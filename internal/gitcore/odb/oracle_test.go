@@ -158,6 +158,16 @@ func (o *oracle) knownObjects(repo string) []hash.ObjectID {
 	return all
 }
 
+func (o *oracle) tryRevParse(dir, arg string) (string, bool) {
+	o.t.Helper()
+	cmd := o.command(dir, "rev-parse", "--verify", "--quiet", arg)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(out)), true
+}
+
 func (o *oracle) fsck(repo string) {
 	o.t.Helper()
 	var errors bytes.Buffer
@@ -328,6 +338,46 @@ func TestOracleGitReadsStreamedObjects(t *testing.T) {
 		t.Fatalf("git read different content for %s", id)
 	}
 	git.fsck(repo)
+}
+
+func TestOracleResolveShortAgreesWithGitRevParse(t *testing.T) {
+	git := newOracle(t)
+	git.build()
+	db := openDB(t, git.objectsDir(git.repo), Options{})
+	for _, id := range git.knownObjects(git.repo) {
+		for _, length := range []int{4, 5, 6, 7} {
+			prefix := id.String()[:length]
+			ids, err := db.ResolveShort(prefix)
+			if err != nil {
+				t.Fatalf("ResolveShort(%q) returned error %v", prefix, err)
+			}
+			full, ok := git.tryRevParse(git.repo, prefix)
+			switch {
+			case ok:
+				if len(ids) != 1 || ids[0].String() != full {
+					t.Fatalf("ResolveShort(%q) gave %v, git resolved uniquely to %s", prefix, ids, full)
+				}
+			case len(ids) == 1:
+				t.Fatalf("ResolveShort(%q) uniquely resolved to %s, git rejected the prefix as ambiguous or unknown", prefix, ids[0])
+			}
+		}
+	}
+}
+
+func TestOracleAbbreviateIDAgreesWithGitShort(t *testing.T) {
+	git := newOracle(t)
+	git.build()
+	db := openDB(t, git.objectsDir(git.repo), Options{})
+	for _, id := range git.knownObjects(git.repo) {
+		want := strings.TrimSpace(git.run(git.repo, "rev-parse", "--short=4", id.String()))
+		got, err := db.AbbreviateID(id, 4)
+		if err != nil {
+			t.Fatalf("AbbreviateID(%s) returned error %v", id, err)
+		}
+		if got != want {
+			t.Fatalf("AbbreviateID(%s) = %q, git rev-parse --short=4 gave %q", id, got, want)
+		}
+	}
 }
 
 func TestOracleReadsObjectsGitWroteAfterOurWrites(t *testing.T) {

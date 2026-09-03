@@ -9,4 +9,5 @@ var (
 	ErrAlternatesLoop  = errors.New("odb: alternate object directories form a loop")
 	ErrTagChainTooDeep = errors.New("odb: tag chain is too deep")
 	ErrWriterClosed    = errors.New("odb: object writer is already closed")
+	ErrInvalidPrefix   = errors.New("odb: invalid short object id prefix")
 )

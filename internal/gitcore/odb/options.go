@@ -8,18 +8,22 @@ import (
 )
 
 const (
-	DefaultCacheBytes    = 32 << 20
-	DefaultMaxDeltaDepth = pack.DefaultMaxDeltaDepth
-	MaxAlternatesDepth   = 5
-	MaxTagChain          = 16
+	DefaultCacheBytes      = 32 << 20
+	DefaultMaxDeltaDepth   = pack.DefaultMaxDeltaDepth
+	MaxAlternatesDepth     = 5
+	MaxTagChain            = 16
+	MinShortPrefix         = 4
+	DefaultMaxShortMatches = 64
+	DefaultAbbrevLength    = 7
 )
 
 type Options struct {
-	Format     hash.Format
-	Alternates []string
-	CacheBytes int64
-	PackBytes  int64
-	MaxDepth   int
+	Format          hash.Format
+	Alternates      []string
+	CacheBytes      int64
+	PackBytes       int64
+	MaxDepth        int
+	MaxShortMatches int
 }
 
 func (o Options) normalized() (Options, error) {
@@ -37,6 +41,9 @@ func (o Options) normalized() (Options, error) {
 	}
 	if o.MaxDepth <= 0 {
 		o.MaxDepth = DefaultMaxDeltaDepth
+	}
+	if o.MaxShortMatches <= 0 {
+		o.MaxShortMatches = DefaultMaxShortMatches
 	}
 	return o, nil
 }

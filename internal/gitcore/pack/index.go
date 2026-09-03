@@ -228,6 +228,68 @@ func (x *Index) Find(id hash.ObjectID) (int64, bool) {
 	return offset, ok
 }
 
+func (x *Index) Prefix(prefix []byte, bits int) iter.Seq[hash.ObjectID] {
+	return func(yield func(hash.ObjectID) bool) {
+		low, high := prefixBounds(prefix, bits)
+		start, err := x.lowerBound(low)
+		if err != nil {
+			return
+		}
+		for position := start; position < x.count; position++ {
+			id, err := x.idAt(position)
+			if err != nil {
+				return
+			}
+			if bytes.Compare(id[:], high[:]) > 0 {
+				return
+			}
+			if !yield(id) {
+				return
+			}
+		}
+	}
+}
+
+func (x *Index) lowerBound(low hash.ObjectID) (int, error) {
+	lo, hi := 0, x.count
+	for lo < hi {
+		middle := int(uint(lo+hi) >> 1)
+		id, err := x.idAt(middle)
+		if err != nil {
+			return 0, err
+		}
+		if bytes.Compare(id[:], low[:]) < 0 {
+			lo = middle + 1
+		} else {
+			hi = middle
+		}
+	}
+	return lo, nil
+}
+
+func prefixBounds(prefix []byte, bits int) (hash.ObjectID, hash.ObjectID) {
+	var low, high hash.ObjectID
+	bits = min(max(bits, 0), hash.Size*8)
+	fullBytes := bits / 8
+	remBits := bits % 8
+	copy(low[:fullBytes], prefix)
+	copy(high[:fullBytes], prefix)
+	if remBits > 0 {
+		mask := byte(0xff) << (8 - remBits)
+		var partial byte
+		if fullBytes < len(prefix) {
+			partial = prefix[fullBytes]
+		}
+		low[fullBytes] = partial & mask
+		high[fullBytes] = partial | ^mask
+		fullBytes++
+	}
+	for i := fullBytes; i < hash.Size; i++ {
+		high[i] = 0xff
+	}
+	return low, high
+}
+
 func (x *Index) Objects() iter.Seq[hash.ObjectID] {
 	return func(yield func(hash.ObjectID) bool) {
 		block := make([]byte, namesChunk*hash.Size)
