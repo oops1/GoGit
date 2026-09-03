@@ -305,6 +305,45 @@ func TestLoadIgnoresWorktreeConfigWhenExtensionMissing(t *testing.T) {
 	}
 }
 
+func TestLoadReadsWorktreeConfigFromWorktreeDirWhenSet(t *testing.T) {
+	isolateEnv(t)
+	commonDir := filepath.Join(t.TempDir(), ".git")
+	worktreeDir := filepath.Join(commonDir, "worktrees", "feature")
+	writeFile(t, filepath.Join(commonDir, "config"), "[extensions]\n\tworktreeConfig = true\n[core]\n\tbare = false\n")
+	writeFile(t, filepath.Join(worktreeDir, "config.worktree"), "[core]\n\tbare = true\n")
+
+	cfg, err := Load(Options{GitDir: commonDir, WorktreeDir: worktreeDir})
+	if err != nil {
+		t.Fatalf("Load returned error %v", err)
+	}
+	if v, _ := cfg.Get("core.bare"); v != "true" {
+		t.Fatalf("core.bare = %q, want true", v)
+	}
+	origin, ok := cfg.Origin("core.bare")
+	if !ok || origin.Level != LevelWorktree {
+		t.Fatalf("origin = %+v, ok=%v", origin, ok)
+	}
+	if origin.Path != filepath.Join(worktreeDir, "config.worktree") {
+		t.Fatalf("origin.Path = %q", origin.Path)
+	}
+}
+
+func TestLoadIgnoresWorktreeDirConfigWhenExtensionMissing(t *testing.T) {
+	isolateEnv(t)
+	commonDir := filepath.Join(t.TempDir(), ".git")
+	worktreeDir := filepath.Join(commonDir, "worktrees", "feature")
+	writeFile(t, filepath.Join(commonDir, "config"), "[core]\n\tbare = false\n")
+	writeFile(t, filepath.Join(worktreeDir, "config.worktree"), "[core]\n\tbare = true\n")
+
+	cfg, err := Load(Options{GitDir: commonDir, WorktreeDir: worktreeDir})
+	if err != nil {
+		t.Fatalf("Load returned error %v", err)
+	}
+	if v, _ := cfg.Get("core.bare"); v != "false" {
+		t.Fatalf("core.bare = %q, want false", v)
+	}
+}
+
 func TestLoadFailsOnBadWorktreeExtensionValue(t *testing.T) {
 	isolateEnv(t)
 	gitDir := filepath.Join(t.TempDir(), ".git")

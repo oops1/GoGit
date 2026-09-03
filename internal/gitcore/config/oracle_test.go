@@ -279,6 +279,46 @@ func TestOracleAgreesOnGeneratedFixtures(t *testing.T) {
 	}
 }
 
+func TestOracleWorktreeConfigMatchesGitConfigWorktree(t *testing.T) {
+	o := newOracle(t)
+	o.run(o.dir, "init", "-q", "main")
+	main := filepath.Join(o.dir, "main")
+	writeFile(t, filepath.Join(main, "a.txt"), "hello\n")
+	o.run(main, "add", "a.txt")
+	o.run(main, "commit", "-q", "-m", "first")
+	o.run(main, "config", "extensions.worktreeConfig", "true")
+	o.run(main, "worktree", "add", "-q", filepath.Join(o.dir, "second"), "-b", "second")
+	second := filepath.Join(o.dir, "second")
+	o.run(second, "config", "--worktree", "core.sparseCheckout", "true")
+
+	want := strings.TrimSpace(o.run(second, "config", "--worktree", "--get", "core.sparseCheckout"))
+	originLine := strings.TrimRight(o.run(second, "config", "--worktree", "--show-origin", "--get", "core.sparseCheckout"), "\n")
+	originParts := strings.SplitN(originLine, "\t", 2)
+	if len(originParts) != 2 {
+		t.Fatalf("unexpected --show-origin output %q", originLine)
+	}
+	wantOriginFile := filepath.Base(strings.TrimPrefix(originParts[0], "file:"))
+	gitDir := strings.TrimSpace(o.run(second, "rev-parse", "--absolute-git-dir"))
+	commonDir := strings.TrimSpace(o.run(second, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+
+	isolateEnv(t)
+	cfg, err := Load(Options{GitDir: commonDir, WorktreeDir: gitDir, NoSystem: true})
+	if err != nil {
+		t.Fatalf("Load returned error %v", err)
+	}
+	got, ok := cfg.Get("core.sparseCheckout")
+	if !ok || got != want {
+		t.Fatalf("core.sparseCheckout = %q, ok=%v, want %q", got, ok, want)
+	}
+	origin, ok := cfg.Origin("core.sparseCheckout")
+	if !ok || origin.Level != LevelWorktree {
+		t.Fatalf("Origin = %+v, ok=%v, want LevelWorktree", origin, ok)
+	}
+	if filepath.Base(origin.Path) != wantOriginFile {
+		t.Fatalf("Origin.Path = %q, want file named %q", origin.Path, wantOriginFile)
+	}
+}
+
 func TestOracleAgreesOnConditionalIncludes(t *testing.T) {
 	o := newOracle(t)
 	o.run(o.dir, "init", "-q", "work")

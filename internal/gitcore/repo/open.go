@@ -23,12 +23,13 @@ func (o OpenOptions) discovery() DiscoverOptions {
 	return DiscoverOptions{Env: o.Env}
 }
 
-func (o OpenOptions) configOptions(gitDir string) config.Options {
+func (o OpenOptions) configOptions(layout Layout) config.Options {
 	return config.Options{
-		GitDir:     gitDir,
-		SystemFile: o.SystemFile,
-		GlobalFile: o.GlobalFile,
-		NoSystem:   o.NoSystem,
+		GitDir:      layout.CommonDir,
+		WorktreeDir: layout.GitDir,
+		SystemFile:  o.SystemFile,
+		GlobalFile:  o.GlobalFile,
+		NoSystem:    o.NoSystem,
 	}
 }
 
@@ -51,7 +52,7 @@ func Open(start string, opts OpenOptions) (*Repository, error) {
 }
 
 func OpenLayout(layout Layout, opts OpenOptions) (*Repository, error) {
-	cfg, err := config.Load(opts.configOptions(layout.CommonDir))
+	cfg, err := config.Load(opts.configOptions(layout))
 	if err != nil {
 		return nil, err
 	}

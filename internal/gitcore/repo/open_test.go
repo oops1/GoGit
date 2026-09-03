@@ -217,6 +217,42 @@ func TestRepositorySplitsWorktreeAndCommonPaths(t *testing.T) {
 	}
 }
 
+func TestConfigReadsWorktreeConfigFileFromTheLinkedWorktree(t *testing.T) {
+	base := tempDir(t)
+	main, work, gitDir := linkedWorktree(t, base, "second")
+	writeFile(t, filepath.Join(main, configFile), "[extensions]\n\tworktreeConfig = true\n")
+	writeFile(t, filepath.Join(gitDir, "config.worktree"), "[core]\n\tsparseCheckout = true\n")
+
+	repository := openRepo(t, work, openOptions(t, env{}))
+	on, err := repository.Config().GetBool("core.sparseCheckout")
+	if err != nil {
+		t.Fatalf("GetBool returned error %v", err)
+	}
+	if !on {
+		t.Fatal("core.sparseCheckout = false, want true from config.worktree")
+	}
+	origin, ok := repository.Config().Origin("core.sparseCheckout")
+	if !ok || origin.Path != filepath.Join(gitDir, "config.worktree") {
+		t.Fatalf("origin = %+v, ok=%v, want the linked worktree's config.worktree", origin, ok)
+	}
+}
+
+func TestConfigIgnoresWorktreeConfigFileForTheMainWorktree(t *testing.T) {
+	base := tempDir(t)
+	work := makeDir(t, filepath.Join(base, "work"))
+	gitDir := gitDirWithConfig(t, filepath.Join(work, dotGit), "[extensions]\n\tworktreeConfig = true\n")
+	writeFile(t, filepath.Join(gitDir, "config.worktree"), "[core]\n\tsparseCheckout = true\n")
+
+	repository := openRepo(t, work, openOptions(t, env{}))
+	on, err := repository.Config().GetBool("core.sparseCheckout")
+	if err != nil {
+		t.Fatalf("GetBool returned error %v", err)
+	}
+	if !on {
+		t.Fatal("core.sparseCheckout = false, want true from config.worktree")
+	}
+}
+
 func TestHooksDirFollowsCoreHooksPath(t *testing.T) {
 	base := tempDir(t)
 	work := makeDir(t, filepath.Join(base, "work"))

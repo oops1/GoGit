@@ -65,11 +65,12 @@ type Config struct {
 }
 
 type Options struct {
-	GitDir     string
-	Branch     string
-	SystemFile string
-	GlobalFile string
-	NoSystem   bool
+	GitDir      string
+	WorktreeDir string
+	Branch      string
+	SystemFile  string
+	GlobalFile  string
+	NoSystem    bool
 }
 
 const maxIncludeDepth = 10
@@ -183,7 +184,11 @@ func (l *loader) worktree() error {
 	if !on {
 		return nil
 	}
-	return l.addFile(LevelWorktree, filepath.Join(l.opts.GitDir, "config.worktree"))
+	dir := l.opts.WorktreeDir
+	if dir == "" {
+		dir = l.opts.GitDir
+	}
+	return l.addFile(LevelWorktree, filepath.Join(dir, "config.worktree"))
 }
 
 func (l *loader) command() error {

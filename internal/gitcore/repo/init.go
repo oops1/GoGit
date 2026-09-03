@@ -214,7 +214,7 @@ func initialBranch(opts InitOptions) (string, error) {
 }
 
 func configuredBranch(opts InitOptions) (string, error) {
-	cfg, err := config.Load(opts.openOptions().configOptions(""))
+	cfg, err := config.Load(opts.openOptions().configOptions(Layout{}))
 	if err != nil {
 		return "", err
 	}
