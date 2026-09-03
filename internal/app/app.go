@@ -24,6 +24,7 @@ import (
 	"github.com/oops1/gogit/internal/systheme"
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
+	"github.com/oops1/gogit/internal/ui/journal"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
@@ -60,9 +61,11 @@ type App struct {
 	registry          *repo.Registry
 	reposView         *repos.View
 	branchesView      *branches.View
+	journalView       *journal.View
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
 	selectedNode      string
+	selectedCommit    hash.ObjectID
 	askInput          func(title, prompt string, cb func(text string, ok bool))
 	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
@@ -75,6 +78,12 @@ type App struct {
 	watchCancel context.CancelFunc
 	watchWG     sync.WaitGroup
 	watcher     watcherIface
+
+	journalMu       sync.Mutex
+	journalCancel   context.CancelFunc
+	journalMore     chan struct{}
+	journalWG       sync.WaitGroup
+	journalPageSize int
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -158,6 +167,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		statusBranchLabel: statusBranchWidget,
 		registry:          repo.New(cfg),
 		newWatcher:        newRealWatcher,
+		journalPageSize:   defaultJournalPageSize,
 	}
 	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
@@ -182,6 +192,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView.OnSelect = func(id string) { a.selectedNode = id }
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
+	a.journalView = journal.NewView()
+	a.journalView.Bind(a.named["journalGrid"].(*widget.DataGridWidget))
+	a.journalView.OnSelect = a.onJournalRowSelected
+	a.journalView.OnNearEnd = a.requestMoreJournal
 	a.restoreActiveRepository()
 	a.reposView.Render(a.registry)
 	a.updateStatusText()
@@ -248,6 +262,7 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 
 func (a *App) CloseRepository() {
 	a.stopWatcher()
+	a.stopJournal()
 	a.closeOpenRepository()
 	a.registry.ClearActive()
 	a.cfg.ActiveRepository = ""
@@ -255,6 +270,7 @@ func (a *App) CloseRepository() {
 	a.updateStatusText()
 	a.statusBranchLabel.SetText("")
 	a.branchesView.Render(branches.Snapshot{})
+	a.journalView.Reset()
 	a.reposView.Render(a.registry)
 }
 
@@ -267,6 +283,7 @@ func (a *App) ActivateRepository(id string) {
 	if err != nil {
 		a.log.Warn("open repository failed", "path", node.Path, "error", err)
 		a.stopWatcher()
+		a.stopJournal()
 		a.closeOpenRepository()
 		a.registry.ClearActive()
 		a.cfg.ActiveRepository = ""
@@ -274,10 +291,12 @@ func (a *App) ActivateRepository(id string) {
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		a.statusBranchLabel.SetText("")
 		a.branchesView.Render(branches.Snapshot{})
+		a.journalView.Reset()
 		a.reposView.Render(a.registry)
 		return
 	}
 	a.stopWatcher()
+	a.stopJournal()
 	a.closeOpenRepository()
 	a.open = opened
 	_ = a.registry.SetActive(id)
@@ -288,6 +307,7 @@ func (a *App) ActivateRepository(id string) {
 	a.statusBranchLabel.SetText(branchStatusText(snap))
 	a.reposView.Render(a.registry)
 	a.startWatcher(opened.repo.Layout())
+	a.startJournal()
 }
 
 func (a *App) closeOpenRepository() {
@@ -312,6 +332,7 @@ func (a *App) RefreshRepository() {
 	}
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.startJournal()
 }
 
 func branchStatusText(snap branches.Snapshot) string {
@@ -497,6 +518,7 @@ func (a *App) Run() error {
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
 		a.stopWatcher()
+		a.stopJournal()
 		close(a.postStop)
 		a.postWG.Wait()
 		a.closeOpenRepository()

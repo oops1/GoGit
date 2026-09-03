@@ -43,6 +43,7 @@
   "Status.Ready": "Ready",
   "Status.NoRepository": "No repository is open",
   "Status.OpenFailed": "Could not open the repository: %s",
+  "Status.CommitSelected": "%s %s",
   "Dialog.AddGroup.Title": "Add Group",
   "Dialog.AddGroup.Prompt": "Group name:",
   "Dialog.AddRepo.Title": "Add or Create Repository",

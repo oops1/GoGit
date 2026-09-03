@@ -43,6 +43,7 @@
   "Status.Ready": "Готово",
   "Status.NoRepository": "Репозиторий не открыт",
   "Status.OpenFailed": "Не удалось открыть репозиторий: %s",
+  "Status.CommitSelected": "%s %s",
   "Dialog.AddGroup.Title": "Добавить группу",
   "Dialog.AddGroup.Prompt": "Имя группы:",
   "Dialog.AddRepo.Title": "Добавить или создать репозиторий",

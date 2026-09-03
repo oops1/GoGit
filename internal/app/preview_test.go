@@ -32,6 +32,7 @@ func TestPreviewOpenedRepository(t *testing.T) {
 	}
 	target := filepath.Join(t.TempDir(), "demo")
 	initTestRepoWithBranch(t, target, "main")
+	seedJournalCommits(t, target, "main", 8)
 	addBranchAndTag(t, target, "feature/preview", "v1.0")
 
 	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
@@ -40,6 +41,7 @@ func TestPreviewOpenedRepository(t *testing.T) {
 		a := newTestAppWithConfig(t, cfg)
 		a.SetTheme(theme)
 		a.ActivateRepository("r1")
+		waitForJournalRows(t, a, 8)
 		a.Engine().SaveFrames(dir + "/opened-" + theme)
 		a.Engine().Start()
 		time.Sleep(700 * time.Millisecond)
