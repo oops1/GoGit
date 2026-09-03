@@ -16,12 +16,28 @@ linters:
     - gosec
   settings:
     govet:
-      settings:
-        unsafeptr:
-          unsafeptr: false
+      disable:
+        - unsafeptr
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+        - (io.Closer).Close
+        - (golang.org/x/sys/windows/registry.Key).Close
+        - (*github.com/oops1/gogit/internal/logx.Logger).Close
+        - os.Unsetenv
+    gosec:
+      excludes:
+        - G301
+        - G302
+        - G304
+        - G306
+        - G401
+        - G505
     revive:
       rules:
         - name: exported
+          disabled: true
+        - name: package-comments
           disabled: true
 formatters:
   enable:

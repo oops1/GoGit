@@ -81,7 +81,7 @@ func (s *scanner) descends(entry os.DirEntry) bool {
 	if !entry.IsDir() || name == ".git" || slices.Contains(s.opts.Exclude, name) {
 		return false
 	}
-	return !(s.opts.SkipHidden && strings.HasPrefix(name, "."))
+	return !s.opts.SkipHidden || !strings.HasPrefix(name, ".")
 }
 
 func classify(dir string, includeBare bool) (Found, bool) {

@@ -94,9 +94,10 @@ func TestBytesReturnsIndependentCopy(t *testing.T) {
 func TestCompareOrdersObjectIDsBytewise(t *testing.T) {
 	low := mustParse(t, emptyTreeID)
 	high := mustParse(t, helloBlobID)
-	if low.Compare(high) >= 0 || high.Compare(low) <= 0 || low.Compare(low) != 0 {
+	same := mustParse(t, emptyTreeID)
+	if low.Compare(high) >= 0 || high.Compare(low) <= 0 || low.Compare(same) != 0 {
 		t.Fatalf("Compare is not a bytewise ordering: %d %d %d",
-			low.Compare(high), high.Compare(low), low.Compare(low))
+			low.Compare(high), high.Compare(low), low.Compare(same))
 	}
 	if !bytes.Equal(low.Bytes(), mustParse(t, emptyTreeID).Bytes()) {
 		t.Fatal("Bytes differ for equal ids")

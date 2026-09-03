@@ -2,6 +2,7 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -235,7 +236,7 @@ func TestScanStopsOnCancelledContext(t *testing.T) {
 		}
 	}}
 	found, errs := collect(t, ctx, root, opts)
-	if len(errs) != 1 || errs[0] != context.Canceled {
+	if len(errs) != 1 || !errors.Is(errs[0], context.Canceled) {
 		t.Fatalf("errors = %v", errs)
 	}
 	if got := paths(root, found); !slices.Equal(got, []string{"a"}) {
