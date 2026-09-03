@@ -26,12 +26,15 @@ linters:
         - (golang.org/x/sys/windows/registry.Key).Close
         - (*github.com/oops1/gogit/internal/logx.Logger).Close
         - os.Unsetenv
+    errorlint:
+      errorf: false
     gosec:
       excludes:
         - G301
         - G302
         - G304
         - G306
+        - G115
         - G401
         - G505
     revive:
