@@ -23,6 +23,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/repos"
+	"github.com/oops1/gogit/internal/ui/settings"
 )
 
 const shortHashLength = 7
@@ -62,6 +63,7 @@ type App struct {
 	selectedNode      string
 	askInput          func(title, prompt string, cb func(text string, ok bool))
 	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
+	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
 
 	open *openedRepository
 }
@@ -151,6 +153,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
 	}
 	a.showAddRepo = a.defaultShowAddRepo
+	a.showSettings = a.defaultShowSettings
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
@@ -179,6 +182,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdAddOrCreate] = a.addOrCreateRepository
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdSettings] = a.openSettings
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
