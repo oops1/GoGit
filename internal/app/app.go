@@ -42,6 +42,9 @@ type App struct {
 
 	layoutStore   layout.Store
 	defaultLayout []byte
+
+	languages []string
+	viewMenu  []CommandID
 }
 
 func New(cfg *config.Config, paths config.Paths, log *slog.Logger) (*App, error) {
@@ -52,7 +55,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	if _, err := i18n.Install(paths.UserI18NDir()); err != nil {
+	cat, err := i18n.Install(paths.UserI18NDir())
+	if err != nil {
 		return nil, err
 	}
 	i18n.Apply(cfg.Language)
@@ -89,14 +93,15 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	}
 
 	a := &App{
-		cfg:      cfg,
-		paths:    paths,
-		root:     root,
-		named:    named,
-		menu:     menu,
-		handlers: map[CommandID]func(){},
-		detect:   systheme.Detect,
-		log:      log,
+		cfg:       cfg,
+		paths:     paths,
+		root:      root,
+		named:     named,
+		menu:      menu,
+		handlers:  map[CommandID]func(){},
+		detect:    systheme.Detect,
+		log:       log,
+		languages: cat.Codes(),
 	}
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
@@ -109,9 +114,13 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	_ = a.RestoreLayout()
 	a.applyTheme()
 
+	a.viewMenu = a.buildViewEntries()
 	a.wireMenu()
 	a.wireToolbar()
 	a.retranslateGrids()
+	a.buildViewMenu()
+	a.wireViewHandlers()
+	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
 	a.handlers[CmdCloseRepository] = a.CloseRepository
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
