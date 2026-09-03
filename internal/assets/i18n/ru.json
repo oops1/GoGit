@@ -37,6 +37,8 @@
   "Journal.Column.Hash": "Коммит",
   "Status.Ready": "Готово",
   "Status.NoRepository": "Репозиторий не открыт",
+  "Dialog.AddGroup.Title": "Добавить группу",
+  "Dialog.AddGroup.Prompt": "Имя группы:",
   "Theme.System": "Как в системе",
   "Theme.Dark": "Тёмная",
   "Theme.Light": "Светлая",

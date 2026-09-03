@@ -464,6 +464,12 @@ func TestNewFromXAMLErrors(t *testing.T) {
 			`<TextBlock x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
+		"repos tree is not a tree view": `<Window><Menu x:Name="mainMenu"/>` +
+			`<TextBlock x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
+			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
+		"status text is not a label": `<Window><Menu x:Name="mainMenu"/>` +
+			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
+			`<Button x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
 	}
 	for name, xaml := range cases {
 		t.Run(name, func(t *testing.T) {

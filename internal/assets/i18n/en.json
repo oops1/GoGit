@@ -37,6 +37,8 @@
   "Journal.Column.Hash": "Commit",
   "Status.Ready": "Ready",
   "Status.NoRepository": "No repository is open",
+  "Dialog.AddGroup.Title": "Add Group",
+  "Dialog.AddGroup.Prompt": "Group name:",
   "Theme.System": "Follow system",
   "Theme.Dark": "Dark",
   "Theme.Light": "Light",

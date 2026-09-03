@@ -134,6 +134,7 @@ func (a *App) retranslate() {
 	a.applyViewTexts()
 	a.retranslateGrids()
 	a.root.Title = i18n.T("App.Title")
+	a.updateStatusText()
 }
 
 func (a *App) applyViewTexts() {

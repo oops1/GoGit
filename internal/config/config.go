@@ -25,14 +25,15 @@ const (
 )
 
 type Config struct {
-	Version      int          `toml:"version"`
-	Language     string       `toml:"language"`
-	Theme        string       `toml:"theme"`
-	Window       Window       `toml:"window"`
-	Git          Git          `toml:"git"`
-	UI           UI           `toml:"ui"`
-	Groups       []Group      `toml:"groups"`
-	Repositories []Repository `toml:"repositories"`
+	Version          int          `toml:"version"`
+	Language         string       `toml:"language"`
+	Theme            string       `toml:"theme"`
+	Window           Window       `toml:"window"`
+	Git              Git          `toml:"git"`
+	UI               UI           `toml:"ui"`
+	Groups           []Group      `toml:"groups"`
+	Repositories     []Repository `toml:"repositories"`
+	ActiveRepository string       `toml:"active_repository"`
 }
 
 type Window struct {

@@ -128,6 +128,10 @@ func (r *Registry) Active() (*Node, bool) {
 	return n, ok
 }
 
+func (r *Registry) ClearActive() {
+	r.activeID = ""
+}
+
 func findGroupIndex(cfg *config.Config, id string) int {
 	for i := range cfg.Groups {
 		if cfg.Groups[i].ID == id {
@@ -352,18 +356,12 @@ func buildTree(cfg *config.Config) ([]*Node, map[string]*Node) {
 		}
 		state[id] = 1
 		ref := entries[id].parentRef
-		switch {
-		case ref == "":
+		_, known := entries[ref]
+		if ref == "" || !known || state[ref] == 1 {
 			actualParent[id] = ""
-		default:
-			if _, ok := entries[ref]; !ok {
-				actualParent[id] = ""
-			} else if state[ref] == 1 {
-				actualParent[id] = ""
-			} else {
-				resolve(ref)
-				actualParent[id] = ref
-			}
+		} else {
+			resolve(ref)
+			actualParent[id] = ref
 		}
 		state[id] = 2
 	}

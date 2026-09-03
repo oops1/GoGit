@@ -273,6 +273,24 @@ func TestActiveNodeLifecycle(t *testing.T) {
 	}
 }
 
+func TestClearActiveResetsActiveNode(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "R1", Path: namePath(dir, "r1")}}
+	reg := New(cfg)
+	if err := reg.SetActive("r1"); err != nil {
+		t.Fatal(err)
+	}
+	reg.ClearActive()
+	if _, ok := reg.Active(); ok {
+		t.Fatal("active node must be cleared")
+	}
+	reg.ClearActive()
+	if _, ok := reg.Active(); ok {
+		t.Fatal("clearing twice must stay cleared")
+	}
+}
+
 func TestAddGroupCreatesRootGroup(t *testing.T) {
 	cfg := config.Default()
 	reg := New(cfg)

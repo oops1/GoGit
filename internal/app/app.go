@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/layout"
+	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/systheme"
+	"github.com/oops1/gogit/internal/ui/repos"
 )
 
 const targetFPS = 30
@@ -45,6 +48,12 @@ type App struct {
 
 	languages []string
 	viewMenu  []CommandID
+
+	registry     *repo.Registry
+	reposView    *repos.View
+	statusLabel  *widget.Label
+	selectedNode string
+	askInput     func(title, prompt string, cb func(text string, ok bool))
 }
 
 func New(cfg *config.Config, paths config.Paths, log *slog.Logger) (*App, error) {
@@ -78,6 +87,14 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
 		}
 	}
+	reposTreeWidget, ok := named["reposTree"].(*widget.TreeViewWidget)
+	if !ok {
+		return nil, fmt.Errorf("%w: reposTree", ErrWidgetMissing)
+	}
+	statusTextWidget, ok := named["statusText"].(*widget.Label)
+	if !ok {
+		return nil, fmt.Errorf("%w: statusText", ErrWidgetMissing)
+	}
 	if _, ok := named["dock"].(*widget.DockManager); !ok {
 		return nil, fmt.Errorf("%w: dock", ErrWidgetMissing)
 	}
@@ -93,15 +110,17 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	}
 
 	a := &App{
-		cfg:       cfg,
-		paths:     paths,
-		root:      root,
-		named:     named,
-		menu:      menu,
-		handlers:  map[CommandID]func(){},
-		detect:    systheme.Detect,
-		log:       log,
-		languages: cat.Codes(),
+		cfg:         cfg,
+		paths:       paths,
+		root:        root,
+		named:       named,
+		menu:        menu,
+		handlers:    map[CommandID]func(){},
+		detect:      systheme.Detect,
+		log:         log,
+		languages:   cat.Codes(),
+		statusLabel: statusTextWidget,
+		registry:    repo.New(cfg),
 	}
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
@@ -109,10 +128,21 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
 	a.eng.SetRoot(root)
+	a.askInput = func(title, prompt string, cb func(text string, ok bool)) {
+		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
+	}
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
 	a.applyTheme()
+
+	a.reposView = repos.NewView()
+	a.reposView.Bind(reposTreeWidget)
+	a.reposView.OnActivate = a.ActivateRepository
+	a.reposView.OnSelect = func(id string) { a.selectedNode = id }
+	a.restoreActiveRepository()
+	a.reposView.Render(a.registry)
+	a.updateStatusText()
 
 	a.viewMenu = a.buildViewEntries()
 	a.wireMenu()
@@ -123,6 +153,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
 	a.handlers[CmdCloseRepository] = a.CloseRepository
+	a.handlers[CmdAddGroup] = a.addGroup
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
@@ -171,7 +202,73 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 }
 
 func (a *App) CloseRepository() {
+	a.registry.ClearActive()
+	a.cfg.ActiveRepository = ""
 	a.SetActiveRepository("", false)
+	a.updateStatusText()
+	a.reposView.Render(a.registry)
+}
+
+func (a *App) ActivateRepository(id string) {
+	node, ok := a.registry.Find(id)
+	if !ok || node.Kind == repo.KindGroup {
+		return
+	}
+	_ = a.registry.SetActive(id)
+	a.cfg.ActiveRepository = id
+	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
+	a.updateStatusText()
+	a.reposView.Render(a.registry)
+}
+
+func (a *App) restoreActiveRepository() {
+	if a.cfg.ActiveRepository == "" {
+		return
+	}
+	node, ok := a.registry.Find(a.cfg.ActiveRepository)
+	if !ok || node.Kind == repo.KindGroup {
+		return
+	}
+	_ = a.registry.SetActive(a.cfg.ActiveRepository)
+	a.SetActiveRepository(a.cfg.ActiveRepository, node.Kind == repo.KindWorktree)
+}
+
+func (a *App) updateStatusText() {
+	if node, ok := a.registry.Active(); ok {
+		a.statusLabel.SetText(node.Name)
+		return
+	}
+	a.statusLabel.SetText(i18n.T("Status.NoRepository"))
+}
+
+func (a *App) addGroup() {
+	title := i18n.T("Dialog.AddGroup.Title")
+	prompt := i18n.T("Dialog.AddGroup.Prompt")
+	a.askInput(title, prompt, func(text string, ok bool) {
+		if !ok {
+			return
+		}
+		name := strings.TrimSpace(text)
+		if name == "" {
+			return
+		}
+		if _, err := a.registry.AddGroup(name, a.groupParentForNewGroup()); err != nil {
+			a.log.Warn("add group failed", "error", err)
+			return
+		}
+		a.reposView.Render(a.registry)
+		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
+			a.log.Warn("save config failed", "error", err)
+		}
+	})
+}
+
+func (a *App) groupParentForNewGroup() string {
+	node, ok := a.registry.Find(a.selectedNode)
+	if !ok || node.Kind != repo.KindGroup {
+		return ""
+	}
+	return a.selectedNode
 }
 
 func (a *App) SetTheme(name string) {

@@ -29,3 +29,15 @@ func newTestAppWithPaths(t *testing.T) (*App, config.Paths) {
 	t.Cleanup(a.Close)
 	return a, paths
 }
+
+func newTestAppWithConfig(t *testing.T, cfg *config.Config) *App {
+	t.Helper()
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	a, err := New(cfg, config.Paths{Dir: t.TempDir()}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	return a
+}
