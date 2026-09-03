@@ -6,6 +6,7 @@ import (
 
 	"github.com/oops1/gogit/internal/app"
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/logx"
 )
 
 func main() {
@@ -24,7 +25,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	a, err := app.New(cfg, paths)
+	logger, err := logx.Open(paths.LogFile(), logx.Options{})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "logx:", err)
+		logger = logx.Discard()
+	}
+	defer logger.Close()
+	a, err := app.New(cfg, paths, logger.Slog())
 	if err != nil {
 		return err
 	}

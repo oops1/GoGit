@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
@@ -15,7 +18,7 @@ func newTestApp(t *testing.T) *App {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)
 	cfg := config.Default()
-	a, err := New(cfg, config.Paths{Dir: t.TempDir()})
+	a, err := New(cfg, config.Paths{Dir: t.TempDir()}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +286,7 @@ func TestNewFromXAMLErrors(t *testing.T) {
 	}
 	for name, xaml := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := NewFromXAML(config.Default(), paths, []byte(xaml)); err == nil {
+			if _, err := NewFromXAML(config.Default(), paths, []byte(xaml), nil); err == nil {
 				t.Fatal("expected error")
 			}
 		})
@@ -299,7 +302,7 @@ func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
 		`<DataGrid x:Name="journalGrid"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
-	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml))
+	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +326,29 @@ func TestNewFailsOnBrokenUserI18N(t *testing.T) {
 	if err := writeFile(paths.UserI18NDir(), "xx.json", "{"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(config.Default(), paths); err == nil {
+	if _, err := New(config.Default(), paths, nil); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestLoggingEmitsDebugEvents(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	a, err := New(config.Default(), config.Paths{Dir: t.TempDir()}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+	a.SetHandler(CmdAddOrCreate, func() {})
+	a.Dispatch(CmdAddOrCreate)
+	a.SetTheme(config.ThemeLight)
+	a.SetLanguage("ru")
+	out := buf.String()
+	for _, want := range []string{"app started", "command dispatched", "theme changed", "language changed"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in log: %s", want, out)
+		}
 	}
 }

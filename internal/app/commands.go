@@ -18,6 +18,7 @@ const (
 	CmdSync            CommandID = "remote.sync"
 	CmdPush            CommandID = "remote.push"
 	CmdCommit          CommandID = "local.commit"
+	CmdResetLayout     CommandID = "view.reset-layout"
 )
 
 const cmdSeparator CommandID = ""

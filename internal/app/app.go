@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/layout"
 	"github.com/oops1/gogit/internal/systheme"
 )
 
@@ -36,13 +38,20 @@ type App struct {
 	OnExit   func()
 	langID   int
 	detect   func() systheme.Scheme
+	log      *slog.Logger
+
+	layoutStore   layout.Store
+	defaultLayout []byte
 }
 
-func New(cfg *config.Config, paths config.Paths) (*App, error) {
-	return NewFromXAML(cfg, paths, assets.MainWindow())
+func New(cfg *config.Config, paths config.Paths, log *slog.Logger) (*App, error) {
+	return NewFromXAML(cfg, paths, assets.MainWindow(), log)
 }
 
-func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte) (*App, error) {
+func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.Logger) (*App, error) {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 	if _, err := i18n.Install(paths.UserI18NDir()); err != nil {
 		return nil, err
 	}
@@ -87,6 +96,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte) (*App, err
 		menu:     menu,
 		handlers: map[CommandID]func(){},
 		detect:   systheme.Detect,
+		log:      log,
 	}
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
@@ -95,6 +105,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte) (*App, err
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
 	a.eng.SetRoot(root)
 	a.applyDockSizes()
+	a.defaultLayout = a.Dock().SaveLayout()
+	_ = a.RestoreLayout()
 	a.applyTheme()
 
 	a.wireMenu()
@@ -102,8 +114,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte) (*App, err
 	a.retranslateGrids()
 	a.handlers[CmdClose] = a.exit
 	a.handlers[CmdCloseRepository] = a.CloseRepository
+	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
+	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
 	return a, nil
 }
 
@@ -135,6 +149,7 @@ func (a *App) Dispatch(id CommandID) bool {
 	if fn == nil || !enabled {
 		return false
 	}
+	a.log.Debug("command dispatched", "command", string(id))
 	fn()
 	return true
 }
@@ -154,6 +169,7 @@ func (a *App) SetTheme(name string) {
 	a.cfg.Theme = name
 	a.cfg.Normalize()
 	a.applyTheme()
+	a.log.Debug("theme changed", "theme", a.cfg.Theme)
 }
 
 func (a *App) SetSystemThemeDetector(fn func() systheme.Scheme) {
@@ -199,6 +215,7 @@ func effectiveTheme(name string, detect func() systheme.Scheme) string {
 func (a *App) SetLanguage(code string) {
 	a.cfg.Language = code
 	i18n.Apply(code)
+	a.log.Debug("language changed", "language", code)
 }
 
 func (a *App) Run() error {
@@ -215,7 +232,7 @@ func (a *App) Run() error {
 		a.OnExit = win.Close
 	}
 	err := win.Run()
-	if saveErr := a.cfg.Save(a.paths.ConfigFile()); err == nil {
+	if saveErr := a.SaveLayout(); err == nil {
 		err = saveErr
 	}
 	return err
