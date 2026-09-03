@@ -1,0 +1,64 @@
+name: release
+
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - run: cd cmd/gogit && go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64
+      - run: mkdir -p dist/windows-amd64 dist/linux-amd64 dist/linux-arm64
+
+      - name: build windows amd64
+        run: GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui -X github.com/oops1/gogit/internal/version.Version=${{ github.ref_name }}" -o dist/windows-amd64/gogit.exe ./cmd/gogit
+
+      - name: build linux amd64
+        run: GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/oops1/gogit/internal/version.Version=${{ github.ref_name }}" -o dist/linux-amd64/gogit ./cmd/gogit
+
+      - name: build linux arm64
+        run: GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X github.com/oops1/gogit/internal/version.Version=${{ github.ref_name }}" -o dist/linux-arm64/gogit ./cmd/gogit
+
+      - name: package windows
+        run: |
+          cd dist/windows-amd64
+          cp ../../LICENSE ../../NOTICE .
+          zip -r ../gogit-${{ github.ref_name }}-windows-amd64.zip gogit.exe LICENSE NOTICE
+          cd ../..
+
+      - name: package linux amd64
+        run: |
+          cd dist/linux-amd64
+          cp ../../LICENSE ../../NOTICE .
+          tar czf ../gogit-${{ github.ref_name }}-linux-amd64.tar.gz gogit LICENSE NOTICE
+          cd ../..
+
+      - name: package linux arm64
+        run: |
+          cd dist/linux-arm64
+          cp ../../LICENSE ../../NOTICE .
+          tar czf ../gogit-${{ github.ref_name }}-linux-arm64.tar.gz gogit LICENSE NOTICE
+          cd ../..
+
+      - name: compute checksums
+        run: cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/gogit-*.zip
+            dist/gogit-*.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true
