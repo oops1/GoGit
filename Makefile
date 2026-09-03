@@ -5,7 +5,7 @@ LDFLAGS  := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 GOFLAGS  := -trimpath
 export CGO_ENABLED := 0
 
-.PHONY: all build build-windows build-linux winres release-local run test test-race cover cover-html vet lint fmt check clean
+.PHONY: all build build-windows build-linux winres release-local run test test-race test-oracle cover cover-html vet lint fmt check clean
 
 all: check build
 
@@ -28,7 +28,10 @@ test:
 	go test -count=1 ./...
 
 test-race:
-	go test -count=1 -race ./...
+	CGO_ENABLED=1 go test -count=1 -race ./...
+
+test-oracle:
+	go test -count=1 -tags oracle ./...
 
 cover:
 	go test -count=1 -coverprofile=cover.out -covermode=atomic ./...
@@ -46,7 +49,7 @@ lint:
 fmt:
 	gofmt -l -w .
 
-check: fmt vet test-race cover
+check: fmt vet test-race test-oracle cover
 	GOOS=linux go build ./...
 	GOOS=windows go build ./...
 
