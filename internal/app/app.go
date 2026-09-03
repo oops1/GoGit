@@ -15,13 +15,17 @@ import (
 
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/layout"
 	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/systheme"
 	"github.com/oops1/gogit/internal/ui/addrepo"
+	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/repos"
 )
+
+const shortHashLength = 7
 
 const targetFPS = 30
 
@@ -50,12 +54,16 @@ type App struct {
 	languages []string
 	viewMenu  []CommandID
 
-	registry     *repo.Registry
-	reposView    *repos.View
-	statusLabel  *widget.Label
-	selectedNode string
-	askInput     func(title, prompt string, cb func(text string, ok bool))
-	showAddRepo  func(initial addrepo.Request, cb func(addrepo.Result, bool))
+	registry          *repo.Registry
+	reposView         *repos.View
+	branchesView      *branches.View
+	statusLabel       *widget.Label
+	statusBranchLabel *widget.Label
+	selectedNode      string
+	askInput          func(title, prompt string, cb func(text string, ok bool))
+	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
+
+	open *openedRepository
 }
 
 func New(cfg *config.Config, paths config.Paths, log *slog.Logger) (*App, error) {
@@ -93,9 +101,17 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: reposTree", ErrWidgetMissing)
 	}
+	branchesTreeWidget, ok := named["branchesTree"].(*widget.TreeViewWidget)
+	if !ok {
+		return nil, fmt.Errorf("%w: branchesTree", ErrWidgetMissing)
+	}
 	statusTextWidget, ok := named["statusText"].(*widget.Label)
 	if !ok {
 		return nil, fmt.Errorf("%w: statusText", ErrWidgetMissing)
+	}
+	statusBranchWidget, ok := named["statusBranch"].(*widget.Label)
+	if !ok {
+		return nil, fmt.Errorf("%w: statusBranch", ErrWidgetMissing)
 	}
 	if _, ok := named["dock"].(*widget.DockManager); !ok {
 		return nil, fmt.Errorf("%w: dock", ErrWidgetMissing)
@@ -112,17 +128,18 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	}
 
 	a := &App{
-		cfg:         cfg,
-		paths:       paths,
-		root:        root,
-		named:       named,
-		menu:        menu,
-		handlers:    map[CommandID]func(){},
-		detect:      systheme.Detect,
-		log:         log,
-		languages:   cat.Codes(),
-		statusLabel: statusTextWidget,
-		registry:    repo.New(cfg),
+		cfg:               cfg,
+		paths:             paths,
+		root:              root,
+		named:             named,
+		menu:              menu,
+		handlers:          map[CommandID]func(){},
+		detect:            systheme.Detect,
+		log:               log,
+		languages:         cat.Codes(),
+		statusLabel:       statusTextWidget,
+		statusBranchLabel: statusBranchWidget,
+		registry:          repo.New(cfg),
 	}
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
@@ -143,6 +160,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView.Bind(reposTreeWidget)
 	a.reposView.OnActivate = a.ActivateRepository
 	a.reposView.OnSelect = func(id string) { a.selectedNode = id }
+	a.branchesView = branches.NewView()
+	a.branchesView.Bind(branchesTreeWidget)
 	a.restoreActiveRepository()
 	a.reposView.Render(a.registry)
 	a.updateStatusText()
@@ -159,6 +178,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdAddGroup] = a.addGroup
 	a.handlers[CmdAddOrCreate] = a.addOrCreateRepository
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
+	a.handlers[CmdRefresh] = a.RefreshRepository
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -206,10 +226,13 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 }
 
 func (a *App) CloseRepository() {
+	a.closeOpenRepository()
 	a.registry.ClearActive()
 	a.cfg.ActiveRepository = ""
 	a.SetActiveRepository("", false)
 	a.updateStatusText()
+	a.statusBranchLabel.SetText("")
+	a.branchesView.Render(branches.Snapshot{})
 	a.reposView.Render(a.registry)
 }
 
@@ -218,11 +241,63 @@ func (a *App) ActivateRepository(id string) {
 	if !ok || node.Kind == repo.KindGroup {
 		return
 	}
+	opened, snap, err := openRepositoryAt(id, node.Path)
+	if err != nil {
+		a.log.Warn("open repository failed", "path", node.Path, "error", err)
+		a.closeOpenRepository()
+		a.registry.ClearActive()
+		a.cfg.ActiveRepository = ""
+		a.SetActiveRepository("", false)
+		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
+		a.statusBranchLabel.SetText("")
+		a.branchesView.Render(branches.Snapshot{})
+		a.reposView.Render(a.registry)
+		return
+	}
+	a.closeOpenRepository()
+	a.open = opened
 	_ = a.registry.SetActive(id)
 	a.cfg.ActiveRepository = id
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
 	a.updateStatusText()
+	a.branchesView.Render(snap)
+	a.statusBranchLabel.SetText(branchStatusText(snap))
 	a.reposView.Render(a.registry)
+}
+
+func (a *App) closeOpenRepository() {
+	if a.open == nil {
+		return
+	}
+	if err := a.open.close(); err != nil {
+		a.log.Warn("close repository failed", "path", a.open.path, "error", err)
+	}
+	a.open = nil
+}
+
+func (a *App) RefreshRepository() {
+	if a.open == nil {
+		return
+	}
+	snap, err := loadBranchSnapshot(a.open.store)
+	if err != nil {
+		a.log.Warn("refresh repository failed", "path", a.open.path, "error", err)
+		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
+		return
+	}
+	a.branchesView.Render(snap)
+	a.statusBranchLabel.SetText(branchStatusText(snap))
+}
+
+func branchStatusText(snap branches.Snapshot) string {
+	if snap.Detached {
+		return i18n.T("Pane.Branches.Detached") + " " + shortHash(snap.HeadID)
+	}
+	return snap.Current
+}
+
+func shortHash(id hash.ObjectID) string {
+	return id.String()[:shortHashLength]
 }
 
 func (a *App) restoreActiveRepository() {
@@ -395,6 +470,7 @@ func (a *App) Run() error {
 }
 
 func (a *App) Close() {
+	a.closeOpenRepository()
 	widget.RemoveLanguageListener(a.langID)
 }
 
