@@ -280,3 +280,71 @@ func TestIDFromLoosePathJoinsFanoutAndName(t *testing.T) {
 		t.Fatalf("IDFromLoosePath = %s, %v", got, err)
 	}
 }
+
+func deflate(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	compressor := zlib.NewWriter(&out)
+	if _, err := compressor.Write(raw); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := compressor.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	return out.Bytes()
+}
+
+func TestReadLooseHeaderRejectsHeadersLongerThanTheLimit(t *testing.T) {
+	source := bytes.NewReader([]byte(strings.Repeat("b", 65)))
+	if _, _, err := object.ReadLooseHeader(source); !errors.Is(err, object.ErrHeaderTooLong) {
+		t.Fatalf("err = %v, want ErrHeaderTooLong", err)
+	}
+}
+
+func TestDecodeLooseRejectsAMalformedHeaderInsideAValidStream(t *testing.T) {
+	compressed := deflate(t, []byte("blob five\x00hello"))
+	if _, err := object.DecodeLoose(bytes.NewReader(compressed)); !errors.Is(err, object.ErrInvalidHeader) {
+		t.Fatalf("err = %v, want ErrInvalidHeader", err)
+	}
+}
+
+func TestDecodeLooseRejectsASizeMismatchInAnOtherwiseCompleteStream(t *testing.T) {
+	compressed := deflate(t, []byte("blob 999\x00hello"))
+	if _, err := object.DecodeLoose(bytes.NewReader(compressed)); !errors.Is(err, object.ErrSizeMismatch) {
+		t.Fatalf("err = %v, want ErrSizeMismatch", err)
+	}
+}
+
+func TestDecodeLooseDecodesACompleteStream(t *testing.T) {
+	compressed := deflate(t, []byte("blob 5\x00hello"))
+	obj, err := object.DecodeLoose(bytes.NewReader(compressed))
+	if err != nil {
+		t.Fatalf("DecodeLoose: %v", err)
+	}
+	blob, ok := obj.(*object.Blob)
+	if !ok || string(blob.Data) != "hello" {
+		t.Fatalf("DecodeLoose gave %#v", obj)
+	}
+}
+
+func TestWriteLooseReportsAMissingObjectsDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+	blob := &object.Blob{Data: []byte("no directory\n")}
+	if _, err := object.WriteLoose(dir, blob); err == nil {
+		t.Fatal("WriteLoose accepted a missing objects directory")
+	}
+}
+
+func TestWriteLooseRawReportsTemporaryFileFailures(t *testing.T) {
+	dir := t.TempDir()
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		t.Fatalf("OpenRoot: %v", err)
+	}
+	if err := root.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := object.WriteLooseRaw(root, object.TypeBlob, []byte("closed root\n")); err == nil {
+		t.Fatal("WriteLooseRaw accepted a closed root")
+	}
+}

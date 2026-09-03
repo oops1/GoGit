@@ -60,8 +60,7 @@ func (t *looseTemp) commit(id hash.ObjectID) error {
 func compressLoose(kind object.Type, data []byte) []byte {
 	var buffer bytes.Buffer
 	compressor := zlib.NewWriter(&buffer)
-	_, _ = compressor.Write(hash.Header(kind.String(), int64(len(data))))
-	_, _ = compressor.Write(data)
+	_, _ = compressor.Write(object.EncodeLooseRaw(kind, data))
 	_ = compressor.Close()
 	return buffer.Bytes()
 }

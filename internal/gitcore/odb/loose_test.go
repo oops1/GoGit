@@ -1,12 +1,10 @@
 package odb
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -40,29 +38,6 @@ func TestLooseIDRejectsForeignNames(t *testing.T) {
 		t.Run(item.name, func(t *testing.T) {
 			if _, ok := looseID(item.fanout, item.entry); ok {
 				t.Fatal("looseID accepted a foreign name")
-			}
-		})
-	}
-}
-
-func TestDecodeLooseHeaderRejectsMalformedHeaders(t *testing.T) {
-	cases := []struct {
-		name   string
-		raw    string
-		wanted error
-	}{
-		{"no terminator", "blob 5", object.ErrInvalidHeader},
-		{"no space", "blob5\x00", object.ErrInvalidHeader},
-		{"unknown type", "widget 5\x00", object.ErrUnknownType},
-		{"size is not a number", "blob five\x00", object.ErrInvalidHeader},
-		{"negative size", "blob -5\x00", object.ErrInvalidHeader},
-		{"header without end", strings.Repeat("b", looseHeaderLimit+1), ErrHeaderTooLong},
-	}
-	for _, item := range cases {
-		t.Run(item.name, func(t *testing.T) {
-			source := bufio.NewReader(strings.NewReader(item.raw))
-			if _, _, err := decodeLooseHeader(source); !errors.Is(err, item.wanted) {
-				t.Fatalf("decodeLooseHeader returned %v, want %v", err, item.wanted)
 			}
 		})
 	}

@@ -2,7 +2,6 @@ package odb
 
 import (
 	"bufio"
-	"bytes"
 	"compress/zlib"
 	"encoding/hex"
 	"errors"
@@ -11,24 +10,19 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
 const (
-	fanoutLength     = 2
-	nameLength       = hash.HexSize - fanoutLength
-	looseHeaderLimit = 64
-	loosePrealloc    = 1 << 20
-	looseDirMode     = 0o755
-	looseFileMode    = 0o444
-	looseTempMode    = 0o644
-	tempPrefix       = "tmp_obj_"
+	fanoutLength  = 2
+	nameLength    = hash.HexSize - fanoutLength
+	looseDirMode  = 0o755
+	looseFileMode = 0o444
+	looseTempMode = 0o644
+	tempPrefix    = "tmp_obj_"
 )
-
-var ErrHeaderTooLong = errors.New("odb: loose object header is too long")
 
 var (
 	rootOpen     = func(root *os.Root, name string) (*os.File, error) { return root.Open(name) }
@@ -63,73 +57,8 @@ func looseID(fanout, name string) (hash.ObjectID, bool) {
 	return id, true
 }
 
-func decodeLooseHeader(source io.ByteReader) (object.Type, int64, error) {
-	head, err := readHeaderBytes(source)
-	if err != nil {
-		return 0, 0, err
-	}
-	typeText, sizeText, found := bytes.Cut(head, []byte(" "))
-	if !found {
-		return 0, 0, fmt.Errorf("%w: no space in header %q", object.ErrInvalidHeader, head)
-	}
-	kind, err := object.ParseType(string(typeText))
-	if err != nil {
-		return 0, 0, err
-	}
-	size, err := strconv.ParseInt(string(sizeText), 10, 64)
-	if err != nil {
-		return 0, 0, fmt.Errorf("%w: %w", object.ErrInvalidHeader, err)
-	}
-	if size < 0 {
-		return 0, 0, fmt.Errorf("%w: negative size %d", object.ErrInvalidHeader, size)
-	}
-	return kind, size, nil
-}
-
-func readHeaderBytes(source io.ByteReader) ([]byte, error) {
-	head := make([]byte, 0, looseHeaderLimit)
-	for range looseHeaderLimit {
-		current, err := source.ReadByte()
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", object.ErrInvalidHeader, err)
-		}
-		if current == 0 {
-			return head, nil
-		}
-		head = append(head, current)
-	}
-	return nil, fmt.Errorf("%w: %d bytes without a terminator", ErrHeaderTooLong, looseHeaderLimit)
-}
-
-func readLooseBody(source io.Reader, size int64) ([]byte, error) {
-	var body bytes.Buffer
-	body.Grow(int(min(size, loosePrealloc)))
-	read, err := io.Copy(&body, io.LimitReader(source, size+1))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", object.ErrMalformed, err)
-	}
-	if read != size {
-		return nil, fmt.Errorf("%w: header declares %d, content holds %d", object.ErrSizeMismatch, size, read)
-	}
-	return body.Bytes(), nil
-}
-
 func decodeLoose(source io.Reader) (object.Type, []byte, error) {
-	decompressor, err := zlib.NewReader(source)
-	if err != nil {
-		return 0, nil, fmt.Errorf("%w: %w", object.ErrMalformed, err)
-	}
-	defer func() { _ = decompressor.Close() }()
-	buffered := bufio.NewReader(decompressor)
-	kind, size, err := decodeLooseHeader(buffered)
-	if err != nil {
-		return 0, nil, err
-	}
-	data, err := readLooseBody(buffered, size)
-	if err != nil {
-		return 0, nil, err
-	}
-	return kind, data, nil
+	return object.DecodeRawStream(source, hash.Zero)
 }
 
 func decodeLooseType(source io.Reader) (object.Type, int64, error) {
@@ -138,7 +67,7 @@ func decodeLooseType(source io.Reader) (object.Type, int64, error) {
 		return 0, 0, fmt.Errorf("%w: %w", object.ErrMalformed, err)
 	}
 	defer func() { _ = decompressor.Close() }()
-	return decodeLooseHeader(bufio.NewReader(decompressor))
+	return object.ReadLooseHeader(bufio.NewReader(decompressor))
 }
 
 func (d *DB) looseFile(id hash.ObjectID) (*os.File, bool, error) {
