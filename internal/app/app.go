@@ -16,9 +16,11 @@ import (
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/layout"
 	"github.com/oops1/gogit/internal/repo"
+	"github.com/oops1/gogit/internal/repo/watch"
 	"github.com/oops1/gogit/internal/systheme"
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
@@ -66,6 +68,19 @@ type App struct {
 	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
 
 	open *openedRepository
+
+	newWatcher func(gitrepo.Layout, watch.Options) watcherIface
+
+	watchMu     sync.Mutex
+	watchCancel context.CancelFunc
+	watchWG     sync.WaitGroup
+	watcher     watcherIface
+
+	postCh   chan func()
+	postStop chan struct{}
+	postWG   sync.WaitGroup
+
+	closeOnce sync.Once
 }
 
 func New(cfg *config.Config, paths config.Paths, log *slog.Logger) (*App, error) {
@@ -142,7 +157,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		statusLabel:       statusTextWidget,
 		statusBranchLabel: statusBranchWidget,
 		registry:          repo.New(cfg),
+		newWatcher:        newRealWatcher,
 	}
+	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
 	root.Title = i18n.T("App.Title")
@@ -230,6 +247,7 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 }
 
 func (a *App) CloseRepository() {
+	a.stopWatcher()
 	a.closeOpenRepository()
 	a.registry.ClearActive()
 	a.cfg.ActiveRepository = ""
@@ -248,6 +266,7 @@ func (a *App) ActivateRepository(id string) {
 	opened, snap, err := openRepositoryAt(id, node.Path)
 	if err != nil {
 		a.log.Warn("open repository failed", "path", node.Path, "error", err)
+		a.stopWatcher()
 		a.closeOpenRepository()
 		a.registry.ClearActive()
 		a.cfg.ActiveRepository = ""
@@ -258,6 +277,7 @@ func (a *App) ActivateRepository(id string) {
 		a.reposView.Render(a.registry)
 		return
 	}
+	a.stopWatcher()
 	a.closeOpenRepository()
 	a.open = opened
 	_ = a.registry.SetActive(id)
@@ -267,6 +287,7 @@ func (a *App) ActivateRepository(id string) {
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
 	a.reposView.Render(a.registry)
+	a.startWatcher(opened.repo.Layout())
 }
 
 func (a *App) closeOpenRepository() {
@@ -474,8 +495,13 @@ func (a *App) Run() error {
 }
 
 func (a *App) Close() {
-	a.closeOpenRepository()
-	widget.RemoveLanguageListener(a.langID)
+	a.closeOnce.Do(func() {
+		a.stopWatcher()
+		close(a.postStop)
+		a.postWG.Wait()
+		a.closeOpenRepository()
+		widget.RemoveLanguageListener(a.langID)
+	})
 }
 
 func (a *App) exit() {
