@@ -21,6 +21,7 @@ linters:
     errcheck:
       exclude-functions:
         - (*os.File).Close
+        - (*os.Root).Close
         - (io.Closer).Close
         - (golang.org/x/sys/windows/registry.Key).Close
         - (*github.com/oops1/gogit/internal/logx.Logger).Close
