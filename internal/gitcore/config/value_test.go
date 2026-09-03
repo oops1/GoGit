@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 )
@@ -101,7 +102,7 @@ func TestExpandPathHandlesTilde(t *testing.T) {
 		{"emptyPathIsUnchanged", "", "", true},
 		{"tildeAlone", "~", home, true},
 		{"tildeSlash", "~/a/b", filepath.Join(home, "a", "b"), true},
-		{"tildeBackslash", `~\a`, filepath.Join(home, "a"), true},
+		{"tildeBackslash", `~\a`, backslashExpanded(home), runtime.GOOS == "windows"},
 		{"otherUserIsNotExpanded", "~someone/a", "", false},
 	}
 	for _, tc := range tests {
@@ -181,4 +182,11 @@ func TestTypedGettersReportMissingAndInvalidValues(t *testing.T) {
 	if f.Has("zz") {
 		t.Error("Has accepted an invalid name")
 	}
+}
+
+func backslashExpanded(home string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(home, "a")
+	}
+	return ""
 }

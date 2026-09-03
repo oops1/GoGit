@@ -146,7 +146,7 @@ func ExpandPath(p string) (string, error) {
 		return p, nil
 	}
 	rest := p[1:]
-	if rest != "" && rest[0] != '/' && rest[0] != '\\' {
+	if rest != "" && !os.IsPathSeparator(rest[0]) {
 		return "", fmt.Errorf("%w: %q", ErrExpandUser, p)
 	}
 	home, ok := homeDir()
