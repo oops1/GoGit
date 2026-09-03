@@ -130,6 +130,23 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestActiveRepositoryRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.Repositories = []Repository{{ID: "r1", Name: "gogit", Path: `D:\Projects\gogit`}}
+	cfg.ActiveRepository = "r1"
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ActiveRepository != "r1" {
+		t.Fatalf("active repository = %q, want %q", loaded.ActiveRepository, "r1")
+	}
+}
+
 func TestSaveFailsWhenDirIsFile(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "file")
