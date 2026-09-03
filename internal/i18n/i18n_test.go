@@ -165,6 +165,16 @@ func TestInstallFromBrokenBuiltin(t *testing.T) {
 	}
 }
 
+func TestTfFormatsTranslationWithArguments(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	widget.RegisterString("en", "Greeting", "Hello, %s!")
+	Apply("en")
+	if got := Tf("Greeting", "World"); got != "Hello, World!" {
+		t.Fatalf("Tf = %q", got)
+	}
+}
+
 func TestInstallWithoutUserDir(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)

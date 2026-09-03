@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-//go:embed ui/*.xaml
+//go:embed ui/*.xaml ui/dialogs/*.xaml
 var uiFS embed.FS
 
 //go:embed i18n/*.json
@@ -16,6 +16,8 @@ var i18nFS embed.FS
 var iconsFS embed.FS
 
 const MainWindowXAML = "ui/main_window.xaml"
+
+const dialogsDir = "ui/dialogs/"
 
 var mainWindow, _ = uiFS.ReadFile(MainWindowXAML)
 
@@ -27,6 +29,10 @@ func MainWindow() []byte {
 
 func UI(name string) ([]byte, error) {
 	return uiFS.ReadFile(name)
+}
+
+func Dialog(name string) ([]byte, error) {
+	return uiFS.ReadFile(dialogsDir + name + ".xaml")
 }
 
 func I18N() fs.FS {

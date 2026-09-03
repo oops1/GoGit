@@ -26,6 +26,22 @@ func TestUIMissing(t *testing.T) {
 	}
 }
 
+func TestDialog(t *testing.T) {
+	data, err := Dialog("add_repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "<Grid") {
+		t.Fatal("add_repo dialog xaml has no Grid root")
+	}
+}
+
+func TestDialogMissing(t *testing.T) {
+	if _, err := Dialog("nope"); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestI18NFS(t *testing.T) {
 	entries, err := fs.ReadDir(I18N(), ".")
 	if err != nil {

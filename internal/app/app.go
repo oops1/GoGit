@@ -19,6 +19,7 @@ import (
 	"github.com/oops1/gogit/internal/layout"
 	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/systheme"
+	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/repos"
 )
 
@@ -54,6 +55,7 @@ type App struct {
 	statusLabel  *widget.Label
 	selectedNode string
 	askInput     func(title, prompt string, cb func(text string, ok bool))
+	showAddRepo  func(initial addrepo.Request, cb func(addrepo.Result, bool))
 }
 
 func New(cfg *config.Config, paths config.Paths, log *slog.Logger) (*App, error) {
@@ -131,6 +133,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.askInput = func(title, prompt string, cb func(text string, ok bool)) {
 		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
 	}
+	a.showAddRepo = a.defaultShowAddRepo
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
@@ -154,6 +157,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdClose] = a.exit
 	a.handlers[CmdCloseRepository] = a.CloseRepository
 	a.handlers[CmdAddGroup] = a.addGroup
+	a.handlers[CmdAddOrCreate] = a.addOrCreateRepository
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
@@ -261,6 +265,52 @@ func (a *App) addGroup() {
 			a.log.Warn("save config failed", "error", err)
 		}
 	})
+}
+
+func (a *App) addOrCreateRepository() {
+	a.showAddRepo(addrepo.Request{}, func(result addrepo.Result, ok bool) {
+		if !ok {
+			return
+		}
+		node, err := a.registry.AddRepository(result.Name, result.Path, a.groupParentForNewGroup())
+		if err != nil {
+			a.log.Warn("add repository failed", "error", err)
+			return
+		}
+		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
+			a.log.Warn("save config failed", "error", err)
+		}
+		a.reposView.Render(a.registry)
+		a.ActivateRepository(node.ID)
+	})
+}
+
+var newAddRepoView = addrepo.NewView
+
+func (a *App) defaultShowAddRepo(initial addrepo.Request, cb func(addrepo.Result, bool)) {
+	view, err := newAddRepoView(a.eng, initial)
+	if err != nil {
+		a.log.Warn("open add repository dialog failed", "error", err)
+		return
+	}
+	a.wireAddRepoView(view, cb)
+	a.eng.ShowModal(view.Dialog())
+}
+
+func (a *App) wireAddRepoView(view *addrepo.View, cb func(addrepo.Result, bool)) {
+	view.OnOK = func(req addrepo.Request) {
+		a.eng.CloseModal(view.Dialog())
+		result, err := addrepo.Apply(req)
+		if err != nil {
+			a.log.Warn("create repository failed", "error", err)
+			return
+		}
+		cb(result, true)
+	}
+	view.OnCancel = func() {
+		a.eng.CloseModal(view.Dialog())
+		cb(addrepo.Result{}, false)
+	}
 }
 
 func (a *App) groupParentForNewGroup() string {
