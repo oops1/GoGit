@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: go vet -unsafeptr=false ./...
+      - run: go build ./...
+      - run: go test -count=1 -race -coverprofile=cover.out -covermode=atomic ./...
+      - name: coverage gate
+        shell: bash
+        run: |
+          total=$(go tool cover -func=cover.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "total coverage: $total%"
+          awk -v t="$total" 'BEGIN { if (t + 0 < 90) { print "coverage below 90%"; exit 1 } }'
+
+  cross-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui" -o dist/gogit.exe ./cmd/gogit
+      - run: GOOS=linux GOARCH=amd64 go build -o dist/gogit ./cmd/gogit
+      - run: GOOS=linux GOARCH=arm64 go build -o dist/gogit-arm64 ./cmd/gogit
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest

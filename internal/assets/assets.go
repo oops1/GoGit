@@ -1,0 +1,47 @@
+package assets
+
+import (
+	"embed"
+	"io/fs"
+	"strings"
+)
+
+//go:embed ui/*.xaml
+var uiFS embed.FS
+
+//go:embed i18n/*.json
+var i18nFS embed.FS
+
+//go:embed icons/*.svg
+var iconsFS embed.FS
+
+const MainWindowXAML = "ui/main_window.xaml"
+
+var mainWindow, _ = uiFS.ReadFile(MainWindowXAML)
+
+var i18nSub, _ = fs.Sub(i18nFS, "i18n")
+
+func MainWindow() []byte {
+	return mainWindow
+}
+
+func UI(name string) ([]byte, error) {
+	return uiFS.ReadFile(name)
+}
+
+func I18N() fs.FS {
+	return i18nSub
+}
+
+func Icon(name string) ([]byte, error) {
+	return iconsFS.ReadFile("icons/" + name + ".svg")
+}
+
+func IconNames() []string {
+	entries, _ := fs.ReadDir(iconsFS, "icons")
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		names = append(names, strings.TrimSuffix(e.Name(), ".svg"))
+	}
+	return names
+}

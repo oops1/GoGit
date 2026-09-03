@@ -1,0 +1,12 @@
+Go.Git
+Copyright 2026 oops1
+
+This product includes software developed as part of the Go.Git project
+(https://github.com/oops1/gogit).
+
+Third-party components:
+- headless-gui (https://github.com/oops1/headless-gui) — MIT License
+- BurntSushi/toml (https://github.com/BurntSushi/toml) — MIT License
+- golang.org/x/* — BSD-3-Clause License
+- ebitengine/purego — Apache License 2.0
+- go-text/typesetting — BSD-3-Clause License
