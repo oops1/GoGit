@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/oops1/gogit/internal/gitcore/wildmatch"
 )
 
 type Level int
@@ -332,7 +334,11 @@ func (l *loader) matchGitDir(pattern, base string, icase bool) bool {
 	if !ok {
 		return false
 	}
-	return wildMatch(expanded, filepath.ToSlash(realPath(l.opts.GitDir)), icase)
+	flags := wildmatch.Pathname
+	if icase {
+		flags |= wildmatch.CaseFold
+	}
+	return wildmatch.Match(expanded, filepath.ToSlash(realPath(l.opts.GitDir)), flags)
 }
 
 func expandGitDirPattern(pattern, base string) (string, bool) {
@@ -385,7 +391,7 @@ func (l *loader) matchBranch(pattern string) bool {
 	if branch == "" {
 		return false
 	}
-	return wildMatch(pattern, branch, false)
+	return wildmatch.Match(pattern, branch, wildmatch.Pathname)
 }
 
 func (l *loader) currentBranch() string {

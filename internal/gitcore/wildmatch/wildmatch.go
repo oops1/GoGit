@@ -1,23 +1,37 @@
-package config
+package wildmatch
 
 import "strings"
 
-func wildMatch(pattern, text string, icase bool) bool {
-	return dowild(pattern, text, icase, true)
+type Flags uint8
+
+const (
+	CaseFold Flags = 1 << iota
+	Pathname
+)
+
+func Match(pattern, text string, flags Flags) bool {
+	return dowild(pattern, text, flags, true)
 }
 
-func eqByte(a, b byte, icase bool) bool {
-	if icase {
+func lower(c byte) byte {
+	if c >= 'A' && c <= 'Z' {
+		return c + 'a' - 'A'
+	}
+	return c
+}
+
+func eqByte(a, b byte, flags Flags) bool {
+	if flags&CaseFold != 0 {
 		return lower(a) == lower(b)
 	}
 	return a == b
 }
 
-func inRange(lo, hi, c byte, icase bool) bool {
+func inRange(lo, hi, c byte, flags Flags) bool {
 	if c >= lo && c <= hi {
 		return true
 	}
-	if icase {
+	if flags&CaseFold != 0 {
 		u := c
 		if u >= 'a' && u <= 'z' {
 			u = u - 'a' + 'A'
@@ -29,12 +43,12 @@ func inRange(lo, hi, c byte, icase bool) bool {
 	return false
 }
 
-func dowild(p, t string, icase, compStart bool) bool {
+func dowild(p, t string, flags Flags, compStart bool) bool {
 	i, j := 0, 0
 	cs := compStart
 	for i < len(p) {
 		if p[i] == '*' {
-			return star(p, i, t[j:], icase, cs)
+			return star(p, i, t[j:], flags, cs)
 		}
 		if j >= len(t) {
 			return false
@@ -42,12 +56,12 @@ func dowild(p, t string, icase, compStart bool) bool {
 		tc := t[j]
 		switch p[i] {
 		case '?':
-			if tc == '/' {
+			if tc == '/' && flags&Pathname != 0 {
 				return false
 			}
 			i++
 		case '[':
-			n, ok := matchBracket(p[i:], tc, icase)
+			n, ok := matchBracket(p[i:], tc, flags)
 			if !ok {
 				return false
 			}
@@ -58,7 +72,7 @@ func dowild(p, t string, icase, compStart bool) bool {
 				i++
 				pc = p[i]
 			}
-			if !eqByte(pc, tc, icase) {
+			if !eqByte(pc, tc, flags) {
 				return false
 			}
 			i++
@@ -69,27 +83,28 @@ func dowild(p, t string, icase, compStart bool) bool {
 	return j == len(t)
 }
 
-func star(p string, i int, tail string, icase, compStart bool) bool {
+func star(p string, i int, tail string, flags Flags, compStart bool) bool {
 	k := i
 	for k < len(p) && p[k] == '*' {
 		k++
 	}
 	rest := p[k:]
-	matchSlash := false
-	if k-i > 1 {
+	pathname := flags&Pathname != 0
+	matchSlash := !pathname
+	if k-i > 1 && pathname {
 		if !compStart || (rest != "" && rest[0] != '/') {
 			return false
 		}
 		if rest == "" {
 			return true
 		}
-		if dowild(rest[1:], tail, icase, true) {
+		if dowild(rest[1:], tail, flags, true) {
 			return true
 		}
 		matchSlash = true
 	}
 	if rest == "" {
-		return !strings.Contains(tail, "/")
+		return matchSlash || !strings.Contains(tail, "/")
 	}
 	limit := len(tail)
 	if !matchSlash {
@@ -98,15 +113,15 @@ func star(p string, i int, tail string, icase, compStart bool) bool {
 		}
 	}
 	for m := 0; m <= limit; m++ {
-		if dowild(rest, tail[m:], icase, false) {
+		if dowild(rest, tail[m:], flags, false) {
 			return true
 		}
 	}
 	return false
 }
 
-func matchBracket(p string, tc byte, icase bool) (int, bool) {
-	if tc == '/' {
+func matchBracket(p string, tc byte, flags Flags) (int, bool) {
+	if tc == '/' && flags&Pathname != 0 {
 		return 0, false
 	}
 	i := 1
@@ -130,7 +145,7 @@ func matchBracket(p string, tc byte, icase bool) (int, bool) {
 				return 0, false
 			}
 			c = p[i]
-			if eqByte(c, tc, icase) {
+			if eqByte(c, tc, flags) {
 				matched = true
 			}
 			prev, hasPrev = c, true
@@ -145,13 +160,13 @@ func matchBracket(p string, tc byte, icase bool) (int, bool) {
 				}
 				c = p[i]
 			}
-			if inRange(prev, c, tc, icase) {
+			if inRange(prev, c, tc, flags) {
 				matched = true
 			}
 			hasPrev = false
 			i++
 		default:
-			if eqByte(c, tc, icase) {
+			if eqByte(c, tc, flags) {
 				matched = true
 			}
 			prev, hasPrev = c, true
