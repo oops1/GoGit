@@ -2,6 +2,8 @@ package icons
 
 import (
 	"errors"
+	"image"
+	"image/color"
 	"sync"
 	"testing"
 
@@ -94,6 +96,114 @@ func TestDocumentParseFailureIsCachedAsNil(t *testing.T) {
 	}
 }
 
+func TestToolbarRendersKnownIconAtRequestedSize(t *testing.T) {
+	resetForTest()
+	img := Toolbar("pull", 16, color.RGBA{R: 255, A: 255})
+	if img == nil {
+		t.Fatal("Toolbar(pull, 16, red) = nil")
+	}
+	if b := img.Bounds(); b.Dx() != 16 || b.Dy() != 16 {
+		t.Fatalf("bounds = %v, want 16x16", b)
+	}
+}
+
+func TestToolbarReturnsNilForUnknownName(t *testing.T) {
+	resetForTest()
+	if img := Toolbar("does-not-exist", 16, color.RGBA{}); img != nil {
+		t.Fatalf("Toolbar(does-not-exist, 16, _) = %v, want nil", img)
+	}
+	if img := Toolbar("does-not-exist", 16, color.RGBA{}); img != nil {
+		t.Fatalf("second call: Toolbar(does-not-exist, 16, _) = %v, want nil", img)
+	}
+}
+
+func TestToolbarReturnsNilForNonPositiveSize(t *testing.T) {
+	resetForTest()
+	if img := Toolbar("pull", 0, color.RGBA{}); img != nil {
+		t.Fatalf("Toolbar(pull, 0, _) = %v, want nil", img)
+	}
+	if img := Toolbar("pull", -1, color.RGBA{}); img != nil {
+		t.Fatalf("Toolbar(pull, -1, _) = %v, want nil", img)
+	}
+}
+
+func TestToolbarRecolorsTheIconWithTheGivenTint(t *testing.T) {
+	resetForTest()
+	red := Toolbar("pull", 16, color.RGBA{R: 255, A: 255})
+	blue := Toolbar("pull", 16, color.RGBA{B: 255, A: 255})
+	if red == nil || blue == nil {
+		t.Fatal("expected non-nil images")
+	}
+	if sameImage(red, blue) {
+		t.Fatal("expected a different rasterization for a different tint")
+	}
+}
+
+func TestToolbarCachesRasterizedImageByNameSizeAndTint(t *testing.T) {
+	resetForTest()
+	tint := color.RGBA{G: 255, A: 255}
+	first := Toolbar("push", 16, tint)
+	second := Toolbar("push", 16, tint)
+	if first == nil || second == nil {
+		t.Fatal("expected non-nil images")
+	}
+	if first != second {
+		t.Fatal("expected cached image to be returned for the same name, size and tint")
+	}
+}
+
+func TestTreeTintedRendersKnownIconAtRequestedSize(t *testing.T) {
+	resetForTest()
+	img := TreeTinted("repository", 16, color.RGBA{R: 255, A: 255})
+	if img == nil {
+		t.Fatal("TreeTinted(repository, 16, red) = nil")
+	}
+	if b := img.Bounds(); b.Dx() != 16 || b.Dy() != 16 {
+		t.Fatalf("bounds = %v, want 16x16", b)
+	}
+}
+
+func TestTreeTintedReturnsNilForUnknownName(t *testing.T) {
+	resetForTest()
+	if img := TreeTinted("does-not-exist", 16, color.RGBA{}); img != nil {
+		t.Fatalf("TreeTinted(does-not-exist, 16, _) = %v, want nil", img)
+	}
+}
+
+func TestTreeTintedReturnsNilForNonPositiveSize(t *testing.T) {
+	resetForTest()
+	if img := TreeTinted("repository", 0, color.RGBA{}); img != nil {
+		t.Fatalf("TreeTinted(repository, 0, _) = %v, want nil", img)
+	}
+}
+
+func TestTreeTintedDiffersFromThePlainTreeIcon(t *testing.T) {
+	resetForTest()
+	plain := Tree("repository", 16)
+	tinted := TreeTinted("repository", 16, color.RGBA{R: 76, G: 194, B: 255, A: 255})
+	if plain == nil || tinted == nil {
+		t.Fatal("expected non-nil images")
+	}
+	if sameImage(plain, tinted) {
+		t.Fatal("expected the accent-tinted icon to differ from the plain icon")
+	}
+}
+
+func sameImage(a, b image.Image) bool {
+	ba, bb := a.Bounds(), b.Bounds()
+	if ba != bb {
+		return false
+	}
+	for y := ba.Min.Y; y < ba.Max.Y; y++ {
+		for x := ba.Min.X; x < ba.Max.X; x++ {
+			if a.At(x, y) != b.At(x, y) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func TestConcurrentAccessIsSafe(t *testing.T) {
 	resetForTest()
 	names := []string{"added", "modified", "conflict", "does-not-exist"}
@@ -103,6 +213,8 @@ func TestConcurrentAccessIsSafe(t *testing.T) {
 			for _, name := range names {
 				Status(name, 16)
 				Tree("branch", 16)
+				TreeTinted("branch", 16, color.RGBA{R: 76, G: 194, B: 255, A: 255})
+				Toolbar("pull", 16, color.RGBA{R: 255, A: 255})
 			}
 		})
 	}

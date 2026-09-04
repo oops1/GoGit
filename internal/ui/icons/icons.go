@@ -15,6 +15,7 @@ type source int
 const (
 	sourceStatus source = iota
 	sourceTree
+	sourceToolbar
 )
 
 type docKey struct {
@@ -41,12 +42,22 @@ var loadStatusIcon = assets.StatusIcon
 
 var loadTreeIcon = assets.TreeIcon
 
+var loadToolbarIcon = assets.Icon
+
 func Status(name string, size int) image.Image {
 	return render(sourceStatus, name, size)
 }
 
 func Tree(name string, size int) image.Image {
 	return render(sourceTree, name, size)
+}
+
+func TreeTinted(name string, size int, tint color.RGBA) image.Image {
+	return renderTinted(sourceTree, name, size, tint)
+}
+
+func Toolbar(name string, size int, tint color.RGBA) image.Image {
+	return renderTinted(sourceToolbar, name, size, tint)
 }
 
 func render(src source, name string, size int) image.Image {
@@ -72,6 +83,17 @@ func render(src source, name string, size int) image.Image {
 	rendered[rk] = img
 	mu.Unlock()
 	return img
+}
+
+func renderTinted(src source, name string, size int, tint color.RGBA) image.Image {
+	if size <= 0 {
+		return nil
+	}
+	doc := document(src, name)
+	if doc == nil {
+		return nil
+	}
+	return doc.RasterizeCached(size, size, tint, true)
 }
 
 func document(src source, name string) *svg.Document {
@@ -112,10 +134,14 @@ func markFailed(dk docKey) {
 }
 
 func load(src source, name string) ([]byte, error) {
-	if src == sourceTree {
+	switch src {
+	case sourceTree:
 		return loadTreeIcon(name)
+	case sourceToolbar:
+		return loadToolbarIcon(name)
+	default:
+		return loadStatusIcon(name)
 	}
-	return loadStatusIcon(name)
 }
 
 func resetForTest() {

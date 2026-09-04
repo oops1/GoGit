@@ -27,8 +27,10 @@ func (a *App) startWorking() {
 		a.filesMu.Lock()
 		a.filesMode = filesModeWorking
 		a.currentEntries = nil
+		a.activeModified = false
 		a.filesMu.Unlock()
 		a.setFilesRows(nil)
+		a.reposView.Render(a.registry, a.repoTreeState())
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -63,12 +65,17 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	if len(entries) > changes.MaxFiles {
 		entries = entries[:changes.MaxFiles]
 	}
+	modified := len(status.Entries) > 0
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
 	a.currentEntries = entries
 	a.currentFiles = nil
+	a.activeModified = modified
 	a.filesMu.Unlock()
-	a.Post(func() { a.setFilesRows(rows) })
+	a.Post(func() {
+		a.setFilesRows(rows)
+		a.reposView.Render(a.registry, a.repoTreeState())
+	})
 }
 
 func (a *App) refreshWorkingStatus() {

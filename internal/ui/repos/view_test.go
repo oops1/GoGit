@@ -1,6 +1,7 @@
 package repos
 
 import (
+	"image/color"
 	"path/filepath"
 	"testing"
 
@@ -45,7 +46,7 @@ func bound(t *testing.T) (*View, *widget.TreeViewWidget) {
 func TestRenderBuildsTreeStructureMatchingRegistry(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	roots := tw.Tree.Roots()
 	if len(roots) != 2 {
@@ -74,7 +75,7 @@ func TestRenderBuildsTreeStructureMatchingRegistry(t *testing.T) {
 func TestRenderAssignsAnIconToEveryNode(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	var walk func(items []*treeview.TreeViewItem)
 	walk = func(items []*treeview.TreeViewItem) {
@@ -91,7 +92,7 @@ func TestRenderAssignsAnIconToEveryNode(t *testing.T) {
 func TestRenderUsesTheOpenGroupIconForAnExpandedGroupAndTheClosedIconOtherwise(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	var work *treeview.TreeViewItem
 	for _, r := range tw.Tree.Roots() {
@@ -107,7 +108,7 @@ func TestRenderUsesTheOpenGroupIconForAnExpandedGroupAndTheClosedIconOtherwise(t
 		t.Fatal("expanded group must have an icon")
 	}
 	tw.Tree.CollapseItem(work)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	for _, r := range tw.Tree.Roots() {
 		if r.DisplayText() == "Work" {
@@ -128,8 +129,7 @@ func TestRenderGivesARepositoryTheModifiedIconWhenMarked(t *testing.T) {
 		}
 	}
 	v, tw := bound(t)
-	v.Modified = map[string]bool{mainID: true}
-	v.Render(reg)
+	v.Render(reg, map[string]State{mainID: {Modified: true}})
 
 	item, ok := v.Item(mainID)
 	if !ok {
@@ -138,6 +138,130 @@ func TestRenderGivesARepositoryTheModifiedIconWhenMarked(t *testing.T) {
 	_ = tw
 	if item.Icon == icons.Tree("repository", treeIconSize) {
 		t.Fatal("a modified repository must not use the plain repository icon")
+	}
+	if item.Icon != icons.Tree("repository_modified", treeIconSize) {
+		t.Fatal("a modified repository must use the repository_modified icon")
+	}
+}
+
+func TestRenderGivesARepositoryTheMissingIconWhenMarked(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	var mainID string
+	for n := range reg.Walk() {
+		if n.Kind == repo.KindRepository {
+			mainID = n.ID
+		}
+	}
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {Missing: true, Modified: true}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.Icon != icons.Tree("repository_missing", treeIconSize) {
+		t.Fatal("missing must take priority over modified and use the repository_missing icon")
+	}
+}
+
+func TestRenderUsesThePlainRepositoryIconWithoutState(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	var mainID string
+	for n := range reg.Walk() {
+		if n.Kind == repo.KindRepository {
+			mainID = n.ID
+		}
+	}
+	v, _ := bound(t)
+	v.Render(reg, nil)
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.Icon != icons.Tree("repository", treeIconSize) {
+		t.Fatal("a repository without state must use the plain repository icon")
+	}
+}
+
+func TestRenderTintsTheActiveRepositoryIconWithAccent(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	var mainID string
+	for n := range reg.Walk() {
+		if n.Kind == repo.KindRepository {
+			mainID = n.ID
+		}
+	}
+	if err := reg.SetActive(mainID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	accent := color.RGBA{R: 76, G: 194, B: 255, A: 255}
+	v.SetAccent(accent)
+	v.Render(reg, nil)
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.Icon == icons.Tree("repository", treeIconSize) {
+		t.Fatal("the active repository must not use the plain, untinted repository icon")
+	}
+	want := icons.TreeTinted("repository", treeIconSize, accent)
+	if item.Icon != want {
+		t.Fatal("the active repository must use the accent-tinted repository icon")
+	}
+}
+
+func TestRenderDoesNotTintInactiveRepositories(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	var mainID, worktreeID string
+	for n := range reg.Walk() {
+		if n.Kind == repo.KindRepository {
+			mainID = n.ID
+		}
+		if n.Kind == repo.KindWorktree {
+			worktreeID = n.ID
+		}
+	}
+	if err := reg.SetActive(worktreeID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.SetAccent(color.RGBA{R: 76, G: 194, B: 255, A: 255})
+	v.Render(reg, nil)
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.Icon != icons.Tree("repository", treeIconSize) {
+		t.Fatal("an inactive repository must keep the plain, untinted icon")
+	}
+}
+
+func TestRenderTintsTheActiveWorktreeIconWithAccent(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	var worktreeID string
+	for n := range reg.Walk() {
+		if n.Kind == repo.KindWorktree {
+			worktreeID = n.ID
+		}
+	}
+	if err := reg.SetActive(worktreeID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	accent := color.RGBA{R: 76, G: 194, B: 255, A: 255}
+	v.SetAccent(accent)
+	v.Render(reg, nil)
+
+	item, ok := v.Item(worktreeID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.Icon != icons.TreeTinted("worktree", treeIconSize, accent) {
+		t.Fatal("the active worktree must use the accent-tinted worktree icon")
 	}
 }
 
@@ -153,7 +277,7 @@ func TestRenderGivesAWorktreeItsOwnIcon(t *testing.T) {
 		t.Fatal("worktree not found")
 	}
 	v, _ := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 	item, ok := v.Item(featureID)
 	if !ok {
 		t.Fatal("item not tracked")
@@ -169,7 +293,7 @@ func TestRenderGivesAWorktreeItsOwnIcon(t *testing.T) {
 func TestRenderDefaultsGroupsToExpanded(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 	for _, r := range tw.Tree.Roots() {
 		if !r.Expanded {
 			t.Fatalf("group %q must default to expanded", r.DisplayText())
@@ -180,7 +304,7 @@ func TestRenderDefaultsGroupsToExpanded(t *testing.T) {
 func TestRenderPreservesCollapsedStateAcrossRenders(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	var work *treeview.TreeViewItem
 	for _, r := range tw.Tree.Roots() {
@@ -193,7 +317,7 @@ func TestRenderPreservesCollapsedStateAcrossRenders(t *testing.T) {
 	}
 	tw.Tree.CollapseItem(work)
 
-	v.Render(reg)
+	v.Render(reg, nil)
 	for _, r := range tw.Tree.Roots() {
 		if r.DisplayText() == "Work" && r.Expanded {
 			t.Fatal("collapsed state must survive re-render")
@@ -204,7 +328,7 @@ func TestRenderPreservesCollapsedStateAcrossRenders(t *testing.T) {
 func TestRenderKeepsNewGroupsExpandedAfterPartialCollapse(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	var work *treeview.TreeViewItem
 	for _, r := range tw.Tree.Roots() {
@@ -217,7 +341,7 @@ func TestRenderKeepsNewGroupsExpandedAfterPartialCollapse(t *testing.T) {
 	if _, err := reg.AddGroup("NewGroup", ""); err != nil {
 		t.Fatal(err)
 	}
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	found := false
 	for _, r := range tw.Tree.Roots() {
@@ -239,7 +363,7 @@ func TestRenderKeepsNewGroupsExpandedAfterPartialCollapse(t *testing.T) {
 func TestOnActivateFiresOnItemInvoked(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, _ := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	var mainID string
 	for n := range reg.Walk() {
@@ -263,7 +387,7 @@ func TestOnActivateFiresOnItemInvoked(t *testing.T) {
 func TestOnActivateIgnoresUnknownItem(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, _ := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	called := false
 	v.OnActivate = func(string) { called = true }
@@ -276,7 +400,7 @@ func TestOnActivateIgnoresUnknownItem(t *testing.T) {
 func TestOnActivateNotSetDoesNotPanic(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, _ := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 	var mainID string
 	for n := range reg.Walk() {
 		if n.Kind == repo.KindRepository {
@@ -290,7 +414,7 @@ func TestOnActivateNotSetDoesNotPanic(t *testing.T) {
 func TestOnSelectFiresOnSelectedItemChanged(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 
 	var mainID string
 	for n := range reg.Walk() {
@@ -314,7 +438,7 @@ func TestOnSelectFiresOnSelectedItemChanged(t *testing.T) {
 func TestOnSelectIgnoresNilSelection(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 	var mainID string
 	for n := range reg.Walk() {
 		if n.Kind == repo.KindRepository {
@@ -335,7 +459,7 @@ func TestOnSelectIgnoresNilSelection(t *testing.T) {
 func TestOnSelectIgnoresUnknownItemAndMissingHandler(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 	tw.Tree.SetSelectedItem(treeview.NewItem("ghost"))
 
 	called := false
@@ -358,7 +482,9 @@ func TestOnSelectIgnoresUnknownItemAndMissingHandler(t *testing.T) {
 
 func TestCaptureExpandedIsNoOpBeforeBind(t *testing.T) {
 	v := NewView()
-	v.captureExpanded()
+	v.mu.Lock()
+	v.captureExpandedLocked()
+	v.mu.Unlock()
 }
 
 func TestItemReturnsFalseForUnknownID(t *testing.T) {
@@ -372,7 +498,7 @@ func TestRenderOnEmptyRegistryProducesNoRoots(t *testing.T) {
 	cfg := config.Default()
 	reg := repo.New(cfg)
 	v, tw := bound(t)
-	v.Render(reg)
+	v.Render(reg, nil)
 	if len(tw.Tree.Roots()) != 0 {
 		t.Fatalf("roots = %d, want 0", len(tw.Tree.Roots()))
 	}

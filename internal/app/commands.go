@@ -99,6 +99,13 @@ var toolbarButtons = map[CommandID]string{
 	CmdCommit: "btnCommit",
 }
 
+var toolbarIcons = map[CommandID]string{
+	CmdPull:   "pull",
+	CmdSync:   "sync",
+	CmdPush:   "push",
+	CmdCommit: "commit",
+}
+
 type State struct {
 	ActiveRepository string
 	ActiveIsWorktree bool

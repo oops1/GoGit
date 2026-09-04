@@ -111,6 +111,7 @@ type App struct {
 	commitSelected   bool
 	filesAllRows     []changes.Row
 	filesFilterQuery string
+	activeModified   bool
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -233,7 +234,6 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
-	a.applyTheme()
 
 	a.reposView = repos.NewView()
 	a.reposView.Bind(reposTreeWidget)
@@ -253,7 +253,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesFilterInput.OnChange = a.onFilesFilterChanged
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
-	a.reposView.Render(a.registry)
+	a.applyTheme()
 	a.updateStatusText()
 
 	a.wireMenuBar()
@@ -330,7 +330,7 @@ func (a *App) CloseRepository() {
 	a.statusBranchLabel.SetText("")
 	a.branchesView.Render(branches.Snapshot{})
 	a.journalView.Reset()
-	a.reposView.Render(a.registry)
+	a.reposView.Render(a.registry, a.repoTreeState())
 }
 
 func (a *App) ActivateRepository(id string) {
@@ -352,7 +352,7 @@ func (a *App) ActivateRepository(id string) {
 		a.statusBranchLabel.SetText("")
 		a.branchesView.Render(branches.Snapshot{})
 		a.journalView.Reset()
-		a.reposView.Render(a.registry)
+		a.reposView.Render(a.registry, a.repoTreeState())
 		return
 	}
 	a.stopWatcher()
@@ -366,7 +366,7 @@ func (a *App) ActivateRepository(id string) {
 	a.updateStatusText()
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
-	a.reposView.Render(a.registry)
+	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
 	a.startWorking()
@@ -447,7 +447,7 @@ func (a *App) addGroup() {
 			a.log.Warn("add group failed", "error", err)
 			return
 		}
-		a.reposView.Render(a.registry)
+		a.reposView.Render(a.registry, a.repoTreeState())
 		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 			a.log.Warn("save config failed", "error", err)
 		}
@@ -467,7 +467,7 @@ func (a *App) addOrCreateRepository() {
 		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 			a.log.Warn("save config failed", "error", err)
 		}
-		a.reposView.Render(a.registry)
+		a.reposView.Render(a.registry, a.repoTreeState())
 		a.ActivateRepository(node.ID)
 	})
 }
@@ -530,7 +530,15 @@ func (a *App) EffectiveTheme() string {
 }
 
 func (a *App) applyTheme() {
-	a.eng.SetTheme(themeFor(a.EffectiveTheme()))
+	theme := themeFor(a.EffectiveTheme())
+	a.eng.SetTheme(theme)
+	a.applyToolbarIcons(theme)
+	a.applyRepoTreeTheme(theme)
+}
+
+func (a *App) applyRepoTreeTheme(t *widget.Theme) {
+	a.reposView.SetAccent(t.Accent)
+	a.reposView.Render(a.registry, a.repoTreeState())
 }
 
 func (a *App) FollowSystemTheme(ctx context.Context) {
