@@ -57,10 +57,10 @@ release-local: build-windows build-linux
 	GOOS=linux GOARCH=arm64 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o dist/linux-arm64/$(BINARY) ./cmd/gogit
 	mkdir -p dist/windows-amd64 dist/linux-amd64 dist/linux-arm64
 	cp LICENSE NOTICE dist/windows-amd64/ && cp LICENSE NOTICE dist/linux-amd64/ && cp LICENSE NOTICE dist/linux-arm64/
-	cd dist/windows-amd64 && tar czf ../gogit-$(VERSION)-windows-amd64.tar.gz gogit.exe LICENSE NOTICE && cd ../..
+	cd dist/windows-amd64 && zip -q -r ../gogit-$(VERSION)-windows-amd64.zip gogit.exe LICENSE NOTICE && cd ../..
 	cd dist/linux-amd64 && tar czf ../gogit-$(VERSION)-linux-amd64.tar.gz gogit LICENSE NOTICE && cd ../..
 	cd dist/linux-arm64 && tar czf ../gogit-$(VERSION)-linux-arm64.tar.gz gogit LICENSE NOTICE && cd ../..
-	cd dist && sha256sum gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS && cd ..
+	cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS && cd ..
 
 clean:
 	rm -rf bin dist cover.out coverage.html cmd/gogit/*.syso
