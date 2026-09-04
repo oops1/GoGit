@@ -662,6 +662,7 @@ func (a *App) applyPaneTitleColors() {
 
 func (a *App) applyRepoTreeTheme(t *widget.Theme) {
 	a.reposView.SetAccent(t.Accent)
+	a.reposView.SetMuted(t.Disabled)
 	a.reposView.Render(a.registry, a.repoTreeState())
 }
 

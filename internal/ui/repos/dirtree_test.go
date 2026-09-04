@@ -2,6 +2,7 @@ package repos
 
 import (
 	"errors"
+	"image/color"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +39,9 @@ func repoRegistry(t *testing.T, path string) (*repo.Registry, string) {
 	reg := repo.New(cfg)
 	n, err := reg.AddRepository("Main", path, "")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.SetActive(n.ID); err != nil {
 		t.Fatal(err)
 	}
 	return reg, n.ID
@@ -544,5 +548,75 @@ func TestDisplayNameOmitsTheBranchSuffixWhenThereIsNone(t *testing.T) {
 	item, _ := v.Item(repoID)
 	if item.DisplayText() != "Main" {
 		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	}
+}
+
+func TestDirTreeStaysClosedForARepositoryThatIsNotActive(t *testing.T) {
+	dir := t.TempDir()
+	mkdirs(t, dir, "src")
+	reg, repoID := repoRegistry(t, dir)
+	reg.ClearActive()
+	v, tw := bound(t)
+	v.Render(reg, nil)
+
+	root, ok := v.Item(repoID)
+	if !ok {
+		t.Fatal("repository item missing")
+	}
+	tw.Tree.ExpandItem(root)
+
+	if len(root.Children) != 0 {
+		t.Fatalf("children = %+v, a closed repository must not list its directories", root.Children)
+	}
+}
+
+func TestDirTreeMutesDirectoriesReportedAsIgnoredOrUntracked(t *testing.T) {
+	dir := t.TempDir()
+	mkdirs(t, dir, "src", "output", "output/logs", "vendor")
+	reg, repoID := repoRegistry(t, dir)
+	v, tw := bound(t)
+	v.Render(reg, map[string]State{repoID: {MutedDirs: []string{"output", "vendor"}}})
+
+	root, _ := v.Item(repoID)
+	tw.Tree.ExpandItem(root)
+
+	src := findChild(root, "src")
+	output := findChild(root, "output")
+	vendor := findChild(root, "vendor")
+	if src == nil || output == nil || vendor == nil {
+		t.Fatalf("children = %+v", root.Children)
+	}
+	if src.Icon == output.Icon {
+		t.Fatal("an ignored directory must not look like a tracked one")
+	}
+	if output.Icon != vendor.Icon {
+		t.Fatal("both muted directories must share the same icon")
+	}
+	tw.Tree.ExpandItem(output)
+	logs := findChild(output, "logs")
+	if logs == nil {
+		t.Fatalf("output children = %+v", output.Children)
+	}
+	if logs.Icon != output.Icon {
+		t.Fatal("a directory inside a muted one must be muted too")
+	}
+}
+
+func TestRepositoryIconIsMutedWhileAnotherRepositoryIsActive(t *testing.T) {
+	dir := t.TempDir()
+	reg, repoID := repoRegistry(t, dir)
+	second, err := reg.AddRepository("Second", t.TempDir(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.SetAccent(color.RGBA{R: 0x2F, G: 0x81, B: 0xF7, A: 255})
+	v.SetMuted(color.RGBA{R: 0x8B, G: 0x94, B: 0x9E, A: 255})
+	v.Render(reg, nil)
+
+	active, _ := v.Item(repoID)
+	idle, _ := v.Item(second.ID)
+	if active.Icon == idle.Icon {
+		t.Fatal("the active repository must not look like the closed one")
 	}
 }

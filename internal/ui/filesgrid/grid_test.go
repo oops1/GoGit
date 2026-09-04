@@ -456,3 +456,10 @@ func TestDrawDoesNotPanic(t *testing.T) {
 	eng.SetRoot(g)
 	eng.RenderOnce()
 }
+
+func TestGridRefusesCellEditing(t *testing.T) {
+	g := New()
+	if !g.Data().Grid.IsReadOnly {
+		t.Fatal("the files grid must not let a click open a cell editor")
+	}
+}

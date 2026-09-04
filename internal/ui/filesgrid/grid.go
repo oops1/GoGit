@@ -44,6 +44,7 @@ func New() *Grid {
 	dg := widget.NewDataGridWidget()
 	dg.Grid.CanUserSortColumns = false
 	dg.Grid.CanUserResizeColumns = false
+	dg.Grid.IsReadOnly = true
 	dg.Grid.RowHeight = DefaultRowHeight
 	dg.Grid.HeaderHeight = DefaultHeaderHeight
 	g := &Grid{dg: dg, menu: widget.NewPopupMenu(), press: pressState{colIdx: -1}}

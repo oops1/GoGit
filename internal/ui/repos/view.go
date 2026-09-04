@@ -19,9 +19,10 @@ import (
 const treeIconSize = 16
 
 type State struct {
-	Modified bool
-	Missing  bool
-	Branch   string
+	Modified  bool
+	Missing   bool
+	Branch    string
+	MutedDirs []string
 }
 
 type dirEntry struct {
@@ -82,6 +83,8 @@ type View struct {
 	itemByID          map[string]*treeview.TreeViewItem
 	expanded          map[string]bool
 	accent            color.RGBA
+	muted             color.RGBA
+	mutedDirs         []string
 	OnActivate        func(id string)
 	OnSelect          func(id string)
 	OnSelectDirectory func(repoID, relPath string)
@@ -145,6 +148,12 @@ func (v *View) SetAccent(c color.RGBA) {
 	v.mu.Unlock()
 }
 
+func (v *View) SetMuted(c color.RGBA) {
+	v.mu.Lock()
+	v.muted = c
+	v.mu.Unlock()
+}
+
 func (v *View) Render(reg *repo.Registry, state map[string]State) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -161,6 +170,7 @@ func (v *View) Render(reg *repo.Registry, state map[string]State) {
 	if n, ok := reg.Active(); ok {
 		activeID = n.ID
 	}
+	v.mutedDirs = state[activeID].MutedDirs
 
 	for _, item := range v.buildItemsLocked(reg.Roots(), state, activeID) {
 		v.tree.AddRoot(item)
@@ -204,7 +214,7 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 		for _, child := range v.buildItemsLocked(n.Children, state, activeID) {
 			item.AddChild(child)
 		}
-		if n.Kind == repo.KindRepository || n.Kind == repo.KindWorktree {
+		if n.ID == activeID && (n.Kind == repo.KindRepository || n.Kind == repo.KindWorktree) {
 			v.attachDirChildrenLocked(item, n.ID, n.Path, "")
 		}
 		items = append(items, item)
@@ -242,7 +252,7 @@ func (v *View) appendDirChildrenLocked(item *treeview.TreeViewItem, repoID, root
 func (v *View) buildDirItemLocked(repoID, root, rel string) *treeview.TreeViewItem {
 	item := treeview.NewItem(filepath.Base(rel))
 	item.Tag = dirEntry{repoID: repoID, root: root, rel: rel}
-	item.Icon = icons.Tree("folder", treeIconSize)
+	item.Icon = icons.Tree(directoryIconLocked(v.mutedDirs, rel), treeIconSize)
 	item.Expanded = v.expanded[dirKey(repoID, rel)]
 	v.attachDirChildrenLocked(item, repoID, root, rel)
 	return item
@@ -295,5 +305,25 @@ func (v *View) iconLocked(name string, active bool) image.Image {
 	if active {
 		return icons.TreeTinted(name, treeIconSize, v.accent)
 	}
+	if v.muted.A > 0 {
+		return icons.TreeTinted(name, treeIconSize, v.muted)
+	}
 	return icons.Tree(name, treeIconSize)
+}
+
+func directoryIconLocked(muted []string, rel string) string {
+	if isMutedDir(muted, rel) {
+		return "directory_muted"
+	}
+	return "directory"
+}
+
+func isMutedDir(muted []string, rel string) bool {
+	path := filepath.ToSlash(rel)
+	for _, prefix := range muted {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }

@@ -75,9 +75,9 @@ func TestActiveRepositoryIconDiffersFromAnInactiveRepository(t *testing.T) {
 	if active.Icon != want {
 		t.Fatal("the active repository must use the accent-tinted repository icon")
 	}
-	wantInactive := icons.Tree("repository", 16)
+	wantInactive := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Disabled)
 	if inactive.Icon != wantInactive {
-		t.Fatal("an inactive repository must keep the plain repository icon")
+		t.Fatal("a repository that is not open must use the muted repository icon")
 	}
 }
 

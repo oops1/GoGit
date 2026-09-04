@@ -116,7 +116,7 @@ func TestTreeIcons(t *testing.T) {
 		"group", "group_open", "repository", "repository_modified",
 		"repository_ahead", "repository_missing", "worktree",
 		"branch", "branch_current", "branch_remote", "branch_head", "tag", "stash",
-		"folder", "file",
+		"folder", "file", "directory", "directory_muted",
 	}
 	names := TreeIconNames()
 	if len(names) != len(want) {

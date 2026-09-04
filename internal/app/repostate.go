@@ -1,7 +1,10 @@
 package app
 
 import (
+	"strings"
+
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/ui/repos"
 )
@@ -45,8 +48,10 @@ func (a *App) repoTreeState() map[string]repos.State {
 	}
 	a.filesMu.Lock()
 	modified := a.activeModified
+	entries := a.currentEntries
 	a.filesMu.Unlock()
 	s.Modified = modified
+	s.MutedDirs = mutedDirectories(entries)
 	state[node.ID] = s
 	return state
 }
@@ -56,9 +61,20 @@ func (a *App) onRepoTreeSelect(id string) {
 	a.clearFilesDirFilter()
 }
 
-func (a *App) onRepoTreeSelectDirectory(repoID, relPath string) {
-	if active, ok := a.registry.Active(); !ok || active.ID != repoID {
-		a.ActivateRepository(repoID)
-	}
+func (a *App) onRepoTreeSelectDirectory(_, relPath string) {
 	a.setFilesDirFilter(relPath)
+}
+
+func mutedDirectories(entries []worktree.Entry) []string {
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir {
+			continue
+		}
+		if e.Unstaged != worktree.StatusIgnored && e.Unstaged != worktree.StatusUntracked {
+			continue
+		}
+		dirs = append(dirs, strings.TrimSuffix(e.Path, "/"))
+	}
+	return dirs
 }

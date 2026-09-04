@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
@@ -13,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
 )
 
 func buildModifiedNestedFilesFixture(t *testing.T, target string) {
@@ -249,43 +251,6 @@ func TestSelectingTheRepositoryNodeClearsTheDirectoryFilter(t *testing.T) {
 	}
 }
 
-func TestSelectingADirectoryInAnInactiveRepositoryActivatesItFirst(t *testing.T) {
-	dir := t.TempDir()
-	target1 := filepath.Join(dir, "main")
-	target2 := filepath.Join(dir, "other")
-	initTestRepoWithBranch(t, target1, "main")
-	buildModifiedNestedFilesFixture(t, target2)
-	cfg := config.Default()
-	cfg.Repositories = []config.Repository{
-		{ID: "r1", Name: "Main", Path: target1},
-		{ID: "r2", Name: "Other", Path: target2},
-	}
-	a := newTestAppWithConfig(t, cfg)
-	a.ActivateRepository("r1")
-	waitForWorkingRows(t, a, 0)
-
-	root2, ok := a.reposView.Item("r2")
-	if !ok {
-		t.Fatal("r2 item missing")
-	}
-	tree := a.Widget("reposTree").(*widget.TreeViewWidget)
-	tree.Tree.ExpandItem(root2)
-	src := findRepoTreeChild(root2, "src")
-	if src == nil {
-		t.Fatal("src item missing under the inactive repository")
-	}
-
-	tree.Tree.SetSelectedItem(src)
-
-	if a.State().ActiveRepository != "r2" {
-		t.Fatalf("active repository = %q, want r2 (selecting a directory of another repository must activate it)", a.State().ActiveRepository)
-	}
-	waitForWorkingRows(t, a, 2)
-	if n := filesRowCountOnDispatcher(t, a); n != 2 {
-		t.Fatalf("filtered rows = %d, want 2", n)
-	}
-}
-
 func TestSelectingADirectoryOfTheAlreadyActiveRepositoryDoesNotReactivate(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "main")
@@ -302,5 +267,18 @@ func TestSelectingADirectoryOfTheAlreadyActiveRepositoryDoesNotReactivate(t *tes
 
 	if a.opened() != before {
 		t.Fatal("selecting a directory of the active repository must not reopen it")
+	}
+}
+
+func TestRepoTreeStateMutesIgnoredAndUntrackedDirectories(t *testing.T) {
+	entries := []worktree.Entry{
+		{Path: "src/main.go", Unstaged: worktree.StatusModified},
+		{Path: "output/", IsDir: true, Unstaged: worktree.StatusIgnored},
+		{Path: "drafts/", IsDir: true, Unstaged: worktree.StatusUntracked},
+		{Path: "vendor/", IsDir: true, Unstaged: worktree.StatusUnmodified},
+	}
+	got := mutedDirectories(entries)
+	if !slices.Equal(got, []string{"output", "drafts"}) {
+		t.Fatalf("muted = %v", got)
 	}
 }
