@@ -121,14 +121,15 @@ func TestActivateRepositoryShowsWorkingCopyStatusInFilesGrid(t *testing.T) {
 		filesRowOnDispatcher(t, a, 3),
 	}
 	want := []changes.Row{
-		{Status: "UU", Name: "conflict.txt", Path: "conflict.txt"},
-		{Status: "A ", Name: "staged.txt", Path: "staged.txt"},
-		{Status: " M", Name: "modified.txt", Path: "modified.txt"},
-		{Status: "??", Name: "untracked.txt", Path: "untracked.txt"},
+		{State: "Conflict", Name: "conflict.txt", RelPath: "conflict.txt"},
+		{State: "Added", Name: "staged.txt", RelPath: "staged.txt"},
+		{State: "Modified", Name: "modified.txt", RelPath: "modified.txt"},
+		{State: "Untracked", Name: "untracked.txt", RelPath: "untracked.txt"},
 	}
 	for i, w := range want {
-		if rows[i] != w {
-			t.Fatalf("row %d = %+v, want %+v", i, rows[i], w)
+		got := rows[i]
+		if got.State != w.State || got.Name != w.Name || got.RelPath != w.RelPath {
+			t.Fatalf("row %d = %+v, want State/Name/RelPath of %+v", i, got, w)
 		}
 	}
 	if n := filesRowCountOnDispatcher(t, a); n != 4 {
@@ -263,7 +264,7 @@ func TestWatcherIndexChangeReloadsTheWorkingCopyStatus(t *testing.T) {
 
 	waitForWorkingRows(t, a, 1)
 	row := filesRowOnDispatcher(t, a, 0)
-	if row.Status != "??" || row.Path != "new.txt" {
+	if row.State != "Untracked" || row.RelPath != "new.txt" {
 		t.Fatalf("row = %+v, want the untracked new.txt", row)
 	}
 }
@@ -287,7 +288,7 @@ func TestSelectingAJournalRowSwitchesTheFilesGridToCommitMode(t *testing.T) {
 		t.Fatal("selecting a commit must switch the files grid to commit mode")
 	}
 	row := filesRowOnDispatcher(t, a, 0)
-	if row.Status != "A" || row.Path != "a.txt" {
+	if row.State != "Added" || row.RelPath != "a.txt" {
 		t.Fatalf("row = %+v, want a.txt added", row)
 	}
 }
@@ -335,7 +336,7 @@ func TestRefreshRepositoryReloadsWorkingCopyWhenNoCommitIsSelected(t *testing.T)
 
 	waitForWorkingRows(t, a, 1)
 	row := filesRowOnDispatcher(t, a, 0)
-	if row.Status != "??" || row.Path != "new.txt" {
+	if row.State != "Untracked" || row.RelPath != "new.txt" {
 		t.Fatalf("row = %+v, want the untracked new.txt", row)
 	}
 }

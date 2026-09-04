@@ -13,6 +13,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
 func TestPreviewFrames(t *testing.T) {
@@ -35,17 +36,27 @@ const previewReadmeContent = "# Demo\n\nGo.Git preview repository.\nSecond line 
 
 const previewMainGoContent = "package main\n\nfunc main() {\n\tprintln(\"hello, gogit\")\n}\n"
 
+const previewMainGoStagedContent = "package main\n\nfunc main() {\n\tprintln(\"hello, gogit v2\")\n}\n"
+
+const previewOldNameContent = "this file is about to be renamed\n"
+
+const previewDeletedContent = "this file is about to be deleted\n"
+
 func seedPreviewChangeCommits(t *testing.T, path, branch string, parent hash.ObjectID) hash.ObjectID {
 	t.Helper()
 	db, store := withJournalRepo(t, path)
 	base := putChangesTree(t, db, map[string]string{
-		"README.md": "# Demo\n\nGo.Git preview repository.\n",
-		"main.go":   "package main\n\nfunc main() {\n\tprintln(\"hi\")\n}\n",
+		"README.md":    "# Demo\n\nGo.Git preview repository.\n",
+		"main.go":      "package main\n\nfunc main() {\n\tprintln(\"hi\")\n}\n",
+		"OLD_NAME.txt": previewOldNameContent,
+		"DELETED.md":   previewDeletedContent,
 	})
 	baseCommit := putChangesCommit(t, db, base, parent)
 	changed := putChangesTree(t, db, map[string]string{
-		"README.md": previewReadmeContent,
-		"main.go":   previewMainGoContent,
+		"README.md":    previewReadmeContent,
+		"main.go":      previewMainGoContent,
+		"OLD_NAME.txt": previewOldNameContent,
+		"DELETED.md":   previewDeletedContent,
 	})
 	tip := putChangesCommit(t, db, changed, baseCommit)
 	setRef(t, store, refs.BranchName(branch), tip)
@@ -66,7 +77,12 @@ func seedPreviewIndex(t *testing.T, target string) {
 	defer func() { _ = db.Close() }()
 
 	idx := index.New(index.Version2)
-	for name, content := range map[string]string{"README.md": previewReadmeContent, "main.go": previewMainGoContent} {
+	staged := map[string]string{
+		"README.md":    previewReadmeContent,
+		"main.go":      previewMainGoStagedContent,
+		"NEW_NAME.txt": previewOldNameContent,
+	}
+	for name, content := range staged {
 		id, err := db.Put(object.TypeBlob, []byte(content))
 		if err != nil {
 			t.Fatal(err)
@@ -83,10 +99,13 @@ func seedPreviewWorkingTreeChanges(t *testing.T, path string) {
 	if err := writeFile(path, "README.md", "# Demo\n\nGo.Git preview repository.\nEdited straight in the working copy.\n"); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeFile(path, "main.go", previewMainGoContent); err != nil {
+	if err := writeFile(path, "main.go", previewMainGoStagedContent); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeFile(path, "NOTES.md", "Ideas for the next release.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(path, "NEW_NAME.txt", previewOldNameContent); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -110,9 +129,13 @@ func TestPreviewOpenedRepository(t *testing.T) {
 	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
 		working := newTestAppWithConfig(t, cfg)
 		working.SetTheme(theme)
+		working.filesGrid.SetColumns(filesgrid.DefaultOrder(), []filesgrid.ColumnID{
+			filesgrid.ColName, filesgrid.ColState, filesgrid.ColIndexState,
+			filesgrid.ColWorkingState, filesgrid.ColSize, filesgrid.ColRelDir,
+		})
 		working.ActivateRepository("r1")
 		waitForJournalRows(t, working, 10)
-		waitForWorkingRows(t, working, 2)
+		waitForWorkingRows(t, working, 5)
 		selectFilesRow(t, working, 0)
 		working.Engine().SaveFrames(dir + "/working-" + theme)
 		working.Engine().Start()

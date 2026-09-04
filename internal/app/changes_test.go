@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/diffview"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
 func putChangesBlob(t *testing.T, db *odb.DB, content string) hash.ObjectID {
@@ -142,8 +144,8 @@ func selectJournalRow(t *testing.T, a *App, index int) {
 func selectFilesRow(t *testing.T, a *App, index int) {
 	t.Helper()
 	row := filesRowOnDispatcher(t, a, index)
-	grid := a.Widget("filesGrid").(*widget.DataGridWidget)
-	grid.Grid.OnSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: index, SelectedItem: row})
+	grid := a.Widget("filesGrid").(*filesgrid.Grid)
+	grid.Data().Grid.OnSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: index, SelectedItem: row})
 }
 
 func newChangesTestApp(t *testing.T, target string) (*App, *bytes.Buffer) {
@@ -184,10 +186,10 @@ func TestSelectingAJournalRowWithTwoChangedFilesPopulatesFilesGridAndShowsTheFir
 
 	first := filesRowOnDispatcher(t, a, 0)
 	second := filesRowOnDispatcher(t, a, 1)
-	if first.Path != "a.txt" || second.Path != "b.txt" {
+	if first.RelPath != "a.txt" || second.RelPath != "b.txt" {
 		t.Fatalf("rows = %+v / %+v, want a.txt then b.txt", first, second)
 	}
-	if first.Status != "M" || second.Status != "M" {
+	if first.State != "Modified" || second.State != "Modified" {
 		t.Fatalf("rows = %+v / %+v, want both modified", first, second)
 	}
 
@@ -243,7 +245,7 @@ func TestSelectingTheRootCommitShowsAllFilesAsAdded(t *testing.T) {
 	waitForFilesRows(t, a, 1)
 
 	row := filesRowOnDispatcher(t, a, 0)
-	if row.Status != "A" || row.Path != "a.txt" {
+	if row.State != "Added" || row.RelPath != "a.txt" {
 		t.Fatalf("row = %+v, want a.txt added", row)
 	}
 }
@@ -491,10 +493,76 @@ func TestSelectingAnotherJournalRowCancelsTheSlowerPreviousDiffComputationWithou
 	waitForFilesRows(t, a, 1)
 
 	row := filesRowOnDispatcher(t, a, 0)
-	if row.Path != "second.txt" {
+	if row.RelPath != "second.txt" {
 		t.Fatalf("row = %+v, want the second selection's result", row)
 	}
 	if strings.Contains(buf.String(), "load diff failed") {
 		t.Fatalf("a cancelled computation must not be logged as a failure: %s", buf.String())
+	}
+}
+
+func TestRestoreFilesColumnsAppliesThePersistedOrderAndVisibility(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	cfg := config.Default()
+	cfg.UI.FilesColumns = []string{"size", "name"}
+	cfg.UI.FilesVisibleColumns = []string{"size"}
+	a, err := New(cfg, config.Paths{Dir: t.TempDir()}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+
+	order, visible := a.filesGrid.Columns()
+	if order[0] != filesgrid.ColSize || order[1] != filesgrid.ColName {
+		t.Fatalf("order[:2] = %v, want [size name]", order[:2])
+	}
+	if len(visible) != 1 || visible[0] != filesgrid.ColSize {
+		t.Fatalf("visible = %v, want [size]", visible)
+	}
+}
+
+func TestSaveFilesColumnsPersistsTheOrderAndVisibilityToConfig(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	paths := config.Paths{Dir: t.TempDir()}
+	a, err := New(config.Default(), paths, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+
+	a.saveFilesColumns([]filesgrid.ColumnID{filesgrid.ColState, filesgrid.ColName}, []filesgrid.ColumnID{filesgrid.ColState})
+
+	if len(a.cfg.UI.FilesColumns) != 2 || a.cfg.UI.FilesColumns[0] != "state" || a.cfg.UI.FilesColumns[1] != "name" {
+		t.Fatalf("FilesColumns = %v", a.cfg.UI.FilesColumns)
+	}
+	if len(a.cfg.UI.FilesVisibleColumns) != 1 || a.cfg.UI.FilesVisibleColumns[0] != "state" {
+		t.Fatalf("FilesVisibleColumns = %v", a.cfg.UI.FilesVisibleColumns)
+	}
+	if _, err := os.Stat(paths.ConfigFile()); err != nil {
+		t.Fatalf("config file was not saved: %v", err)
+	}
+}
+
+func TestSaveFilesColumnsLogsWarningWhenConfigSaveFails(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "config.toml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	a, err := New(config.Default(), config.Paths{Dir: dir}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+
+	a.saveFilesColumns([]filesgrid.ColumnID{filesgrid.ColName}, []filesgrid.ColumnID{filesgrid.ColName})
+
+	if !strings.Contains(buf.String(), "save config failed") {
+		t.Fatalf("expected save failure to be logged: %s", buf.String())
 	}
 }

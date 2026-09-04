@@ -462,6 +462,88 @@ func TestStatusFailsWhenTheFileLimitIsExceeded(t *testing.T) {
 	}
 }
 
+func TestStatusReportsSizeAndModTimeForAnUntrackedFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.commit("initial")
+	tr.writeFile("new.txt", "content\n")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entry, ok := entryMap(status.Entries)["new.txt"]
+	if !ok {
+		t.Fatalf("new.txt entry missing")
+	}
+	if entry.Size != int64(len("content\n")) {
+		t.Fatalf("Size = %d, want %d", entry.Size, len("content\n"))
+	}
+	if entry.ModTime.IsZero() {
+		t.Fatalf("ModTime is zero, want a real timestamp")
+	}
+}
+
+func TestStatusReportsSizeAndModTimeForAModifiedFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.commit("initial")
+	tr.writeFile("a.txt", "goodbye!!\n")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entry, ok := entryMap(status.Entries)["a.txt"]
+	if !ok {
+		t.Fatalf("a.txt entry missing")
+	}
+	if entry.Size != int64(len("goodbye!!\n")) {
+		t.Fatalf("Size = %d, want %d", entry.Size, len("goodbye!!\n"))
+	}
+	if entry.ModTime.IsZero() {
+		t.Fatalf("ModTime is zero, want a real timestamp")
+	}
+}
+
+func TestStatusLeavesSizeAndModTimeZeroForADeletedFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.commit("initial")
+	tr.remove("a.txt")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entry, ok := entryMap(status.Entries)["a.txt"]
+	if !ok {
+		t.Fatalf("a.txt entry missing")
+	}
+	if entry.Size != 0 || !entry.ModTime.IsZero() {
+		t.Fatalf("entry = %#v, want zero Size/ModTime for a deleted file", entry)
+	}
+}
+
+func TestStatusLeavesSizeAndModTimeZeroForACollapsedUntrackedDirectory(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.commit("initial")
+	tr.writeFile("newdir/one.txt", "1\n")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entry, ok := entryMap(status.Entries)["newdir/"]
+	if !ok {
+		t.Fatalf("newdir/ entry missing")
+	}
+	if entry.Size != 0 || !entry.ModTime.IsZero() {
+		t.Fatalf("entry = %#v, want zero Size/ModTime for a directory entry", entry)
+	}
+}
+
 func TestStatusEntriesAreSortedByPath(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage("z.txt", "z\n")

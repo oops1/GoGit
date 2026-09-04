@@ -235,12 +235,15 @@ func TestThemeAndLanguageSwitch(t *testing.T) {
 	if themeFor(config.ThemeLight) == nil || themeFor(config.ThemeDark) == nil {
 		t.Fatal("themes")
 	}
-	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 || headers[0] != "Status" {
+	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 || headers[0] != "Name" {
 		t.Fatalf("files headers = %v", headers)
 	}
 	a.SetLanguage("ru")
 	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Добавить или создать..." {
 		t.Fatalf("menu not retranslated: %q", text)
+	}
+	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 || headers[0] != "Имя" {
+		t.Fatalf("files headers = %v", headers)
 	}
 	if headers := a.ColumnHeaders("journalGrid"); len(headers) != 5 || headers[1] != "Сообщение" {
 		t.Fatalf("journal headers = %v", headers)
@@ -311,14 +314,14 @@ func TestNewFromXAMLErrors(t *testing.T) {
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
 		"no toolbar": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
-			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
+			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
 		"diff view is not a diff view": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
-			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
+			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
-		"grid is not a datagrid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+		"files grid is not a files grid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<TextBlock x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
@@ -349,12 +352,12 @@ func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
 	}
 }
 
-func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
+func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)
 	xaml := `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 		`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
-		`<DataGrid x:Name="filesGrid"><DataGrid.Columns><DataGridTextColumn Header="x" Binding="{Binding X}"/></DataGrid.Columns></DataGrid>` +
+		`<FilesGrid x:Name="filesGrid"/>` +
 		`<DataGrid x:Name="journalGrid"/><DiffView x:Name="diffView"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
@@ -363,8 +366,8 @@ func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Close)
-	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 1 || headers[0] != "Status" {
-		t.Fatalf("headers = %v", headers)
+	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 {
+		t.Fatalf("headers = %v, want 3 default columns", headers)
 	}
 	if headers := a.ColumnHeaders("journalGrid"); len(headers) != 0 {
 		t.Fatalf("headers = %v", headers)

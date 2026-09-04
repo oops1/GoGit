@@ -12,6 +12,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/ui/changes"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
 var ErrNotACommit = errors.New("app: object is not a commit")
@@ -130,6 +131,36 @@ func (a *App) loadDiffFiles(ctx context.Context, db *odb.DB, id hash.ObjectID) (
 		parentTree = parent.Tree
 	}
 	return diffTreesFunc(ctx, db, parentTree, commit.Tree, diffOptions)
+}
+
+func (a *App) restoreFilesColumns() {
+	order := stringsToColumnIDs(a.cfg.UI.FilesColumns)
+	visible := stringsToColumnIDs(a.cfg.UI.FilesVisibleColumns)
+	a.filesGrid.SetColumns(order, visible)
+}
+
+func (a *App) saveFilesColumns(order, visible []filesgrid.ColumnID) {
+	a.cfg.UI.FilesColumns = columnIDsToStrings(order)
+	a.cfg.UI.FilesVisibleColumns = columnIDsToStrings(visible)
+	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
+		a.log.Warn("save config failed", "error", err)
+	}
+}
+
+func stringsToColumnIDs(names []string) []filesgrid.ColumnID {
+	ids := make([]filesgrid.ColumnID, len(names))
+	for i, name := range names {
+		ids[i] = filesgrid.ColumnID(name)
+	}
+	return ids
+}
+
+func columnIDsToStrings(ids []filesgrid.ColumnID) []string {
+	names := make([]string, len(ids))
+	for i, id := range ids {
+		names[i] = string(id)
+	}
+	return names
 }
 
 func (a *App) clearChangesPanels() {

@@ -28,6 +28,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/diffview"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
@@ -66,6 +67,7 @@ type App struct {
 	branchesView      *branches.View
 	journalView       *journal.View
 	diffView          *diffview.DiffView
+	filesGrid         *filesgrid.Grid
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
 	selectedNode      string
@@ -126,6 +128,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	}
 	i18n.Apply(cfg.Language)
 	diffview.Register()
+	filesgrid.Register()
 
 	rootWidget, named, err := widget.LoadUIFromXAML(xaml)
 	if err != nil {
@@ -173,6 +176,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
 		}
 	}
+	filesGridWidget, ok := named["filesGrid"].(*filesgrid.Grid)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesGrid", ErrWidgetMissing)
+	}
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
@@ -192,6 +199,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		statusBranchLabel: statusBranchWidget,
 		registry:          repo.New(cfg),
 		diffView:          diffWidget,
+		filesGrid:         filesGridWidget,
 		newWatcher:        newRealWatcher,
 		journalPageSize:   defaultJournalPageSize,
 	}
@@ -223,9 +231,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.journalView.OnSelect = a.onJournalRowSelected
 	a.journalView.OnNearEnd = a.requestMoreJournal
 	a.filesItems = datagrid.NewObservableCollection()
-	filesGridWidget := a.named["filesGrid"].(*widget.DataGridWidget)
-	filesGridWidget.Grid.SetItemsSource(a.filesItems)
-	filesGridWidget.Grid.OnSelectionChanged = a.onFilesRowSelected
+	a.filesGrid.SetItemsSource(a.filesItems)
+	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
+	a.restoreFilesColumns()
+	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
 	a.restoreActiveRepository()
 	a.reposView.Render(a.registry)
 	a.updateStatusText()

@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/i18n"
 )
@@ -261,10 +262,17 @@ func (a *App) retranslateGrids() {
 			}
 		}
 	}
+	a.filesGrid.Retranslate()
 }
 
 func (a *App) ColumnHeaders(grid string) []string {
-	columns := a.named[grid].(*widget.DataGridWidget).Grid.Columns()
+	if grid == "filesGrid" {
+		return columnHeaders(a.filesGrid.Data().Grid.Columns())
+	}
+	return columnHeaders(a.named[grid].(*widget.DataGridWidget).Grid.Columns())
+}
+
+func columnHeaders(columns []datagrid.Column) []string {
 	headers := make([]string, 0, len(columns))
 	for _, c := range columns {
 		headers = append(headers, c.Header())

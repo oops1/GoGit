@@ -70,13 +70,7 @@
                     <TreeView x:Name="branchesTree" ShowIndentGuides="True"/>
                 </DockPane>
                 <DockPane Id="files" Title="{Loc Pane.Files}" Side="Top" Size="200">
-                    <DataGrid x:Name="filesGrid" AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="{Loc Files.Column.Status}" Binding="{Binding Status}" Width="80"/>
-                            <DataGridTextColumn Header="{Loc Files.Column.Name}" Binding="{Binding Name}" Width="*"/>
-                            <DataGridTextColumn Header="{Loc Files.Column.Path}" Binding="{Binding Path}" Width="2*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <FilesGrid x:Name="filesGrid"/>
                 </DockPane>
                 <DockPane Id="journal" Title="{Loc Pane.Journal}" Side="Bottom" Size="220">
                     <DataGrid x:Name="journalGrid" AutoGenerateColumns="False" IsReadOnly="True">

@@ -185,7 +185,7 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	if dst.Language != src.Language || dst.Theme != src.Theme {
 		t.Fatalf("language/theme mismatch: %+v vs %+v", dst, src)
 	}
-	if dst.UI != src.UI {
+	if dst.UI.ShowToolbar != src.UI.ShowToolbar || dst.UI.ShowStatusBar != src.UI.ShowStatusBar {
 		t.Fatalf("ui mismatch: %+v vs %+v", dst.UI, src.UI)
 	}
 	if dst.Git.LogMaxCount != src.Git.LogMaxCount || dst.Git.AutoFetch != src.Git.AutoFetch ||

@@ -1,8 +1,10 @@
 package changes
 
 import (
+	"cmp"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
@@ -12,10 +14,19 @@ import (
 
 const MaxFiles = 500
 
+const modifiedLayout = "2006-01-02 15:04:05"
+
 type Row struct {
-	Status string
-	Name   string
-	Path   string
+	Name         string
+	State        string
+	IndexState   string
+	WorkingState string
+	RelDir       string
+	Extension    string
+	Modified     string
+	RelPath      string
+	RenamedFrom  string
+	Size         string
 }
 
 func Files(files []diff.File) []Row {
@@ -35,16 +46,27 @@ func Files(files []diff.File) []Row {
 }
 
 func fileRow(f diff.File) Row {
-	oldPath, newPath := f.OldPath, f.NewPath
-	namePath := newPath
-	if namePath == "" {
-		namePath = oldPath
+	namePath := cmp.Or(f.NewPath, f.OldPath)
+	dir, name := splitRelDir(namePath)
+	row := Row{
+		Name:      name,
+		State:     diffStatusWord(f.Status),
+		RelDir:    dir,
+		RelPath:   namePath,
+		Size:      sizeString(diffFileSize(f)),
+		Extension: extensionOf(name),
 	}
-	displayPath := namePath
-	if (f.Status == diff.StatusRenamed || f.Status == diff.StatusCopied) && oldPath != newPath {
-		displayPath = oldPath + " → " + newPath
+	if (f.Status == diff.StatusRenamed || f.Status == diff.StatusCopied) && f.OldPath != f.NewPath {
+		row.RenamedFrom = f.OldPath
 	}
-	return Row{Status: f.Status.String(), Name: path.Base(namePath), Path: displayPath}
+	return row
+}
+
+func diffFileSize(f diff.File) int64 {
+	if f.NewSize > 0 {
+		return int64(f.NewSize)
+	}
+	return int64(f.OldSize)
 }
 
 func SortEntries(entries []worktree.Entry) []worktree.Entry {
@@ -91,16 +113,112 @@ func WorkingRows(s worktree.Status) []Row {
 }
 
 func workingRow(e worktree.Entry) Row {
-	displayPath := e.Path
-	if e.OrigPath != "" {
-		displayPath = e.OrigPath + " → " + e.Path
+	dir, name := splitRelDir(e.Path)
+	row := Row{
+		Name:         name,
+		State:        combinedState(e),
+		IndexState:   optionalStatusWord(e.Staged),
+		WorkingState: optionalStatusWord(e.Unstaged),
+		RelDir:       dir,
+		Extension:    extensionOf(name),
+		RelPath:      e.Path,
+		RenamedFrom:  e.OrigPath,
+		Size:         sizeString(e.Size),
 	}
-	return Row{Status: workingStatus(e), Name: path.Base(e.Path), Path: displayPath}
+	if !e.ModTime.IsZero() {
+		row.Modified = e.ModTime.Format(modifiedLayout)
+	}
+	return row
 }
 
-func workingStatus(e worktree.Entry) string {
-	if e.Unstaged == worktree.StatusUntracked {
-		return "??"
+func splitRelDir(p string) (dir, name string) {
+	trimmed := strings.TrimSuffix(p, "/")
+	d := path.Dir(trimmed)
+	if d == "." {
+		d = ""
 	}
-	return string(rune(e.Staged)) + string(rune(e.Unstaged))
+	return d, path.Base(trimmed)
+}
+
+func extensionOf(name string) string {
+	idx := strings.LastIndexByte(name, '.')
+	if idx <= 0 {
+		return ""
+	}
+	return name[idx+1:]
+}
+
+func sizeString(size int64) string {
+	if size <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(size, 10)
+}
+
+func combinedState(e worktree.Entry) string {
+	switch {
+	case e.Conflict != worktree.ConflictNone:
+		return i18n.T("Files.State.Conflict")
+	case e.Unstaged == worktree.StatusUntracked:
+		return i18n.T("Files.State.Untracked")
+	case e.Staged != worktree.StatusUnmodified && e.Unstaged != worktree.StatusUnmodified:
+		return i18n.T("Files.State.Modified")
+	case e.Staged != worktree.StatusUnmodified:
+		return statusCodeWord(e.Staged)
+	case e.Unstaged != worktree.StatusUnmodified:
+		return statusCodeWord(e.Unstaged)
+	default:
+		return i18n.T("Files.State.Unmodified")
+	}
+}
+
+func optionalStatusWord(c worktree.StatusCode) string {
+	if c == worktree.StatusUnmodified {
+		return ""
+	}
+	return statusCodeWord(c)
+}
+
+func statusCodeWord(c worktree.StatusCode) string {
+	switch c {
+	case worktree.StatusModified:
+		return i18n.T("Files.State.Modified")
+	case worktree.StatusAdded:
+		return i18n.T("Files.State.Added")
+	case worktree.StatusDeleted:
+		return i18n.T("Files.State.Deleted")
+	case worktree.StatusRenamed:
+		return i18n.T("Files.State.Renamed")
+	case worktree.StatusCopied:
+		return i18n.T("Files.State.Copied")
+	case worktree.StatusTypeChanged:
+		return i18n.T("Files.State.TypeChanged")
+	case worktree.StatusUnmerged:
+		return i18n.T("Files.State.Conflict")
+	case worktree.StatusUntracked:
+		return i18n.T("Files.State.Untracked")
+	case worktree.StatusIgnored:
+		return i18n.T("Files.State.Ignored")
+	default:
+		return i18n.T("Files.State.Unmodified")
+	}
+}
+
+func diffStatusWord(s diff.Status) string {
+	switch s {
+	case diff.StatusModified:
+		return i18n.T("Files.State.Modified")
+	case diff.StatusAdded:
+		return i18n.T("Files.State.Added")
+	case diff.StatusDeleted:
+		return i18n.T("Files.State.Deleted")
+	case diff.StatusRenamed:
+		return i18n.T("Files.State.Renamed")
+	case diff.StatusCopied:
+		return i18n.T("Files.State.Copied")
+	case diff.StatusTypeChanged:
+		return i18n.T("Files.State.TypeChanged")
+	default:
+		return i18n.T("Files.State.Unmodified")
+	}
 }

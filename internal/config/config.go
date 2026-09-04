@@ -52,8 +52,10 @@ type Git struct {
 }
 
 type UI struct {
-	ShowToolbar   bool `toml:"show_toolbar"`
-	ShowStatusBar bool `toml:"show_status_bar"`
+	ShowToolbar         bool     `toml:"show_toolbar"`
+	ShowStatusBar       bool     `toml:"show_status_bar"`
+	FilesColumns        []string `toml:"files_columns"`
+	FilesVisibleColumns []string `toml:"files_visible_columns"`
 }
 
 type Group struct {

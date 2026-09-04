@@ -89,7 +89,6 @@ var dockSideSizes = map[widget.DockSide]int{
 }
 
 var gridColumnKeys = map[string][]string{
-	"filesGrid":   {"Files.Column.Status", "Files.Column.Name", "Files.Column.Path"},
 	"journalGrid": {"Journal.Column.Graph", "Journal.Column.Message", "Journal.Column.Author", "Journal.Column.Date", "Journal.Column.Hash"},
 }
 

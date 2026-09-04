@@ -318,7 +318,7 @@ func TestHandleChangeSetPostsAWorkingStatusReloadForIndexOrWorkTreeChanges(t *te
 
 	waitForWorkingRows(t, a, 1)
 	row := filesRowOnDispatcher(t, a, 0)
-	if row.Path != "new.txt" {
+	if row.RelPath != "new.txt" {
 		t.Fatalf("row = %+v, want the untracked new.txt", row)
 	}
 }
