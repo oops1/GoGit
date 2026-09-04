@@ -32,6 +32,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
+	"github.com/oops1/gogit/internal/ui/panetitle"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
@@ -583,6 +584,11 @@ func (a *App) applyTheme() {
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyRepoTreeTheme(theme)
+	a.applyPaneTitleColors()
+}
+
+func (a *App) applyPaneTitleColors() {
+	panetitle.Apply(a.Dock().Panes())
 }
 
 func (a *App) applyRepoTreeTheme(t *widget.Theme) {
