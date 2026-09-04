@@ -129,9 +129,15 @@ type App struct {
 	activeModified     bool
 	stagedCount        int
 
-	postCh   chan func()
-	postStop chan struct{}
-	postWG   sync.WaitGroup
+	watchdogInterval time.Duration
+	watchdogStall    time.Duration
+
+	postMu     sync.Mutex
+	posted     []func()
+	postClosed bool
+	postWake   chan struct{}
+	postStop   chan struct{}
+	postWG     sync.WaitGroup
 
 	closeOnce sync.Once
 }
@@ -233,6 +239,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		named:             named,
 		menu:              menu,
 		handlers:          map[CommandID]func(){},
+		watchdogInterval:  defaultWatchdogInterval,
+		watchdogStall:     defaultWatchdogStall,
 		detect:            systheme.Detect,
 		log:               log,
 		languages:         cat.Codes(),
@@ -683,6 +691,7 @@ func (a *App) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go a.FollowSystemTheme(ctx)
+	go a.runWatchdog(ctx, a.watches())
 	win := window.New(a.eng, a.root.Title)
 	if a.OnExit == nil {
 		a.OnExit = win.Close
@@ -696,8 +705,7 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
-		close(a.postStop)
-		a.postWG.Wait()
+		a.closePostQueue()
 		a.stopWatcher()
 		a.stopJournal()
 		a.stopDiff()
