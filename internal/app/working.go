@@ -22,7 +22,9 @@ const (
 )
 
 func (a *App) startWorking() {
-	a.stopWorking()
+	a.workingRunMu.Lock()
+	defer a.workingRunMu.Unlock()
+	a.stopWorkingLocked()
 	if a.open == nil || a.open.worktree == nil {
 		a.filesMu.Lock()
 		a.filesMode = filesModeWorking
@@ -44,6 +46,12 @@ func (a *App) startWorking() {
 }
 
 func (a *App) stopWorking() {
+	a.workingRunMu.Lock()
+	defer a.workingRunMu.Unlock()
+	a.stopWorkingLocked()
+}
+
+func (a *App) stopWorkingLocked() {
 	a.workingMu.Lock()
 	cancel := a.workingCancel
 	a.workingCancel = nil
@@ -104,7 +112,9 @@ func (a *App) refreshWorkingStatus() {
 }
 
 func (a *App) showWorkingDiff(entry worktree.Entry) {
-	a.stopDiff()
+	a.diffRunMu.Lock()
+	defer a.diffRunMu.Unlock()
+	a.stopDiffLocked()
 	if a.open == nil || entry.IsDir {
 		a.diffView.Clear()
 		return

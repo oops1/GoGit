@@ -45,6 +45,8 @@ func (a *App) startWrite(fn writeFunc, onDone func(error)) bool {
 	if a.open == nil {
 		return false
 	}
+	a.writeRunMu.Lock()
+	defer a.writeRunMu.Unlock()
 	a.writeMu.Lock()
 	if a.writeCancel != nil {
 		a.writeMu.Unlock()
@@ -102,6 +104,8 @@ func (a *App) pokeWatch() {
 }
 
 func (a *App) stopWrite() {
+	a.writeRunMu.Lock()
+	defer a.writeRunMu.Unlock()
 	a.writeMu.Lock()
 	cancel := a.writeCancel
 	a.writeMu.Unlock()

@@ -20,6 +20,8 @@ func newRealWatcher(layout gitrepo.Layout, opts watch.Options) watcherIface {
 }
 
 func (a *App) startWatcher(layout gitrepo.Layout) {
+	a.watchRunMu.Lock()
+	defer a.watchRunMu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
 	w := a.newWatcher(layout, watch.Options{})
 	a.watchMu.Lock()
@@ -45,6 +47,8 @@ func (a *App) handleChangeSet(set watch.ChangeSet) {
 }
 
 func (a *App) stopWatcher() {
+	a.watchRunMu.Lock()
+	defer a.watchRunMu.Unlock()
 	a.watchMu.Lock()
 	cancel := a.watchCancel
 	a.watchCancel = nil

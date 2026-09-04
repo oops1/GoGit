@@ -58,8 +58,10 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 }
 
 func (a *App) startDiff(id hash.ObjectID) {
-	a.stopDiff()
 	a.stopWorking()
+	a.diffRunMu.Lock()
+	defer a.diffRunMu.Unlock()
+	a.stopDiffLocked()
 	if a.open == nil {
 		return
 	}
@@ -72,6 +74,12 @@ func (a *App) startDiff(id hash.ObjectID) {
 }
 
 func (a *App) stopDiff() {
+	a.diffRunMu.Lock()
+	defer a.diffRunMu.Unlock()
+	a.stopDiffLocked()
+}
+
+func (a *App) stopDiffLocked() {
 	a.diffMu.Lock()
 	cancel := a.diffCancel
 	a.diffCancel = nil

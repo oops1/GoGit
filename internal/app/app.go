@@ -87,15 +87,18 @@ type App struct {
 
 	newWatcher func(gitrepo.Layout, watch.Options) watcherIface
 
+	writeRunMu  sync.Mutex
 	writeMu     sync.Mutex
 	writeCancel context.CancelFunc
 	writeWG     sync.WaitGroup
 
+	watchRunMu  sync.Mutex
 	watchMu     sync.Mutex
 	watchCancel context.CancelFunc
 	watchWG     sync.WaitGroup
 	watcher     watcherIface
 
+	journalRunMu    sync.Mutex
 	journalMu       sync.Mutex
 	journalCancel   context.CancelFunc
 	journalMore     chan struct{}
@@ -104,10 +107,12 @@ type App struct {
 
 	filesItems *datagrid.ObservableCollection
 
+	diffRunMu  sync.Mutex
 	diffMu     sync.Mutex
 	diffCancel context.CancelFunc
 	diffWG     sync.WaitGroup
 
+	workingRunMu  sync.Mutex
 	workingMu     sync.Mutex
 	workingCancel context.CancelFunc
 	workingWG     sync.WaitGroup
@@ -647,13 +652,13 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		close(a.postStop)
+		a.postWG.Wait()
 		a.stopWatcher()
 		a.stopJournal()
 		a.stopDiff()
 		a.stopWorking()
 		a.stopWrite()
-		close(a.postStop)
-		a.postWG.Wait()
 		a.closeOpenRepository()
 		widget.RemoveLanguageListener(a.langID)
 	})

@@ -21,7 +21,9 @@ var newJournalPager = func(ctx context.Context, source revision.Context, opts re
 }
 
 func (a *App) startJournal() {
-	a.stopJournal()
+	a.journalRunMu.Lock()
+	defer a.journalRunMu.Unlock()
+	a.stopJournalLocked()
 	a.journalView.Reset()
 	if a.open == nil {
 		return
@@ -73,6 +75,12 @@ func (a *App) requestMoreJournal() {
 }
 
 func (a *App) stopJournal() {
+	a.journalRunMu.Lock()
+	defer a.journalRunMu.Unlock()
+	a.stopJournalLocked()
+}
+
+func (a *App) stopJournalLocked() {
 	a.journalMu.Lock()
 	cancel := a.journalCancel
 	more := a.journalMore
