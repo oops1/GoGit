@@ -28,8 +28,6 @@ const (
 	CmdRefresh         CommandID = "view.refresh"
 )
 
-const cmdSeparator CommandID = ""
-
 const (
 	viewPanePrefix     = "view.pane:"
 	viewThemePrefix    = "view.theme:"
@@ -82,32 +80,6 @@ func cutPrefix(id CommandID, prefix string) (string, bool) {
 
 func languageKey(code string) string {
 	return "Language." + code
-}
-
-var repositoryMenu = []CommandID{
-	CmdAddOrCreate,
-	CmdAddGroup,
-	CmdSearch,
-	CmdCloseRepository,
-	cmdSeparator,
-	CmdAddWorktree,
-	CmdRemoveWorktree,
-	CmdPruneWorktrees,
-	cmdSeparator,
-	CmdSettings,
-	CmdClose,
-}
-
-var menuKeys = map[CommandID]string{
-	CmdAddOrCreate:     "Menu.Repository.AddOrCreate",
-	CmdAddGroup:        "Menu.Repository.AddGroup",
-	CmdSearch:          "Menu.Repository.Search",
-	CmdCloseRepository: "Menu.Repository.CloseRepository",
-	CmdAddWorktree:     "Menu.Repository.AddWorktree",
-	CmdRemoveWorktree:  "Menu.Repository.RemoveWorktree",
-	CmdPruneWorktrees:  "Menu.Repository.PruneWorktrees",
-	CmdSettings:        "Menu.Repository.Settings",
-	CmdClose:           "Menu.Repository.Close",
 }
 
 var dockSideSizes = map[widget.DockSide]int{

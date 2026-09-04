@@ -87,8 +87,8 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	if a.Widget("statusBar").(*widget.Grid).IsVisible() {
 		t.Fatal("status bar widget must be hidden")
 	}
-	if a.MenuItemText(0) != "Добавить или создать..." {
-		t.Fatalf("menu not retranslated: %q", a.MenuItemText(0))
+	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Добавить или создать..." {
+		t.Fatalf("menu not retranslated: %q", text)
 	}
 	if a.EffectiveTheme() != config.ThemeLight {
 		t.Fatalf("effective theme = %q, want light", a.EffectiveTheme())

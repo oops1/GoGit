@@ -9,85 +9,107 @@ import (
 const repositoryMenuIndex = 0
 const viewMenuIndex = 1
 
-type viewLeafEntry struct {
+type menuLeafEntry struct {
 	Key     string
 	Command CommandID
 }
 
-type viewGroupEntry struct {
+type menuGroupEntry struct {
 	Key   string
-	Items []viewLeafEntry
+	Items []menuLeafEntry
 }
 
-type viewTreeEntry struct {
+type menuTreeEntry struct {
 	Separator bool
-	Leaf      *viewLeafEntry
-	Group     *viewGroupEntry
+	Leaf      *menuLeafEntry
+	Group     *menuGroupEntry
 }
 
+type menuDef struct {
+	TitleKey string
+	Tree     []menuTreeEntry
+	LeafText func(a *App, leaf menuLeafEntry) string
+}
+
+var repositoryMenuTree = buildRepositoryMenuTree()
 var viewMenuTree = buildViewMenuTree()
 
-func buildViewMenuTree() []viewTreeEntry {
+var menuBarDefs = []menuDef{
+	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
+}
+
+func buildRepositoryMenuTree() []menuTreeEntry {
+	leaf := func(key string, cmd CommandID) menuTreeEntry {
+		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
+	}
+	separator := menuTreeEntry{Separator: true}
+	return []menuTreeEntry{
+		leaf("Menu.Repository.AddOrCreate", CmdAddOrCreate),
+		leaf("Menu.Repository.AddGroup", CmdAddGroup),
+		leaf("Menu.Repository.Search", CmdSearch),
+		leaf("Menu.Repository.CloseRepository", CmdCloseRepository),
+		separator,
+		leaf("Menu.Repository.AddWorktree", CmdAddWorktree),
+		leaf("Menu.Repository.RemoveWorktree", CmdRemoveWorktree),
+		leaf("Menu.Repository.PruneWorktrees", CmdPruneWorktrees),
+		separator,
+		leaf("Menu.Repository.Settings", CmdSettings),
+		leaf("Menu.Repository.Close", CmdClose),
+	}
+}
+
+func buildViewMenuTree() []menuTreeEntry {
 	panes := buildViewLeafGroup("Menu.View.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
 	theme := buildViewLeafGroup("Menu.View.Theme", viewThemeOrder, viewThemeKeys, cmdTheme)
 	language := buildViewLeafGroup("Menu.View.Language", viewLanguageOrder, nil, cmdLanguage)
-	return []viewTreeEntry{
+	return []menuTreeEntry{
 		{Group: &panes},
-		{Leaf: &viewLeafEntry{Key: "Menu.View.ResetLayout", Command: CmdResetLayout}},
+		{Leaf: &menuLeafEntry{Key: "Menu.View.ResetLayout", Command: CmdResetLayout}},
 		{Separator: true},
 		{Group: &theme},
 		{Group: &language},
 		{Separator: true},
-		{Leaf: &viewLeafEntry{Key: "Menu.View.Refresh", Command: CmdRefresh}},
+		{Leaf: &menuLeafEntry{Key: "Menu.View.Refresh", Command: CmdRefresh}},
 	}
 }
 
-func buildViewLeafGroup(headerKey string, ids []string, keys map[string]string, cmd func(string) CommandID) viewGroupEntry {
-	items := make([]viewLeafEntry, 0, len(ids))
+func buildViewLeafGroup(headerKey string, ids []string, keys map[string]string, cmd func(string) CommandID) menuGroupEntry {
+	items := make([]menuLeafEntry, 0, len(ids))
 	for _, id := range ids {
 		key := keys[id]
 		if key == "" {
 			key = languageKey(id)
 		}
-		items = append(items, viewLeafEntry{Key: key, Command: cmd(id)})
+		items = append(items, menuLeafEntry{Key: key, Command: cmd(id)})
 	}
-	return viewGroupEntry{Key: headerKey, Items: items}
+	return menuGroupEntry{Key: headerKey, Items: items}
 }
 
-func (a *App) wireMenu() {
-	a.menu.OnSelect = func(top, sub int, _ string) {
-		if id, ok := a.menuCommand(top, sub); ok {
-			a.Dispatch(id)
+func plainLeafText(_ *App, leaf menuLeafEntry) string {
+	return i18n.T(leaf.Key)
+}
+
+func (a *App) wireMenuBar() {
+	items := a.menu.Items()
+	for i, def := range menuBarDefs {
+		if i >= len(items) {
+			return
 		}
+		wireMenuTreeEntries(items[i].Items, def.Tree, a.Dispatch)
 	}
 }
 
-func (a *App) menuCommand(top, sub int) (CommandID, bool) {
-	if top != repositoryMenuIndex {
-		return "", false
-	}
-	return lookupCommand(repositoryMenu, sub)
-}
-
-func lookupCommand(ids []CommandID, sub int) (CommandID, bool) {
-	if sub < 0 || sub >= len(ids) {
-		return "", false
-	}
-	id := ids[sub]
-	return id, id != cmdSeparator
-}
-
-func (a *App) wireViewMenu() {
-	subs := a.viewMenuItems()
-	for i, entry := range viewMenuTree {
+func wireMenuTreeEntries(subs []widget.MenuItem, tree []menuTreeEntry, dispatch func(CommandID) bool) {
+	for i, entry := range tree {
 		if i >= len(subs) {
 			return
 		}
-		wireViewTreeEntry(&subs[i], entry, a.Dispatch)
+		wireMenuTreeEntry(&subs[i], entry, dispatch)
 	}
 }
 
-func wireViewTreeEntry(item *widget.MenuItem, entry viewTreeEntry, dispatch func(CommandID) bool) {
+func wireMenuTreeEntry(item *widget.MenuItem, entry menuTreeEntry, dispatch func(CommandID) bool) {
 	switch {
 	case entry.Leaf != nil:
 		cmd := entry.Leaf.Command
@@ -105,14 +127,14 @@ func (a *App) wireViewHandlers() {
 		paneID := id
 		a.handlers[cmdPane(paneID)] = func() {
 			a.SetPaneVisible(paneID, !a.PaneVisible(paneID))
-			a.applyViewTexts()
+			a.applyMenuTexts(viewMenuIndex)
 		}
 	}
 	for _, name := range viewThemeOrder {
 		theme := name
 		a.handlers[cmdTheme(theme)] = func() {
 			a.SetTheme(theme)
-			a.applyViewTexts()
+			a.applyMenuTexts(viewMenuIndex)
 		}
 	}
 	for _, code := range viewLanguageOrder {
@@ -139,32 +161,19 @@ func (a *App) wireToolbar() {
 func (a *App) refreshCommands() {
 	state := a.State()
 	items := a.menu.Items()
-	applyMenuDisabled(items, repositoryMenuIndex, repositoryMenu, state)
-	a.applyViewEnabled(items, state)
+	for i, def := range menuBarDefs {
+		if i >= len(items) {
+			continue
+		}
+		applyTreeEnabled(items[i].Items, def.Tree, state)
+	}
 	for id, name := range toolbarButtons {
 		a.named[name].(*widget.Button).SetEnabled(state.Enabled(id))
 	}
 }
 
-func applyMenuDisabled(items []widget.MenuBarItem, topIdx int, ids []CommandID, state State) {
-	if len(items) <= topIdx {
-		return
-	}
-	subs := items[topIdx].Items
-	for i, id := range ids {
-		if id == cmdSeparator || i >= len(subs) {
-			continue
-		}
-		subs[i].Disabled = !state.Enabled(id)
-	}
-}
-
-func (a *App) applyViewEnabled(items []widget.MenuBarItem, state State) {
-	if len(items) <= viewMenuIndex {
-		return
-	}
-	subs := items[viewMenuIndex].Items
-	for i, entry := range viewMenuTree {
+func applyTreeEnabled(subs []widget.MenuItem, tree []menuTreeEntry, state State) {
+	for i, entry := range tree {
 		if i >= len(subs) || entry.Leaf == nil {
 			continue
 		}
@@ -173,50 +182,49 @@ func (a *App) applyViewEnabled(items []widget.MenuBarItem, state State) {
 }
 
 func (a *App) retranslate() {
-	a.menu.SetMenuText(repositoryMenuIndex, i18n.T("Menu.Repository"))
-	for i, id := range repositoryMenu {
-		if key, ok := menuKeys[id]; ok {
-			a.menu.SetSubItemText(repositoryMenuIndex, i, i18n.T(key))
-		}
+	for i, def := range menuBarDefs {
+		a.menu.SetMenuText(i, i18n.T(def.TitleKey))
+		a.applyMenuTexts(i)
 	}
-	a.menu.SetMenuText(viewMenuIndex, i18n.T("Menu.View"))
-	a.applyViewTexts()
 	a.retranslateGrids()
 	a.root.Title = i18n.T("App.Title")
 	a.updateStatusText()
 }
 
-func (a *App) viewMenuItems() []widget.MenuItem {
-	items := a.menu.Items()
-	if len(items) <= viewMenuIndex {
-		return nil
+func (a *App) applyMenuTexts(idx int) {
+	if idx < 0 || idx >= len(menuBarDefs) {
+		return
 	}
-	return items[viewMenuIndex].Items
+	items := a.menu.Items()
+	if idx >= len(items) {
+		return
+	}
+	def := menuBarDefs[idx]
+	applyTreeTexts(a, items[idx].Items, def.Tree, def.LeafText)
 }
 
-func (a *App) applyViewTexts() {
-	subs := a.viewMenuItems()
-	for i, entry := range viewMenuTree {
+func applyTreeTexts(a *App, subs []widget.MenuItem, tree []menuTreeEntry, leafText func(*App, menuLeafEntry) string) {
+	for i, entry := range tree {
 		if i >= len(subs) {
 			return
 		}
-		a.applyViewTreeEntryText(&subs[i], entry)
+		applyTreeEntryText(a, &subs[i], entry, leafText)
 	}
 }
 
-func (a *App) applyViewTreeEntryText(item *widget.MenuItem, entry viewTreeEntry) {
+func applyTreeEntryText(a *App, item *widget.MenuItem, entry menuTreeEntry, leafText func(*App, menuLeafEntry) string) {
 	switch {
 	case entry.Leaf != nil:
-		item.Text = a.viewLeafText(*entry.Leaf)
+		item.Text = leafText(a, *entry.Leaf)
 	case entry.Group != nil:
 		item.Text = i18n.T(entry.Group.Key)
 		for i := range min(len(entry.Group.Items), len(item.SubItems)) {
-			item.SubItems[i].Text = a.viewLeafText(entry.Group.Items[i])
+			item.SubItems[i].Text = leafText(a, entry.Group.Items[i])
 		}
 	}
 }
 
-func (a *App) viewLeafText(leaf viewLeafEntry) string {
+func (a *App) viewLeafText(leaf menuLeafEntry) string {
 	label, checked := a.viewLeafLabelChecked(leaf)
 	if checked {
 		return checkedPrefix + label
@@ -224,7 +232,7 @@ func (a *App) viewLeafText(leaf viewLeafEntry) string {
 	return label
 }
 
-func (a *App) viewLeafLabelChecked(leaf viewLeafEntry) (string, bool) {
+func (a *App) viewLeafLabelChecked(leaf menuLeafEntry) (string, bool) {
 	if paneID, ok := paneIDFromCommand(leaf.Command); ok {
 		return i18n.T(leaf.Key), a.PaneVisible(paneID)
 	}
@@ -264,26 +272,38 @@ func (a *App) ColumnHeaders(grid string) []string {
 	return headers
 }
 
-func (a *App) MenuItemEnabled(sub int) bool {
-	return a.subItemEnabled(repositoryMenuIndex, sub)
-}
-
-func (a *App) MenuItemText(sub int) string {
-	return a.subItemText(repositoryMenuIndex, sub)
-}
-
-func (a *App) subItemEnabled(top, sub int) bool {
+func (a *App) MenuItemByCommand(id CommandID) (text string, enabled bool, ok bool) {
 	items := a.menu.Items()
-	if len(items) <= top || sub < 0 || sub >= len(items[top].Items) {
-		return false
+	for i, def := range menuBarDefs {
+		if i >= len(items) {
+			continue
+		}
+		if text, enabled, ok = findTreeItem(items[i].Items, def.Tree, id); ok {
+			return text, enabled, true
+		}
 	}
-	return !items[top].Items[sub].Disabled
+	return "", false, false
 }
 
-func (a *App) subItemText(top, sub int) string {
-	items := a.menu.Items()
-	if len(items) <= top || sub < 0 || sub >= len(items[top].Items) {
-		return ""
+func findTreeItem(subs []widget.MenuItem, tree []menuTreeEntry, id CommandID) (text string, enabled bool, ok bool) {
+	for i, entry := range tree {
+		if i >= len(subs) {
+			return "", false, false
+		}
+		switch {
+		case entry.Leaf != nil:
+			if entry.Leaf.Command == id {
+				return subs[i].Text, !subs[i].Disabled, true
+			}
+		case entry.Group != nil:
+			for j, leaf := range entry.Group.Items {
+				if leaf.Command != id || j >= len(subs[i].SubItems) {
+					continue
+				}
+				sub := subs[i].SubItems[j]
+				return sub.Text, !sub.Disabled, true
+			}
+		}
 	}
-	return items[top].Items[sub].Text
+	return "", false, false
 }

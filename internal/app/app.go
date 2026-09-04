@@ -230,12 +230,11 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView.Render(a.registry)
 	a.updateStatusText()
 
-	a.wireMenu()
+	a.wireMenuBar()
 	a.wireToolbar()
 	a.retranslateGrids()
-	a.wireViewMenu()
 	a.wireViewHandlers()
-	a.applyViewTexts()
+	a.applyMenuTexts(viewMenuIndex)
 	a.logLanguageMenuLimit()
 	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
