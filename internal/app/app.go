@@ -11,10 +11,12 @@ import (
 
 	"github.com/oops1/headless-gui/v3/engine"
 	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v3/widget/datagrid"
 	"github.com/oops1/headless-gui/v3/window"
 
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
@@ -57,7 +59,6 @@ type App struct {
 	defaultLayout []byte
 
 	languages []string
-	viewMenu  []CommandID
 
 	registry          *repo.Registry
 	reposView         *repos.View
@@ -86,6 +87,15 @@ type App struct {
 	journalMore     chan struct{}
 	journalWG       sync.WaitGroup
 	journalPageSize int
+
+	filesItems *datagrid.ObservableCollection
+
+	diffMu     sync.Mutex
+	diffCancel context.CancelFunc
+	diffWG     sync.WaitGroup
+
+	filesMu      sync.Mutex
+	currentFiles []diff.File
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -204,16 +214,21 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.journalView.Bind(a.named["journalGrid"].(*widget.DataGridWidget))
 	a.journalView.OnSelect = a.onJournalRowSelected
 	a.journalView.OnNearEnd = a.requestMoreJournal
+	a.filesItems = datagrid.NewObservableCollection()
+	filesGridWidget := a.named["filesGrid"].(*widget.DataGridWidget)
+	filesGridWidget.Grid.SetItemsSource(a.filesItems)
+	filesGridWidget.Grid.OnSelectionChanged = a.onFilesRowSelected
 	a.restoreActiveRepository()
 	a.reposView.Render(a.registry)
 	a.updateStatusText()
 
-	a.viewMenu = a.buildViewEntries()
 	a.wireMenu()
 	a.wireToolbar()
 	a.retranslateGrids()
-	a.buildViewMenu()
+	a.wireViewMenu()
 	a.wireViewHandlers()
+	a.applyViewTexts()
+	a.logLanguageMenuLimit()
 	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
 	a.handlers[CmdCloseRepository] = a.CloseRepository
@@ -273,6 +288,7 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 func (a *App) CloseRepository() {
 	a.stopWatcher()
 	a.stopJournal()
+	a.clearChangesPanels()
 	a.closeOpenRepository()
 	a.registry.ClearActive()
 	a.cfg.ActiveRepository = ""
@@ -294,6 +310,7 @@ func (a *App) ActivateRepository(id string) {
 		a.log.Warn("open repository failed", "path", node.Path, "error", err)
 		a.stopWatcher()
 		a.stopJournal()
+		a.clearChangesPanels()
 		a.closeOpenRepository()
 		a.registry.ClearActive()
 		a.cfg.ActiveRepository = ""
@@ -307,6 +324,7 @@ func (a *App) ActivateRepository(id string) {
 	}
 	a.stopWatcher()
 	a.stopJournal()
+	a.clearChangesPanels()
 	a.closeOpenRepository()
 	a.open = opened
 	_ = a.registry.SetActive(id)
@@ -342,6 +360,7 @@ func (a *App) RefreshRepository() {
 	}
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.clearChangesPanels()
 	a.startJournal()
 }
 
@@ -529,6 +548,7 @@ func (a *App) Close() {
 	a.closeOnce.Do(func() {
 		a.stopWatcher()
 		a.stopJournal()
+		a.stopDiff()
 		close(a.postStop)
 		a.postWG.Wait()
 		a.closeOpenRepository()
