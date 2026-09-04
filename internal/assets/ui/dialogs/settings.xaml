@@ -23,6 +23,7 @@
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
@@ -46,6 +47,8 @@
                           Content="{Loc Dialog.Settings.ShowStatusBar}"/>
                 <CheckBox x:Name="toolbarCaptions" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
                           Content="{Loc Dialog.Settings.ToolbarCaptions}"/>
+                <CheckBox x:Name="journalFullAuthorName" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+                          Content="{Loc Dialog.Settings.JournalFullAuthorName}"/>
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.Git}">

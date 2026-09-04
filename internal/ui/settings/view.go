@@ -25,10 +25,11 @@ type View struct {
 	tabs            *widget.TabControl
 	language        *widget.Dropdown
 	theme           *widget.Dropdown
-	showToolbar     *widget.CheckBox
-	toolbarCaptions *widget.CheckBox
-	showStatusBar   *widget.CheckBox
-	logMaxCount     *widget.NumericUpDown
+	showToolbar           *widget.CheckBox
+	toolbarCaptions       *widget.CheckBox
+	showStatusBar         *widget.CheckBox
+	journalFullAuthorName *widget.CheckBox
+	logMaxCount           *widget.NumericUpDown
 	autoFetch       *widget.CheckBox
 	fetchInterval   *widget.NumericUpDown
 	workTreeDepth   *widget.NumericUpDown
@@ -79,6 +80,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.showStatusBar, ok = named["showStatusBar"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showStatusBar", ErrWidgetMissing)
 	}
+	if v.journalFullAuthorName, ok = named["journalFullAuthorName"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: journalFullAuthorName", ErrWidgetMissing)
+	}
 	if v.logMaxCount, ok = named["logMaxCount"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: logMaxCount", ErrWidgetMissing)
 	}
@@ -122,6 +126,7 @@ func (v *View) apply(m Model) {
 	v.showToolbar.SetChecked(m.ShowToolbar)
 	v.toolbarCaptions.SetChecked(m.ToolbarCaptions)
 	v.showStatusBar.SetChecked(m.ShowStatusBar)
+	v.journalFullAuthorName.SetChecked(m.JournalFullAuthorName)
 	v.logMaxCount.SetValue(float64(m.LogMaxCount))
 	v.autoFetch.SetChecked(m.AutoFetch)
 	v.fetchInterval.SetValue(float64(m.FetchInterval))
@@ -159,15 +164,16 @@ func (v *View) request() Model {
 		code = v.languages[idx]
 	}
 	return Model{
-		Language:        code,
-		Theme:           themeAt(v.theme.Selected()),
-		ShowToolbar:     v.showToolbar.IsChecked(),
-		ToolbarCaptions: v.toolbarCaptions.IsChecked(),
-		ShowStatusBar:   v.showStatusBar.IsChecked(),
-		LogMaxCount:     int(v.logMaxCount.Value()),
-		AutoFetch:       v.autoFetch.IsChecked(),
-		FetchInterval:   int(v.fetchInterval.Value()),
-		WorkTreeDepth:   int(v.workTreeDepth.Value()),
+		Language:              code,
+		Theme:                 themeAt(v.theme.Selected()),
+		ShowToolbar:           v.showToolbar.IsChecked(),
+		ToolbarCaptions:       v.toolbarCaptions.IsChecked(),
+		ShowStatusBar:         v.showStatusBar.IsChecked(),
+		JournalFullAuthorName: v.journalFullAuthorName.IsChecked(),
+		LogMaxCount:           int(v.logMaxCount.Value()),
+		AutoFetch:             v.autoFetch.IsChecked(),
+		FetchInterval:         int(v.fetchInterval.Value()),
+		WorkTreeDepth:         int(v.workTreeDepth.Value()),
 	}.Normalized()
 }
 

@@ -160,6 +160,28 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestJournalFullAuthorNameRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.UI.JournalFullAuthorName = true
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.UI.JournalFullAuthorName {
+		t.Fatal("journal full author name must round trip as true")
+	}
+}
+
+func TestJournalFullAuthorNameDefaultsToFalse(t *testing.T) {
+	if Default().UI.JournalFullAuthorName {
+		t.Fatal("journal full author name must default to false (initials badge)")
+	}
+}
+
 func TestActiveRepositoryRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	cfg := Default()
