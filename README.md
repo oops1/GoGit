@@ -37,11 +37,6 @@ make check
 Интеграционные тесты совместимости используют системный git как эталон и запускаются
 отдельно: `go test -tags oracle ./...`.
 
-## Движок
-
-Ошибки и нехватка возможностей в [headless-gui](https://github.com/oops1/headless-gui)
-собираются в [ENGINE_ISSUES.md](ENGINE_ISSUES.md).
-
 ## Лицензия
 
 Apache License 2.0, см. [LICENSE](LICENSE).
