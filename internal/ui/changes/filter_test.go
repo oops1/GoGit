@@ -195,6 +195,53 @@ func TestDisabledStatusFiltersRoundTripsWithAllowedStatusFilters(t *testing.T) {
 	}
 }
 
+func TestFilterRowsByDirectoryReturnsAllRowsForAnEmptyDirectory(t *testing.T) {
+	rows := []Row{{Name: "main.go", RelDir: "src"}, {Name: "readme.md", RelDir: ""}}
+	got := FilterRowsByDirectory(rows, "")
+	if !slices.Equal(namesOf(got), namesOf(rows)) {
+		t.Fatalf("FilterRowsByDirectory(empty) = %v, want all rows", namesOf(got))
+	}
+}
+
+func TestFilterRowsByDirectoryKeepsRowsDirectlyInsideTheDirectory(t *testing.T) {
+	rows := []Row{
+		{Name: "main.go", RelDir: "src"},
+		{Name: "readme.md", RelDir: ""},
+		{Name: "other.go", RelDir: "other"},
+	}
+	got := FilterRowsByDirectory(rows, "src")
+	if !slices.Equal(namesOf(got), []string{"main.go"}) {
+		t.Fatalf("FilterRowsByDirectory(src) = %v, want [main.go]", namesOf(got))
+	}
+}
+
+func TestFilterRowsByDirectoryKeepsRowsInSubdirectories(t *testing.T) {
+	rows := []Row{
+		{Name: "main.go", RelDir: "src/pkg"},
+		{Name: "readme.md", RelDir: ""},
+	}
+	got := FilterRowsByDirectory(rows, "src")
+	if !slices.Equal(namesOf(got), []string{"main.go"}) {
+		t.Fatalf("FilterRowsByDirectory(src) = %v, want [main.go] from the nested subdirectory", namesOf(got))
+	}
+}
+
+func TestFilterRowsByDirectoryExcludesADirectoryWithTheSamePrefixButDifferentName(t *testing.T) {
+	rows := []Row{{Name: "main.go", RelDir: "srcOther"}}
+	got := FilterRowsByDirectory(rows, "src")
+	if len(got) != 0 {
+		t.Fatalf("FilterRowsByDirectory(src) = %v, want empty (srcOther is not a subdirectory of src)", namesOf(got))
+	}
+}
+
+func TestFilterRowsByDirectoryExcludesRootFilesWhenADirectoryIsSelected(t *testing.T) {
+	rows := []Row{{Name: "readme.md", RelDir: ""}}
+	got := FilterRowsByDirectory(rows, "src")
+	if len(got) != 0 {
+		t.Fatalf("FilterRowsByDirectory(src) = %v, want root files excluded", namesOf(got))
+	}
+}
+
 func TestDisabledStatusFiltersOfAllAllowedIsEmpty(t *testing.T) {
 	got := DisabledStatusFilters(AllowedStatusFilters(nil))
 	if len(got) != 0 {

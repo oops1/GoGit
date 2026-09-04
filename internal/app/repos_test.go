@@ -58,7 +58,7 @@ func TestActivateRepositorySetsStateAndStatusText(t *testing.T) {
 		t.Fatalf("status text = %q", got)
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "Main" {
+	if !ok || item.DisplayText() != "Main (master)" {
 		t.Fatalf("tree item missing or text changed: %q", item.DisplayText())
 	}
 	if item.Icon == nil {
@@ -176,7 +176,7 @@ func TestCloseRepositoryClearsRegistryTreeAndStatus(t *testing.T) {
 		t.Fatal("branches pane not cleared")
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "Main" {
+	if !ok || item.DisplayText() != "Main (master)" {
 		t.Fatalf("marker not removed from tree: %q", item.DisplayText())
 	}
 }
@@ -503,7 +503,7 @@ func TestCmdAddOrCreateOpensExistingRepositoryAndActivatesIt(t *testing.T) {
 		t.Fatalf("active node = %+v, ok = %v", node, ok)
 	}
 	item, ok := a.reposView.Item(node.ID)
-	if !ok || item.DisplayText() != "repo" {
+	if !ok || item.DisplayText() != "repo (master)" {
 		t.Fatalf("tree item missing or text changed: %q", item.DisplayText())
 	}
 	loaded, err := config.Load(paths.ConfigFile())

@@ -136,7 +136,7 @@ func TestActiveRepositoryWithAMissingPathShowsTheMissingIcon(t *testing.T) {
 
 func TestRepoTreeStateIsEmptyWithoutAnActiveRepository(t *testing.T) {
 	a := newTestApp(t)
-	if state := a.repoTreeState(); state != nil {
-		t.Fatalf("state = %+v, want nil", state)
+	if state := a.repoTreeState(); len(state) != 0 {
+		t.Fatalf("state = %+v, want empty", state)
 	}
 }

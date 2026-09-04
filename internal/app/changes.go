@@ -177,6 +177,7 @@ func (a *App) clearChangesPanels() {
 	a.currentFiles = nil
 	a.currentEntries = nil
 	a.activeModified = false
+	a.filesDirFilter = ""
 	a.filesMu.Unlock()
 	a.selectedCommit = hash.ObjectID{}
 	a.setCommitSelected(false)

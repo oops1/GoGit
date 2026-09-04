@@ -55,6 +55,23 @@ func FilterRowsByStatus(rows []Row, query string, allowed map[StatusFilter]bool)
 	return out
 }
 
+func FilterRowsByDirectory(rows []Row, dir string) []Row {
+	if dir == "" {
+		return rows
+	}
+	out := make([]Row, 0, len(rows))
+	for _, r := range rows {
+		if rowInDirectory(r, dir) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func rowInDirectory(r Row, dir string) bool {
+	return r.RelDir == dir || strings.HasPrefix(r.RelDir, dir+"/")
+}
+
 func rowMatchesQuery(r Row, q string) bool {
 	return strings.Contains(strings.ToLower(r.Name), q) || strings.Contains(strings.ToLower(r.RelPath), q)
 }

@@ -125,9 +125,13 @@ type App struct {
 	commitSelected     bool
 	filesAllRows       []changes.Row
 	filesFilterQuery   string
+	filesDirFilter     string
 	filesStatusAllowed map[changes.StatusFilter]bool
 	activeModified     bool
 	stagedCount        int
+
+	branchMu    sync.Mutex
+	branchCache map[string]string
 
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
@@ -279,7 +283,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView = repos.NewView()
 	a.reposView.Bind(reposTreeWidget)
 	a.reposView.OnActivate = a.ActivateRepository
-	a.reposView.OnSelect = a.setSelected
+	a.reposView.OnSelect = a.onRepoTreeSelect
+	a.reposView.OnSelectDirectory = a.onRepoTreeSelectDirectory
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
 	a.journalView = journal.NewView()
@@ -297,6 +302,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesFilterInput.OnChange = a.onFilesFilterChanged
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
+	a.refreshBranchCache()
 	a.applyTheme()
 	a.updateStatusText()
 
@@ -421,6 +427,7 @@ func (a *App) ActivateRepository(id string) {
 		a.statusBranchLabel.SetText("")
 		a.branchesView.Render(branches.Snapshot{})
 		a.journalView.Reset()
+		a.refreshBranchCache()
 		a.reposView.Render(a.registry, a.repoTreeState())
 		return
 	}
@@ -435,6 +442,7 @@ func (a *App) ActivateRepository(id string) {
 	a.updateStatusText()
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.refreshBranchCache()
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
@@ -501,6 +509,8 @@ func (a *App) RefreshRepository() {
 	}
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.refreshBranchCache()
+	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startJournal()
 	if a.commitIsSelected() {
 		return
@@ -574,6 +584,7 @@ func (a *App) addOrCreateRepository() {
 		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 			a.log.Warn("save config failed", "error", err)
 		}
+		a.refreshBranchCache()
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.ActivateRepository(node.ID)
 	})

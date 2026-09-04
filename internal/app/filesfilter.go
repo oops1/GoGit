@@ -19,14 +19,27 @@ func (a *App) onFilesFilterChanged(text string) {
 	a.applyFilesFilter()
 }
 
+func (a *App) setFilesDirFilter(dir string) {
+	a.filesMu.Lock()
+	a.filesDirFilter = dir
+	a.filesMu.Unlock()
+	a.applyFilesFilter()
+}
+
+func (a *App) clearFilesDirFilter() {
+	a.setFilesDirFilter("")
+}
+
 func (a *App) applyFilesFilter() {
 	a.filesMu.Lock()
 	rows := a.filesAllRows
 	query := a.filesFilterQuery
 	allowed := a.filesStatusAllowed
+	dir := a.filesDirFilter
 	a.filesMu.Unlock()
 
 	filtered := changes.FilterRowsByStatus(rows, query, allowed)
+	filtered = changes.FilterRowsByDirectory(filtered, dir)
 	items := make([]interface{}, len(filtered))
 	for i, r := range filtered {
 		items[i] = r
