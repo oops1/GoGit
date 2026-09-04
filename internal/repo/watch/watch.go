@@ -90,6 +90,7 @@ type Options struct {
 	MinInterval   time.Duration
 	MaxInterval   time.Duration
 	MaxEntries    int
+	Snapshot      func() Snapshot
 }
 
 func (o Options) normalize() Options {
@@ -117,12 +118,30 @@ type Watcher struct {
 	paused   bool
 	resumeCh chan struct{}
 	pokeCh   chan struct{}
+
+	baseline     Snapshot
+	baselineOnce sync.Once
 }
 
 func New(layout repo.Layout, opts Options) *Watcher {
-	w := &Watcher{layout: layout, opts: opts.normalize(), pokeCh: make(chan struct{}, 1)}
-	w.snapshotFn = func() Snapshot { return take(w.layout, w.opts) }
+	opts = opts.normalize()
+	w := &Watcher{layout: layout, opts: opts, pokeCh: make(chan struct{}, 1)}
+	if opts.Snapshot != nil {
+		w.snapshotFn = opts.Snapshot
+	} else {
+		w.snapshotFn = func() Snapshot { return take(w.layout, w.opts) }
+	}
+	w.baseline = w.snapshotFn()
 	return w
+}
+
+func (w *Watcher) initialSnapshot() Snapshot {
+	first := false
+	w.baselineOnce.Do(func() { first = true })
+	if first {
+		return w.baseline
+	}
+	return w.snapshotFn()
 }
 
 func (w *Watcher) Poke() {
@@ -168,7 +187,7 @@ func minDuration(a, b time.Duration) time.Duration {
 
 func (w *Watcher) Run(ctx context.Context) iter.Seq[ChangeSet] {
 	return func(yield func(ChangeSet) bool) {
-		prev := w.snapshotFn()
+		prev := w.initialSnapshot()
 		interval := w.opts.MinInterval
 		timer := time.NewTimer(interval)
 		defer timer.Stop()

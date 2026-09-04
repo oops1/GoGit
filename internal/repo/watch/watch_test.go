@@ -113,19 +113,23 @@ func TestDiffDetectsChangedAddedAndRemovedEntries(t *testing.T) {
 	}
 }
 
+func assertOptionsEqual(t *testing.T, got, want Options) {
+	t.Helper()
+	if got.WorkTreeDepth != want.WorkTreeDepth || got.MinInterval != want.MinInterval ||
+		got.MaxInterval != want.MaxInterval || got.MaxEntries != want.MaxEntries {
+		t.Fatalf("options = %+v, want %+v", got, want)
+	}
+}
+
 func TestOptionsNormalizeFillsDefaults(t *testing.T) {
 	got := Options{}.normalize()
 	want := Options{WorkTreeDepth: defaultWorkTreeDepth, MinInterval: defaultMinInterval, MaxInterval: defaultMaxInterval, MaxEntries: defaultMaxEntries}
-	if got != want {
-		t.Fatalf("normalize() = %+v, want %+v", got, want)
-	}
+	assertOptionsEqual(t, got, want)
 }
 
 func TestOptionsNormalizeKeepsProvidedValues(t *testing.T) {
 	want := Options{WorkTreeDepth: 5, MinInterval: 2 * time.Second, MaxInterval: 30 * time.Second, MaxEntries: 10}
-	if got := want.normalize(); got != want {
-		t.Fatalf("normalize() = %+v, want %+v", got, want)
-	}
+	assertOptionsEqual(t, want.normalize(), want)
 }
 
 func TestMinDurationReturnsTheSmallerValue(t *testing.T) {
@@ -412,9 +416,7 @@ func TestTakeOmitsWorkTreeEntriesForABareRepository(t *testing.T) {
 func TestNewNormalizesOptions(t *testing.T) {
 	w := New(repo.Layout{}, Options{})
 	want := Options{WorkTreeDepth: defaultWorkTreeDepth, MinInterval: defaultMinInterval, MaxInterval: defaultMaxInterval, MaxEntries: defaultMaxEntries}
-	if w.opts != want {
-		t.Fatalf("opts = %+v, want %+v", w.opts, want)
-	}
+	assertOptionsEqual(t, w.opts, want)
 }
 
 func TestNewSnapshotFnReflectsTheGivenLayout(t *testing.T) {
@@ -423,6 +425,20 @@ func TestNewSnapshotFnReflectsTheGivenLayout(t *testing.T) {
 	snap := w.snapshotFn()
 	if e, ok := snap[gitPath(layout, "HEAD")]; !ok || !e.Exists {
 		t.Fatalf("snapshot missing HEAD entry: %+v", snap)
+	}
+}
+
+func TestNewCapturesTheBaselineSnapshotSynchronouslyFromOptionsSnapshot(t *testing.T) {
+	var calls atomic.Int32
+	w := New(repo.Layout{}, Options{Snapshot: func() Snapshot {
+		calls.Add(1)
+		return Snapshot{"marker": {Kind: Head, Exists: true}}
+	}})
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("Options.Snapshot called %d times during New, want 1", got)
+	}
+	if _, ok := w.baseline["marker"]; !ok {
+		t.Fatalf("baseline = %v, want the injected snapshot", w.baseline)
 	}
 }
 
@@ -484,14 +500,94 @@ func TestRunReportsHeadChangeWithinMinInterval(t *testing.T) {
 	})
 }
 
+func TestRunReportsAChangeMadeBetweenNewAndTheFirstIteration(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		layout := newTestLayout(t, false)
+		w := New(layout, Options{MinInterval: time.Second, MaxInterval: 4 * time.Second})
+		headFile := gitPath(layout, "HEAD")
+		if err := os.WriteFile(headFile, []byte("ref: refs/heads/created-before-the-first-iteration\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile returned error %v", err)
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		results := make(chan ChangeSet, 4)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for cs := range w.Run(ctx) {
+				results <- cs
+			}
+		}()
+		select {
+		case cs := <-results:
+			if !cs.Has(Head) {
+				t.Fatalf("changes = %v, want Head", cs)
+			}
+		case <-time.After(testTimeout):
+			t.Fatal("a change made between New and the first iteration was not reported")
+		}
+		cancel()
+		<-done
+	})
+}
+
+func TestRunCalledAgainAfterCancelTakesAFreshSnapshotInsteadOfTheStaleBaseline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		layout := newTestLayout(t, false)
+		w := New(layout, Options{MinInterval: time.Second, MaxInterval: time.Second})
+		headFile := gitPath(layout, "HEAD")
+
+		ctx1, cancel1 := context.WithCancel(t.Context())
+		results1 := make(chan ChangeSet, 4)
+		done1 := make(chan struct{})
+		go func() {
+			defer close(done1)
+			for cs := range w.Run(ctx1) {
+				results1 <- cs
+			}
+		}()
+		time.Sleep(10 * time.Millisecond)
+		if err := os.WriteFile(headFile, []byte("ref: refs/heads/first-run-branch\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile returned error %v", err)
+		}
+		select {
+		case cs := <-results1:
+			if !cs.Has(Head) {
+				t.Fatalf("changes = %v, want Head", cs)
+			}
+		case <-time.After(testTimeout):
+			t.Fatal("the first run did not report the change")
+		}
+		cancel1()
+		<-done1
+
+		ctx2, cancel2 := context.WithCancel(t.Context())
+		results2 := make(chan ChangeSet, 4)
+		done2 := make(chan struct{})
+		go func() {
+			defer close(done2)
+			for cs := range w.Run(ctx2) {
+				results2 <- cs
+			}
+		}()
+		time.Sleep(3 * time.Second)
+		select {
+		case cs := <-results2:
+			t.Fatalf("the second run must not replay a change already reported by the first run: %v", cs)
+		default:
+		}
+		cancel2()
+		<-done2
+	})
+}
+
 func TestRunIntervalGrowsDuringSilenceUpToMax(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := New(repo.Layout{}, Options{MinInterval: time.Second, MaxInterval: 4 * time.Second})
 		var calls atomic.Int32
-		w.snapshotFn = func() Snapshot {
+		snapshotFn := func() Snapshot {
 			calls.Add(1)
 			return Snapshot{}
 		}
+		w := New(repo.Layout{}, Options{MinInterval: time.Second, MaxInterval: 4 * time.Second, Snapshot: snapshotFn})
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
 		go func() {
@@ -511,12 +607,12 @@ func TestRunIntervalGrowsDuringSilenceUpToMax(t *testing.T) {
 
 func TestRunPokeTriggersAnImmediatePoll(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := New(repo.Layout{}, Options{MinInterval: time.Hour, MaxInterval: time.Hour})
 		polled := make(chan struct{}, 8)
-		w.snapshotFn = func() Snapshot {
+		snapshotFn := func() Snapshot {
 			polled <- struct{}{}
 			return Snapshot{}
 		}
+		w := New(repo.Layout{}, Options{MinInterval: time.Hour, MaxInterval: time.Hour, Snapshot: snapshotFn})
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
 		go func() {
@@ -538,8 +634,7 @@ func TestRunPokeTriggersAnImmediatePoll(t *testing.T) {
 
 func TestRunPausedBeforeStartBlocksUntilResumeOrCancel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := New(repo.Layout{}, Options{MinInterval: time.Millisecond, MaxInterval: time.Millisecond})
-		w.snapshotFn = func() Snapshot { return Snapshot{} }
+		w := New(repo.Layout{}, Options{MinInterval: time.Millisecond, MaxInterval: time.Millisecond, Snapshot: func() Snapshot { return Snapshot{} }})
 		w.Pause()
 		ctx, cancel := context.WithCancel(t.Context())
 		results := make(chan ChangeSet, 4)
@@ -563,8 +658,7 @@ func TestRunPausedBeforeStartBlocksUntilResumeOrCancel(t *testing.T) {
 
 func TestRunContextCancelWhilePausedEndsIterator(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		w := New(repo.Layout{}, Options{})
-		w.snapshotFn = func() Snapshot { return Snapshot{} }
+		w := New(repo.Layout{}, Options{Snapshot: func() Snapshot { return Snapshot{} }})
 		w.Pause()
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
