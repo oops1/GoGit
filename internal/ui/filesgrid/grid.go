@@ -28,6 +28,8 @@ type Grid struct {
 
 	press pressState
 
+	pendingIcons []pendingIcon
+
 	OnColumnsChanged func(order []ColumnID, visible []ColumnID)
 }
 
@@ -94,7 +96,12 @@ func (g *Grid) rebuildColumns() {
 			continue
 		}
 		def, _ := columnByID(id)
-		col := datagrid.NewTextColumn(i18n.T(def.key), def.path)
+		var col datagrid.Column
+		if id == ColName {
+			col = datagrid.NewTemplateColumn(i18n.T(def.key), g.drawNameCell)
+		} else {
+			col = datagrid.NewTextColumn(i18n.T(def.key), def.path)
+		}
 		col.SetWidth(def.width)
 		cols = append(cols, col)
 	}
@@ -114,7 +121,28 @@ func (g *Grid) notifyColumnsChanged() {
 }
 
 func (g *Grid) Draw(ctx widget.DrawContext) {
+	g.mu.Lock()
+	g.pendingIcons = g.pendingIcons[:0]
+	g.mu.Unlock()
+
 	g.dg.Draw(ctx)
+
+	g.mu.Lock()
+	pending := slices.Clone(g.pendingIcons)
+	g.mu.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+	ctx.SetClip(g.dataRect())
+	for _, pi := range pending {
+		ctx.DrawImageScaled(pi.img, pi.rect.Min.X, pi.rect.Min.Y, pi.rect.Dx(), pi.rect.Dy())
+	}
+	ctx.ClearClip()
+}
+
+func (g *Grid) dataRect() image.Rectangle {
+	b := g.dg.Bounds()
+	return image.Rect(b.Min.X, b.Min.Y+g.dg.Grid.HeaderHeight, b.Max.X, b.Max.Y)
 }
 
 func (g *Grid) Bounds() image.Rectangle {
@@ -140,6 +168,10 @@ func (g *Grid) SetEnabled(v bool) { g.dg.SetEnabled(v) }
 func (g *Grid) SetFocused(v bool) { g.dg.SetFocused(v) }
 
 func (g *Grid) IsFocused() bool { return g.dg.IsFocused() }
+
+func (g *Grid) SetToolTip(s string) { g.dg.SetToolTip(s) }
+
+func (g *Grid) GetToolTip() string { return g.dg.GetToolTip() }
 
 func (g *Grid) NeedsAnimation() bool { return g.dg.NeedsAnimation() }
 

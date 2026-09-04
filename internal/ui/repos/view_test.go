@@ -9,6 +9,7 @@ import (
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/repo"
+	"github.com/oops1/gogit/internal/ui/icons"
 )
 
 func newTestRegistry(t *testing.T) (*repo.Registry, *config.Config) {
@@ -65,42 +66,82 @@ func TestRenderBuildsTreeStructureMatchingRegistry(t *testing.T) {
 		t.Fatalf("main children = %d", len(main.Children))
 	}
 	feature := main.Children[0]
-	if feature.DisplayText() != "⎇ feature" {
+	if feature.DisplayText() != "feature" {
 		t.Fatalf("feature text = %q", feature.DisplayText())
 	}
 }
 
-func TestRenderMarksActiveNodeWithPrefix(t *testing.T) {
+func TestRenderAssignsAnIconToEveryNode(t *testing.T) {
 	reg, _ := newTestRegistry(t)
-	if err := reg.SetActive(workGroupID(t, reg)); err != nil {
-		t.Fatal(err)
-	}
 	v, tw := bound(t)
 	v.Render(reg)
-	roots := tw.Tree.Roots()
-	var found *treeview.TreeViewItem
-	for _, r := range roots {
-		if r.DisplayText() == "● Work" {
-			found = r
+
+	var walk func(items []*treeview.TreeViewItem)
+	walk = func(items []*treeview.TreeViewItem) {
+		for _, item := range items {
+			if item.Icon == nil {
+				t.Fatalf("node %q has no icon", item.DisplayText())
+			}
+			walk(item.Children)
 		}
 	}
-	if found == nil {
-		t.Fatal("active group must be prefixed")
+	walk(tw.Tree.Roots())
+}
+
+func TestRenderUsesTheOpenGroupIconForAnExpandedGroupAndTheClosedIconOtherwise(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg)
+
+	var work *treeview.TreeViewItem
+	for _, r := range tw.Tree.Roots() {
+		if r.DisplayText() == "Work" {
+			work = r
+		}
+	}
+	if work == nil {
+		t.Fatal("work group missing")
+	}
+	openIcon := work.Icon
+	if openIcon == nil {
+		t.Fatal("expanded group must have an icon")
+	}
+	tw.Tree.CollapseItem(work)
+	v.Render(reg)
+
+	for _, r := range tw.Tree.Roots() {
+		if r.DisplayText() == "Work" {
+			work = r
+		}
+	}
+	if work.Icon == openIcon {
+		t.Fatal("a collapsed group must use a different icon than an expanded one")
 	}
 }
 
-func workGroupID(t *testing.T, reg *repo.Registry) string {
-	t.Helper()
+func TestRenderGivesARepositoryTheModifiedIconWhenMarked(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	var mainID string
 	for n := range reg.Walk() {
-		if n.Kind == repo.KindGroup && n.Name == "Work" {
-			return n.ID
+		if n.Kind == repo.KindRepository {
+			mainID = n.ID
 		}
 	}
-	t.Fatal("work group not found")
-	return ""
+	v, tw := bound(t)
+	v.Modified = map[string]bool{mainID: true}
+	v.Render(reg)
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	_ = tw
+	if item.Icon == icons.Tree("repository", treeIconSize) {
+		t.Fatal("a modified repository must not use the plain repository icon")
+	}
 }
 
-func TestRenderMarksActiveWorktreeWithBothPrefixes(t *testing.T) {
+func TestRenderGivesAWorktreeItsOwnIcon(t *testing.T) {
 	reg, _ := newTestRegistry(t)
 	var featureID string
 	for n := range reg.Walk() {
@@ -111,19 +152,18 @@ func TestRenderMarksActiveWorktreeWithBothPrefixes(t *testing.T) {
 	if featureID == "" {
 		t.Fatal("worktree not found")
 	}
-	if err := reg.SetActive(featureID); err != nil {
-		t.Fatal(err)
-	}
-	v, tw := bound(t)
+	v, _ := bound(t)
 	v.Render(reg)
 	item, ok := v.Item(featureID)
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	if item.DisplayText() != "● ⎇ feature" {
+	if item.DisplayText() != "feature" {
 		t.Fatalf("text = %q", item.DisplayText())
 	}
-	_ = tw
+	if item.Icon == nil {
+		t.Fatal("worktree must have an icon")
+	}
 }
 
 func TestRenderDefaultsGroupsToExpanded(t *testing.T) {

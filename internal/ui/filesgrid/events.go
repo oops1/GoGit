@@ -7,6 +7,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/changes"
 )
 
 const checkedPrefix = "✓ "
@@ -51,7 +52,39 @@ func (g *Grid) OnMouseMove(x, y int) {
 		g.updateHeaderPress(x)
 		return
 	}
+	g.updateRowToolTip(y)
 	g.dg.OnMouseMove(x, y)
+}
+
+func (g *Grid) updateRowToolTip(y int) {
+	row, ok := g.rowAt(y)
+	if !ok {
+		g.SetToolTip("")
+		return
+	}
+	g.SetToolTip(row.State)
+}
+
+func (g *Grid) rowAt(y int) (changes.Row, bool) {
+	b := g.dg.Bounds()
+	dataTop := b.Min.Y + g.dg.Grid.HeaderHeight
+	if y < dataTop || y >= b.Max.Y {
+		return changes.Row{}, false
+	}
+	oc := g.dg.Grid.ItemsSource()
+	if oc == nil {
+		return changes.Row{}, false
+	}
+	rowHeight := g.dg.Grid.RowHeight
+	if rowHeight <= 0 {
+		return changes.Row{}, false
+	}
+	idx := (y - dataTop + g.dg.Grid.ScrollY()) / rowHeight
+	if idx < 0 || idx >= oc.Count() {
+		return changes.Row{}, false
+	}
+	row, ok := oc.Get(idx).(changes.Row)
+	return row, ok
 }
 
 func (g *Grid) OnKeyEvent(e widget.KeyEvent) {

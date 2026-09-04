@@ -101,8 +101,11 @@ func TestRenderBuildsLocalGroupWithNestedBranches(t *testing.T) {
 	if len(feature.Children) != 2 {
 		t.Fatalf("feature children = %v", childTexts(feature))
 	}
-	if feature.Children[0].DisplayText() != "● x" {
-		t.Fatalf("feature/x text = %q, want current marker", feature.Children[0].DisplayText())
+	if feature.Children[0].DisplayText() != "x" {
+		t.Fatalf("feature/x text = %q", feature.Children[0].DisplayText())
+	}
+	if feature.Children[0].Icon == feature.Children[1].Icon {
+		t.Fatal("the current branch must use a different icon than a regular branch")
 	}
 	if feature.Children[1].DisplayText() != "y" {
 		t.Fatalf("feature/y text = %q", feature.Children[1].DisplayText())
@@ -201,9 +204,12 @@ func TestRenderMarksDetachedHeadUnderLocal(t *testing.T) {
 	if len(local.Children) != 2 {
 		t.Fatalf("local children = %v, want detached marker and main", childTexts(local))
 	}
-	want := "● Detached HEAD " + shortID(oid(t, "aa"))
+	want := "Detached HEAD " + shortID(oid(t, "aa"))
 	if local.Children[0].DisplayText() != want {
 		t.Fatalf("detached marker = %q, want %q", local.Children[0].DisplayText(), want)
+	}
+	if local.Children[0].Icon == nil {
+		t.Fatal("detached HEAD must have an icon")
 	}
 	if local.Children[1].DisplayText() != "main" {
 		t.Fatalf("main text = %q, want plain (no current marker)", local.Children[1].DisplayText())
@@ -402,6 +408,75 @@ func TestItemReturnsFalseForUnknownRef(t *testing.T) {
 func TestCaptureExpandedIsNoOpBeforeBind(t *testing.T) {
 	v := NewView()
 	v.captureExpanded()
+}
+
+func TestRenderAssignsAnIconToEveryNode(t *testing.T) {
+	v, tw := bound(t)
+	v.Render(fullSnapshot(t))
+
+	var walk func(items []*treeview.TreeViewItem)
+	walk = func(items []*treeview.TreeViewItem) {
+		for _, item := range items {
+			if item.Icon == nil {
+				t.Fatalf("node %q has no icon", item.DisplayText())
+			}
+			walk(item.Children)
+		}
+	}
+	walk(tw.Tree.Roots())
+}
+
+func TestRenderUsesTheFolderIconForGroupNodes(t *testing.T) {
+	v, tw := bound(t)
+	v.Render(fullSnapshot(t))
+	local, remotesRoot, tagsRoot := roots(t, tw)
+	folder := local.Icon
+	if folder == nil {
+		t.Fatal("local group must have an icon")
+	}
+	if remotesRoot.Icon != folder || tagsRoot.Icon != folder {
+		t.Fatal("every group node must share the folder icon")
+	}
+	origin := remotesRoot.Children[0]
+	if origin.Icon != folder {
+		t.Fatal("a remote node is a group and must use the folder icon")
+	}
+}
+
+func TestRenderUsesDistinctIconsForRemoteBranchesAndTags(t *testing.T) {
+	v, tw := bound(t)
+	v.Render(fullSnapshot(t))
+	local, remotesRoot, tagsRoot := roots(t, tw)
+
+	main := findChild(t, local, "main")
+	origin := remotesRoot.Children[0]
+	originMain := findChild(t, origin, "main")
+	v1 := findChild(t, tagsRoot, "v1.0")
+
+	if main.Icon == nil || originMain.Icon == nil || v1.Icon == nil {
+		t.Fatal("every leaf must have an icon")
+	}
+	if main.Icon == originMain.Icon {
+		t.Fatal("a local branch and a remote branch must use different icons")
+	}
+	if main.Icon == v1.Icon || originMain.Icon == v1.Icon {
+		t.Fatal("a tag must use a different icon than a branch")
+	}
+}
+
+func TestRenderUsesTheStashIcon(t *testing.T) {
+	v, tw := bound(t)
+	v.Render(fullSnapshot(t))
+	items := tw.Tree.Roots()
+	stash := items[len(items)-1]
+	if stash.Icon == nil {
+		t.Fatal("stash node must have an icon")
+	}
+	local, _, _ := roots(t, tw)
+	main := findChild(t, local, "main")
+	if stash.Icon == main.Icon {
+		t.Fatal("stash must use a different icon than a branch")
+	}
 }
 
 func TestStashItemIsTrackedForSelection(t *testing.T) {

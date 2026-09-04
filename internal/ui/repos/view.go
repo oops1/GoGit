@@ -1,24 +1,23 @@
 package repos
 
 import (
-	"strings"
+	"image"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/treeview"
 
 	"github.com/oops1/gogit/internal/repo"
+	"github.com/oops1/gogit/internal/ui/icons"
 )
 
-const (
-	activePrefix   = "● "
-	worktreePrefix = "⎇ "
-)
+const treeIconSize = 16
 
 type View struct {
 	tree       *widget.TreeViewWidget
 	idByItem   map[*treeview.TreeViewItem]string
 	itemByID   map[string]*treeview.TreeViewItem
 	expanded   map[string]bool
+	Modified   map[string]bool
 	OnActivate func(id string)
 	OnSelect   func(id string)
 }
@@ -64,12 +63,7 @@ func (v *View) Render(reg *repo.Registry) {
 	v.idByItem = map[*treeview.TreeViewItem]string{}
 	v.itemByID = map[string]*treeview.TreeViewItem{}
 
-	activeID := ""
-	if n, ok := reg.Active(); ok {
-		activeID = n.ID
-	}
-
-	for _, item := range v.buildItems(reg.Roots(), activeID) {
+	for _, item := range v.buildItems(reg.Roots()) {
 		v.tree.AddRoot(item)
 	}
 	v.tree.EndUpdate()
@@ -91,16 +85,17 @@ func (v *View) captureExpanded() {
 	walk(v.tree.Tree.Roots())
 }
 
-func (v *View) buildItems(nodes []*repo.Node, activeID string) []*treeview.TreeViewItem {
+func (v *View) buildItems(nodes []*repo.Node) []*treeview.TreeViewItem {
 	items := make([]*treeview.TreeViewItem, 0, len(nodes))
 	for _, n := range nodes {
-		item := treeview.NewItem(v.label(n, activeID))
+		item := treeview.NewItem(n.Name)
 		v.idByItem[item] = n.ID
 		v.itemByID[n.ID] = item
 		if n.Kind == repo.KindGroup {
 			item.Expanded = v.expandedDefault(n.ID)
 		}
-		for _, child := range v.buildItems(n.Children, activeID) {
+		item.Icon = v.iconFor(n, item.Expanded)
+		for _, child := range v.buildItems(n.Children) {
 			item.AddChild(child)
 		}
 		items = append(items, item)
@@ -116,14 +111,19 @@ func (v *View) expandedDefault(id string) bool {
 	return exp
 }
 
-func (v *View) label(n *repo.Node, activeID string) string {
-	var b strings.Builder
-	if n.ID == activeID {
-		b.WriteString(activePrefix)
+func (v *View) iconFor(n *repo.Node, expanded bool) image.Image {
+	switch n.Kind {
+	case repo.KindGroup:
+		if expanded {
+			return icons.Tree("group_open", treeIconSize)
+		}
+		return icons.Tree("group", treeIconSize)
+	case repo.KindWorktree:
+		return icons.Tree("worktree", treeIconSize)
+	default:
+		if v.Modified[n.ID] {
+			return icons.Tree("repository_modified", treeIconSize)
+		}
+		return icons.Tree("repository", treeIconSize)
 	}
-	if n.Kind == repo.KindWorktree {
-		b.WriteString(worktreePrefix)
-	}
-	b.WriteString(n.Name)
-	return b.String()
 }

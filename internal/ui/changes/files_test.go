@@ -42,27 +42,27 @@ func TestFilesMapsStateNameAndPathForEachStatusCode(t *testing.T) {
 		{
 			name: "modified",
 			file: diff.File{OldPath: "src/main.go", NewPath: "src/main.go", Status: diff.StatusModified},
-			want: Row{State: "Modified", Name: "main.go", RelDir: "src", RelPath: "src/main.go", Extension: "go"},
+			want: Row{Status: RowModified, State: "Modified", Name: "main.go", RelDir: "src", RelPath: "src/main.go", Extension: "go"},
 		},
 		{
 			name: "added",
 			file: diff.File{NewPath: "src/new.go", Status: diff.StatusAdded, NewSize: 12},
-			want: Row{State: "Added", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go", Size: "12"},
+			want: Row{Status: RowAdded, State: "Added", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go", Size: "12"},
 		},
 		{
 			name: "deleted",
 			file: diff.File{OldPath: "src/old.go", Status: diff.StatusDeleted, OldSize: 7},
-			want: Row{State: "Deleted", Name: "old.go", RelDir: "src", RelPath: "src/old.go", Extension: "go", Size: "7"},
+			want: Row{Status: RowDeleted, State: "Deleted", Name: "old.go", RelDir: "src", RelPath: "src/old.go", Extension: "go", Size: "7"},
 		},
 		{
 			name: "copied",
 			file: diff.File{OldPath: "src/a.go", NewPath: "src/b.go", Status: diff.StatusCopied},
-			want: Row{State: "Copied", Name: "b.go", RelDir: "src", RelPath: "src/b.go", Extension: "go", RenamedFrom: "src/a.go"},
+			want: Row{Status: RowCopied, State: "Copied", Name: "b.go", RelDir: "src", RelPath: "src/b.go", Extension: "go", RenamedFrom: "src/a.go"},
 		},
 		{
 			name: "typeChanged",
 			file: diff.File{OldPath: "src/link", NewPath: "src/link", Status: diff.StatusTypeChanged},
-			want: Row{State: "TypeChanged", Name: "link", RelDir: "src", RelPath: "src/link"},
+			want: Row{Status: RowTypeChanged, State: "TypeChanged", Name: "link", RelDir: "src", RelPath: "src/link"},
 		},
 	}
 	for _, tt := range tests {
@@ -79,7 +79,7 @@ func TestFilesShowsRenamedFromForRenames(t *testing.T) {
 	registerStateStrings(t)
 	rows := Files([]diff.File{{OldPath: "src/old.go", NewPath: "src/new.go", Status: diff.StatusRenamed}})
 
-	want := Row{State: "Renamed", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go", RenamedFrom: "src/old.go"}
+	want := Row{Status: RowRenamed, State: "Renamed", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go", RenamedFrom: "src/old.go"}
 	if len(rows) != 1 || rows[0] != want {
 		t.Fatalf("row = %+v, want %+v", rows, want)
 	}
@@ -89,7 +89,7 @@ func TestFilesLeavesRenamedFromEmptyWhenARenameKeepsTheSamePath(t *testing.T) {
 	registerStateStrings(t)
 	rows := Files([]diff.File{{OldPath: "src/same.go", NewPath: "src/same.go", Status: diff.StatusRenamed}})
 
-	want := Row{State: "Renamed", Name: "same.go", RelDir: "src", RelPath: "src/same.go", Extension: "go"}
+	want := Row{Status: RowRenamed, State: "Renamed", Name: "same.go", RelDir: "src", RelPath: "src/same.go", Extension: "go"}
 	if len(rows) != 1 || rows[0] != want {
 		t.Fatalf("row = %+v, want %+v", rows, want)
 	}
@@ -162,47 +162,67 @@ func TestWorkingRowsMapsStateNameAndPathForEachEntryKind(t *testing.T) {
 		{
 			name:  "unstaged modified",
 			entry: worktree.Entry{Path: "src/main.go", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified, Size: 42, ModTime: mtime},
-			want:  Row{State: "Modified", WorkingState: "Modified", Name: "main.go", RelDir: "src", RelPath: "src/main.go", Extension: "go", Size: "42", Modified: "2026-01-02 03:04:05"},
+			want:  Row{Status: RowModified, State: "Modified", WorkingState: "Modified", Name: "main.go", RelDir: "src", RelPath: "src/main.go", Extension: "go", Size: "42", Modified: "2026-01-02 03:04:05"},
 		},
 		{
 			name:  "staged added",
 			entry: worktree.Entry{Path: "src/new.go", Staged: worktree.StatusAdded, Unstaged: worktree.StatusUnmodified},
-			want:  Row{State: "Added", IndexState: "Added", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go"},
+			want:  Row{Status: RowAdded, State: "Added", IndexState: "Added", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go"},
 		},
 		{
 			name:  "staged deleted",
 			entry: worktree.Entry{Path: "src/old.go", Staged: worktree.StatusDeleted, Unstaged: worktree.StatusUnmodified},
-			want:  Row{State: "Deleted", IndexState: "Deleted", Name: "old.go", RelDir: "src", RelPath: "src/old.go", Extension: "go"},
+			want:  Row{Status: RowDeleted, State: "Deleted", IndexState: "Deleted", Name: "old.go", RelDir: "src", RelPath: "src/old.go", Extension: "go"},
 		},
 		{
 			name:  "untracked file always shows the untracked state",
 			entry: worktree.Entry{Path: "src/new.go", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUntracked},
-			want:  Row{State: "Untracked", WorkingState: "Untracked", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go"},
+			want:  Row{Status: RowUntracked, State: "Untracked", WorkingState: "Untracked", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go"},
 		},
 		{
 			name:  "untracked directory keeps its trailing slash in RelPath but not the name",
 			entry: worktree.Entry{Path: "src/newdir/", IsDir: true, Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUntracked},
-			want:  Row{State: "Untracked", WorkingState: "Untracked", Name: "newdir", RelDir: "src", RelPath: "src/newdir/"},
+			want:  Row{Status: RowUntracked, State: "Untracked", WorkingState: "Untracked", Name: "newdir", RelDir: "src", RelPath: "src/newdir/"},
 		},
 		{
 			name:  "conflict",
 			entry: worktree.Entry{Path: "src/conf.go", Staged: worktree.StatusUnmerged, Unstaged: worktree.StatusUnmerged, Conflict: worktree.ConflictBothModified},
-			want:  Row{State: "Conflict", IndexState: "Conflict", WorkingState: "Conflict", Name: "conf.go", RelDir: "src", RelPath: "src/conf.go", Extension: "go"},
+			want:  Row{Status: RowConflict, State: "Conflict", IndexState: "Conflict", WorkingState: "Conflict", Name: "conf.go", RelDir: "src", RelPath: "src/conf.go", Extension: "go"},
 		},
 		{
 			name:  "staged rename shows RenamedFrom",
 			entry: worktree.Entry{Path: "src/new.go", OrigPath: "src/old.go", Staged: worktree.StatusRenamed, Unstaged: worktree.StatusUnmodified},
-			want:  Row{State: "Renamed", IndexState: "Renamed", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go", RenamedFrom: "src/old.go"},
+			want:  Row{Status: RowRenamed, State: "Renamed", IndexState: "Renamed", Name: "new.go", RelDir: "src", RelPath: "src/new.go", Extension: "go", RenamedFrom: "src/old.go"},
 		},
 		{
 			name:  "clean entry has no state words",
 			entry: worktree.Entry{Path: "src/clean.go", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUnmodified},
-			want:  Row{State: "Unmodified", Name: "clean.go", RelDir: "src", RelPath: "src/clean.go", Extension: "go"},
+			want:  Row{Status: RowUnchanged, State: "Unmodified", Name: "clean.go", RelDir: "src", RelPath: "src/clean.go", Extension: "go"},
 		},
 		{
 			name:  "staged and unstaged changes together summarize as modified",
 			entry: worktree.Entry{Path: "src/both.go", Staged: worktree.StatusModified, Unstaged: worktree.StatusModified},
-			want:  Row{State: "Modified", IndexState: "Modified", WorkingState: "Modified", Name: "both.go", RelDir: "src", RelPath: "src/both.go", Extension: "go"},
+			want:  Row{Status: RowModified, State: "Modified", IndexState: "Modified", WorkingState: "Modified", Name: "both.go", RelDir: "src", RelPath: "src/both.go", Extension: "go"},
+		},
+		{
+			name:  "ignored entry",
+			entry: worktree.Entry{Path: "src/build.log", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusIgnored},
+			want:  Row{Status: RowIgnored, State: "Ignored", WorkingState: "Ignored", Name: "build.log", RelDir: "src", RelPath: "src/build.log", Extension: "log"},
+		},
+		{
+			name:  "staged copy",
+			entry: worktree.Entry{Path: "src/copy.go", OrigPath: "src/orig.go", Staged: worktree.StatusCopied, Unstaged: worktree.StatusUnmodified},
+			want:  Row{Status: RowCopied, State: "Copied", IndexState: "Copied", Name: "copy.go", RelDir: "src", RelPath: "src/copy.go", Extension: "go", RenamedFrom: "src/orig.go"},
+		},
+		{
+			name:  "unstaged type change",
+			entry: worktree.Entry{Path: "src/link", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusTypeChanged},
+			want:  Row{Status: RowTypeChanged, State: "TypeChanged", WorkingState: "TypeChanged", Name: "link", RelDir: "src", RelPath: "src/link"},
+		},
+		{
+			name:  "staged added takes priority over unstaged modified",
+			entry: worktree.Entry{Path: "src/mix.go", Staged: worktree.StatusAdded, Unstaged: worktree.StatusModified},
+			want:  Row{Status: RowAdded, State: "Modified", IndexState: "Added", WorkingState: "Modified", Name: "mix.go", RelDir: "src", RelPath: "src/mix.go", Extension: "go"},
 		},
 	}
 	for _, tt := range tests {
@@ -334,6 +354,26 @@ func TestDiffStatusWordFallsBackToUnmodifiedForAnUnknownStatus(t *testing.T) {
 	registerStateStrings(t)
 	if got := diffStatusWord(diff.Status(99)); got != "Unmodified" {
 		t.Fatalf("diffStatusWord(unknown) = %q, want Unmodified", got)
+	}
+}
+
+func TestDiffRowStatusFallsBackToUnchangedForAnUnknownStatus(t *testing.T) {
+	if got := diffRowStatus(diff.Status(99)); got != RowUnchanged {
+		t.Fatalf("diffRowStatus(unknown) = %q, want %q", got, RowUnchanged)
+	}
+}
+
+func TestWorkingRowStatusPrefersConflictOverEveryOtherState(t *testing.T) {
+	e := worktree.Entry{Staged: worktree.StatusAdded, Unstaged: worktree.StatusUntracked, Conflict: worktree.ConflictBothModified}
+	if got := workingRowStatus(e); got != RowConflict {
+		t.Fatalf("workingRowStatus(conflict) = %q, want %q", got, RowConflict)
+	}
+}
+
+func TestWorkingRowStatusPrefersUntrackedOverIgnored(t *testing.T) {
+	e := worktree.Entry{Staged: worktree.StatusIgnored, Unstaged: worktree.StatusUntracked}
+	if got := workingRowStatus(e); got != RowUntracked {
+		t.Fatalf("workingRowStatus(untracked over ignored) = %q, want %q", got, RowUntracked)
 	}
 }
 

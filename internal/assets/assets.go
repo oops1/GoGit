@@ -12,7 +12,7 @@ var uiFS embed.FS
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-//go:embed icons/*.svg
+//go:embed icons/*.svg icons/status/*.svg icons/tree/*.svg
 var iconsFS embed.FS
 
 const MainWindowXAML = "ui/main_window.xaml"
@@ -44,9 +44,32 @@ func Icon(name string) ([]byte, error) {
 }
 
 func IconNames() []string {
-	entries, _ := fs.ReadDir(iconsFS, "icons")
+	return svgNamesIn("icons")
+}
+
+func StatusIcon(name string) ([]byte, error) {
+	return iconsFS.ReadFile("icons/status/" + name + ".svg")
+}
+
+func StatusIconNames() []string {
+	return svgNamesIn("icons/status")
+}
+
+func TreeIcon(name string) ([]byte, error) {
+	return iconsFS.ReadFile("icons/tree/" + name + ".svg")
+}
+
+func TreeIconNames() []string {
+	return svgNamesIn("icons/tree")
+}
+
+func svgNamesIn(dir string) []string {
+	entries, _ := fs.ReadDir(iconsFS, dir)
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
 		names = append(names, strings.TrimSuffix(e.Name(), ".svg"))
 	}
 	return names

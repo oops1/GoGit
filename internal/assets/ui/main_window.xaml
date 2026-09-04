@@ -70,7 +70,18 @@
                     <TreeView x:Name="branchesTree" ShowIndentGuides="True"/>
                 </DockPane>
                 <DockPane Id="files" Title="{Loc Pane.Files}" Side="Top" Size="200">
-                    <FilesGrid x:Name="filesGrid"/>
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top" Margin="4,4,4,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="filesFilter" Grid.Column="0" Margin="0,0,6,0"
+                                     Placeholder="{Loc Files.Filter.Placeholder}"/>
+                            <TextBlock x:Name="filesFilterCount" Grid.Column="1" Text="" Margin="0,4"/>
+                        </Grid>
+                        <FilesGrid x:Name="filesGrid"/>
+                    </DockPanel>
                 </DockPane>
                 <DockPane Id="journal" Title="{Loc Pane.Journal}" Side="Bottom" Size="220">
                     <DataGrid x:Name="journalGrid" AutoGenerateColumns="False" IsReadOnly="True">

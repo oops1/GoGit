@@ -27,6 +27,7 @@ import (
 	"github.com/oops1/gogit/internal/systheme"
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
+	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -68,6 +69,8 @@ type App struct {
 	journalView       *journal.View
 	diffView          *diffview.DiffView
 	filesGrid         *filesgrid.Grid
+	filesFilterInput  *widget.TextInput
+	filesFilterLabel  *widget.Label
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
 	selectedNode      string
@@ -101,11 +104,13 @@ type App struct {
 	workingCancel context.CancelFunc
 	workingWG     sync.WaitGroup
 
-	filesMu        sync.Mutex
-	filesMode      filesMode
-	currentFiles   []diff.File
-	currentEntries []worktree.Entry
-	commitSelected bool
+	filesMu          sync.Mutex
+	filesMode        filesMode
+	currentFiles     []diff.File
+	currentEntries   []worktree.Entry
+	commitSelected   bool
+	filesAllRows     []changes.Row
+	filesFilterQuery string
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -180,6 +185,14 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: filesGrid", ErrWidgetMissing)
 	}
+	filesFilterWidget, ok := named["filesFilter"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesFilter", ErrWidgetMissing)
+	}
+	filesFilterCountWidget, ok := named["filesFilterCount"].(*widget.Label)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesFilterCount", ErrWidgetMissing)
+	}
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
@@ -200,6 +213,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		registry:          repo.New(cfg),
 		diffView:          diffWidget,
 		filesGrid:         filesGridWidget,
+		filesFilterInput:  filesFilterWidget,
+		filesFilterLabel:  filesFilterCountWidget,
 		newWatcher:        newRealWatcher,
 		journalPageSize:   defaultJournalPageSize,
 	}
@@ -235,6 +250,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
 	a.restoreFilesColumns()
 	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
+	a.filesFilterInput.OnChange = a.onFilesFilterChanged
+	a.applyFilesFilter()
 	a.restoreActiveRepository()
 	a.reposView.Render(a.registry)
 	a.updateStatusText()

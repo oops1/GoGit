@@ -105,10 +105,7 @@ func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
 		first = files[0]
 	}
 	a.Post(func() {
-		a.filesItems.Clear()
-		for _, r := range rows {
-			a.filesItems.Add(r)
-		}
+		a.setFilesRows(rows)
 		if hasFirst {
 			a.diffView.SetDocument(changes.FromFile(first))
 		} else {
@@ -173,6 +170,6 @@ func (a *App) clearChangesPanels() {
 	a.filesMu.Unlock()
 	a.selectedCommit = hash.ObjectID{}
 	a.commitSelected = false
-	a.filesItems.Clear()
+	a.setFilesRows(nil)
 	a.diffView.Clear()
 }

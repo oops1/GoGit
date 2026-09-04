@@ -16,8 +16,24 @@ const MaxFiles = 500
 
 const modifiedLayout = "2006-01-02 15:04:05"
 
+type RowStatus string
+
+const (
+	RowUnchanged   RowStatus = "unchanged"
+	RowModified    RowStatus = "modified"
+	RowAdded       RowStatus = "added"
+	RowDeleted     RowStatus = "deleted"
+	RowRenamed     RowStatus = "renamed"
+	RowCopied      RowStatus = "copied"
+	RowTypeChanged RowStatus = "typechanged"
+	RowConflict    RowStatus = "conflict"
+	RowUntracked   RowStatus = "untracked"
+	RowIgnored     RowStatus = "ignored"
+)
+
 type Row struct {
 	Name         string
+	Status       RowStatus
 	State        string
 	IndexState   string
 	WorkingState string
@@ -50,6 +66,7 @@ func fileRow(f diff.File) Row {
 	dir, name := splitRelDir(namePath)
 	row := Row{
 		Name:      name,
+		Status:    diffRowStatus(f.Status),
 		State:     diffStatusWord(f.Status),
 		RelDir:    dir,
 		RelPath:   namePath,
@@ -116,6 +133,7 @@ func workingRow(e worktree.Entry) Row {
 	dir, name := splitRelDir(e.Path)
 	row := Row{
 		Name:         name,
+		Status:       workingRowStatus(e),
 		State:        combinedState(e),
 		IndexState:   optionalStatusWord(e.Staged),
 		WorkingState: optionalStatusWord(e.Unstaged),
@@ -202,6 +220,54 @@ func statusCodeWord(c worktree.StatusCode) string {
 	default:
 		return i18n.T("Files.State.Unmodified")
 	}
+}
+
+func diffRowStatus(s diff.Status) RowStatus {
+	switch s {
+	case diff.StatusModified:
+		return RowModified
+	case diff.StatusAdded:
+		return RowAdded
+	case diff.StatusDeleted:
+		return RowDeleted
+	case diff.StatusRenamed:
+		return RowRenamed
+	case diff.StatusCopied:
+		return RowCopied
+	case diff.StatusTypeChanged:
+		return RowTypeChanged
+	default:
+		return RowUnchanged
+	}
+}
+
+var workingStatusPriority = []struct {
+	code   worktree.StatusCode
+	status RowStatus
+}{
+	{worktree.StatusRenamed, RowRenamed},
+	{worktree.StatusCopied, RowCopied},
+	{worktree.StatusTypeChanged, RowTypeChanged},
+	{worktree.StatusAdded, RowAdded},
+	{worktree.StatusDeleted, RowDeleted},
+	{worktree.StatusModified, RowModified},
+}
+
+func workingRowStatus(e worktree.Entry) RowStatus {
+	switch {
+	case e.Conflict != worktree.ConflictNone:
+		return RowConflict
+	case e.Unstaged == worktree.StatusUntracked:
+		return RowUntracked
+	case e.Staged == worktree.StatusIgnored || e.Unstaged == worktree.StatusIgnored:
+		return RowIgnored
+	}
+	for _, c := range workingStatusPriority {
+		if e.Staged == c.code || e.Unstaged == c.code {
+			return c.status
+		}
+	}
+	return RowUnchanged
 }
 
 func diffStatusWord(s diff.Status) string {

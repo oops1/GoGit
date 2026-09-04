@@ -41,7 +41,7 @@ func TestReposTreeReflectsConfigAfterNew(t *testing.T) {
 	}
 }
 
-func TestActivateRepositorySetsStateStatusTextAndMarker(t *testing.T) {
+func TestActivateRepositorySetsStateAndStatusText(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "main")
 	initTestRepo(t, target)
@@ -58,8 +58,11 @@ func TestActivateRepositorySetsStateStatusTextAndMarker(t *testing.T) {
 		t.Fatalf("status text = %q", got)
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "● Main" {
-		t.Fatalf("marker missing: %q", item.DisplayText())
+	if !ok || item.DisplayText() != "Main" {
+		t.Fatalf("tree item missing or text changed: %q", item.DisplayText())
+	}
+	if item.Icon == nil {
+		t.Fatal("active repository must still have an icon")
 	}
 }
 
@@ -313,8 +316,8 @@ func TestRestoreActiveRepositoryFromConfigOnStartup(t *testing.T) {
 		t.Fatalf("status text = %q", got)
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "● Main" {
-		t.Fatalf("marker missing on restore: %q", item.DisplayText())
+	if !ok || item.DisplayText() != "Main" {
+		t.Fatalf("tree item missing or text changed on restore: %q", item.DisplayText())
 	}
 }
 
@@ -500,8 +503,8 @@ func TestCmdAddOrCreateOpensExistingRepositoryAndActivatesIt(t *testing.T) {
 		t.Fatalf("active node = %+v, ok = %v", node, ok)
 	}
 	item, ok := a.reposView.Item(node.ID)
-	if !ok || item.DisplayText() != "● repo" {
-		t.Fatalf("tree item missing or not marked active: %q", item.DisplayText())
+	if !ok || item.DisplayText() != "repo" {
+		t.Fatalf("tree item missing or text changed: %q", item.DisplayText())
 	}
 	loaded, err := config.Load(paths.ConfigFile())
 	if err != nil {

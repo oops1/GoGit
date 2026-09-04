@@ -28,7 +28,7 @@ func (a *App) startWorking() {
 		a.filesMode = filesModeWorking
 		a.currentEntries = nil
 		a.filesMu.Unlock()
-		a.filesItems.Clear()
+		a.setFilesRows(nil)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -68,12 +68,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	a.currentEntries = entries
 	a.currentFiles = nil
 	a.filesMu.Unlock()
-	a.Post(func() {
-		a.filesItems.Clear()
-		for _, r := range rows {
-			a.filesItems.Add(r)
-		}
-	})
+	a.Post(func() { a.setFilesRows(rows) })
 }
 
 func (a *App) refreshWorkingStatus() {
