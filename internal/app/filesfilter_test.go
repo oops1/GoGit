@@ -24,7 +24,7 @@ func TestOnFilesFilterChangedNarrowsTheGridToMatchingRows(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.onFilesFilterChanged("mod")
 
@@ -37,8 +37,8 @@ func TestOnFilesFilterChangedNarrowsTheGridToMatchingRows(t *testing.T) {
 	}
 
 	label := a.Widget("filesFilterCount").(*widget.Label)
-	if got := label.Text(); got != "1 of 4" {
-		t.Fatalf("counter text = %q, want %q", got, "1 of 4")
+	if got := label.Text(); got != "1 of 5" {
+		t.Fatalf("counter text = %q, want %q", got, "1 of 5")
 	}
 }
 
@@ -47,17 +47,17 @@ func TestOnFilesFilterChangedBackToEmptyRestoresAllRowsAndTheTotalCounter(t *tes
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.onFilesFilterChanged("mod")
 	a.onFilesFilterChanged("")
 
-	if n := filesRowCountOnDispatcher(t, a); n != 4 {
-		t.Fatalf("rows after clearing the filter = %d, want 4", n)
+	if n := filesRowCountOnDispatcher(t, a); n != 5 {
+		t.Fatalf("rows after clearing the filter = %d, want 5", n)
 	}
 	label := a.Widget("filesFilterCount").(*widget.Label)
-	if got := label.Text(); got != "4 files" {
-		t.Fatalf("counter text = %q, want %q", got, "4 files")
+	if got := label.Text(); got != "5 files" {
+		t.Fatalf("counter text = %q, want %q", got, "5 files")
 	}
 }
 
@@ -80,12 +80,12 @@ func TestDisablingAFilesStatusButtonHidesMatchingRowsAndUpdatesTheCounter(t *tes
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.toggleFilesStatusFilter(changes.FilterAdded)
 
-	if got := filesRowNamesOnDispatcher(t, a); len(got) != 3 {
-		t.Fatalf("rows after hiding added = %v, want 3 rows", got)
+	if got := filesRowNamesOnDispatcher(t, a); len(got) != 4 {
+		t.Fatalf("rows after hiding added = %v, want 4 rows", got)
 	}
 	for _, name := range filesRowNamesOnDispatcher(t, a) {
 		if name == "staged.txt" {
@@ -93,8 +93,8 @@ func TestDisablingAFilesStatusButtonHidesMatchingRowsAndUpdatesTheCounter(t *tes
 		}
 	}
 	label := a.Widget("filesFilterCount").(*widget.Label)
-	if got := label.Text(); got != "3 of 4" {
-		t.Fatalf("counter text = %q, want %q", got, "3 of 4")
+	if got := label.Text(); got != "4 of 5" {
+		t.Fatalf("counter text = %q, want %q", got, "4 of 5")
 	}
 }
 
@@ -103,7 +103,7 @@ func TestDisablingTheStagedButtonAlsoHidesAFullyStagedRow(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.toggleFilesStatusFilter(changes.FilterStaged)
 
@@ -119,7 +119,7 @@ func TestDisablingTheStagedButtonKeepsAConflictRowVisible(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.toggleFilesStatusFilter(changes.FilterStaged)
 
@@ -139,13 +139,13 @@ func TestCombiningTextAndStatusButtonFiltersNarrowsTheGridFurther(t *testing.T) 
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.toggleFilesStatusFilter(changes.FilterAdded)
 	a.onFilesFilterChanged("e")
 
 	got := filesRowNamesOnDispatcher(t, a)
-	want := []string{"modified.txt", "untracked.txt"}
+	want := []string{"modified.txt", "clean.txt", "untracked.txt"}
 	if len(got) != len(want) {
 		t.Fatalf("rows = %v, want %v", got, want)
 	}
@@ -165,23 +165,50 @@ func containsName(names []string, want string) bool {
 	return false
 }
 
+func TestDisablingTheUnchangedButtonHidesTheCleanTrackedRow(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 5)
+
+	if !containsName(filesRowNamesOnDispatcher(t, a), "clean.txt") {
+		t.Fatalf("clean.txt must be visible by default, rows = %v", filesRowNamesOnDispatcher(t, a))
+	}
+
+	a.toggleFilesStatusFilter(changes.FilterUnchanged)
+
+	got := filesRowNamesOnDispatcher(t, a)
+	if len(got) != 4 {
+		t.Fatalf("rows after hiding unchanged = %v, want 4 rows", got)
+	}
+	if containsName(got, "clean.txt") {
+		t.Fatalf("clean.txt must be hidden once the unchanged filter is disabled, rows = %v", got)
+	}
+
+	a.toggleFilesStatusFilter(changes.FilterUnchanged)
+	if !containsName(filesRowNamesOnDispatcher(t, a), "clean.txt") {
+		t.Fatalf("clean.txt must reappear once the unchanged filter is re-enabled, rows = %v", filesRowNamesOnDispatcher(t, a))
+	}
+}
+
 func TestReenablingAFilesStatusButtonRestoresItsRows(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.toggleFilesStatusFilter(changes.FilterUntracked)
-	if n := filesRowCountOnDispatcher(t, a); n != 3 {
-		t.Fatalf("rows after hiding untracked = %d, want 3", n)
+	if n := filesRowCountOnDispatcher(t, a); n != 4 {
+		t.Fatalf("rows after hiding untracked = %d, want 4", n)
 	}
 	a.toggleFilesStatusFilter(changes.FilterUntracked)
-	if n := filesRowCountOnDispatcher(t, a); n != 4 {
-		t.Fatalf("rows after re-enabling untracked = %d, want 4", n)
+	if n := filesRowCountOnDispatcher(t, a); n != 5 {
+		t.Fatalf("rows after re-enabling untracked = %d, want 5", n)
 	}
 	label := a.Widget("filesFilterCount").(*widget.Label)
-	if got := label.Text(); got != "4 files" {
-		t.Fatalf("counter text = %q, want %q", got, "4 files")
+	if got := label.Text(); got != "5 files" {
+		t.Fatalf("counter text = %q, want %q", got, "5 files")
 	}
 }

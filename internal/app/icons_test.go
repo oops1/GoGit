@@ -20,32 +20,44 @@ func TestToolbarButtonsHaveIconsAfterConstruction(t *testing.T) {
 		if btn.IconSize != toolbarIconSize {
 			t.Fatalf("button %q icon size = %d, want %d", name, btn.IconSize, toolbarIconSize)
 		}
-		if btn.IconPos != widget.IconLeft {
-			t.Fatalf("button %q icon position = %v, want IconLeft", name, btn.IconPos)
+		if btn.IconPos != widget.IconTop {
+			t.Fatalf("button %q icon position = %v, want IconTop", name, btn.IconPos)
 		}
 	}
 }
 
-func TestToolbarButtonIconsAreRecoloredWhenThemeChanges(t *testing.T) {
+func TestToolbarButtonsKeepTheirOwnColoursInBothThemes(t *testing.T) {
 	a := newTestApp(t)
 	a.SetTheme(config.ThemeDark)
-	before := a.Widget("btnPull").(*widget.Button).Icon
+	dark := a.Widget("btnPull").(*widget.Button).Icon
 
 	a.SetTheme(config.ThemeLight)
-	after := a.Widget("btnPull").(*widget.Button).Icon
+	light := a.Widget("btnPull").(*widget.Button).Icon
 
-	if before == nil || after == nil {
-		t.Fatal("expected non-nil icons before and after the theme change")
+	if dark == nil || light == nil {
+		t.Fatal("expected non-nil icons in both themes")
 	}
-	if before == after {
-		t.Fatal("expected a different icon instance after switching themes")
+	if dark != light {
+		t.Fatal("a toolbar icon carries its own colours and must not be repainted per theme")
 	}
-	wantAfter := icons.Toolbar("pull", toolbarIconSize, themeFor(config.ThemeLight).BtnText)
-	if after != wantAfter {
-		t.Fatal("expected the button icon to be tinted with the new theme's button text color")
+	if dark != icons.ToolbarPlain("pull", toolbarIconSize) {
+		t.Fatal("the toolbar must draw the icon as it is drawn in the asset")
 	}
 }
 
+func TestToolbarDropsCaptionsWhenTheSettingIsOff(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.UI.ToolbarCaptions = false
+	a.applyToolbarIcons(themeFor(a.EffectiveTheme()))
+
+	btn := a.Widget("btnPull").(*widget.Button)
+	if btn.IconPos != widget.IconOnly {
+		t.Fatalf("icon position = %v, want IconOnly", btn.IconPos)
+	}
+	if got := btn.Bounds().Dx(); got != toolbarCompactWidth {
+		t.Fatalf("button width = %d, want %d", got, toolbarCompactWidth)
+	}
+}
 func TestActiveRepositoryIconDiffersFromAnInactiveRepository(t *testing.T) {
 	dir := t.TempDir()
 	activePath := filepath.Join(dir, "active")
@@ -86,7 +98,7 @@ func TestActiveRepositoryWithWorkingCopyChangesShowsTheModifiedIcon(t *testing.T
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	waitForPostQueueDrain(t, a)
 
 	item, ok := a.reposView.Item("r1")
@@ -114,6 +126,24 @@ func TestActiveRepositoryWithACleanWorkingCopyKeepsThePlainIcon(t *testing.T) {
 	want := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Accent)
 	if item.Icon != want {
 		t.Fatal("a repository with a clean working copy must show the plain icon")
+	}
+}
+
+func TestActiveRepositoryWithOnlyUnmodifiedTrackedFilesKeepsThePlainIcon(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildCleanTrackedRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 1)
+	waitForPostQueueDrain(t, a)
+
+	item, ok := a.reposView.Item("r1")
+	if !ok {
+		t.Fatal("item missing")
+	}
+	want := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Accent)
+	if item.Icon != want {
+		t.Fatal("an unmodified tracked file reported by IncludeUnmodified must not trigger the modified icon")
 	}
 }
 

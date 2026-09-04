@@ -127,6 +127,15 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 		combined[stored.Path] = &stored
 	}
 
+	if w.includeUnmodified {
+		for _, entry := range mergedEntries {
+			if _, ok := combined[entry.Path]; ok {
+				continue
+			}
+			combined[entry.Path] = &Entry{Path: entry.Path, Staged: StatusUnmodified, Unstaged: StatusUnmodified}
+		}
+	}
+
 	result := Status{HeadBranch: branch, Detached: detached, Entries: make([]Entry, 0, len(combined))}
 	for _, entry := range combined {
 		w.fillWorkingInfo(entry)

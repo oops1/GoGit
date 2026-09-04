@@ -208,7 +208,7 @@ func TestSelectingADirectoryInTheReposTreeFiltersTheFilesPanel(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildModifiedNestedFilesFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 3)
+	waitForWorkingRows(t, a, 4)
 
 	root, ok := a.reposView.Item("r1")
 	if !ok {
@@ -233,7 +233,7 @@ func TestSelectingTheRepositoryNodeClearsTheDirectoryFilter(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildModifiedNestedFilesFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 3)
+	waitForWorkingRows(t, a, 4)
 
 	root, _ := a.reposView.Item("r1")
 	tree := a.Widget("reposTree").(*widget.TreeViewWidget)
@@ -246,8 +246,8 @@ func TestSelectingTheRepositoryNodeClearsTheDirectoryFilter(t *testing.T) {
 
 	tree.Tree.SetSelectedItem(root)
 
-	if n := filesRowCountOnDispatcher(t, a); n != 3 {
-		t.Fatalf("rows after selecting the repository = %d, want 3 (filter cleared)", n)
+	if n := filesRowCountOnDispatcher(t, a); n != 4 {
+		t.Fatalf("rows after selecting the repository = %d, want 4 (filter cleared)", n)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestSelectingADirectoryOfTheAlreadyActiveRepositoryDoesNotReactivate(t *tes
 	target := filepath.Join(dir, "main")
 	buildModifiedNestedFilesFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 3)
+	waitForWorkingRows(t, a, 4)
 	before := a.opened()
 
 	root, _ := a.reposView.Item("r1")

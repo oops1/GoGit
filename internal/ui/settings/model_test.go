@@ -20,14 +20,15 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 	m := FromConfig(cfg)
 
 	want := Model{
-		Language:      "ru",
-		Theme:         config.ThemeDark,
-		ShowToolbar:   false,
-		ShowStatusBar: false,
-		LogMaxCount:   750,
-		AutoFetch:     true,
-		FetchInterval: 120,
-		WorkTreeDepth: 6,
+		Language:        "ru",
+		Theme:           config.ThemeDark,
+		ShowToolbar:     false,
+		ToolbarCaptions: true,
+		ShowStatusBar:   false,
+		LogMaxCount:     750,
+		AutoFetch:       true,
+		FetchInterval:   120,
+		WorkTreeDepth:   6,
 	}
 	if m != want {
 		t.Fatalf("model = %+v, want %+v", m, want)

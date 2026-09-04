@@ -14,26 +14,28 @@ const (
 )
 
 type Model struct {
-	Language      string
-	Theme         string
-	ShowToolbar   bool
-	ShowStatusBar bool
-	LogMaxCount   int
-	AutoFetch     bool
-	FetchInterval int
-	WorkTreeDepth int
+	Language        string
+	Theme           string
+	ShowToolbar     bool
+	ToolbarCaptions bool
+	ShowStatusBar   bool
+	LogMaxCount     int
+	AutoFetch       bool
+	FetchInterval   int
+	WorkTreeDepth   int
 }
 
 func FromConfig(cfg *config.Config) Model {
 	m := Model{
-		Language:      cfg.Language,
-		Theme:         cfg.Theme,
-		ShowToolbar:   cfg.UI.ShowToolbar,
-		ShowStatusBar: cfg.UI.ShowStatusBar,
-		LogMaxCount:   cfg.Git.LogMaxCount,
-		AutoFetch:     cfg.Git.AutoFetch,
-		FetchInterval: cfg.Git.FetchInterval,
-		WorkTreeDepth: cfg.Git.WorkTreeDepth,
+		Language:        cfg.Language,
+		Theme:           cfg.Theme,
+		ShowToolbar:     cfg.UI.ShowToolbar,
+		ToolbarCaptions: cfg.UI.ToolbarCaptions,
+		ShowStatusBar:   cfg.UI.ShowStatusBar,
+		LogMaxCount:     cfg.Git.LogMaxCount,
+		AutoFetch:       cfg.Git.AutoFetch,
+		FetchInterval:   cfg.Git.FetchInterval,
+		WorkTreeDepth:   cfg.Git.WorkTreeDepth,
 	}
 	return m.Normalized()
 }
@@ -58,6 +60,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Language = n.Language
 	cfg.Theme = n.Theme
 	cfg.UI.ShowToolbar = n.ShowToolbar
+	cfg.UI.ToolbarCaptions = n.ToolbarCaptions
 	cfg.UI.ShowStatusBar = n.ShowStatusBar
 	cfg.Git.LogMaxCount = n.LogMaxCount
 	cfg.Git.AutoFetch = n.AutoFetch

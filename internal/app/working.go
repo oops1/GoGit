@@ -76,7 +76,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	if len(entries) > changes.MaxFiles {
 		entries = entries[:changes.MaxFiles]
 	}
-	modified := len(status.Entries) > 0
+	modified := hasWorkingChanges(status.Entries)
 	staged := stagedEntryCount(status.Entries)
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
@@ -84,6 +84,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	a.currentFiles = nil
 	a.activeModified = modified
 	a.stagedCount = staged
+	a.mutedDirs = mutedDirectories(entries)
 	a.filesMu.Unlock()
 	a.Post(func() {
 		if ctx.Err() != nil {
@@ -93,6 +94,15 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
 	})
+}
+
+func hasWorkingChanges(entries []worktree.Entry) bool {
+	for _, e := range entries {
+		if e.Staged != worktree.StatusUnmodified || e.Unstaged != worktree.StatusUnmodified {
+			return true
+		}
+	}
+	return false
 }
 
 func stagedEntryCount(entries []worktree.Entry) int {

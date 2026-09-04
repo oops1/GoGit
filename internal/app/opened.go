@@ -88,7 +88,7 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 		_ = closeGitRepository(r)
 		return nil, branches.Snapshot{}, err
 	}
-	wt, err := openWorktree(r, worktree.Options{DB: db, Refs: store, MaxFiles: worktreeMaxFiles})
+	wt, err := openWorktree(r, worktree.Options{DB: db, Refs: store, MaxFiles: worktreeMaxFiles, IncludeUnmodified: true})
 	if err != nil && !errors.Is(err, worktree.ErrBareRepository) {
 		_ = closeRefsStore(store)
 		_ = closeObjectsDB(db)

@@ -34,17 +34,18 @@ func clickCheckBox(cb *widget.CheckBox) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"tabs":          widget.NewTabControl(),
-		"language":      widget.NewDropdown(),
-		"theme":         widget.NewDropdown(),
-		"showToolbar":   widget.NewCheckBox(""),
-		"showStatusBar": widget.NewCheckBox(""),
-		"logMaxCount":   widget.NewNumericUpDown(),
-		"autoFetch":     widget.NewCheckBox(""),
-		"fetchInterval": widget.NewNumericUpDown(),
-		"workTreeDepth": widget.NewNumericUpDown(),
-		"ok":            widget.NewButton(""),
-		"cancel":        widget.NewButton(""),
+		"tabs":            widget.NewTabControl(),
+		"language":        widget.NewDropdown(),
+		"theme":           widget.NewDropdown(),
+		"showToolbar":     widget.NewCheckBox(""),
+		"toolbarCaptions": widget.NewCheckBox(""),
+		"showStatusBar":   widget.NewCheckBox(""),
+		"logMaxCount":     widget.NewNumericUpDown(),
+		"autoFetch":       widget.NewCheckBox(""),
+		"fetchInterval":   widget.NewNumericUpDown(),
+		"workTreeDepth":   widget.NewNumericUpDown(),
+		"ok":              widget.NewButton(""),
+		"cancel":          widget.NewButton(""),
 	}
 }
 
@@ -80,7 +81,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"tabs", "language", "theme", "showToolbar", "showStatusBar", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
+	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)

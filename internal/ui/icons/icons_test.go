@@ -258,3 +258,57 @@ func TestConcurrentAccessIsSafe(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestStatusMutedKeepsTheGlyphButDropsColourAndOpacity(t *testing.T) {
+	full := Status("modified", 16)
+	dim := StatusMuted("modified", 16)
+	if full == nil || dim == nil {
+		t.Fatal("both renders must produce an image")
+	}
+	if sameImage(full, dim) {
+		t.Fatal("the muted icon must differ from the full colour one")
+	}
+	var opaque, coloured int
+	b := dim.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, a := dim.At(x, y).RGBA()
+			if a == 0 {
+				continue
+			}
+			opaque++
+			if r != g || g != bl {
+				coloured++
+			}
+		}
+	}
+	if opaque == 0 {
+		t.Fatal("the muted icon lost every pixel")
+	}
+	if coloured != 0 {
+		t.Fatalf("%d muted pixels kept their colour", coloured)
+	}
+}
+
+func TestStatusMutedReturnsNothingForAnUnknownIcon(t *testing.T) {
+	if StatusMuted("nope", 16) != nil {
+		t.Fatal("an unknown icon must not render")
+	}
+	if StatusMuted("modified", 0) != nil {
+		t.Fatal("a zero size must not render")
+	}
+}
+
+func TestToolbarPlainRendersTheIconWithItsOwnColours(t *testing.T) {
+	plain := ToolbarPlain("pull", 24)
+	if plain == nil {
+		t.Fatal("the toolbar icon must render")
+	}
+	tinted := Toolbar("pull", 24, color.RGBA{R: 255, A: 255})
+	if sameImage(plain, tinted) {
+		t.Fatal("a plain render must differ from a tinted one")
+	}
+	if ToolbarPlain("nope", 24) != nil {
+		t.Fatal("an unknown toolbar icon must not render")
+	}
+}

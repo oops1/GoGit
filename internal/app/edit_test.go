@@ -210,7 +210,7 @@ func TestStageUnstageDiscardFollowFilesSelection(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	for _, cmd := range []CommandID{CmdStage, CmdUnstage, CmdDiscard} {
 		if _, enabled, ok := a.MenuItemByCommand(cmd); !ok || enabled {
@@ -264,8 +264,8 @@ func TestStageSelectedUntrackedFileMovesItToAddedState(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
-	selectAndActivateFilesRow(t, a, 3)
+	waitForWorkingRows(t, a, 5)
+	selectAndActivateFilesRow(t, a, 4)
 
 	if !a.Dispatch(CmdStage) {
 		t.Fatal("stage command must dispatch")
@@ -283,7 +283,7 @@ func TestUnstageSelectedFileReturnsItToUntrackedState(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	selectAndActivateFilesRow(t, a, 1)
 
 	if !a.Dispatch(CmdUnstage) {
@@ -299,7 +299,7 @@ func TestDiscardWithConfirmationRestoresFileContent(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	a.askConfirm = func(_, _ string, cb func(bool)) { cb(true) }
 	selectAndActivateFilesRow(t, a, 2)
 
@@ -323,7 +323,7 @@ func TestDiscardWithoutConfirmationLeavesTheFileUnchanged(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	askCalled := 0
 	a.askConfirm = func(_, _ string, cb func(bool)) { askCalled++; cb(false) }
 	selectAndActivateFilesRow(t, a, 2)
@@ -350,9 +350,9 @@ func TestDiscardConfirmedRemovesAnUntrackedFile(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	a.askConfirm = func(_, _ string, cb func(bool)) { cb(true) }
-	selectAndActivateFilesRow(t, a, 3)
+	selectAndActivateFilesRow(t, a, 4)
 
 	if !a.Dispatch(CmdDiscard) {
 		t.Fatal("discard command must dispatch")
@@ -370,7 +370,7 @@ func TestStageUnstageDiscardWithNoSelectionAreNoOps(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.stageSelected()
 	a.unstageSelected()
@@ -440,7 +440,7 @@ func TestStageFailedLogsWarningAndSetsStatus(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
@@ -468,7 +468,7 @@ func TestUnstageFailedLogsWarningAndSetsStatus(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
@@ -496,7 +496,7 @@ func TestDiscardFailedLogsWarningAndSetsStatus(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	a.askConfirm = func(_, _ string, cb func(bool)) { cb(true) }
 
 	a.filesMu.Lock()
@@ -608,8 +608,8 @@ func TestWriteOperationPausesAndResumesTheWatcherAndPokesItAfterward(t *testing.
 	a.newWatcher = func(gitrepo.Layout, watch.Options) watcherIface { return fw }
 	a.ActivateRepository("r1")
 	<-fw.started
-	waitForWorkingRows(t, a, 4)
-	selectAndActivateFilesRow(t, a, 3)
+	waitForWorkingRows(t, a, 5)
+	selectAndActivateFilesRow(t, a, 4)
 
 	if !a.Dispatch(CmdStage) {
 		t.Fatal("stage command must dispatch")
@@ -894,7 +894,7 @@ func TestDefaultShowCommitShowsModalWithoutPanicking(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	a.showCommit(commit.Model{Staged: 1}, func(commit.Model, bool) {})
 }

@@ -122,6 +122,7 @@ type App struct {
 	filesMode          filesMode
 	currentFiles       []diff.File
 	currentEntries     []worktree.Entry
+	mutedDirs          []string
 	commitSelected     bool
 	filesAllRows       []changes.Row
 	filesFilterQuery   string
@@ -486,6 +487,9 @@ func (a *App) setSelected(id string) {
 }
 
 func (a *App) closeOpenRepository() {
+	a.filesMu.Lock()
+	a.mutedDirs = nil
+	a.filesMu.Unlock()
 	o := a.opened()
 	if o == nil {
 		return
@@ -542,11 +546,34 @@ func (a *App) restoreActiveRepository() {
 }
 
 func (a *App) updateStatusText() {
-	if node, ok := a.registry.Active(); ok {
-		a.statusLabel.SetText(node.Name)
+	node, ok := a.registry.Active()
+	if !ok {
+		a.statusLabel.SetText(i18n.T("Status.NoRepository"))
 		return
 	}
-	a.statusLabel.SetText(i18n.T("Status.NoRepository"))
+	a.statusLabel.SetText(statusRepositoryText(node.Name, node.Path, a.statusLabel.Bounds().Dx()))
+}
+
+func statusRepositoryText(name, path string, width int) string {
+	if path == "" {
+		return name
+	}
+	return ellipsizeText(name+statusPathSeparator+path, width)
+}
+
+func ellipsizeText(text string, width int) string {
+	if width <= 0 || widget.MeasureUIText(text, widget.DefaultFontSizePt) <= width {
+		return text
+	}
+	runes := []rune(text)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		shortened := string(runes) + statusEllipsis
+		if widget.MeasureUIText(shortened, widget.DefaultFontSizePt) <= width {
+			return shortened
+		}
+	}
+	return statusEllipsis
 }
 
 func (a *App) addGroup() {

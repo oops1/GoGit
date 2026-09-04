@@ -48,10 +48,10 @@ func (a *App) repoTreeState() map[string]repos.State {
 	}
 	a.filesMu.Lock()
 	modified := a.activeModified
-	entries := a.currentEntries
+	muted := a.mutedDirs
 	a.filesMu.Unlock()
 	s.Modified = modified
-	s.MutedDirs = mutedDirectories(entries)
+	s.MutedDirs = muted
 	state[node.ID] = s
 	return state
 }

@@ -75,7 +75,7 @@ func TestFilterRowsByStatusHidesRowsOfADisabledStatus(t *testing.T) {
 }
 
 func TestFilterRowsByStatusHidesRowsWithoutAKnownStatusOnlyWhenTheirStatusIsDisabled(t *testing.T) {
-	rows := []Row{{Name: "truncated", Status: RowUnchanged}}
+	rows := []Row{{Name: "truncated"}}
 	allowed := map[StatusFilter]bool{}
 	got := FilterRowsByStatus(rows, "", allowed)
 	if !slices.Equal(namesOf(got), []string{"truncated"}) {
@@ -141,6 +141,7 @@ func TestFilterRowsByStatusMapsEachRowStatusToItsFilter(t *testing.T) {
 		{RowUntracked, FilterUntracked},
 		{RowIgnored, FilterIgnored},
 		{RowConflict, FilterConflict},
+		{RowUnchanged, FilterUnchanged},
 	}
 	for _, c := range cases {
 		rows := []Row{{Name: "f", Status: c.status}}
@@ -246,5 +247,29 @@ func TestDisabledStatusFiltersOfAllAllowedIsEmpty(t *testing.T) {
 	got := DisabledStatusFilters(AllowedStatusFilters(nil))
 	if len(got) != 0 {
 		t.Fatalf("DisabledStatusFilters(all allowed) = %v, want empty", got)
+	}
+}
+
+func TestFilterRowsByStatusShowsUnchangedRowsWhenTheFilterIsEnabled(t *testing.T) {
+	rows := []Row{
+		{Name: "main.go", Status: RowModified},
+		{Name: "assets.go", Status: RowUnchanged},
+	}
+	got := FilterRowsByStatus(rows, "", allowAll())
+	if !slices.Equal(namesOf(got), []string{"main.go", "assets.go"}) {
+		t.Fatalf("FilterRowsByStatus(unchanged allowed) = %v, want both rows", namesOf(got))
+	}
+}
+
+func TestFilterRowsByStatusHidesUnchangedRowsWhenTheFilterIsDisabled(t *testing.T) {
+	rows := []Row{
+		{Name: "main.go", Status: RowModified},
+		{Name: "assets.go", Status: RowUnchanged},
+	}
+	allowed := allowAll()
+	allowed[FilterUnchanged] = false
+	got := FilterRowsByStatus(rows, "", allowed)
+	if !slices.Equal(namesOf(got), []string{"main.go"}) {
+		t.Fatalf("FilterRowsByStatus(unchanged disabled) = %v, want [main.go]", namesOf(got))
 	}
 }

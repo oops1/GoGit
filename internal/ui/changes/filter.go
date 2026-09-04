@@ -13,6 +13,7 @@ const (
 	FilterUntracked StatusFilter = "untracked"
 	FilterIgnored   StatusFilter = "ignored"
 	FilterConflict  StatusFilter = "conflict"
+	FilterUnchanged StatusFilter = "unchanged"
 )
 
 var AllStatusFilters = []StatusFilter{
@@ -24,6 +25,7 @@ var AllStatusFilters = []StatusFilter{
 	FilterUntracked,
 	FilterIgnored,
 	FilterConflict,
+	FilterUnchanged,
 }
 
 func FilterRows(rows []Row, query string) []Row {
@@ -112,6 +114,8 @@ func primaryStatusFilter(s RowStatus) (StatusFilter, bool) {
 		return FilterIgnored, true
 	case RowConflict:
 		return FilterConflict, true
+	case RowUnchanged:
+		return FilterUnchanged, true
 	default:
 		return "", false
 	}

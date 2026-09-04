@@ -2,6 +2,7 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"os"
 	"runtime"
 	"testing"
@@ -613,5 +614,101 @@ func TestStatusEntriesAreSortedByPath(t *testing.T) {
 		if status.Entries[i-1].Path >= status.Entries[i].Path {
 			t.Fatalf("Entries are not sorted: %q >= %q", status.Entries[i-1].Path, status.Entries[i].Path)
 		}
+	}
+}
+
+func TestStatusOmitsUnmodifiedEntriesByDefault(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.stage("dir/b.txt", "world\n")
+	tr.commit("initial")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	if len(status.Entries) != 0 {
+		t.Fatalf("Entries = %#v, want none", status.Entries)
+	}
+}
+
+func TestStatusIncludesUnmodifiedEntriesWhenEnabled(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.stage("dir/b.txt", "world\n")
+	tr.commit("initial")
+	w := tr.openWith(Options{IncludeUnmodified: true})
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entries := entryMap(status.Entries)
+	for _, path := range []string{"a.txt", "dir/b.txt"} {
+		entry, ok := entries[path]
+		if !ok {
+			t.Fatalf("entry %q missing, want it reported as unmodified", path)
+		}
+		if entry.Staged != StatusUnmodified || entry.Unstaged != StatusUnmodified {
+			t.Fatalf("entry %q = %#v, want Staged=Unmodified Unstaged=Unmodified", path, entry)
+		}
+	}
+}
+
+func TestStatusIncludesUnmodifiedEntriesAlongsideModifiedOnes(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.stage("b.txt", "unchanged\n")
+	tr.commit("initial")
+	tr.writeFile("a.txt", "changed\n")
+	tr.writeFile("new.txt", "fresh\n")
+	w := tr.openWith(Options{IncludeUnmodified: true})
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entries := entryMap(status.Entries)
+	if entry, ok := entries["a.txt"]; !ok || entry.Staged != StatusUnmodified || entry.Unstaged != StatusModified {
+		t.Fatalf("a.txt entry = %#v, want Staged=Unmodified Unstaged=Modified", entry)
+	}
+	if entry, ok := entries["b.txt"]; !ok || entry.Staged != StatusUnmodified || entry.Unstaged != StatusUnmodified {
+		t.Fatalf("b.txt entry = %#v, want Staged=Unmodified Unstaged=Unmodified", entry)
+	}
+	if entry, ok := entries["new.txt"]; !ok || entry.Staged != StatusUnmodified || entry.Unstaged != StatusUntracked {
+		t.Fatalf("new.txt entry = %#v, want Staged=Unmodified Unstaged=Untracked", entry)
+	}
+	if len(status.Entries) != 3 {
+		t.Fatalf("Entries = %#v, want exactly a.txt, b.txt and new.txt", status.Entries)
+	}
+	for i := 1; i < len(status.Entries); i++ {
+		if status.Entries[i-1].Path >= status.Entries[i].Path {
+			t.Fatalf("Entries are not sorted: %q >= %q", status.Entries[i-1].Path, status.Entries[i].Path)
+		}
+	}
+}
+
+func TestStatusFailsWhenTheFileLimitIsExceededByUnmodifiedEntries(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.stage("b.txt", "world\n")
+	tr.stage("c.txt", "third\n")
+	tr.commit("initial")
+	w := tr.openWith(Options{IncludeUnmodified: true, MaxFiles: 2})
+	if _, err := w.Status(t.Context()); !errors.Is(err, ErrTooManyFiles) {
+		t.Fatalf("Status returned error %v, want ErrTooManyFiles", err)
+	}
+}
+
+func TestStatusIncludesUnmodifiedEntriesWithinTheFileLimit(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage("a.txt", "hello\n")
+	tr.stage("b.txt", "world\n")
+	tr.commit("initial")
+	w := tr.openWith(Options{IncludeUnmodified: true, MaxFiles: 3})
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	if len(status.Entries) != 2 {
+		t.Fatalf("Entries = %#v, want exactly 2 entries", status.Entries)
 	}
 }

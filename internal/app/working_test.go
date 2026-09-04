@@ -97,6 +97,46 @@ func buildWorkingRepoFixture(t *testing.T, target string) {
 	}
 }
 
+func buildCleanTrackedRepoFixture(t *testing.T, target string) {
+	t.Helper()
+	initTestRepoWithBranch(t, target, "main")
+	r, err := gitrepo.Open(target, gitrepo.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	db, err := odb.Open(r.ObjectsDir(), odb.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	store, err := refs.Open(refs.Options{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Committer: testCommitter})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+
+	cleanID := putChangesBlob(t, db, "same\n")
+	tree := &object.Tree{Entries: []object.TreeEntry{{Mode: object.ModeBlob, Name: "clean.txt", ID: cleanID}}}
+	tree.Sort()
+	treeID, err := db.PutObject(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitID := putChangesCommit(t, db, treeID)
+	setRef(t, store, refs.BranchName("main"), commitID)
+
+	idx := index.New(index.Version2)
+	idx.Add(index.Entry{Path: "clean.txt", Mode: object.ModeBlob, ID: cleanID, Stage: index.StageMerged})
+	if err := idx.WriteFile(r.IndexFile(), index.Version2); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writeFile(target, "clean.txt", "same\n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func activatedWorkingApp(t *testing.T, target string) *App {
 	t.Helper()
 	cfg := config.Default()
@@ -112,18 +152,20 @@ func TestActivateRepositoryShowsWorkingCopyStatusInFilesGrid(t *testing.T) {
 	buildWorkingRepoFixture(t, target)
 
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	rows := []changes.Row{
 		filesRowOnDispatcher(t, a, 0),
 		filesRowOnDispatcher(t, a, 1),
 		filesRowOnDispatcher(t, a, 2),
 		filesRowOnDispatcher(t, a, 3),
+		filesRowOnDispatcher(t, a, 4),
 	}
 	want := []changes.Row{
 		{State: "Conflict", Name: "conflict.txt", RelPath: "conflict.txt"},
 		{State: "Added", Name: "staged.txt", RelPath: "staged.txt"},
 		{State: "Modified", Name: "modified.txt", RelPath: "modified.txt"},
+		{State: "Unmodified", Name: "clean.txt", RelPath: "clean.txt"},
 		{State: "Untracked", Name: "untracked.txt", RelPath: "untracked.txt"},
 	}
 	for i, w := range want {
@@ -132,8 +174,8 @@ func TestActivateRepositoryShowsWorkingCopyStatusInFilesGrid(t *testing.T) {
 			t.Fatalf("row %d = %+v, want State/Name/RelPath of %+v", i, got, w)
 		}
 	}
-	if n := filesRowCountOnDispatcher(t, a); n != 4 {
-		t.Fatalf("clean.txt must not appear as a row: got %d rows", n)
+	if n := filesRowCountOnDispatcher(t, a); n != 5 {
+		t.Fatalf("clean.txt must appear as an unmodified row by default: got %d rows", n)
 	}
 }
 
@@ -142,7 +184,7 @@ func TestSelectingAModifiedWorkingRowShowsTheIndexVsWorktreeDiff(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	selectFilesRow(t, a, 2)
 	waitForPostQueueDrain(t, a)
@@ -162,7 +204,7 @@ func TestSelectingAStagedWorkingRowShowsTheHeadVsIndexDiff(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	selectFilesRow(t, a, 1)
 	waitForPostQueueDrain(t, a)
@@ -187,7 +229,7 @@ func TestSelectingAConflictWorkingRowShowsAnOursVsWorktreeDiff(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
 	selectFilesRow(t, a, 0)
 	waitForPostQueueDrain(t, a)
@@ -204,9 +246,9 @@ func TestSelectingAnUntrackedWorkingRowShowsAnAddedFileDiff(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 
-	selectFilesRow(t, a, 3)
+	selectFilesRow(t, a, 4)
 	waitForPostQueueDrain(t, a)
 	a.diffWG.Wait()
 
@@ -396,7 +438,7 @@ func TestOnFilesRowSelectedIgnoresAnOutOfRangeIndexInWorkingMode(t *testing.T) {
 	target := filepath.Join(dir, "main")
 	buildWorkingRepoFixture(t, target)
 	a := activatedWorkingApp(t, target)
-	waitForWorkingRows(t, a, 4)
+	waitForWorkingRows(t, a, 5)
 	before := diffDocumentOnDispatcher(t, a)
 
 	a.onFilesRowSelected(datagrid.SelectionChangedEvent{SelectedIndex: 99, SelectedItem: changes.Row{Name: "x"}})
@@ -404,5 +446,42 @@ func TestOnFilesRowSelectedIgnoresAnOutOfRangeIndexInWorkingMode(t *testing.T) {
 	after := diffDocumentOnDispatcher(t, a)
 	if after.OldName != before.OldName {
 		t.Fatalf("document changed for an out-of-range working index: %+v", after)
+	}
+}
+
+func TestHasWorkingChangesIsFalseForNoEntriesOrOnlyUnmodifiedOnes(t *testing.T) {
+	cases := [][]worktree.Entry{
+		nil,
+		{{Path: "clean.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUnmodified}},
+		{
+			{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUnmodified},
+			{Path: "b.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUnmodified},
+		},
+	}
+	for _, entries := range cases {
+		if hasWorkingChanges(entries) {
+			t.Fatalf("hasWorkingChanges(%+v) = true, want false", entries)
+		}
+	}
+}
+
+func TestHasWorkingChangesIsTrueWhenAnyEntryHasARealChange(t *testing.T) {
+	cases := []struct {
+		name    string
+		entries []worktree.Entry
+	}{
+		{"staged", []worktree.Entry{{Path: "a.txt", Staged: worktree.StatusAdded, Unstaged: worktree.StatusUnmodified}}},
+		{"unstaged", []worktree.Entry{{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified}}},
+		{"untracked", []worktree.Entry{{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUntracked}}},
+		{"conflict", []worktree.Entry{{Path: "a.txt", Conflict: worktree.ConflictBothModified, Staged: worktree.StatusUnmerged, Unstaged: worktree.StatusUnmerged}}},
+		{"mixed with unmodified", []worktree.Entry{
+			{Path: "clean.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUnmodified},
+			{Path: "dirty.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified},
+		}},
+	}
+	for _, c := range cases {
+		if !hasWorkingChanges(c.entries) {
+			t.Fatalf("%s: hasWorkingChanges(%+v) = false, want true", c.name, c.entries)
+		}
 	}
 }

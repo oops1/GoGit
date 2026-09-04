@@ -23,6 +23,7 @@ var filesStatusButtons = map[changes.StatusFilter]string{
 	changes.FilterUntracked: "filesFilterUntracked",
 	changes.FilterIgnored:   "filesFilterIgnored",
 	changes.FilterConflict:  "filesFilterConflict",
+	changes.FilterUnchanged: "filesFilterUnchanged",
 }
 
 var filesStatusTipKeys = map[changes.StatusFilter]string{
@@ -34,6 +35,7 @@ var filesStatusTipKeys = map[changes.StatusFilter]string{
 	changes.FilterUntracked: "Files.Filter.Status.Untracked",
 	changes.FilterIgnored:   "Files.Filter.Status.Ignored",
 	changes.FilterConflict:  "Files.Filter.Status.Conflict",
+	changes.FilterUnchanged: "Files.Filter.Status.Unchanged",
 }
 
 func (a *App) filesStatusButton(f changes.StatusFilter) *widget.Button {
@@ -100,7 +102,7 @@ func (a *App) applyFilesStatusButtonVisuals(t *widget.Theme) {
 			btn.Background = enabledBG
 			btn.BorderColor = t.Accent
 		} else {
-			btn.Icon = icons.StatusTinted(string(f), filesStatusIconSize, t.Disabled)
+			btn.Icon = icons.StatusMuted(string(f), filesStatusIconSize)
 			btn.Background = color.RGBA{}
 			btn.BorderColor = t.BtnBorder
 		}

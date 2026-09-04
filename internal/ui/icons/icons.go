@@ -52,12 +52,20 @@ func StatusTinted(name string, size int, tint color.RGBA) image.Image {
 	return renderTinted(sourceStatus, name, size, tint)
 }
 
+func StatusMuted(name string, size int) image.Image {
+	return muted(render(sourceStatus, name, size))
+}
+
 func Tree(name string, size int) image.Image {
 	return render(sourceTree, name, size)
 }
 
 func TreeTinted(name string, size int, tint color.RGBA) image.Image {
 	return renderTinted(sourceTree, name, size, tint)
+}
+
+func ToolbarPlain(name string, size int) image.Image {
+	return render(sourceToolbar, name, size)
 }
 
 func Toolbar(name string, size int, tint color.RGBA) image.Image {
@@ -154,4 +162,30 @@ func resetForTest() {
 	docFail = map[docKey]bool{}
 	rendered = map[rasterKey]image.Image{}
 	mu.Unlock()
+}
+
+const mutedAlpha = 0.5
+
+func muted(src image.Image) image.Image {
+	if src == nil {
+		return nil
+	}
+	b := src.Bounds()
+	out := image.NewRGBA(b)
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, bl, a := src.At(x, y).RGBA()
+			if a == 0 {
+				continue
+			}
+			gray := (299*r + 587*g + 114*bl) / 1000
+			out.Set(x, y, color.RGBA{
+				R: uint8(float64(gray>>8) * mutedAlpha),
+				G: uint8(float64(gray>>8) * mutedAlpha),
+				B: uint8(float64(gray>>8) * mutedAlpha),
+				A: uint8(float64(a>>8) * mutedAlpha),
+			})
+		}
+	}
+	return out
 }

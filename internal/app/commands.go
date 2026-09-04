@@ -129,3 +129,8 @@ func (s State) Enabled(id CommandID) bool {
 	}
 	return true
 }
+
+const (
+	statusPathSeparator = " — "
+	statusEllipsis      = "…"
+)

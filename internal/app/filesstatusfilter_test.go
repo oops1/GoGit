@@ -144,7 +144,6 @@ func TestApplyFilesStatusButtonVisualsMarksDisabledButtonsDifferentlyFromEnabled
 
 func TestApplyFilesStatusButtonVisualsUsesAFullColorIconWhenEnabledAndAMutedIconWhenDisabled(t *testing.T) {
 	a := newTestApp(t)
-	theme := themeFor(a.EffectiveTheme())
 
 	enabledIcon := a.filesStatusButton(changes.FilterModified).Icon
 	wantEnabled := icons.Status(string(changes.FilterModified), filesStatusIconSize)
@@ -154,7 +153,7 @@ func TestApplyFilesStatusButtonVisualsUsesAFullColorIconWhenEnabledAndAMutedIcon
 
 	a.toggleFilesStatusFilter(changes.FilterModified)
 	disabledIcon := a.filesStatusButton(changes.FilterModified).Icon
-	wantDisabled := icons.StatusTinted(string(changes.FilterModified), filesStatusIconSize, theme.Disabled)
+	wantDisabled := icons.StatusMuted(string(changes.FilterModified), filesStatusIconSize)
 	if !sameImage(disabledIcon, wantDisabled) {
 		t.Fatal("disabled button must show the muted status icon")
 	}
@@ -260,12 +259,11 @@ func TestFilesStatusFilterSurvivesRestartAcrossTwoAppInstances(t *testing.T) {
 	if allowed := filesStatusAllowedSnapshot(second); allowed[changes.FilterModified] {
 		t.Fatal("second instance must start with the modified filter disabled")
 	}
-	theme := themeFor(second.EffectiveTheme())
 	btn := second.filesStatusButton(changes.FilterModified)
 	if btn.Background.A != 0 {
 		t.Fatalf("second instance modified button background = %v, want fully transparent", btn.Background)
 	}
-	wantIcon := icons.StatusTinted(string(changes.FilterModified), filesStatusIconSize, theme.Disabled)
+	wantIcon := icons.StatusMuted(string(changes.FilterModified), filesStatusIconSize)
 	if !sameImage(btn.Icon, wantIcon) {
 		t.Fatal("second instance modified button must show the muted icon")
 	}

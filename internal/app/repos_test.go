@@ -54,8 +54,8 @@ func TestActivateRepositorySetsStateAndStatusText(t *testing.T) {
 	if a.State().ActiveRepository != "r1" || a.State().ActiveIsWorktree {
 		t.Fatalf("state = %+v", a.State())
 	}
-	if got := a.Widget("statusText").(*widget.Label).Text(); got != "Main" {
-		t.Fatalf("status text = %q", got)
+	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
+		t.Fatalf("status text = %q, want the repository name and its path", got)
 	}
 	item, ok := a.reposView.Item("r1")
 	if !ok || item.DisplayText() != "Main (master)" {
@@ -312,8 +312,8 @@ func TestRestoreActiveRepositoryFromConfigOnStartup(t *testing.T) {
 	if a.State().ActiveRepository != "r1" {
 		t.Fatalf("state = %+v", a.State())
 	}
-	if got := a.Widget("statusText").(*widget.Label).Text(); got != "Main" {
-		t.Fatalf("status text = %q", got)
+	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
+		t.Fatalf("status text = %q, want the repository name and its path", got)
 	}
 	item, ok := a.reposView.Item("r1")
 	if !ok || item.DisplayText() != "Main" {
@@ -352,7 +352,7 @@ func TestStatusTextSurvivesLanguageSwitch(t *testing.T) {
 	a.ActivateRepository("r1")
 
 	a.SetLanguage("ru")
-	if got := a.Widget("statusText").(*widget.Label).Text(); got != "Main" {
+	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
 		t.Fatalf("status text after language switch = %q", got)
 	}
 
@@ -941,5 +941,25 @@ func TestRefreshRepositoryLogsWarningAndReportsErrorWhenLoadFails(t *testing.T) 
 	}
 	if got := a.Widget("statusText").(*widget.Label).Text(); got == "Main" {
 		t.Fatalf("status text = %q, want an error message", got)
+	}
+}
+
+func TestStatusTextEndsWithAnEllipsisWhenThePathDoesNotFit(t *testing.T) {
+	long := `C:\Users\valer\Projects\a-very-long-directory-name\and-another-one\headless-gui-2`
+	got := statusRepositoryText("headless-gui-2", long, 160)
+	if !strings.HasSuffix(got, statusEllipsis) {
+		t.Fatalf("status text = %q, want it cut with an ellipsis", got)
+	}
+	if !strings.HasPrefix(got, "headless-gui-2") {
+		t.Fatalf("status text = %q, want the repository name kept", got)
+	}
+	if full := statusRepositoryText("headless-gui-2", long, 0); full != "headless-gui-2"+statusPathSeparator+long {
+		t.Fatalf("status text without a known width = %q", full)
+	}
+	if plain := statusRepositoryText("headless-gui-2", "", 160); plain != "headless-gui-2" {
+		t.Fatalf("status text without a path = %q", plain)
+	}
+	if narrow := statusRepositoryText("headless-gui-2", long, 1); narrow != statusEllipsis {
+		t.Fatalf("status text in a one pixel label = %q", narrow)
 	}
 }

@@ -54,6 +54,7 @@ type Git struct {
 
 type UI struct {
 	ShowToolbar         bool     `toml:"show_toolbar"`
+	ToolbarCaptions     bool     `toml:"toolbar_captions"`
 	ShowStatusBar       bool     `toml:"show_status_bar"`
 	FilesColumns        []string `toml:"files_columns"`
 	FilesVisibleColumns []string `toml:"files_visible_columns"`
@@ -84,7 +85,7 @@ func Default() *Config {
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
 		Git:      Git{LogMaxCount: 500, FetchInterval: 300},
-		UI:       UI{ShowToolbar: true, ShowStatusBar: true},
+		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true},
 	}
 }
 
