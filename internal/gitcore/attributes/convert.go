@@ -3,7 +3,6 @@ package attributes
 import (
 	"bytes"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -223,7 +222,7 @@ func DefaultAttributesFile(env func(string) string) string {
 }
 
 func slashDir(dir string) string {
-	return strings.TrimRight(filepath.ToSlash(dir), "/")
+	return strings.TrimRight(strings.ReplaceAll(dir, `\`, "/"), "/")
 }
 
 func xdgConfigFile(env func(string) string, name string) string {
