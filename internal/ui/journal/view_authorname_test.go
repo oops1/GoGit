@@ -10,7 +10,7 @@ func journalColumns() []datagrid.Column {
 	return []datagrid.Column{
 		datagrid.NewTextColumn("Graph", "Graph"),
 		datagrid.NewTextColumn("Message", "Message"),
-		newAuthorColumn("Author", false),
+		NewView().newAuthorColumn("Author", false),
 		datagrid.NewTextColumn("Date", "Date"),
 		datagrid.NewTextColumn("Hash", "ShortHash"),
 	}
@@ -84,5 +84,23 @@ func TestSetFullAuthorNameIsANoOpWhenTheAuthorColumnIsMissing(t *testing.T) {
 
 	if len(grid.Grid.Columns()) != 1 {
 		t.Fatal("column count must stay unchanged when the author column index is out of range")
+	}
+}
+
+func TestAuthorHeaderComesBackWithTheFullName(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	cols := grid.Grid.Columns()
+	cols[authorColumnIndex].SetHeader("Author")
+	grid.Grid.SetColumns(cols)
+
+	v.SetFullAuthorName(false)
+	if got := grid.Grid.Columns()[authorColumnIndex].Header(); got != "" {
+		t.Fatalf("badge column header = %q, want it empty", got)
+	}
+
+	v.SetFullAuthorName(true)
+	if got := grid.Grid.Columns()[authorColumnIndex].Header(); got != "Author" {
+		t.Fatalf("full name column header = %q, want Author", got)
 	}
 }

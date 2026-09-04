@@ -8,10 +8,11 @@ import (
 const nearEndRows = 5
 
 type View struct {
-	grid      *widget.DataGridWidget
-	items     *datagrid.ObservableCollection
-	OnSelect  func(Row)
-	OnNearEnd func()
+	grid         *widget.DataGridWidget
+	items        *datagrid.ObservableCollection
+	authorHeader string
+	OnSelect     func(Row)
+	OnNearEnd    func()
 }
 
 func NewView() *View {
@@ -20,7 +21,11 @@ func NewView() *View {
 
 func (v *View) Bind(grid *widget.DataGridWidget) {
 	v.grid = grid
+	grid.Grid.ZebraStripes = false
+	grid.Grid.RowHeight = rowHeight
+	grid.Grid.FontSize = fontSize
 	grid.Grid.SetItemsSource(v.items)
+	v.SetFullAuthorName(false)
 	grid.Grid.OnSelectionChanged = func(e datagrid.SelectionChangedEvent) {
 		row, ok := e.SelectedItem.(Row)
 		if !ok {
@@ -37,6 +42,13 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 
 func (v *View) Reset() {
 	v.items.Clear()
+}
+
+func (v *View) ClearSelection() {
+	if v.grid == nil {
+		return
+	}
+	v.grid.Grid.SetSelectedIndex(-1)
 }
 
 func (v *View) Append(rows []Row) {
@@ -64,8 +76,25 @@ func (v *View) SetFullAuthorName(fullName bool) {
 		return
 	}
 	old := cols[authorColumnIndex]
-	col := newAuthorColumn(old.Header(), fullName)
-	col.SetWidth(old.Width())
+	if old.Header() != "" {
+		v.authorHeader = old.Header()
+	}
+	header := ""
+	if fullName {
+		header = v.authorHeader
+	}
+	col := v.newAuthorColumn(header, fullName)
+	if fullName {
+		col.SetWidth(datagrid.PixelWidth(authorBadgeColumnWide))
+	} else {
+		col.SetWidth(datagrid.PixelWidth(float64(authorBadgeColumnWidth(v.grid.Grid.RowHeight))))
+	}
 	cols[authorColumnIndex] = col
 	v.grid.Grid.SetColumns(cols)
 }
+
+const (
+	rowHeight       = 20
+	fontSize        = 9.0
+	fontHeightRatio = 1.4
+)

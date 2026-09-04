@@ -63,7 +63,7 @@ func cellContext(item interface{}, dc datagrid.DrawContextBridge) datagrid.CellD
 }
 
 func TestNewAuthorColumnReturnsATextColumnBoundToAuthorWhenFullNameIsEnabled(t *testing.T) {
-	col := newAuthorColumn("Author", true)
+	col := NewView().newAuthorColumn("Author", true)
 	textCol, ok := col.(*datagrid.DataGridTextColumn)
 	if !ok {
 		t.Fatalf("column type = %T, want *datagrid.DataGridTextColumn", col)
@@ -77,7 +77,7 @@ func TestNewAuthorColumnReturnsATextColumnBoundToAuthorWhenFullNameIsEnabled(t *
 }
 
 func TestNewAuthorColumnReturnsATemplateColumnWhenFullNameIsDisabled(t *testing.T) {
-	col := newAuthorColumn("Author", false)
+	col := NewView().newAuthorColumn("Author", false)
 	if _, ok := col.(*datagrid.DataGridTemplateColumn); !ok {
 		t.Fatalf("column type = %T, want *datagrid.DataGridTemplateColumn", col)
 	}
@@ -86,7 +86,7 @@ func TestNewAuthorColumnReturnsATemplateColumnWhenFullNameIsDisabled(t *testing.
 func TestDrawAuthorBadgeCellIgnoresNonRowItems(t *testing.T) {
 	t.Cleanup(resetBadgeCacheForTest)
 	dc := &recordingDrawCtx{}
-	drawAuthorBadgeCell(cellContext("not-a-row", dc))
+	NewView().drawAuthorBadgeCell(cellContext("not-a-row", dc))
 	if len(dc.images) != 0 || len(dc.texts) != 0 {
 		t.Fatal("expected no drawing for a non-Row item")
 	}
@@ -95,7 +95,7 @@ func TestDrawAuthorBadgeCellIgnoresNonRowItems(t *testing.T) {
 func TestDrawAuthorBadgeCellSkipsRowsWithNoAuthor(t *testing.T) {
 	t.Cleanup(resetBadgeCacheForTest)
 	dc := &recordingDrawCtx{}
-	drawAuthorBadgeCell(cellContext(Row{Author: ""}, dc))
+	NewView().drawAuthorBadgeCell(cellContext(Row{Author: ""}, dc))
 	if len(dc.images) != 0 || len(dc.texts) != 0 {
 		t.Fatal("expected no drawing for a row with an empty author")
 	}
@@ -104,13 +104,15 @@ func TestDrawAuthorBadgeCellSkipsRowsWithNoAuthor(t *testing.T) {
 func TestDrawAuthorBadgeCellDrawsTheBadgeImageAndTheInitials(t *testing.T) {
 	t.Cleanup(resetBadgeCacheForTest)
 	dc := &recordingDrawCtx{}
-	drawAuthorBadgeCell(cellContext(Row{Author: "Чукалин Валерий"}, dc))
+	cdc := cellContext(Row{Author: "Чукалин Валерий"}, dc)
+	NewView().drawAuthorBadgeCell(cdc)
 
 	if len(dc.images) != 1 {
 		t.Fatalf("images drawn = %d, want 1", len(dc.images))
 	}
-	if dc.images[0].w != authorBadgeSize || dc.images[0].h != authorBadgeSize {
-		t.Fatalf("badge size = %dx%d, want %dx%d", dc.images[0].w, dc.images[0].h, authorBadgeSize, authorBadgeSize)
+	want := badgeFitSize(cdc.Rect.Dy())
+	if dc.images[0].w != want || dc.images[0].h != want {
+		t.Fatalf("badge size = %dx%d, want %dx%d", dc.images[0].w, dc.images[0].h, want, want)
 	}
 	if len(dc.texts) != 1 {
 		t.Fatalf("texts drawn = %d, want 1", len(dc.texts))
@@ -118,24 +120,23 @@ func TestDrawAuthorBadgeCellDrawsTheBadgeImageAndTheInitials(t *testing.T) {
 	if dc.texts[0].text != "ЧВ" {
 		t.Fatalf("initials = %q, want %q", dc.texts[0].text, "ЧВ")
 	}
-	want := badgeTextColor(authorColor("Чукалин Валерий"))
-	if dc.texts[0].color != want {
-		t.Fatalf("text color = %v, want %v", dc.texts[0].color, want)
+	if got := dc.texts[0].color; got != badgeTextColor(authorColor("Чукалин Валерий")) {
+		t.Fatalf("text color = %v, want the xor of the badge colour", got)
 	}
 }
 
-func TestDrawAuthorBadgeCellShrinksTheBadgeToFitAShortRow(t *testing.T) {
+func TestDrawAuthorBadgeCellFillsTheRowHeightWithTheBadge(t *testing.T) {
 	t.Cleanup(resetBadgeCacheForTest)
 	dc := &recordingDrawCtx{}
 	cdc := cellContext(Row{Author: "ann"}, dc)
-	cdc.Rect = image.Rect(0, 0, 160, 10)
-	drawAuthorBadgeCell(cdc)
+	cdc.Rect = image.Rect(0, 0, 40, 20)
+	NewView().drawAuthorBadgeCell(cdc)
 
 	if len(dc.images) != 1 {
 		t.Fatalf("images drawn = %d, want 1", len(dc.images))
 	}
-	if dc.images[0].w >= authorBadgeSize {
-		t.Fatalf("badge width = %d, want less than %d for a short row", dc.images[0].w, authorBadgeSize)
+	if got := dc.images[0].w; got != 20-2*authorBadgePaddingY {
+		t.Fatalf("badge width = %d, want the row height minus its padding", got)
 	}
 }
 
@@ -143,22 +144,43 @@ func TestDrawAuthorBadgeCellSkipsWhenTheRowIsTooShortForABadge(t *testing.T) {
 	t.Cleanup(resetBadgeCacheForTest)
 	dc := &recordingDrawCtx{}
 	cdc := cellContext(Row{Author: "ann"}, dc)
-	cdc.Rect = image.Rect(0, 0, 160, 2*authorBadgePaddingX)
-	drawAuthorBadgeCell(cdc)
+	cdc.Rect = image.Rect(0, 0, 160, 2*authorBadgePaddingY)
+	NewView().drawAuthorBadgeCell(cdc)
 
 	if len(dc.images) != 0 || len(dc.texts) != 0 {
 		t.Fatal("expected no drawing when the row is too short to fit a badge")
 	}
 }
 
-func TestBadgeFitSizeCapsAtTheDefaultBadgeSize(t *testing.T) {
-	if got := badgeFitSize(200); got != authorBadgeSize {
-		t.Fatalf("badgeFitSize(200) = %d, want %d", got, authorBadgeSize)
+func TestDrawAuthorBadgeCellSkipsARepeatedAuthor(t *testing.T) {
+	t.Cleanup(resetBadgeCacheForTest)
+	v := NewView()
+	v.Append([]Row{{Author: "ann"}, {Author: "ann"}, {Author: "bob"}})
+
+	for _, tc := range []struct {
+		name  string
+		index int
+		drawn bool
+	}{
+		{"first row of the author", 0, true},
+		{"same author again", 1, false},
+		{"another author", 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dc := &recordingDrawCtx{}
+			item, _ := v.items.Get(tc.index).(Row)
+			cdc := cellContext(item, dc)
+			cdc.RowIndex = tc.index
+			v.drawAuthorBadgeCell(cdc)
+			if drawn := len(dc.images) == 1; drawn != tc.drawn {
+				t.Fatalf("badge drawn = %v, want %v", drawn, tc.drawn)
+			}
+		})
 	}
 }
 
-func TestBadgeFitSizeShrinksForATightRow(t *testing.T) {
-	if got := badgeFitSize(10); got != 10-2*authorBadgePaddingX {
-		t.Fatalf("badgeFitSize(10) = %d, want %d", got, 10-2*authorBadgePaddingX)
+func TestAuthorColumnWidthFollowsTheRowHeight(t *testing.T) {
+	if got := authorBadgeColumnWidth(20); got != badgeFitSize(20)+2*authorBadgePaddingX {
+		t.Fatalf("authorBadgeColumnWidth(20) = %d", got)
 	}
 }

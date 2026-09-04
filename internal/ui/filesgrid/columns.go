@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
+
+	"github.com/oops1/gogit/internal/ui/changes"
 )
 
 type ColumnID string
@@ -104,3 +106,20 @@ func NormalizeVisible(order []ColumnID, visible []ColumnID) []ColumnID {
 	}
 	return result
 }
+
+const stateFontScale = 0.85
+
+func drawStateCell(cdc datagrid.CellDrawContext) {
+	row, ok := cdc.Item.(changes.Row)
+	if !ok {
+		return
+	}
+	size := cdc.FontSize * stateFontScale
+	textY := cdc.Rect.Min.Y + (cdc.Rect.Dy()-int(size*stateLineRatio))/2
+	cdc.DrawCtx.DrawTextSize(row.State, cdc.Rect.Min.X+stateCellPadding, textY, size, cdc.TextColor)
+}
+
+const (
+	stateCellPadding = 4
+	stateLineRatio   = 1.4
+)
