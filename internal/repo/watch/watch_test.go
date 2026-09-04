@@ -123,13 +123,20 @@ func assertOptionsEqual(t *testing.T, got, want Options) {
 
 func TestOptionsNormalizeFillsDefaults(t *testing.T) {
 	got := Options{}.normalize()
-	want := Options{WorkTreeDepth: defaultWorkTreeDepth, MinInterval: defaultMinInterval, MaxInterval: defaultMaxInterval, MaxEntries: defaultMaxEntries}
+	want := Options{WorkTreeDepth: 0, MinInterval: defaultMinInterval, MaxInterval: defaultMaxInterval, MaxEntries: defaultMaxEntries}
 	assertOptionsEqual(t, got, want)
 }
 
 func TestOptionsNormalizeKeepsProvidedValues(t *testing.T) {
 	want := Options{WorkTreeDepth: 5, MinInterval: 2 * time.Second, MaxInterval: 30 * time.Second, MaxEntries: 10}
 	assertOptionsEqual(t, want.normalize(), want)
+}
+
+func TestOptionsNormalizeClampsNegativeWorkTreeDepthToUnlimited(t *testing.T) {
+	got := Options{WorkTreeDepth: -3, MinInterval: time.Second, MaxInterval: time.Second, MaxEntries: 10}.normalize()
+	if got.WorkTreeDepth != 0 {
+		t.Fatalf("WorkTreeDepth = %d, want 0 (unlimited)", got.WorkTreeDepth)
+	}
 }
 
 func TestMinDurationReturnsTheSmallerValue(t *testing.T) {
@@ -215,6 +222,27 @@ func TestCollectWorkTreeDirsWalksUpToDepth(t *testing.T) {
 	}
 	if len(dirs) != 3 {
 		t.Fatalf("len(dirs) = %d, want 3", len(dirs))
+	}
+}
+
+func TestCollectWorkTreeDirsWithZeroDepthWalksTheWholeTree(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "a")
+	b := filepath.Join(a, "b")
+	c := filepath.Join(b, "c")
+	for _, dir := range []string{a, b, c} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) returned error %v", dir, err)
+		}
+	}
+	dirs, ok := collectWorkTreeDirs(root, 0, 100)
+	if !ok {
+		t.Fatal("collectWorkTreeDirs reported an exceeded budget")
+	}
+	for _, want := range []string{root, a, b, c} {
+		if !slices.Contains(dirs, want) {
+			t.Fatalf("dirs = %v, missing %q", dirs, want)
+		}
 	}
 }
 
@@ -403,6 +431,35 @@ func TestTakeReportsWorkTreeDirectoriesAndSkipsDotGit(t *testing.T) {
 	}
 }
 
+func TestAddWorkTreeAtUnlimitedDepthNoticesAChangeThreeLevelsDeepThatDepthTwoMisses(t *testing.T) {
+	layout := newTestLayout(t, false)
+	l3 := filepath.Join(layout.WorkTree, "l1", "l2", "l3")
+	if err := os.MkdirAll(l3, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) returned error %v", l3, err)
+	}
+
+	unlimited := Options{WorkTreeDepth: 0, MinInterval: time.Second, MaxInterval: time.Second}.normalize()
+	shallow := Options{WorkTreeDepth: 2, MinInterval: time.Second, MaxInterval: time.Second}.normalize()
+
+	beforeUnlimited := take(layout, unlimited)
+	beforeShallow := take(layout, shallow)
+
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(filepath.Join(l3, "new.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error %v", err)
+	}
+
+	afterUnlimited := take(layout, unlimited)
+	afterShallow := take(layout, shallow)
+
+	if changes := Diff(beforeUnlimited, afterUnlimited); !changes.Has(WorkTree) {
+		t.Fatalf("changes = %v, want a WorkTree change to be noticed at unlimited depth", changes)
+	}
+	if changes := Diff(beforeShallow, afterShallow); changes.Has(WorkTree) {
+		t.Fatalf("changes = %v, must not notice a level-3 change when the scan depth is 2", changes)
+	}
+}
+
 func TestTakeOmitsWorkTreeEntriesForABareRepository(t *testing.T) {
 	layout := newTestLayout(t, true)
 	snap := take(layout, Options{}.normalize())
@@ -415,7 +472,7 @@ func TestTakeOmitsWorkTreeEntriesForABareRepository(t *testing.T) {
 
 func TestNewNormalizesOptions(t *testing.T) {
 	w := New(repo.Layout{}, Options{})
-	want := Options{WorkTreeDepth: defaultWorkTreeDepth, MinInterval: defaultMinInterval, MaxInterval: defaultMaxInterval, MaxEntries: defaultMaxEntries}
+	want := Options{WorkTreeDepth: 0, MinInterval: defaultMinInterval, MaxInterval: defaultMaxInterval, MaxEntries: defaultMaxEntries}
 	assertOptionsEqual(t, w.opts, want)
 }
 

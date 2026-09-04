@@ -23,12 +23,21 @@ func (a *App) startWatcher(layout gitrepo.Layout) {
 	a.watchRunMu.Lock()
 	defer a.watchRunMu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
-	w := a.newWatcher(layout, watch.Options{})
+	w := a.newWatcher(layout, watch.Options{WorkTreeDepth: a.cfg.Git.WorkTreeDepth})
 	a.watchMu.Lock()
 	a.watchCancel = cancel
 	a.watcher = w
 	a.watchMu.Unlock()
 	a.watchWG.Go(func() { a.runWatcher(ctx, w) })
+}
+
+func (a *App) restartWatcherForCurrentRepository() {
+	o := a.opened()
+	if o == nil {
+		return
+	}
+	a.stopWatcher()
+	a.startWatcher(o.repo.Layout())
 }
 
 func (a *App) runWatcher(ctx context.Context, w watcherIface) {

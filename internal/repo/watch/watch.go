@@ -12,15 +12,14 @@ import (
 )
 
 const (
-	headFileName         = "HEAD"
-	indexFileName        = "index"
-	packedRefsFileName   = "packed-refs"
-	refsDirName          = "refs"
-	dotGitDirName        = ".git"
-	defaultWorkTreeDepth = 2
-	defaultMinInterval   = time.Second
-	defaultMaxInterval   = 8 * time.Second
-	defaultMaxEntries    = 5000
+	headFileName       = "HEAD"
+	indexFileName      = "index"
+	packedRefsFileName = "packed-refs"
+	refsDirName        = "refs"
+	dotGitDirName      = ".git"
+	defaultMinInterval = time.Second
+	defaultMaxInterval = 8 * time.Second
+	defaultMaxEntries  = 5000
 )
 
 var stateFileNames = []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"}
@@ -94,8 +93,8 @@ type Options struct {
 }
 
 func (o Options) normalize() Options {
-	if o.WorkTreeDepth <= 0 {
-		o.WorkTreeDepth = defaultWorkTreeDepth
+	if o.WorkTreeDepth < 0 {
+		o.WorkTreeDepth = 0
 	}
 	if o.MinInterval <= 0 {
 		o.MinInterval = defaultMinInterval
@@ -277,7 +276,7 @@ func collectWorkTreeDirs(root string, depth, budget int) ([]string, bool) {
 		if len(dirs) > budget {
 			return false
 		}
-		if level >= depth {
+		if depth > 0 && level >= depth {
 			return true
 		}
 		entries, err := os.ReadDir(dir)

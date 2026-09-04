@@ -8,6 +8,9 @@ const (
 
 	MinFetchInterval = 30
 	MaxFetchInterval = 3600
+
+	MinWorkTreeDepth = 0
+	MaxWorkTreeDepth = 100
 )
 
 type Model struct {
@@ -18,6 +21,7 @@ type Model struct {
 	LogMaxCount   int
 	AutoFetch     bool
 	FetchInterval int
+	WorkTreeDepth int
 }
 
 func FromConfig(cfg *config.Config) Model {
@@ -29,6 +33,7 @@ func FromConfig(cfg *config.Config) Model {
 		LogMaxCount:   cfg.Git.LogMaxCount,
 		AutoFetch:     cfg.Git.AutoFetch,
 		FetchInterval: cfg.Git.FetchInterval,
+		WorkTreeDepth: cfg.Git.WorkTreeDepth,
 	}
 	return m.Normalized()
 }
@@ -44,6 +49,7 @@ func (m Model) Normalized() Model {
 	}
 	m.LogMaxCount = clamp(m.LogMaxCount, MinLogMaxCount, MaxLogMaxCount)
 	m.FetchInterval = clamp(m.FetchInterval, MinFetchInterval, MaxFetchInterval)
+	m.WorkTreeDepth = clamp(m.WorkTreeDepth, MinWorkTreeDepth, MaxWorkTreeDepth)
 	return m
 }
 
@@ -56,6 +62,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.LogMaxCount = n.LogMaxCount
 	cfg.Git.AutoFetch = n.AutoFetch
 	cfg.Git.FetchInterval = n.FetchInterval
+	cfg.Git.WorkTreeDepth = n.WorkTreeDepth
 }
 
 func clamp(v, min, max int) int {

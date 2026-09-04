@@ -15,6 +15,7 @@ import (
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/repo/watch"
 	"github.com/oops1/gogit/internal/ui/branches"
+	"github.com/oops1/gogit/internal/ui/settings"
 )
 
 type fakeWatcher struct {
@@ -153,6 +154,103 @@ func TestCloseRepositoryStopsTheWatcher(t *testing.T) {
 
 	if !fw.stopped.Load() {
 		t.Fatal("CloseRepository must stop the watcher and wait for it to exit")
+	}
+}
+
+func TestStartWatcherPassesTheConfiguredWorkTreeDepth(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	cfg.Git.WorkTreeDepth = 7
+	a := newTestAppWithConfig(t, cfg)
+
+	var gotOpts watch.Options
+	fw := newFakeWatcher()
+	a.newWatcher = func(_ gitrepo.Layout, opts watch.Options) watcherIface {
+		gotOpts = opts
+		return fw
+	}
+
+	a.ActivateRepository("r1")
+	<-fw.started
+
+	if gotOpts.WorkTreeDepth != 7 {
+		t.Fatalf("WorkTreeDepth = %d, want 7", gotOpts.WorkTreeDepth)
+	}
+}
+
+func TestRestartWatcherForCurrentRepositoryIsNoOpWithoutAnOpenRepository(t *testing.T) {
+	a := newTestApp(t)
+	called := false
+	a.newWatcher = func(gitrepo.Layout, watch.Options) watcherIface {
+		called = true
+		return newFakeWatcher()
+	}
+
+	a.restartWatcherForCurrentRepository()
+
+	if called {
+		t.Fatal("restartWatcherForCurrentRepository must not start a watcher without an open repository")
+	}
+}
+
+func TestApplySettingsRestartsTheWatcherWithTheUpdatedWorkTreeDepth(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+
+	var watchers []*fakeWatcher
+	var opts []watch.Options
+	a.newWatcher = func(_ gitrepo.Layout, o watch.Options) watcherIface {
+		fw := newFakeWatcher()
+		watchers = append(watchers, fw)
+		opts = append(opts, o)
+		return fw
+	}
+
+	a.ActivateRepository("r1")
+	<-watchers[0].started
+
+	newModel := settings.FromConfig(a.Config())
+	newModel.WorkTreeDepth = 9
+	stubShowSettings(a, newModel, true)
+	a.Dispatch(CmdSettings)
+
+	if len(watchers) != 2 {
+		t.Fatalf("watchers started = %d, want 2 (initial + restart after settings)", len(watchers))
+	}
+	<-watchers[1].started
+	if !watchers[0].stopped.Load() {
+		t.Fatal("applying settings must stop the previous watcher")
+	}
+	if opts[1].WorkTreeDepth != 9 {
+		t.Fatalf("restarted WorkTreeDepth = %d, want 9", opts[1].WorkTreeDepth)
+	}
+	if a.Config().Git.WorkTreeDepth != 9 {
+		t.Fatalf("config WorkTreeDepth = %d, want 9", a.Config().Git.WorkTreeDepth)
+	}
+}
+
+func TestApplySettingsWithoutAnOpenRepositoryDoesNotStartAWatcher(t *testing.T) {
+	a := newTestApp(t)
+	called := false
+	a.newWatcher = func(gitrepo.Layout, watch.Options) watcherIface {
+		called = true
+		return newFakeWatcher()
+	}
+	newModel := settings.FromConfig(a.Config())
+	newModel.WorkTreeDepth = 3
+	stubShowSettings(a, newModel, true)
+
+	a.Dispatch(CmdSettings)
+
+	if called {
+		t.Fatal("applying settings without an open repository must not start a watcher")
 	}
 }
 

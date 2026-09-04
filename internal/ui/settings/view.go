@@ -30,6 +30,7 @@ type View struct {
 	logMaxCount   *widget.NumericUpDown
 	autoFetch     *widget.CheckBox
 	fetchInterval *widget.NumericUpDown
+	workTreeDepth *widget.NumericUpDown
 	okBtn         *widget.Button
 	cancelBtn     *widget.Button
 
@@ -83,6 +84,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.fetchInterval, ok = named["fetchInterval"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: fetchInterval", ErrWidgetMissing)
 	}
+	if v.workTreeDepth, ok = named["workTreeDepth"].(*widget.NumericUpDown); !ok {
+		return fmt.Errorf("%w: workTreeDepth", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
@@ -116,6 +120,7 @@ func (v *View) apply(m Model) {
 	v.logMaxCount.SetValue(float64(m.LogMaxCount))
 	v.autoFetch.SetChecked(m.AutoFetch)
 	v.fetchInterval.SetValue(float64(m.FetchInterval))
+	v.workTreeDepth.SetValue(float64(m.WorkTreeDepth))
 }
 
 func (v *View) setLanguageSelection(code string) {
@@ -156,6 +161,7 @@ func (v *View) request() Model {
 		LogMaxCount:   int(v.logMaxCount.Value()),
 		AutoFetch:     v.autoFetch.IsChecked(),
 		FetchInterval: int(v.fetchInterval.Value()),
+		WorkTreeDepth: int(v.workTreeDepth.Value()),
 	}.Normalized()
 }
 

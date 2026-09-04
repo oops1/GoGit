@@ -66,6 +66,7 @@ height = 10
 [git]
 log_max_count = -1
 fetch_interval_sec = 0
+worktree_scan_depth = -5
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -79,8 +80,32 @@ fetch_interval_sec = 0
 	if cfg.Window.Width != MinWindowWidth || cfg.Window.Height != MinWindowHeight {
 		t.Fatalf("normalize window: %+v", cfg.Window)
 	}
-	if cfg.Git.LogMaxCount != 500 || cfg.Git.FetchInterval != 300 {
+	if cfg.Git.LogMaxCount != 500 || cfg.Git.FetchInterval != 300 || cfg.Git.WorkTreeDepth != 0 {
 		t.Fatalf("normalize git: %+v", cfg.Git)
+	}
+}
+
+func TestDefaultWorkTreeDepthIsUnlimited(t *testing.T) {
+	if got := Default().Git.WorkTreeDepth; got != 0 {
+		t.Fatalf("WorkTreeDepth = %d, want 0 (unlimited)", got)
+	}
+}
+
+func TestNormalizeKeepsAPositiveWorkTreeDepth(t *testing.T) {
+	cfg := Default()
+	cfg.Git.WorkTreeDepth = 4
+	cfg.Normalize()
+	if cfg.Git.WorkTreeDepth != 4 {
+		t.Fatalf("WorkTreeDepth = %d, want 4", cfg.Git.WorkTreeDepth)
+	}
+}
+
+func TestNormalizeClampsNegativeWorkTreeDepthToZero(t *testing.T) {
+	cfg := Default()
+	cfg.Git.WorkTreeDepth = -3
+	cfg.Normalize()
+	if cfg.Git.WorkTreeDepth != 0 {
+		t.Fatalf("WorkTreeDepth = %d, want 0", cfg.Git.WorkTreeDepth)
 	}
 }
 

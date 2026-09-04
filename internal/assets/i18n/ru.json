@@ -118,6 +118,8 @@
   "Dialog.Settings.LogMaxCount": "Лимит журнала:",
   "Dialog.Settings.AutoFetch": "Авто-fetch",
   "Dialog.Settings.FetchInterval": "Интервал авто-fetch (сек):",
+  "Dialog.Settings.WorkTreeDepth": "Глубина обхода каталогов (0 — все)",
+  "Dialog.Settings.WorkTreeDepth.Tip": "0 — обходить рабочую копию без ограничения глубины; положительное число ограничивает число уровней вложенных папок, за которыми следит наблюдатель.",
   "Dialog.Settings.OK": "ОК",
   "Dialog.Settings.Cancel": "Отмена",
   "Dialog.Discard.Title": "Отменить изменения",

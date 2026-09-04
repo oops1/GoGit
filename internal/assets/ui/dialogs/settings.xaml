@@ -51,6 +51,7 @@
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
@@ -68,6 +69,12 @@
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.FetchInterval}"/>
                 <NumericUpDown x:Name="fetchInterval" Grid.Row="2" Grid.Column="1"
                                 Minimum="30" Maximum="3600" Increment="10"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.WorkTreeDepth}"
+                           ToolTip="{Loc Dialog.Settings.WorkTreeDepth.Tip}"/>
+                <NumericUpDown x:Name="workTreeDepth" Grid.Row="3" Grid.Column="1"
+                                ToolTip="{Loc Dialog.Settings.WorkTreeDepth.Tip}"
+                                Minimum="0" Maximum="100" Increment="1"/>
             </Grid>
         </TabItem>
     </TabControl>

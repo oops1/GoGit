@@ -49,6 +49,7 @@ type Git struct {
 	LogMaxCount   int    `toml:"log_max_count"`
 	AutoFetch     bool   `toml:"auto_fetch"`
 	FetchInterval int    `toml:"fetch_interval_sec"`
+	WorkTreeDepth int    `toml:"worktree_scan_depth"`
 }
 
 type UI struct {
@@ -129,6 +130,9 @@ func (c *Config) Normalize() {
 	}
 	if c.Git.FetchInterval <= 0 {
 		c.Git.FetchInterval = 300
+	}
+	if c.Git.WorkTreeDepth < 0 {
+		c.Git.WorkTreeDepth = 0
 	}
 }
 

@@ -118,6 +118,8 @@
   "Dialog.Settings.LogMaxCount": "Log limit:",
   "Dialog.Settings.AutoFetch": "Auto-fetch",
   "Dialog.Settings.FetchInterval": "Auto-fetch interval (sec):",
+  "Dialog.Settings.WorkTreeDepth": "Directory scan depth (0 — unlimited)",
+  "Dialog.Settings.WorkTreeDepth.Tip": "0 scans the whole working tree with no depth limit; a positive number limits how many nested folder levels the watcher scans for changes.",
   "Dialog.Settings.OK": "OK",
   "Dialog.Settings.Cancel": "Cancel",
   "Dialog.Discard.Title": "Discard Changes",
