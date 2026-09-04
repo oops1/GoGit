@@ -35,6 +35,7 @@
   "Files.Column.Status": "Статус",
   "Files.Column.Name": "Имя",
   "Files.Column.Path": "Путь",
+  "Diff.Binary": "Двоичные файлы различаются",
   "Journal.Column.Graph": "Граф",
   "Journal.Column.Message": "Сообщение",
   "Journal.Column.Author": "Автор",

@@ -69,10 +69,7 @@
                     </DataGrid>
                 </DockPane>
                 <DockContent>
-                    <SplitPanel x:Name="diffSplit" Orientation="Horizontal" Position="0.5" SplitterSize="6" MinFirst="120" MinSecond="120">
-                        <TextBox x:Name="diffLeft" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas"/>
-                        <TextBox x:Name="diffRight" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas"/>
-                    </SplitPanel>
+                    <DiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
                 </DockContent>
             </DockManager>
 

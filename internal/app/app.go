@@ -24,6 +24,7 @@ import (
 	"github.com/oops1/gogit/internal/systheme"
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
+	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/journal"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
@@ -62,6 +63,7 @@ type App struct {
 	reposView         *repos.View
 	branchesView      *branches.View
 	journalView       *journal.View
+	diffView          *diffview.DiffView
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
 	selectedNode      string
@@ -105,6 +107,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		return nil, err
 	}
 	i18n.Apply(cfg.Language)
+	diffview.Register()
 
 	rootWidget, named, err := widget.LoadUIFromXAML(xaml)
 	if err != nil {
@@ -152,6 +155,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
 		}
 	}
+	diffWidget, ok := named["diffView"].(*diffview.DiffView)
+	if !ok {
+		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
+	}
 
 	a := &App{
 		cfg:               cfg,
@@ -166,6 +173,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		statusLabel:       statusTextWidget,
 		statusBranchLabel: statusBranchWidget,
 		registry:          repo.New(cfg),
+		diffView:          diffWidget,
 		newWatcher:        newRealWatcher,
 		journalPageSize:   defaultJournalPageSize,
 	}
@@ -225,6 +233,8 @@ func (a *App) Engine() *engine.Engine { return a.eng }
 func (a *App) Root() *widget.Window { return a.root }
 
 func (a *App) Widget(name string) widget.Widget { return a.named[name] }
+
+func (a *App) DiffView() *diffview.DiffView { return a.diffView }
 
 func (a *App) Config() *config.Config { return a.cfg }
 

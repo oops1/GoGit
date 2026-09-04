@@ -35,6 +35,7 @@
   "Files.Column.Status": "Status",
   "Files.Column.Name": "Name",
   "Files.Column.Path": "Path",
+  "Diff.Binary": "Binary files differ",
   "Journal.Column.Graph": "Graph",
   "Journal.Column.Message": "Message",
   "Journal.Column.Author": "Author",

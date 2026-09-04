@@ -1,0 +1,7 @@
+diff --git a/renamed.txt b/renamed.txt
+deleted file mode 100644
+index e0808fa..0000000
+--- a/renamed.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-keep me

@@ -459,6 +459,11 @@ func TestNewFromXAMLErrors(t *testing.T) {
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
+		"diff view is not a diff view": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
+			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
+			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
+			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
 		"grid is not a datagrid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<TextBlock x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
@@ -480,13 +485,23 @@ func TestNewFromXAMLErrors(t *testing.T) {
 	}
 }
 
+func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
+	a := newTestApp(t)
+	if a.DiffView() == nil {
+		t.Fatal("changes pane widget missing")
+	}
+	if a.DiffView() != a.Widget("diffView") {
+		t.Fatal("DiffView must return the named widget")
+	}
+}
+
 func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)
 	xaml := `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 		`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 		`<DataGrid x:Name="filesGrid"><DataGrid.Columns><DataGridTextColumn Header="x" Binding="{Binding X}"/></DataGrid.Columns></DataGrid>` +
-		`<DataGrid x:Name="journalGrid"/>` +
+		`<DataGrid x:Name="journalGrid"/><DiffView x:Name="diffView"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
 	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml), nil)
