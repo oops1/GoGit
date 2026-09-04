@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -99,6 +100,18 @@ func addJournalCommit(t *testing.T, path, branch string, parent hash.ObjectID, m
 	return id
 }
 
+func writeShallowFile(t *testing.T, path string, ids ...hash.ObjectID) {
+	t.Helper()
+	var text strings.Builder
+	for _, id := range ids {
+		text.WriteString(id.String())
+		text.WriteByte('\n')
+	}
+	if err := os.WriteFile(filepath.Join(path, ".git", "shallow"), []byte(text.String()), 0o666); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func journalRowCountOnDispatcher(t *testing.T, a *App) int {
 	t.Helper()
 	result := make(chan int, 1)
@@ -169,6 +182,32 @@ func TestActivateRepositoryLoadsJournalRowsNewestFirstWithBranchDecoration(t *te
 	last := journalRowOnDispatcher(t, a, 2)
 	if last.ID != ids[0] {
 		t.Fatalf("last row = %s, want root %s", last.ID, ids[0])
+	}
+}
+
+func TestActivateRepositoryOnAShallowCloneShowsTheTipWithoutFailing(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepoWithBranch(t, target, "main")
+	db, store := withJournalRepo(t, target)
+	tree := putJournalTree(t, db)
+	missingParent := hash.SumSHA1("commit", []byte("truncated by shallow clone"))
+	tip := putJournalCommit(t, db, tree, time.Now(), "shallow tip\n", missingParent)
+	setRef(t, store, refs.BranchName("main"), tip)
+	writeShallowFile(t, target, tip)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+
+	a.ActivateRepository("r1")
+	waitForJournalRows(t, a, 1)
+
+	if got := journalRowCountOnDispatcher(t, a); got != 1 {
+		t.Fatalf("journal row count = %d, want 1", got)
+	}
+	row := journalRowOnDispatcher(t, a, 0)
+	if row.ID != tip {
+		t.Fatalf("journal row = %s, want the shallow tip %s", row.ID, tip)
 	}
 }
 

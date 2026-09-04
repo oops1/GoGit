@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -14,11 +15,12 @@ import (
 const worktreeMaxFiles = 200000
 
 type openedRepository struct {
-	repo  *gitrepo.Repository
-	store *refs.Store
-	db    *odb.DB
-	path  string
-	id    string
+	repo    *gitrepo.Repository
+	store   *refs.Store
+	db      *odb.DB
+	path    string
+	id      string
+	shallow map[hash.ObjectID]struct{}
 
 	wtMu     sync.RWMutex
 	worktree *worktree.Worktree
@@ -40,6 +42,8 @@ func (o *openedRepository) swapWorktree(fresh *worktree.Worktree) *worktree.Work
 
 var openGitRepository = gitrepo.Open
 
+var readRepositoryShallow = (*gitrepo.Repository).Shallow
+
 var openObjectsDB = odb.Open
 
 var openRefsStore = refs.Open
@@ -59,6 +63,11 @@ var closeWorktree = (*worktree.Worktree).Close
 func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, error) {
 	r, err := openGitRepository(path, gitrepo.OpenOptions{})
 	if err != nil {
+		return nil, branches.Snapshot{}, err
+	}
+	shallow, err := readRepositoryShallow(r)
+	if err != nil {
+		_ = closeGitRepository(r)
 		return nil, branches.Snapshot{}, err
 	}
 	db, err := openObjectsDB(r.ObjectsDir(), odb.Options{})
@@ -89,7 +98,7 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 	if errors.Is(err, worktree.ErrBareRepository) {
 		wt = nil
 	}
-	return &openedRepository{repo: r, store: store, db: db, worktree: wt, path: path, id: id}, snap, nil
+	return &openedRepository{repo: r, store: store, db: db, worktree: wt, path: path, id: id, shallow: shallow}, snap, nil
 }
 
 func (o *openedRepository) close() error {

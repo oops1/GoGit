@@ -38,6 +38,7 @@ type Context struct {
 	Refs    Refs
 	Config  Config
 	Head    refs.Name
+	Shallow map[hash.ObjectID]struct{}
 }
 
 type Rev struct {
@@ -62,14 +63,16 @@ type store struct {
 	commits map[hash.ObjectID]*object.Commit
 	trees   map[hash.ObjectID]*object.Tree
 	paths   map[pathKey]pathValue
+	shallow map[hash.ObjectID]struct{}
 }
 
-func newStore(objects Objects) *store {
+func newStore(objects Objects, shallow map[hash.ObjectID]struct{}) *store {
 	return &store{
 		objects: objects,
 		commits: make(map[hash.ObjectID]*object.Commit),
 		trees:   make(map[hash.ObjectID]*object.Tree),
 		paths:   make(map[pathKey]pathValue),
+		shallow: shallow,
 	}
 }
 
@@ -95,6 +98,11 @@ func (s *store) object(id hash.ObjectID) (object.Type, object.Object, error) {
 		s.trees[id] = typed
 	}
 	return kind, parsed, nil
+}
+
+func (s *store) isShallow(id hash.ObjectID) bool {
+	_, cut := s.shallow[id]
+	return cut
 }
 
 func (s *store) commit(id hash.ObjectID) (*object.Commit, error) {

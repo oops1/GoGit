@@ -29,7 +29,7 @@ func (a *App) startJournal() {
 	if o == nil {
 		return
 	}
-	source := revision.Context{Objects: o.db, Refs: o.store}
+	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
 	opts := revision.Options{MaxCount: a.cfg.Git.LogMaxCount}
 	ctx, cancel := context.WithCancel(context.Background())
 	pager := newJournalPager(ctx, source, opts)

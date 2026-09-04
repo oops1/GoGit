@@ -24,6 +24,7 @@ const (
 	hooksDirName     = "hooks"
 	packDirName      = "objects/pack"
 	indexName        = "index"
+	shallowFileName  = "shallow"
 	maxHeadRefSize   = 256
 	maxGitFileSize   = 1 << 20
 	worktreesDirName = "worktrees"
