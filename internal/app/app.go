@@ -294,6 +294,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.branchesView.Bind(branchesTreeWidget)
 	a.journalView = journal.NewView()
 	a.journalView.Bind(a.named["journalGrid"].(*widget.DataGridWidget))
+	a.journalView.SetFullAuthorName(cfg.UI.JournalFullAuthorName)
 	a.journalView.OnSelect = a.onJournalRowSelected
 	a.journalView.OnNearEnd = a.requestMoreJournal
 	a.filesItems = datagrid.NewObservableCollection()

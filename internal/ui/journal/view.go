@@ -54,3 +54,18 @@ func (v *View) EnsureLoaded(count int) {
 		v.OnNearEnd()
 	}
 }
+
+func (v *View) SetFullAuthorName(fullName bool) {
+	if v.grid == nil {
+		return
+	}
+	cols := v.grid.Grid.Columns()
+	if authorColumnIndex >= len(cols) {
+		return
+	}
+	old := cols[authorColumnIndex]
+	col := newAuthorColumn(old.Header(), fullName)
+	col.SetWidth(old.Width())
+	cols[authorColumnIndex] = col
+	v.grid.Grid.SetColumns(cols)
+}

@@ -22,19 +22,19 @@ var themeOrder = []string{config.ThemeSystem, config.ThemeDark, config.ThemeLigh
 type View struct {
 	dlg *widget.Dialog
 
-	tabs            *widget.TabControl
-	language        *widget.Dropdown
-	theme           *widget.Dropdown
+	tabs                  *widget.TabControl
+	language              *widget.Dropdown
+	theme                 *widget.Dropdown
 	showToolbar           *widget.CheckBox
 	toolbarCaptions       *widget.CheckBox
 	showStatusBar         *widget.CheckBox
 	journalFullAuthorName *widget.CheckBox
 	logMaxCount           *widget.NumericUpDown
-	autoFetch       *widget.CheckBox
-	fetchInterval   *widget.NumericUpDown
-	workTreeDepth   *widget.NumericUpDown
-	okBtn           *widget.Button
-	cancelBtn       *widget.Button
+	autoFetch             *widget.CheckBox
+	fetchInterval         *widget.NumericUpDown
+	workTreeDepth         *widget.NumericUpDown
+	okBtn                 *widget.Button
+	cancelBtn             *widget.Button
 
 	eng       widget.ModalShower
 	languages []string

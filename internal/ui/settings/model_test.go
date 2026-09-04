@@ -12,6 +12,7 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 	cfg.Theme = config.ThemeDark
 	cfg.UI.ShowToolbar = false
 	cfg.UI.ShowStatusBar = false
+	cfg.UI.JournalFullAuthorName = true
 	cfg.Git.LogMaxCount = 750
 	cfg.Git.AutoFetch = true
 	cfg.Git.FetchInterval = 120
@@ -20,15 +21,16 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 	m := FromConfig(cfg)
 
 	want := Model{
-		Language:        "ru",
-		Theme:           config.ThemeDark,
-		ShowToolbar:     false,
-		ToolbarCaptions: true,
-		ShowStatusBar:   false,
-		LogMaxCount:     750,
-		AutoFetch:       true,
-		FetchInterval:   120,
-		WorkTreeDepth:   6,
+		Language:              "ru",
+		Theme:                 config.ThemeDark,
+		ShowToolbar:           false,
+		ToolbarCaptions:       true,
+		ShowStatusBar:         false,
+		JournalFullAuthorName: true,
+		LogMaxCount:           750,
+		AutoFetch:             true,
+		FetchInterval:         120,
+		WorkTreeDepth:         6,
 	}
 	if m != want {
 		t.Fatalf("model = %+v, want %+v", m, want)
@@ -141,14 +143,15 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 	cfg.Repositories = []config.Repository{{ID: "r1", Name: "keep", Path: "keep"}}
 
 	m := Model{
-		Language:      "ru",
-		Theme:         "bogus",
-		ShowToolbar:   false,
-		ShowStatusBar: false,
-		LogMaxCount:   MaxLogMaxCount + 1000,
-		AutoFetch:     true,
-		FetchInterval: MinFetchInterval - 5,
-		WorkTreeDepth: -7,
+		Language:              "ru",
+		Theme:                 "bogus",
+		ShowToolbar:           false,
+		ShowStatusBar:         false,
+		JournalFullAuthorName: true,
+		LogMaxCount:           MaxLogMaxCount + 1000,
+		AutoFetch:             true,
+		FetchInterval:         MinFetchInterval - 5,
+		WorkTreeDepth:         -7,
 	}
 	m.ApplyTo(cfg)
 
@@ -160,6 +163,9 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 	}
 	if cfg.UI.ShowToolbar || cfg.UI.ShowStatusBar {
 		t.Fatal("toolbar and status bar must be hidden")
+	}
+	if !cfg.UI.JournalFullAuthorName {
+		t.Fatal("journal full author name must be enabled")
 	}
 	if cfg.Git.LogMaxCount != MaxLogMaxCount {
 		t.Fatalf("logMaxCount = %d, want %d", cfg.Git.LogMaxCount, MaxLogMaxCount)
@@ -184,6 +190,7 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	src.Theme = config.ThemeLight
 	src.UI.ShowToolbar = false
 	src.UI.ShowStatusBar = true
+	src.UI.JournalFullAuthorName = true
 	src.Git.LogMaxCount = 42000
 	src.Git.AutoFetch = true
 	src.Git.FetchInterval = 900
@@ -199,6 +206,9 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	}
 	if dst.UI.ShowToolbar != src.UI.ShowToolbar || dst.UI.ShowStatusBar != src.UI.ShowStatusBar {
 		t.Fatalf("ui mismatch: %+v vs %+v", dst.UI, src.UI)
+	}
+	if dst.UI.JournalFullAuthorName != src.UI.JournalFullAuthorName {
+		t.Fatalf("journal full author name mismatch: %+v vs %+v", dst.UI, src.UI)
 	}
 	if dst.Git.LogMaxCount != src.Git.LogMaxCount || dst.Git.AutoFetch != src.Git.AutoFetch ||
 		dst.Git.FetchInterval != src.Git.FetchInterval || dst.Git.WorkTreeDepth != src.Git.WorkTreeDepth {

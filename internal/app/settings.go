@@ -24,6 +24,7 @@ func (a *App) applySettings(m settings.Model, ok bool) {
 	a.SetTheme(a.cfg.Theme)
 	a.setToolbarVisible(a.cfg.UI.ShowToolbar)
 	a.setStatusBarVisible(a.cfg.UI.ShowStatusBar)
+	a.journalView.SetFullAuthorName(a.cfg.UI.JournalFullAuthorName)
 	a.restartWatcherForCurrentRepository()
 	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 		a.log.Warn("save config failed", "error", err)

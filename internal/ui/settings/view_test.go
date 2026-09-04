@@ -34,18 +34,19 @@ func clickCheckBox(cb *widget.CheckBox) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"tabs":            widget.NewTabControl(),
-		"language":        widget.NewDropdown(),
-		"theme":           widget.NewDropdown(),
-		"showToolbar":     widget.NewCheckBox(""),
-		"toolbarCaptions": widget.NewCheckBox(""),
-		"showStatusBar":   widget.NewCheckBox(""),
-		"logMaxCount":     widget.NewNumericUpDown(),
-		"autoFetch":       widget.NewCheckBox(""),
-		"fetchInterval":   widget.NewNumericUpDown(),
-		"workTreeDepth":   widget.NewNumericUpDown(),
-		"ok":              widget.NewButton(""),
-		"cancel":          widget.NewButton(""),
+		"tabs":                  widget.NewTabControl(),
+		"language":              widget.NewDropdown(),
+		"theme":                 widget.NewDropdown(),
+		"showToolbar":           widget.NewCheckBox(""),
+		"toolbarCaptions":       widget.NewCheckBox(""),
+		"showStatusBar":         widget.NewCheckBox(""),
+		"journalFullAuthorName": widget.NewCheckBox(""),
+		"logMaxCount":           widget.NewNumericUpDown(),
+		"autoFetch":             widget.NewCheckBox(""),
+		"fetchInterval":         widget.NewNumericUpDown(),
+		"workTreeDepth":         widget.NewNumericUpDown(),
+		"ok":                    widget.NewButton(""),
+		"cancel":                widget.NewButton(""),
 	}
 }
 
@@ -81,7 +82,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
+	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -109,14 +110,15 @@ func TestBindSucceedsWithAllWidgetsPresent(t *testing.T) {
 
 func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 	initial := Model{
-		Language:      "ru",
-		Theme:         config.ThemeDark,
-		ShowToolbar:   false,
-		ShowStatusBar: true,
-		LogMaxCount:   777,
-		AutoFetch:     true,
-		FetchInterval: 90,
-		WorkTreeDepth: 6,
+		Language:              "ru",
+		Theme:                 config.ThemeDark,
+		ShowToolbar:           false,
+		ShowStatusBar:         true,
+		JournalFullAuthorName: true,
+		LogMaxCount:           777,
+		AutoFetch:             true,
+		FetchInterval:         90,
+		WorkTreeDepth:         6,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -131,6 +133,9 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 	}
 	if !v.showStatusBar.IsChecked() {
 		t.Fatal("show status bar must be checked")
+	}
+	if !v.journalFullAuthorName.IsChecked() {
+		t.Fatal("journal full author name must be checked")
 	}
 	if v.logMaxCount.Value() != 777 {
 		t.Fatalf("logMaxCount = %v", v.logMaxCount.Value())
@@ -189,34 +194,37 @@ func TestThemeAtFallsBackToSystemForOutOfRangeIndex(t *testing.T) {
 
 func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	initial := Model{
-		Language:      "en",
-		Theme:         config.ThemeSystem,
-		ShowToolbar:   false,
-		ShowStatusBar: false,
-		LogMaxCount:   500,
-		AutoFetch:     false,
-		FetchInterval: 300,
-		WorkTreeDepth: 0,
+		Language:              "en",
+		Theme:                 config.ThemeSystem,
+		ShowToolbar:           false,
+		ShowStatusBar:         false,
+		JournalFullAuthorName: false,
+		LogMaxCount:           500,
+		AutoFetch:             false,
+		FetchInterval:         300,
+		WorkTreeDepth:         0,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 	v.language.SetSelected(1)
 	v.theme.SetSelected(themeIndex(config.ThemeLight))
 	clickCheckBox(v.showToolbar)
 	clickCheckBox(v.autoFetch)
+	clickCheckBox(v.journalFullAuthorName)
 	v.logMaxCount.SetValue(1234)
 	v.fetchInterval.SetValue(456)
 	v.workTreeDepth.SetValue(8)
 
 	got := v.request()
 	want := Model{
-		Language:      "ru",
-		Theme:         config.ThemeLight,
-		ShowToolbar:   true,
-		ShowStatusBar: false,
-		LogMaxCount:   1234,
-		AutoFetch:     true,
-		FetchInterval: 456,
-		WorkTreeDepth: 8,
+		Language:              "ru",
+		Theme:                 config.ThemeLight,
+		ShowToolbar:           true,
+		ShowStatusBar:         false,
+		JournalFullAuthorName: true,
+		LogMaxCount:           1234,
+		AutoFetch:             true,
+		FetchInterval:         456,
+		WorkTreeDepth:         8,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)

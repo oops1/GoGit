@@ -53,14 +53,14 @@ type Git struct {
 }
 
 type UI struct {
-	ShowToolbar            bool     `toml:"show_toolbar"`
-	ToolbarCaptions        bool     `toml:"toolbar_captions"`
-	ShowStatusBar          bool     `toml:"show_status_bar"`
-	FilesColumns           []string `toml:"files_columns"`
-	FilesVisibleColumns    []string `toml:"files_visible_columns"`
-	FilesStatusFilter      []string `toml:"files_status_filter"`
-	FilesSubdirectories    bool     `toml:"files_subdirectories"`
-	JournalFullAuthorName  bool     `toml:"journal_full_author_name"`
+	ShowToolbar           bool     `toml:"show_toolbar"`
+	ToolbarCaptions       bool     `toml:"toolbar_captions"`
+	ShowStatusBar         bool     `toml:"show_status_bar"`
+	FilesColumns          []string `toml:"files_columns"`
+	FilesVisibleColumns   []string `toml:"files_visible_columns"`
+	FilesStatusFilter     []string `toml:"files_status_filter"`
+	FilesSubdirectories   bool     `toml:"files_subdirectories"`
+	JournalFullAuthorName bool     `toml:"journal_full_author_name"`
 }
 
 type Group struct {

@@ -26,8 +26,5 @@ func singleWordInitials(word string) string {
 }
 
 func firstRune(word string) rune {
-	for _, r := range word {
-		return unicode.ToUpper(r)
-	}
-	return 0
+	return unicode.ToUpper([]rune(word)[0])
 }

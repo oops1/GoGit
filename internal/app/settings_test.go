@@ -11,10 +11,13 @@ import (
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
+
+const journalAuthorColumnIndex = 2
 
 func stubShowSettings(a *App, result settings.Model, ok bool) {
 	a.showSettings = func(_ settings.Model, cb func(settings.Model, bool)) {
@@ -105,6 +108,57 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	}
 	if saved.Language != "ru" || saved.Theme != config.ThemeLight || saved.Git.LogMaxCount != 12345 || saved.Git.WorkTreeDepth != 5 {
 		t.Fatalf("saved config = %+v", saved)
+	}
+}
+
+func TestJournalAuthorColumnShowsInitialsBadgeByDefault(t *testing.T) {
+	a := newTestApp(t)
+	grid := a.named["journalGrid"].(*widget.DataGridWidget)
+
+	col := grid.Grid.Columns()[journalAuthorColumnIndex]
+	if _, ok := col.(*datagrid.DataGridTemplateColumn); !ok {
+		t.Fatalf("author column type = %T, want the badge template column by default", col)
+	}
+}
+
+func TestApplySettingsSwitchesTheJournalAuthorColumnToFullNameAndRedraws(t *testing.T) {
+	a := newTestApp(t)
+	grid := a.named["journalGrid"].(*widget.DataGridWidget)
+	grid.Grid.TakeDirty()
+	stubShowSettings(a, settings.Model{
+		Language: "en", Theme: config.ThemeSystem, LogMaxCount: 500, FetchInterval: 300,
+		JournalFullAuthorName: true,
+	}, true)
+
+	a.Dispatch(CmdSettings)
+
+	col := grid.Grid.Columns()[journalAuthorColumnIndex]
+	if _, ok := col.(*datagrid.DataGridTextColumn); !ok {
+		t.Fatalf("author column type = %T, want a plain text column after enabling full names", col)
+	}
+	if _, full := grid.Grid.TakeDirty(); !full {
+		t.Fatal("switching the author column mode must mark the journal grid fully dirty")
+	}
+}
+
+func TestApplySettingsSwitchesTheJournalAuthorColumnBackToTheBadge(t *testing.T) {
+	a := newTestApp(t)
+	grid := a.named["journalGrid"].(*widget.DataGridWidget)
+	stubShowSettings(a, settings.Model{
+		Language: "en", Theme: config.ThemeSystem, LogMaxCount: 500, FetchInterval: 300,
+		JournalFullAuthorName: true,
+	}, true)
+	a.Dispatch(CmdSettings)
+
+	stubShowSettings(a, settings.Model{
+		Language: "en", Theme: config.ThemeSystem, LogMaxCount: 500, FetchInterval: 300,
+		JournalFullAuthorName: false,
+	}, true)
+	a.Dispatch(CmdSettings)
+
+	col := grid.Grid.Columns()[journalAuthorColumnIndex]
+	if _, ok := col.(*datagrid.DataGridTemplateColumn); !ok {
+		t.Fatalf("author column type = %T, want the badge template column again", col)
 	}
 }
 
