@@ -43,6 +43,12 @@ linters:
           disabled: true
         - name: package-comments
           disabled: true
+  exclusions:
+    rules:
+      - path: internal/winconsole/console_windows\.go
+        linters:
+          - gosec
+        text: "G103"
 formatters:
   enable:
     - gofmt
