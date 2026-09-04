@@ -16,6 +16,8 @@ const filesStatusButtonsXAML = `<Button x:Name="filesFilterStaged"/><Button x:Na
 	`<Button x:Name="filesFilterIgnored"/><Button x:Name="filesFilterConflict"/>` +
 	`<Button x:Name="filesFilterUnchanged"/>`
 
+const filesSubdirsButtonXAML = `<Button x:Name="filesFilterSubdirs"/>`
+
 func writeFile(dir, name, content string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err

@@ -68,6 +68,10 @@ func ToolbarPlain(name string, size int) image.Image {
 	return render(sourceToolbar, name, size)
 }
 
+func ToolbarMuted(name string, size int) image.Image {
+	return muted(render(sourceToolbar, name, size))
+}
+
 func Toolbar(name string, size int, tint color.RGBA) image.Image {
 	return renderTinted(sourceToolbar, name, size, tint)
 }

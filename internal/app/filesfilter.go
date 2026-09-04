@@ -39,7 +39,7 @@ func (a *App) applyFilesFilter() {
 	a.filesMu.Unlock()
 
 	filtered := changes.FilterRowsByStatus(rows, query, allowed)
-	filtered = changes.FilterRowsByDirectory(filtered, dir)
+	filtered = changes.FilterRowsByDirectory(filtered, dir, a.cfg.UI.FilesSubdirectories)
 	items := make([]interface{}, len(filtered))
 	for i, r := range filtered {
 		items[i] = r

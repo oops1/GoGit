@@ -312,3 +312,17 @@ func TestToolbarPlainRendersTheIconWithItsOwnColours(t *testing.T) {
 		t.Fatal("an unknown toolbar icon must not render")
 	}
 }
+
+func TestToolbarMutedGreysTheIcon(t *testing.T) {
+	plain := ToolbarPlain("subdirs", 16)
+	dim := ToolbarMuted("subdirs", 16)
+	if plain == nil || dim == nil {
+		t.Fatal("both renders must produce an image")
+	}
+	if sameImage(plain, dim) {
+		t.Fatal("the muted toolbar icon must differ from the full colour one")
+	}
+	if ToolbarMuted("nope", 16) != nil {
+		t.Fatal("an unknown icon must not render")
+	}
+}

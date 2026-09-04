@@ -300,6 +300,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
 	a.restoreFilesStatusFilter()
 	a.wireFilesStatusButtons()
+	a.wireFilesSubdirsButton()
 	a.filesFilterInput.OnChange = a.onFilesFilterChanged
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
@@ -679,6 +680,7 @@ func (a *App) applyTheme() {
 	a.eng.SetTheme(theme)
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
+	a.applyFilesSubdirsButtonVisuals(theme)
 	a.applyRepoTreeTheme(theme)
 	a.applyPaneTitleColors()
 }

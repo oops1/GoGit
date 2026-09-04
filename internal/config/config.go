@@ -59,6 +59,7 @@ type UI struct {
 	FilesColumns        []string `toml:"files_columns"`
 	FilesVisibleColumns []string `toml:"files_visible_columns"`
 	FilesStatusFilter   []string `toml:"files_status_filter"`
+	FilesSubdirectories bool     `toml:"files_subdirectories"`
 }
 
 type Group struct {
@@ -85,7 +86,7 @@ func Default() *Config {
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
 		Git:      Git{LogMaxCount: 500, FetchInterval: 300},
-		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true},
+		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
 	}
 }
 

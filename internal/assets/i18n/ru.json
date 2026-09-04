@@ -60,6 +60,7 @@
   "Files.State.Ignored": "Игнорируется",
   "Files.State.Unmodified": "Без изменений",
   "Files.Filter.Placeholder": "Фильтр файлов",
+  "Files.Filter.Subdirectories": "Показывать файлы из подкаталогов",
   "Files.Filter.Count": "Файлов: %d",
   "Files.Filter.CountFiltered": "%d из %d",
   "Files.Filter.Status.Staged": "В индексе",

@@ -60,6 +60,7 @@
   "Files.State.Ignored": "Ignored",
   "Files.State.Unmodified": "Unmodified",
   "Files.Filter.Placeholder": "Filter files",
+  "Files.Filter.Subdirectories": "Show files from subdirectories",
   "Files.Filter.Count": "%d files",
   "Files.Filter.CountFiltered": "%d of %d",
   "Files.Filter.Status.Staged": "Staged",
