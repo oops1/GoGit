@@ -1,7 +1,8 @@
 /bin/
 /dist/
-/cover.out
-/coverage.html
+cover*.out
+cover*.html
+coverage.html
 *.exe
 *.test
 *.prof

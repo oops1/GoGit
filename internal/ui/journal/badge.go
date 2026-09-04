@@ -101,7 +101,7 @@ func insideRoundedSquare(x, y, size, radius int) bool {
 	}
 	left, right := x < radius, x >= size-radius
 	top, bottom := y < radius, y >= size-radius
-	if !((left || right) && (top || bottom)) {
+	if (!left && !right) || (!top && !bottom) {
 		return true
 	}
 	cx := radius - 1
