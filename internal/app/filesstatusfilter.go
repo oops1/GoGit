@@ -1,6 +1,8 @@
 package app
 
 import (
+	"image/color"
+
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
@@ -9,6 +11,8 @@ import (
 )
 
 const filesStatusIconSize = 16
+
+const filesStatusEnabledBGAlpha = 70
 
 var filesStatusButtons = map[changes.StatusFilter]string{
 	changes.FilterStaged:    "filesFilterStaged",
@@ -84,18 +88,31 @@ func (a *App) applyFilesStatusButtonVisuals(t *widget.Theme) {
 	a.filesMu.Lock()
 	allowed := a.filesStatusAllowed
 	a.filesMu.Unlock()
+	enabledBG := translucent(t.Accent, filesStatusEnabledBGAlpha)
 	for _, f := range changes.AllStatusFilters {
 		btn := a.filesStatusButton(f)
-		btn.Icon = icons.Status(string(f), filesStatusIconSize)
 		btn.IconSize = filesStatusIconSize
 		btn.IconPos = widget.IconOnly
 		btn.HoverBG = t.BtnHoverBG
 		btn.PressedBG = t.BtnPressedBG
 		if allowed[f] {
-			btn.Background = t.BtnPressedBG
+			btn.Icon = icons.Status(string(f), filesStatusIconSize)
+			btn.Background = enabledBG
+			btn.BorderColor = t.Accent
 		} else {
-			btn.Background = t.PanelBG
+			btn.Icon = icons.StatusTinted(string(f), filesStatusIconSize, t.Disabled)
+			btn.Background = color.RGBA{}
+			btn.BorderColor = t.BtnBorder
 		}
+	}
+}
+
+func translucent(c color.RGBA, alpha uint8) color.RGBA {
+	return color.RGBA{
+		R: uint8(uint32(c.R) * uint32(alpha) / 255),
+		G: uint8(uint32(c.G) * uint32(alpha) / 255),
+		B: uint8(uint32(c.B) * uint32(alpha) / 255),
+		A: alpha,
 	}
 }
 

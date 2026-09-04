@@ -57,6 +57,43 @@ func TestStatusReturnsNilForNonPositiveSize(t *testing.T) {
 	}
 }
 
+func TestStatusTintedRendersKnownIconAtRequestedSize(t *testing.T) {
+	resetForTest()
+	img := StatusTinted("added", 16, color.RGBA{R: 128, G: 128, B: 128, A: 255})
+	if img == nil {
+		t.Fatal("StatusTinted(added, 16, gray) = nil")
+	}
+	if b := img.Bounds(); b.Dx() != 16 || b.Dy() != 16 {
+		t.Fatalf("bounds = %v, want 16x16", b)
+	}
+}
+
+func TestStatusTintedReturnsNilForUnknownName(t *testing.T) {
+	resetForTest()
+	if img := StatusTinted("does-not-exist", 16, color.RGBA{}); img != nil {
+		t.Fatalf("StatusTinted(does-not-exist, 16, _) = %v, want nil", img)
+	}
+}
+
+func TestStatusTintedReturnsNilForNonPositiveSize(t *testing.T) {
+	resetForTest()
+	if img := StatusTinted("added", 0, color.RGBA{}); img != nil {
+		t.Fatalf("StatusTinted(added, 0, _) = %v, want nil", img)
+	}
+}
+
+func TestStatusTintedDiffersFromThePlainStatusIcon(t *testing.T) {
+	resetForTest()
+	plain := Status("added", 16)
+	tinted := StatusTinted("added", 16, color.RGBA{R: 128, G: 128, B: 128, A: 255})
+	if plain == nil || tinted == nil {
+		t.Fatal("expected non-nil images")
+	}
+	if sameImage(plain, tinted) {
+		t.Fatal("expected the tinted icon to differ from the plain icon")
+	}
+}
+
 func TestTreeRendersKnownIconAtRequestedSize(t *testing.T) {
 	resetForTest()
 	img := Tree("branch", 20)
@@ -212,6 +249,7 @@ func TestConcurrentAccessIsSafe(t *testing.T) {
 		wg.Go(func() {
 			for _, name := range names {
 				Status(name, 16)
+				StatusTinted(name, 16, color.RGBA{R: 128, G: 128, B: 128, A: 255})
 				Tree("branch", 16)
 				TreeTinted("branch", 16, color.RGBA{R: 76, G: 194, B: 255, A: 255})
 				Toolbar("pull", 16, color.RGBA{R: 255, A: 255})

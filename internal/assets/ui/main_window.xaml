@@ -78,16 +78,11 @@
                 </DockPane>
                 <DockPane Id="files" Title="{Loc Pane.Files}" Side="Top" Size="200">
                     <DockPanel>
-                        <Grid DockPanel.Dock="Top" Margin="4,4,4,2">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="220"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="filesFilter" Grid.Column="0" Margin="0,0,6,0"
+                        <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+                            <TextBox x:Name="filesFilter" DockPanel.Dock="Left" Width="220" Margin="0,0,6,0"
                                      Placeholder="{Loc Files.Filter.Placeholder}"/>
-                            <TextBlock x:Name="filesFilterCount" Grid.Column="1" Text="" Margin="0,4,10,4"/>
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" Width="240">
+                            <StackPanel x:Name="filesFilterButtons" DockPanel.Dock="Right"
+                                        Orientation="Horizontal" Width="240">
                                 <Button x:Name="filesFilterStaged" Width="26" Height="24" Margin="2,0"/>
                                 <Button x:Name="filesFilterModified" Width="26" Height="24" Margin="2,0"/>
                                 <Button x:Name="filesFilterAdded" Width="26" Height="24" Margin="2,0"/>
@@ -97,7 +92,10 @@
                                 <Button x:Name="filesFilterIgnored" Width="26" Height="24" Margin="2,0"/>
                                 <Button x:Name="filesFilterConflict" Width="26" Height="24" Margin="2,0"/>
                             </StackPanel>
-                        </Grid>
+                            <TextBlock x:Name="filesFilterCount" DockPanel.Dock="Right" Text="" Width="100"
+                                       FontSize="9" Margin="0,4,10,4"/>
+                            <Border x:Name="filesFilterSpacer"/>
+                        </DockPanel>
                         <FilesGrid x:Name="filesGrid"/>
                     </DockPanel>
                 </DockPane>

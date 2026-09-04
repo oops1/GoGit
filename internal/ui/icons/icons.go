@@ -48,6 +48,10 @@ func Status(name string, size int) image.Image {
 	return render(sourceStatus, name, size)
 }
 
+func StatusTinted(name string, size int, tint color.RGBA) image.Image {
+	return renderTinted(sourceStatus, name, size, tint)
+}
+
 func Tree(name string, size int) image.Image {
 	return render(sourceTree, name, size)
 }

@@ -2,9 +2,11 @@ package app
 
 import (
 	"bytes"
+	"image"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/ui/changes"
+	"github.com/oops1/gogit/internal/ui/icons"
 )
 
 func filesStatusAllowedSnapshot(a *App) map[changes.StatusFilter]bool {
@@ -117,18 +120,66 @@ func TestApplyFilesStatusButtonVisualsMarksDisabledButtonsDifferentlyFromEnabled
 	theme := themeFor(a.EffectiveTheme())
 
 	enabledBG := a.filesStatusButton(changes.FilterModified).Background
+	enabledBorder := a.filesStatusButton(changes.FilterModified).BorderColor
 	a.toggleFilesStatusFilter(changes.FilterModified)
 	disabledBG := a.filesStatusButton(changes.FilterModified).Background
+	disabledBorder := a.filesStatusButton(changes.FilterModified).BorderColor
 
-	if enabledBG != theme.BtnPressedBG {
-		t.Fatalf("enabled button background = %v, want %v", enabledBG, theme.BtnPressedBG)
+	if enabledBG != translucent(theme.Accent, filesStatusEnabledBGAlpha) {
+		t.Fatalf("enabled button background = %v, want translucent accent", enabledBG)
 	}
-	if disabledBG != theme.PanelBG {
-		t.Fatalf("disabled button background = %v, want %v", disabledBG, theme.PanelBG)
+	if disabledBG.A != 0 {
+		t.Fatalf("disabled button background = %v, want fully transparent", disabledBG)
 	}
 	if enabledBG == disabledBG {
 		t.Fatal("enabled and disabled buttons must look different")
 	}
+	if enabledBorder != theme.Accent {
+		t.Fatalf("enabled button border = %v, want %v", enabledBorder, theme.Accent)
+	}
+	if disabledBorder != theme.BtnBorder {
+		t.Fatalf("disabled button border = %v, want %v", disabledBorder, theme.BtnBorder)
+	}
+}
+
+func TestApplyFilesStatusButtonVisualsUsesAFullColorIconWhenEnabledAndAMutedIconWhenDisabled(t *testing.T) {
+	a := newTestApp(t)
+	theme := themeFor(a.EffectiveTheme())
+
+	enabledIcon := a.filesStatusButton(changes.FilterModified).Icon
+	wantEnabled := icons.Status(string(changes.FilterModified), filesStatusIconSize)
+	if !sameImage(enabledIcon, wantEnabled) {
+		t.Fatal("enabled button must show the full-color status icon")
+	}
+
+	a.toggleFilesStatusFilter(changes.FilterModified)
+	disabledIcon := a.filesStatusButton(changes.FilterModified).Icon
+	wantDisabled := icons.StatusTinted(string(changes.FilterModified), filesStatusIconSize, theme.Disabled)
+	if !sameImage(disabledIcon, wantDisabled) {
+		t.Fatal("disabled button must show the muted status icon")
+	}
+
+	if sameImage(enabledIcon, disabledIcon) {
+		t.Fatal("enabled and disabled icons must differ")
+	}
+}
+
+func sameImage(a, b image.Image) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ba, bb := a.Bounds(), b.Bounds()
+	if ba != bb {
+		return false
+	}
+	for y := ba.Min.Y; y < ba.Max.Y; y++ {
+		for x := ba.Min.X; x < ba.Max.X; x++ {
+			if a.At(x, y) != b.At(x, y) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func TestApplyFilesStatusButtonVisualsSetsAStatusIconOnEveryButton(t *testing.T) {
@@ -170,5 +221,61 @@ func TestSetLanguageUpdatesFilesStatusButtonTooltips(t *testing.T) {
 	a.SetLanguage("en")
 	if got := a.filesStatusButton(changes.FilterStaged).GetToolTip(); got != enTip {
 		t.Fatalf("tooltip after switching back = %q, want %q", got, enTip)
+	}
+}
+
+func TestFilesStatusFilterSurvivesRestartAcrossTwoAppInstances(t *testing.T) {
+	first, paths := newTestAppWithPaths(t)
+
+	rows := []changes.Row{
+		{Name: "modified.txt", RelPath: "modified.txt", Status: changes.RowModified},
+		{Name: "added.txt", RelPath: "added.txt", Status: changes.RowAdded},
+	}
+	first.setFilesRows(rows)
+	if got := len(first.filesItems.Items()); got != 2 {
+		t.Fatalf("first instance visible rows before toggling = %d, want 2", got)
+	}
+
+	first.toggleFilesStatusFilter(changes.FilterModified)
+	if got := len(first.filesItems.Items()); got != 1 {
+		t.Fatalf("first instance visible rows after disabling modified = %d, want 1", got)
+	}
+
+	restoredCfg, err := config.Load(paths.ConfigFile())
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	if !slices.Contains(restoredCfg.UI.FilesStatusFilter, "modified") {
+		t.Fatalf("persisted config = %v, want it to list modified as disabled", restoredCfg.UI.FilesStatusFilter)
+	}
+
+	first.Close()
+	widget.ClearStrings()
+	second, err := New(restoredCfg, paths, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(second.Close)
+
+	if allowed := filesStatusAllowedSnapshot(second); allowed[changes.FilterModified] {
+		t.Fatal("second instance must start with the modified filter disabled")
+	}
+	theme := themeFor(second.EffectiveTheme())
+	btn := second.filesStatusButton(changes.FilterModified)
+	if btn.Background.A != 0 {
+		t.Fatalf("second instance modified button background = %v, want fully transparent", btn.Background)
+	}
+	wantIcon := icons.StatusTinted(string(changes.FilterModified), filesStatusIconSize, theme.Disabled)
+	if !sameImage(btn.Icon, wantIcon) {
+		t.Fatal("second instance modified button must show the muted icon")
+	}
+
+	second.setFilesRows(rows)
+	visible := second.filesItems.Items()
+	if len(visible) != 1 {
+		t.Fatalf("second instance visible rows = %d, want 1", len(visible))
+	}
+	if row, ok := visible[0].(changes.Row); !ok || row.Status != changes.RowAdded {
+		t.Fatalf("second instance visible row = %+v, want the added row", visible[0])
 	}
 }

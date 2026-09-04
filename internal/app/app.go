@@ -203,6 +203,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: filesFilterCount", ErrWidgetMissing)
 	}
+	filesFilterCountWidget.TextAlign = widget.TextAlignRight
 	for _, name := range filesStatusButtons {
 		if _, ok := named[name].(*widget.Button); !ok {
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
