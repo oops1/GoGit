@@ -25,10 +25,11 @@ func (a *App) startJournal() {
 	defer a.journalRunMu.Unlock()
 	a.stopJournalLocked()
 	a.journalView.Reset()
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return
 	}
-	source := revision.Context{Objects: a.open.db, Refs: a.open.store}
+	source := revision.Context{Objects: o.db, Refs: o.store}
 	opts := revision.Options{MaxCount: a.cfg.Git.LogMaxCount}
 	ctx, cancel := context.WithCancel(context.Background())
 	pager := newJournalPager(ctx, source, opts)
@@ -98,7 +99,7 @@ func (a *App) stopJournalLocked() {
 
 func (a *App) onJournalRowSelected(row journal.Row) {
 	a.selectedCommit = row.ID
-	a.commitSelected = true
+	a.setCommitSelected(true)
 	a.setFilesSelected(false)
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))
 	a.startDiff(row.ID)

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -13,12 +14,28 @@ import (
 const worktreeMaxFiles = 200000
 
 type openedRepository struct {
-	repo     *gitrepo.Repository
-	store    *refs.Store
-	db       *odb.DB
+	repo  *gitrepo.Repository
+	store *refs.Store
+	db    *odb.DB
+	path  string
+	id    string
+
+	wtMu     sync.RWMutex
 	worktree *worktree.Worktree
-	path     string
-	id       string
+}
+
+func (o *openedRepository) currentWorktree() *worktree.Worktree {
+	o.wtMu.RLock()
+	defer o.wtMu.RUnlock()
+	return o.worktree
+}
+
+func (o *openedRepository) swapWorktree(fresh *worktree.Worktree) *worktree.Worktree {
+	o.wtMu.Lock()
+	defer o.wtMu.Unlock()
+	stale := o.worktree
+	o.worktree = fresh
+	return stale
 }
 
 var openGitRepository = gitrepo.Open
@@ -77,8 +94,8 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 
 func (o *openedRepository) close() error {
 	var errs []error
-	if o.worktree != nil {
-		errs = append(errs, closeWorktree(o.worktree))
+	if wt := o.currentWorktree(); wt != nil {
+		errs = append(errs, closeWorktree(wt))
 	}
 	errs = append(errs, closeRefsStore(o.store), closeObjectsDB(o.db), closeGitRepository(o.repo))
 	return errors.Join(errs...)

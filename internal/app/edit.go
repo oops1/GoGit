@@ -42,7 +42,8 @@ func (a *App) clearFilesSelection() {
 }
 
 func (a *App) startWrite(fn writeFunc, onDone func(error)) bool {
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return false
 	}
 	a.writeRunMu.Lock()
@@ -55,7 +56,7 @@ func (a *App) startWrite(fn writeFunc, onDone func(error)) bool {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.writeCancel = cancel
 	a.writeMu.Unlock()
-	r := a.open.repo
+	r := o.repo
 	a.writeWG.Go(func() { a.runWrite(ctx, cancel, r, fn, onDone) })
 	return true
 }
@@ -79,16 +80,16 @@ func (a *App) runWrite(ctx context.Context, cancel context.CancelFunc, r *gitrep
 }
 
 func (a *App) reloadWorktree() {
-	if a.open == nil || a.open.worktree == nil {
+	o := a.opened()
+	if o == nil || o.currentWorktree() == nil {
 		return
 	}
-	fresh, err := openWorktree(a.open.repo, worktree.Options{DB: a.open.db, Refs: a.open.store, MaxFiles: worktreeMaxFiles})
+	fresh, err := openWorktree(o.repo, worktree.Options{DB: o.db, Refs: o.store, MaxFiles: worktreeMaxFiles})
 	if err != nil {
 		a.log.Warn("reload working tree failed", "error", err)
 		return
 	}
-	stale := a.open.worktree
-	a.open.worktree = fresh
+	stale := o.swapWorktree(fresh)
 	if err := closeWorktree(stale); err != nil {
 		a.log.Warn("close previous working tree failed", "error", err)
 	}
@@ -174,7 +175,7 @@ func (a *App) discardSelected() {
 }
 
 func (a *App) openCommit() {
-	if a.open == nil {
+	if a.opened() == nil {
 		return
 	}
 	a.filesMu.Lock()
@@ -185,14 +186,15 @@ func (a *App) openCommit() {
 }
 
 func (a *App) lastCommitMessage() string {
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return ""
 	}
-	ref, err := a.open.store.Resolve(refs.HEAD)
+	ref, err := o.store.Resolve(refs.HEAD)
 	if err != nil || ref.Target.IsZero() {
 		return ""
 	}
-	c, err := loadCommitObject(a.open.db, ref.Target)
+	c, err := loadCommitObject(o.db, ref.Target)
 	if err != nil {
 		return ""
 	}
@@ -200,7 +202,7 @@ func (a *App) lastCommitMessage() string {
 }
 
 func (a *App) applyCommit(m commit.Model, ok bool) {
-	if !ok || a.open == nil {
+	if !ok || a.opened() == nil {
 		return
 	}
 	var newID hash.ObjectID

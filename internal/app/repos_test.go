@@ -160,7 +160,7 @@ func TestCloseRepositoryClearsRegistryTreeAndStatus(t *testing.T) {
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must be reset")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("opened repository must be released")
 	}
 	if _, ok := a.registry.Active(); ok {
@@ -730,7 +730,7 @@ func TestActivateRepositoryLoadsLocalBranchAndTagAndSetsStatusBranch(t *testing.
 	if _, ok := a.branchesView.Item(refs.TagName("v1")); !ok {
 		t.Fatal("tag v1 not present in branches pane")
 	}
-	if a.open == nil {
+	if a.opened() == nil {
 		t.Fatal("opened repository must be tracked")
 	}
 }
@@ -775,7 +775,7 @@ func TestActivateRepositoryOnInvalidPathReportsErrorAndClearsState(t *testing.T)
 	if a.State().ActiveRepository != "" {
 		t.Fatalf("state = %+v, want no active repository", a.State())
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a broken repository must not stay open")
 	}
 	if _, ok := a.registry.Active(); ok {
@@ -865,7 +865,7 @@ func TestActivateRepositoryReportsErrorWhenRefsStoreFailsToOpen(t *testing.T) {
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must stay reset when the refs store fails to open")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a failed open must not leave a repository open")
 	}
 }
@@ -886,7 +886,7 @@ func TestActivateRepositoryReportsErrorWhenBranchSnapshotFailsToLoad(t *testing.
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must stay reset when the branch snapshot fails to load")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a failed open must not leave a repository open")
 	}
 }

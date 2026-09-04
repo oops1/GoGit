@@ -360,7 +360,7 @@ func TestActivateRepositoryReportsErrorWhenObjectsDBFailsToOpen(t *testing.T) {
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must stay reset when the objects db fails to open")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a failed open must not leave a repository open")
 	}
 	if got := journalRowCountOnDispatcher(t, a); got != 0 {

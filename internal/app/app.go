@@ -75,6 +75,7 @@ type App struct {
 	filesFilterLabel  *widget.Label
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
+	stateMu           sync.RWMutex
 	selectedNode      string
 	selectedCommit    hash.ObjectID
 	askInput          func(title, prompt string, cb func(text string, ok bool))
@@ -265,7 +266,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView = repos.NewView()
 	a.reposView.Bind(reposTreeWidget)
 	a.reposView.OnActivate = a.ActivateRepository
-	a.reposView.OnSelect = func(id string) { a.selectedNode = id }
+	a.reposView.OnSelect = a.setSelected
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
 	a.journalView = journal.NewView()
@@ -414,7 +415,7 @@ func (a *App) ActivateRepository(id string) {
 	a.stopJournal()
 	a.clearChangesPanels()
 	a.closeOpenRepository()
-	a.open = opened
+	a.setOpened(opened)
 	_ = a.registry.SetActive(id)
 	a.cfg.ActiveRepository = id
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
@@ -427,30 +428,68 @@ func (a *App) ActivateRepository(id string) {
 	a.startWorking()
 }
 
+func (a *App) opened() *openedRepository {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.open
+}
+
+func (a *App) setOpened(o *openedRepository) {
+	a.stateMu.Lock()
+	a.open = o
+	a.stateMu.Unlock()
+}
+
+func (a *App) commitIsSelected() bool {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.commitSelected
+}
+
+func (a *App) setCommitSelected(v bool) {
+	a.stateMu.Lock()
+	a.commitSelected = v
+	a.stateMu.Unlock()
+}
+
+func (a *App) selected() string {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.selectedNode
+}
+
+func (a *App) setSelected(id string) {
+	a.stateMu.Lock()
+	a.selectedNode = id
+	a.stateMu.Unlock()
+}
+
 func (a *App) closeOpenRepository() {
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return
 	}
-	if err := a.open.close(); err != nil {
-		a.log.Warn("close repository failed", "path", a.open.path, "error", err)
+	if err := o.close(); err != nil {
+		a.log.Warn("close repository failed", "path", o.path, "error", err)
 	}
-	a.open = nil
+	a.setOpened(nil)
 }
 
 func (a *App) RefreshRepository() {
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return
 	}
-	snap, err := loadBranchSnapshot(a.open.store)
+	snap, err := loadBranchSnapshot(o.store)
 	if err != nil {
-		a.log.Warn("refresh repository failed", "path", a.open.path, "error", err)
+		a.log.Warn("refresh repository failed", "path", o.path, "error", err)
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		return
 	}
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
 	a.startJournal()
-	if a.commitSelected {
+	if a.commitIsSelected() {
 		return
 	}
 	a.startWorking()
@@ -556,11 +595,11 @@ func (a *App) wireAddRepoView(view *addrepo.View, cb func(addrepo.Result, bool))
 }
 
 func (a *App) groupParentForNewGroup() string {
-	node, ok := a.registry.Find(a.selectedNode)
+	node, ok := a.registry.Find(a.selected())
 	if !ok || node.Kind != repo.KindGroup {
 		return ""
 	}
-	return a.selectedNode
+	return a.selected()
 }
 
 func (a *App) SetTheme(name string) {

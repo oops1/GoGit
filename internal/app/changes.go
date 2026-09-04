@@ -62,14 +62,15 @@ func (a *App) startDiff(id hash.ObjectID) {
 	a.diffRunMu.Lock()
 	defer a.diffRunMu.Unlock()
 	a.stopDiffLocked()
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.diffMu.Lock()
 	a.diffCancel = cancel
 	a.diffMu.Unlock()
-	db := a.open.db
+	db := o.db
 	a.diffWG.Go(func() { a.runDiff(ctx, db, id) })
 }
 
@@ -178,7 +179,7 @@ func (a *App) clearChangesPanels() {
 	a.activeModified = false
 	a.filesMu.Unlock()
 	a.selectedCommit = hash.ObjectID{}
-	a.commitSelected = false
+	a.setCommitSelected(false)
 	a.setFilesRows(nil)
 	a.diffView.Clear()
 	a.setFilesSelected(false)

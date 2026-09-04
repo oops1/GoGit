@@ -239,7 +239,7 @@ func TestActivateRepositoryOnABareRepositoryLeavesFilesGridEmpty(t *testing.T) {
 	if got := filesRowCountOnDispatcher(t, a); got != 0 {
 		t.Fatalf("files grid = %d rows, want 0 for a bare repository", got)
 	}
-	if a.open == nil || a.open.worktree != nil {
+	if a.opened() == nil || a.opened().currentWorktree() != nil {
 		t.Fatal("a bare repository must not open a worktree")
 	}
 }

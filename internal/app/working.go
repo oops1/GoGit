@@ -25,7 +25,8 @@ func (a *App) startWorking() {
 	a.workingRunMu.Lock()
 	defer a.workingRunMu.Unlock()
 	a.stopWorkingLocked()
-	if a.open == nil || a.open.worktree == nil {
+	o := a.opened()
+	if o == nil || o.currentWorktree() == nil {
 		a.filesMu.Lock()
 		a.filesMode = filesModeWorking
 		a.currentEntries = nil
@@ -41,7 +42,7 @@ func (a *App) startWorking() {
 	a.workingMu.Lock()
 	a.workingCancel = cancel
 	a.workingMu.Unlock()
-	wt := a.open.worktree
+	wt := o.currentWorktree()
 	a.workingWG.Go(func() { a.runWorking(ctx, wt) })
 }
 
@@ -105,7 +106,7 @@ func stagedEntryCount(entries []worktree.Entry) int {
 }
 
 func (a *App) refreshWorkingStatus() {
-	if a.commitSelected {
+	if a.commitIsSelected() {
 		return
 	}
 	a.startWorking()
@@ -115,7 +116,8 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 	a.diffRunMu.Lock()
 	defer a.diffRunMu.Unlock()
 	a.stopDiffLocked()
-	if a.open == nil || entry.IsDir {
+	o := a.opened()
+	if o == nil || entry.IsDir {
 		a.diffView.Clear()
 		return
 	}
@@ -123,7 +125,6 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 	a.diffMu.Lock()
 	a.diffCancel = cancel
 	a.diffMu.Unlock()
-	o := a.open
 	a.diffWG.Go(func() { a.runWorkingDiff(ctx, o, entry) })
 }
 
