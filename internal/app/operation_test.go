@@ -102,6 +102,23 @@ func TestRunOperationCancelStopsTheBody(t *testing.T) {
 	}
 }
 
+func TestEscapeCancelsTheRunningOperation(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+	started := make(chan struct{})
+
+	a.RunOperation("Fetch", func(ctx context.Context, _ OperationReporter) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+
+	view := lastOperationView(t, views)
+	<-started
+	readOnDispatcher(t, a, func() bool { view.Dialog().OnCancel(); return true })
+	waitForFinishedOperation(t, a, view)
+}
+
 func TestRunOperationCloseClosesTheModal(t *testing.T) {
 	a := newTestApp(t)
 	views := captureOperationViews(t)
