@@ -12,6 +12,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/ui/changes"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
 var ErrNotACommit = errors.New("app: object is not a commit")
@@ -32,10 +33,9 @@ var loadCommitObject = func(db *odb.DB, id hash.ObjectID) (*object.Commit, error
 }
 
 func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
-	if _, ok := e.SelectedItem.(changes.Row); !ok {
-		return
-	}
-	if e.SelectedIndex < 0 {
+	row, ok := e.SelectedItem.(changes.Row)
+	if !ok || e.SelectedIndex < 0 {
+		a.setFilesSelected(false)
 		return
 	}
 	a.filesMu.Lock()
@@ -43,6 +43,7 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	files := a.currentFiles
 	entries := a.currentEntries
 	a.filesMu.Unlock()
+	a.setFilesSelected(mode == filesModeWorking && row.RelPath != "")
 	if mode == filesModeCommit {
 		if e.SelectedIndex >= len(files) {
 			return
@@ -57,20 +58,29 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 }
 
 func (a *App) startDiff(id hash.ObjectID) {
-	a.stopDiff()
 	a.stopWorking()
-	if a.open == nil {
+	a.diffRunMu.Lock()
+	defer a.diffRunMu.Unlock()
+	a.stopDiffLocked()
+	o := a.opened()
+	if o == nil {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.diffMu.Lock()
 	a.diffCancel = cancel
 	a.diffMu.Unlock()
-	db := a.open.db
+	db := o.db
 	a.diffWG.Go(func() { a.runDiff(ctx, db, id) })
 }
 
 func (a *App) stopDiff() {
+	a.diffRunMu.Lock()
+	defer a.diffRunMu.Unlock()
+	a.stopDiffLocked()
+}
+
+func (a *App) stopDiffLocked() {
 	a.diffMu.Lock()
 	cancel := a.diffCancel
 	a.diffCancel = nil
@@ -104,10 +114,7 @@ func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
 		first = files[0]
 	}
 	a.Post(func() {
-		a.filesItems.Clear()
-		for _, r := range rows {
-			a.filesItems.Add(r)
-		}
+		a.setFilesRows(rows)
 		if hasFirst {
 			a.diffView.SetDocument(changes.FromFile(first))
 		} else {
@@ -132,6 +139,36 @@ func (a *App) loadDiffFiles(ctx context.Context, db *odb.DB, id hash.ObjectID) (
 	return diffTreesFunc(ctx, db, parentTree, commit.Tree, diffOptions)
 }
 
+func (a *App) restoreFilesColumns() {
+	order := stringsToColumnIDs(a.cfg.UI.FilesColumns)
+	visible := stringsToColumnIDs(a.cfg.UI.FilesVisibleColumns)
+	a.filesGrid.SetColumns(order, visible)
+}
+
+func (a *App) saveFilesColumns(order, visible []filesgrid.ColumnID) {
+	a.cfg.UI.FilesColumns = columnIDsToStrings(order)
+	a.cfg.UI.FilesVisibleColumns = columnIDsToStrings(visible)
+	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
+		a.log.Warn("save config failed", "error", err)
+	}
+}
+
+func stringsToColumnIDs(names []string) []filesgrid.ColumnID {
+	ids := make([]filesgrid.ColumnID, len(names))
+	for i, name := range names {
+		ids[i] = filesgrid.ColumnID(name)
+	}
+	return ids
+}
+
+func columnIDsToStrings(ids []filesgrid.ColumnID) []string {
+	names := make([]string, len(ids))
+	for i, id := range ids {
+		names[i] = string(id)
+	}
+	return names
+}
+
 func (a *App) clearChangesPanels() {
 	a.stopDiff()
 	a.stopWorking()
@@ -139,9 +176,13 @@ func (a *App) clearChangesPanels() {
 	a.filesMode = filesModeWorking
 	a.currentFiles = nil
 	a.currentEntries = nil
+	a.activeModified = false
+	a.filesDirFilter = ""
 	a.filesMu.Unlock()
 	a.selectedCommit = hash.ObjectID{}
-	a.commitSelected = false
-	a.filesItems.Clear()
+	a.setCommitSelected(false)
+	a.setFilesRows(nil)
 	a.diffView.Clear()
+	a.setFilesSelected(false)
+	a.setHasStagedChanges(false)
 }

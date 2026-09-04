@@ -334,6 +334,26 @@ func TestUntrackedEntriesPropagatesFailuresFromUntrackedSubdirectories(t *testin
 	}
 }
 
+func TestUntrackedEntriesPropagatesFailuresWhileScanningAnIgnoredSubdirectoryForAnyFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage(".gitignore", "problem/only/\n")
+	tr.stage("a.txt", "hi\n")
+	tr.commit("initial")
+	tr.writeFile("problem/only/inside.txt", "x\n")
+	w := tr.open()
+	original := fsOpenDir
+	fsOpenDir = func(root *os.Root, name string) (*os.File, error) {
+		if name == filepath.FromSlash("problem/only") {
+			return nil, errors.New("boom")
+		}
+		return original(root, name)
+	}
+	t.Cleanup(func() { fsOpenDir = original })
+	if _, err := w.Status(t.Context()); err == nil {
+		t.Fatalf("Status returned no error")
+	}
+}
+
 func TestStatusFailsWhenTheFileLimitIsExceededInATrackedSubdirectory(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage("dir/one.txt", "1\n")

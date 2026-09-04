@@ -2,7 +2,9 @@ package app
 
 import (
 	"errors"
+	"sync"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -13,15 +15,34 @@ import (
 const worktreeMaxFiles = 200000
 
 type openedRepository struct {
-	repo     *gitrepo.Repository
-	store    *refs.Store
-	db       *odb.DB
+	repo    *gitrepo.Repository
+	store   *refs.Store
+	db      *odb.DB
+	path    string
+	id      string
+	shallow map[hash.ObjectID]struct{}
+
+	wtMu     sync.RWMutex
 	worktree *worktree.Worktree
-	path     string
-	id       string
+}
+
+func (o *openedRepository) currentWorktree() *worktree.Worktree {
+	o.wtMu.RLock()
+	defer o.wtMu.RUnlock()
+	return o.worktree
+}
+
+func (o *openedRepository) swapWorktree(fresh *worktree.Worktree) *worktree.Worktree {
+	o.wtMu.Lock()
+	defer o.wtMu.Unlock()
+	stale := o.worktree
+	o.worktree = fresh
+	return stale
 }
 
 var openGitRepository = gitrepo.Open
+
+var readRepositoryShallow = (*gitrepo.Repository).Shallow
 
 var openObjectsDB = odb.Open
 
@@ -44,6 +65,11 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 	if err != nil {
 		return nil, branches.Snapshot{}, err
 	}
+	shallow, err := readRepositoryShallow(r)
+	if err != nil {
+		_ = closeGitRepository(r)
+		return nil, branches.Snapshot{}, err
+	}
 	db, err := openObjectsDB(r.ObjectsDir(), odb.Options{})
 	if err != nil {
 		_ = closeGitRepository(r)
@@ -62,7 +88,7 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 		_ = closeGitRepository(r)
 		return nil, branches.Snapshot{}, err
 	}
-	wt, err := openWorktree(r, worktree.Options{DB: db, Refs: store, MaxFiles: worktreeMaxFiles})
+	wt, err := openWorktree(r, worktree.Options{DB: db, Refs: store, MaxFiles: worktreeMaxFiles, IncludeUnmodified: true})
 	if err != nil && !errors.Is(err, worktree.ErrBareRepository) {
 		_ = closeRefsStore(store)
 		_ = closeObjectsDB(db)
@@ -72,13 +98,13 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 	if errors.Is(err, worktree.ErrBareRepository) {
 		wt = nil
 	}
-	return &openedRepository{repo: r, store: store, db: db, worktree: wt, path: path, id: id}, snap, nil
+	return &openedRepository{repo: r, store: store, db: db, worktree: wt, path: path, id: id, shallow: shallow}, snap, nil
 }
 
 func (o *openedRepository) close() error {
 	var errs []error
-	if o.worktree != nil {
-		errs = append(errs, closeWorktree(o.worktree))
+	if wt := o.currentWorktree(); wt != nil {
+		errs = append(errs, closeWorktree(wt))
 	}
 	errs = append(errs, closeRefsStore(o.store), closeObjectsDB(o.db), closeGitRepository(o.repo))
 	return errors.Join(errs...)

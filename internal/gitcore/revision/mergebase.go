@@ -6,7 +6,7 @@ func MergeBase(ctx Context, ids ...hash.ObjectID) ([]hash.ObjectID, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	objects := newStore(ctx.Objects)
+	objects := newStore(ctx.Objects, ctx.Shallow)
 	result := []hash.ObjectID{ids[0]}
 	for _, id := range ids[1:] {
 		var merged []hash.ObjectID
@@ -26,7 +26,7 @@ func MergeBase(ctx Context, ids ...hash.ObjectID) ([]hash.ObjectID, error) {
 }
 
 func IsAncestor(ctx Context, a, b hash.ObjectID) (bool, error) {
-	return isAncestor(newStore(ctx.Objects), a, b)
+	return isAncestor(newStore(ctx.Objects, ctx.Shallow), a, b)
 }
 
 func mergeBasesPair(objects *store, a, b hash.ObjectID) ([]hash.ObjectID, error) {

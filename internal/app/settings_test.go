@@ -37,6 +37,7 @@ func TestOpenSettingsPassesConfigDerivedModelToShowSettings(t *testing.T) {
 	cfg.Git.LogMaxCount = 999
 	cfg.Git.AutoFetch = true
 	cfg.Git.FetchInterval = 45
+	cfg.Git.WorkTreeDepth = 3
 	a := newTestAppWithConfig(t, cfg)
 
 	var got settings.Model
@@ -67,6 +68,7 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 		LogMaxCount:   12345,
 		AutoFetch:     true,
 		FetchInterval: 120,
+		WorkTreeDepth: 5,
 	}
 	stubShowSettings(a, newModel, true)
 
@@ -78,6 +80,9 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	if a.Config().Git.LogMaxCount != 12345 || !a.Config().Git.AutoFetch || a.Config().Git.FetchInterval != 120 {
 		t.Fatalf("git config not updated: %+v", a.Config().Git)
 	}
+	if a.Config().Git.WorkTreeDepth != 5 {
+		t.Fatalf("git worktree depth not updated: %+v", a.Config().Git)
+	}
 	if a.Config().UI.ShowToolbar || a.Config().UI.ShowStatusBar {
 		t.Fatal("ui visibility flags not updated")
 	}
@@ -87,8 +92,8 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	if a.Widget("statusBar").(*widget.Grid).IsVisible() {
 		t.Fatal("status bar widget must be hidden")
 	}
-	if a.MenuItemText(0) != "Добавить или создать..." {
-		t.Fatalf("menu not retranslated: %q", a.MenuItemText(0))
+	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Добавить или создать..." {
+		t.Fatalf("menu not retranslated: %q", text)
 	}
 	if a.EffectiveTheme() != config.ThemeLight {
 		t.Fatalf("effective theme = %q, want light", a.EffectiveTheme())
@@ -98,7 +103,7 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Language != "ru" || saved.Theme != config.ThemeLight || saved.Git.LogMaxCount != 12345 {
+	if saved.Language != "ru" || saved.Theme != config.ThemeLight || saved.Git.LogMaxCount != 12345 || saved.Git.WorkTreeDepth != 5 {
 		t.Fatalf("saved config = %+v", saved)
 	}
 }

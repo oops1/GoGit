@@ -4,7 +4,9 @@ import (
 	"context"
 	"iter"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -12,15 +14,14 @@ import (
 )
 
 const (
-	headFileName         = "HEAD"
-	indexFileName        = "index"
-	packedRefsFileName   = "packed-refs"
-	refsDirName          = "refs"
-	dotGitDirName        = ".git"
-	defaultWorkTreeDepth = 2
-	defaultMinInterval   = time.Second
-	defaultMaxInterval   = 8 * time.Second
-	defaultMaxEntries    = 5000
+	headFileName       = "HEAD"
+	indexFileName      = "index"
+	packedRefsFileName = "packed-refs"
+	refsDirName        = "refs"
+	dotGitDirName      = ".git"
+	defaultMinInterval = time.Second
+	defaultMaxInterval = 8 * time.Second
+	defaultMaxEntries  = 5000
 )
 
 var stateFileNames = []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"}
@@ -87,6 +88,7 @@ func Diff(prev, next Snapshot) ChangeSet {
 
 type Options struct {
 	WorkTreeDepth int
+	SkipDirs      []string
 	MinInterval   time.Duration
 	MaxInterval   time.Duration
 	MaxEntries    int
@@ -94,8 +96,8 @@ type Options struct {
 }
 
 func (o Options) normalize() Options {
-	if o.WorkTreeDepth <= 0 {
-		o.WorkTreeDepth = defaultWorkTreeDepth
+	if o.WorkTreeDepth < 0 {
+		o.WorkTreeDepth = 0
 	}
 	if o.MinInterval <= 0 {
 		o.MinInterval = defaultMinInterval
@@ -266,18 +268,18 @@ func walkRefsTree(snap Snapshot, dir string) {
 	}
 }
 
-func collectWorkTreeDirs(root string, depth, budget int) ([]string, bool) {
+func collectWorkTreeDirs(root string, depth, budget int, skip []string) ([]string, bool) {
 	if budget <= 0 {
 		return nil, false
 	}
 	var dirs []string
-	var walk func(dir string, level int) bool
-	walk = func(dir string, level int) bool {
+	var walk func(dir, rel string, level int) bool
+	walk = func(dir, rel string, level int) bool {
 		dirs = append(dirs, dir)
 		if len(dirs) > budget {
 			return false
 		}
-		if level >= depth {
+		if depth > 0 && level >= depth {
 			return true
 		}
 		entries, err := os.ReadDir(dir)
@@ -288,13 +290,17 @@ func collectWorkTreeDirs(root string, depth, budget int) ([]string, bool) {
 			if !e.IsDir() || e.Name() == dotGitDirName {
 				continue
 			}
-			if !walk(filepath.Join(dir, e.Name()), level+1) {
+			child := path.Join(rel, e.Name())
+			if slices.Contains(skip, child) {
+				continue
+			}
+			if !walk(filepath.Join(dir, e.Name()), child, level+1) {
 				return false
 			}
 		}
 		return true
 	}
-	if !walk(root, 0) {
+	if !walk(root, "", 0) {
 		return nil, false
 	}
 	return dirs, true
@@ -306,7 +312,7 @@ func addWorkTree(snap Snapshot, layout repo.Layout, opts Options) {
 		return
 	}
 	budget := opts.MaxEntries - len(snap)
-	dirs, ok := collectWorkTreeDirs(root, opts.WorkTreeDepth, budget)
+	dirs, ok := collectWorkTreeDirs(root, opts.WorkTreeDepth, budget, opts.SkipDirs)
 	if !ok {
 		addPath(snap, WorkTree, root)
 		return

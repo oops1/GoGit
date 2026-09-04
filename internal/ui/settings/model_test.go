@@ -15,17 +15,20 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 	cfg.Git.LogMaxCount = 750
 	cfg.Git.AutoFetch = true
 	cfg.Git.FetchInterval = 120
+	cfg.Git.WorkTreeDepth = 6
 
 	m := FromConfig(cfg)
 
 	want := Model{
-		Language:      "ru",
-		Theme:         config.ThemeDark,
-		ShowToolbar:   false,
-		ShowStatusBar: false,
-		LogMaxCount:   750,
-		AutoFetch:     true,
-		FetchInterval: 120,
+		Language:        "ru",
+		Theme:           config.ThemeDark,
+		ShowToolbar:     false,
+		ToolbarCaptions: true,
+		ShowStatusBar:   false,
+		LogMaxCount:     750,
+		AutoFetch:       true,
+		FetchInterval:   120,
+		WorkTreeDepth:   6,
 	}
 	if m != want {
 		t.Fatalf("model = %+v, want %+v", m, want)
@@ -38,6 +41,7 @@ func TestFromConfigNormalizesOutOfRangeStoredValues(t *testing.T) {
 	cfg.Theme = "bogus"
 	cfg.Git.LogMaxCount = 1
 	cfg.Git.FetchInterval = 1
+	cfg.Git.WorkTreeDepth = MaxWorkTreeDepth + 1
 
 	m := FromConfig(cfg)
 
@@ -52,6 +56,9 @@ func TestFromConfigNormalizesOutOfRangeStoredValues(t *testing.T) {
 	}
 	if m.FetchInterval != MinFetchInterval {
 		t.Fatalf("fetchInterval = %d, want %d", m.FetchInterval, MinFetchInterval)
+	}
+	if m.WorkTreeDepth != MaxWorkTreeDepth {
+		t.Fatalf("workTreeDepth = %d, want %d", m.WorkTreeDepth, MaxWorkTreeDepth)
 	}
 }
 
@@ -141,6 +148,7 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 		LogMaxCount:   MaxLogMaxCount + 1000,
 		AutoFetch:     true,
 		FetchInterval: MinFetchInterval - 5,
+		WorkTreeDepth: -7,
 	}
 	m.ApplyTo(cfg)
 
@@ -162,6 +170,9 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 	if cfg.Git.FetchInterval != MinFetchInterval {
 		t.Fatalf("fetchInterval = %d, want %d", cfg.Git.FetchInterval, MinFetchInterval)
 	}
+	if cfg.Git.WorkTreeDepth != MinWorkTreeDepth {
+		t.Fatalf("workTreeDepth = %d, want %d", cfg.Git.WorkTreeDepth, MinWorkTreeDepth)
+	}
 	if len(cfg.Repositories) != 1 || cfg.Repositories[0].ID != "r1" {
 		t.Fatal("ApplyTo must not touch unrelated config fields")
 	}
@@ -176,6 +187,7 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	src.Git.LogMaxCount = 42000
 	src.Git.AutoFetch = true
 	src.Git.FetchInterval = 900
+	src.Git.WorkTreeDepth = 8
 
 	m := FromConfig(src)
 
@@ -185,11 +197,32 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	if dst.Language != src.Language || dst.Theme != src.Theme {
 		t.Fatalf("language/theme mismatch: %+v vs %+v", dst, src)
 	}
-	if dst.UI != src.UI {
+	if dst.UI.ShowToolbar != src.UI.ShowToolbar || dst.UI.ShowStatusBar != src.UI.ShowStatusBar {
 		t.Fatalf("ui mismatch: %+v vs %+v", dst.UI, src.UI)
 	}
 	if dst.Git.LogMaxCount != src.Git.LogMaxCount || dst.Git.AutoFetch != src.Git.AutoFetch ||
-		dst.Git.FetchInterval != src.Git.FetchInterval {
+		dst.Git.FetchInterval != src.Git.FetchInterval || dst.Git.WorkTreeDepth != src.Git.WorkTreeDepth {
 		t.Fatalf("git mismatch: %+v vs %+v", dst.Git, src.Git)
+	}
+}
+
+func TestNormalizedClampsWorkTreeDepth(t *testing.T) {
+	cases := map[string]struct {
+		in   int
+		want int
+	}{
+		"below minimum": {in: MinWorkTreeDepth - 1, want: MinWorkTreeDepth},
+		"at minimum":    {in: MinWorkTreeDepth, want: MinWorkTreeDepth},
+		"in range":      {in: 10, want: 10},
+		"at maximum":    {in: MaxWorkTreeDepth, want: MaxWorkTreeDepth},
+		"above maximum": {in: MaxWorkTreeDepth + 1, want: MaxWorkTreeDepth},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := Model{WorkTreeDepth: tc.in}.Normalized()
+			if m.WorkTreeDepth != tc.want {
+				t.Fatalf("workTreeDepth = %d, want %d", m.WorkTreeDepth, tc.want)
+			}
+		})
 	}
 }

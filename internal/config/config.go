@@ -49,11 +49,17 @@ type Git struct {
 	LogMaxCount   int    `toml:"log_max_count"`
 	AutoFetch     bool   `toml:"auto_fetch"`
 	FetchInterval int    `toml:"fetch_interval_sec"`
+	WorkTreeDepth int    `toml:"worktree_scan_depth"`
 }
 
 type UI struct {
-	ShowToolbar   bool `toml:"show_toolbar"`
-	ShowStatusBar bool `toml:"show_status_bar"`
+	ShowToolbar         bool     `toml:"show_toolbar"`
+	ToolbarCaptions     bool     `toml:"toolbar_captions"`
+	ShowStatusBar       bool     `toml:"show_status_bar"`
+	FilesColumns        []string `toml:"files_columns"`
+	FilesVisibleColumns []string `toml:"files_visible_columns"`
+	FilesStatusFilter   []string `toml:"files_status_filter"`
+	FilesSubdirectories bool     `toml:"files_subdirectories"`
 }
 
 type Group struct {
@@ -80,7 +86,7 @@ func Default() *Config {
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
 		Git:      Git{LogMaxCount: 500, FetchInterval: 300},
-		UI:       UI{ShowToolbar: true, ShowStatusBar: true},
+		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
 	}
 }
 
@@ -126,6 +132,9 @@ func (c *Config) Normalize() {
 	}
 	if c.Git.FetchInterval <= 0 {
 		c.Git.FetchInterval = 300
+	}
+	if c.Git.WorkTreeDepth < 0 {
+		c.Git.WorkTreeDepth = 0
 	}
 }
 

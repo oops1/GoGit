@@ -58,15 +58,15 @@ func TestNewLoadsMainWindow(t *testing.T) {
 func TestMenuStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 2 {
+	if len(items) != 3 {
 		t.Fatalf("top menus = %d", len(items))
 	}
-	if len(items[0].Items) != len(repositoryMenu) {
-		t.Fatalf("sub items = %d, want %d", len(items[0].Items), len(repositoryMenu))
+	if len(items[0].Items) != len(repositoryMenuTree) {
+		t.Fatalf("sub items = %d, want %d", len(items[0].Items), len(repositoryMenuTree))
 	}
-	for i, id := range repositoryMenu {
+	for i, entry := range repositoryMenuTree {
 		item := items[0].Items[i]
-		if id == cmdSeparator {
+		if entry.Separator {
 			if !item.Separator {
 				t.Fatalf("item %d should be a separator", i)
 			}
@@ -75,41 +75,59 @@ func TestMenuStructure(t *testing.T) {
 		if item.Separator {
 			t.Fatalf("item %d should not be a separator", i)
 		}
-		if item.Text != widget.Tr(menuKeys[id]) {
-			t.Fatalf("item %d text = %q, want %q", i, item.Text, widget.Tr(menuKeys[id]))
+		if entry.Leaf == nil {
+			t.Fatalf("item %d must be a leaf", i)
+		}
+		if item.Text != widget.Tr(entry.Leaf.Key) {
+			t.Fatalf("item %d text = %q, want %q", i, item.Text, widget.Tr(entry.Leaf.Key))
 		}
 	}
 }
 
-func TestMenuCommandMapping(t *testing.T) {
+func repositoryItemIndex(t *testing.T, cmd CommandID) int {
+	t.Helper()
+	for i, entry := range repositoryMenuTree {
+		if entry.Leaf != nil && entry.Leaf.Command == cmd {
+			return i
+		}
+	}
+	t.Fatalf("%q not found in repository menu", cmd)
+	return -1
+}
+
+func TestRepositoryMenuSeparatorsHaveNoClickHandler(t *testing.T) {
 	a := newTestApp(t)
-	if _, ok := a.menuCommand(2, 0); ok {
-		t.Fatal("unknown top menu should not map")
+	items := a.menu.Items()[repositoryMenuIndex].Items
+	for i, entry := range repositoryMenuTree {
+		if entry.Separator && items[i].OnClick != nil {
+			t.Fatalf("separator %d must not have a click handler", i)
+		}
 	}
-	if _, ok := a.menuCommand(viewMenuIndex, 0); ok {
-		t.Fatal("view menu is wired through OnClick, not menuCommand")
+}
+
+func TestMenuItemByCommandFindsRepositoryAndViewEntries(t *testing.T) {
+	a := newTestApp(t)
+	if _, _, ok := a.MenuItemByCommand(CommandID("unknown")); ok {
+		t.Fatal("unknown command should not map")
 	}
-	if _, ok := a.menuCommand(0, -1); ok {
-		t.Fatal("negative index")
+	text, enabled, ok := a.MenuItemByCommand(CmdAddOrCreate)
+	if !ok || !enabled || text != widget.Tr("Menu.Repository.AddOrCreate") {
+		t.Fatalf("add-or-create lookup = %q, %v, %v", text, enabled, ok)
 	}
-	if _, ok := a.menuCommand(0, len(repositoryMenu)); ok {
-		t.Fatal("out of range")
-	}
-	if _, ok := a.menuCommand(0, 4); ok {
-		t.Fatal("separator should not map")
-	}
-	if id, ok := a.menuCommand(0, 0); !ok || id != CmdAddOrCreate {
-		t.Fatalf("first item = %q", id)
+	if _, _, ok := a.MenuItemByCommand(CmdResetLayout); !ok {
+		t.Fatal("view menu command should also be found")
 	}
 }
 
 func TestCommandStatesFollowActiveRepository(t *testing.T) {
 	a := newTestApp(t)
-	closeIdx, removeIdx, addIdx := 3, 6, 0
-	if a.MenuItemEnabled(closeIdx) || a.MenuItemEnabled(removeIdx) {
-		t.Fatal("repository commands must be disabled without a repository")
+	if _, enabled, ok := a.MenuItemByCommand(CmdCloseRepository); !ok || enabled {
+		t.Fatal("close repository must be disabled without an active repository")
 	}
-	if !a.MenuItemEnabled(addIdx) {
+	if _, enabled, ok := a.MenuItemByCommand(CmdRemoveWorktree); !ok || enabled {
+		t.Fatal("remove worktree must be disabled without an active repository")
+	}
+	if _, enabled, ok := a.MenuItemByCommand(CmdAddOrCreate); !ok || !enabled {
 		t.Fatal("add must be enabled")
 	}
 	for _, name := range toolbarButtons {
@@ -118,27 +136,32 @@ func TestCommandStatesFollowActiveRepository(t *testing.T) {
 		}
 	}
 	a.SetActiveRepository("r1", false)
-	if !a.MenuItemEnabled(closeIdx) || a.MenuItemEnabled(removeIdx) {
-		t.Fatal("close enabled, remove worktree disabled for a plain repo")
+	if _, enabled, ok := a.MenuItemByCommand(CmdCloseRepository); !ok || !enabled {
+		t.Fatal("close must be enabled for a plain repo")
+	}
+	if _, enabled, ok := a.MenuItemByCommand(CmdRemoveWorktree); !ok || enabled {
+		t.Fatal("remove worktree must be disabled for a plain repo")
 	}
 	a.SetActiveRepository("w1", true)
-	if !a.MenuItemEnabled(removeIdx) {
+	if _, enabled, ok := a.MenuItemByCommand(CmdRemoveWorktree); !ok || !enabled {
 		t.Fatal("remove worktree must be enabled on a worktree")
 	}
-	for _, name := range toolbarButtons {
-		if !a.Widget(name).(*widget.Button).IsEnabled() {
-			t.Fatalf("%s must be enabled", name)
+	for cmd, name := range toolbarButtons {
+		want := cmd != CmdCommit
+		if got := a.Widget(name).(*widget.Button).IsEnabled(); got != want {
+			t.Fatalf("%s enabled = %v, want %v", name, got, want)
 		}
 	}
+	a.setHasStagedChanges(true)
+	if !a.Widget("btnCommit").(*widget.Button).IsEnabled() {
+		t.Fatal("btnCommit must be enabled once there are staged changes")
+	}
 	a.CloseRepository()
-	if a.State().ActiveRepository != "" || a.MenuItemEnabled(closeIdx) {
+	if a.State().ActiveRepository != "" {
 		t.Fatal("close repository should reset state")
 	}
-	if a.MenuItemEnabled(-1) || a.MenuItemEnabled(100) {
-		t.Fatal("out of range must be false")
-	}
-	if a.MenuItemText(-1) != "" || a.MenuItemText(0) == "" {
-		t.Fatal("menu item text bounds")
+	if _, enabled, ok := a.MenuItemByCommand(CmdCloseRepository); !ok || enabled {
+		t.Fatal("close repository should be disabled again")
 	}
 }
 
@@ -160,17 +183,30 @@ func TestDispatch(t *testing.T) {
 	if !a.Dispatch(CmdPull) || called != 2 {
 		t.Fatal("enabled command must run")
 	}
-	a.menu.OnSelect(0, 0, "")
+	addIdx := repositoryItemIndex(t, CmdAddOrCreate)
+	a.menu.Items()[repositoryMenuIndex].Items[addIdx].OnClick()
 	if called != 3 {
-		t.Fatal("menu select should dispatch")
-	}
-	a.menu.OnSelect(0, 4, "")
-	if called != 3 {
-		t.Fatal("separator should not dispatch")
+		t.Fatal("clicking the repository menu item should dispatch")
 	}
 	a.Widget("btnPull").(*widget.Button).OnClick()
 	if called != 4 {
 		t.Fatal("toolbar should dispatch")
+	}
+}
+
+func TestClickingDisabledRepositoryMenuItemDoesNothing(t *testing.T) {
+	a := newTestApp(t)
+	called := 0
+	a.SetHandler(CmdCloseRepository, func() { called++ })
+	closeIdx := repositoryItemIndex(t, CmdCloseRepository)
+	a.menu.Items()[repositoryMenuIndex].Items[closeIdx].OnClick()
+	if called != 0 {
+		t.Fatal("close repository must not dispatch without an active repository")
+	}
+	a.SetActiveRepository("r1", false)
+	a.menu.Items()[repositoryMenuIndex].Items[closeIdx].OnClick()
+	if called != 1 {
+		t.Fatal("close repository must dispatch with an active repository")
 	}
 }
 
@@ -204,12 +240,15 @@ func TestThemeAndLanguageSwitch(t *testing.T) {
 	if themeFor(config.ThemeLight) == nil || themeFor(config.ThemeDark) == nil {
 		t.Fatal("themes")
 	}
-	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 || headers[0] != "Status" {
+	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 || headers[0] != "Name" {
 		t.Fatalf("files headers = %v", headers)
 	}
 	a.SetLanguage("ru")
-	if a.MenuItemText(0) != "Добавить или создать..." {
-		t.Fatalf("menu not retranslated: %q", a.MenuItemText(0))
+	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Добавить или создать..." {
+		t.Fatalf("menu not retranslated: %q", text)
+	}
+	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 || headers[0] != "Имя" {
+		t.Fatalf("files headers = %v", headers)
 	}
 	if headers := a.ColumnHeaders("journalGrid"); len(headers) != 5 || headers[1] != "Сообщение" {
 		t.Fatalf("journal headers = %v", headers)
@@ -218,8 +257,8 @@ func TestThemeAndLanguageSwitch(t *testing.T) {
 		t.Fatal("language not stored")
 	}
 	a.SetLanguage("en")
-	if a.MenuItemText(0) != "Add or Create..." {
-		t.Fatalf("menu not retranslated back: %q", a.MenuItemText(0))
+	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Add or Create..." {
+		t.Fatalf("menu not retranslated back: %q", text)
 	}
 }
 
@@ -280,14 +319,14 @@ func TestNewFromXAMLErrors(t *testing.T) {
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
 		"no toolbar": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
-			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
+			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
 		"diff view is not a diff view": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
-			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
+			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
-		"grid is not a datagrid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+		"files grid is not a files grid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<TextBlock x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
@@ -318,12 +357,16 @@ func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
 	}
 }
 
-func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
+func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)
 	xaml := `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 		`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
-		`<DataGrid x:Name="filesGrid"><DataGrid.Columns><DataGridTextColumn Header="x" Binding="{Binding X}"/></DataGrid.Columns></DataGrid>` +
+		`<FilesGrid x:Name="filesGrid"/>` +
+		`<TextBox x:Name="filesFilter"/><TextBlock x:Name="filesFilterCount"/>` +
+		`<DockPanel x:Name="filesFilterRow"/>` +
+		filesStatusButtonsXAML +
+		filesSubdirsButtonXAML +
 		`<DataGrid x:Name="journalGrid"/><DiffView x:Name="diffView"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
@@ -332,8 +375,8 @@ func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(a.Close)
-	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 1 || headers[0] != "Status" {
-		t.Fatalf("headers = %v", headers)
+	if headers := a.ColumnHeaders("filesGrid"); len(headers) != 3 {
+		t.Fatalf("headers = %v, want 3 default columns", headers)
 	}
 	if headers := a.ColumnHeaders("journalGrid"); len(headers) != 0 {
 		t.Fatalf("headers = %v", headers)

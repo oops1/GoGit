@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/icons"
 )
 
 const (
@@ -16,9 +17,9 @@ const (
 	remotesGroupKey = "remotes"
 	tagsGroupKey    = "tags"
 
-	currentPrefix = "● "
-	remoteArrow   = " → "
 	shortIDLength = 7
+
+	treeIconSize = 16
 )
 
 type pathEntry struct {
@@ -26,6 +27,7 @@ type pathEntry struct {
 	ref     refs.Name
 	label   string
 	current bool
+	icon    string
 }
 
 type View struct {
@@ -115,6 +117,7 @@ func (v *View) expandedDefault(key string) bool {
 func (v *View) newGroupItem(key, label string) *treeview.TreeViewItem {
 	item := treeview.NewItem(label)
 	item.Expanded = v.expandedDefault(key)
+	item.Icon = icons.Tree("folder", treeIconSize)
 	v.keyByItem[item] = key
 	return item
 }
@@ -127,17 +130,24 @@ func (v *View) track(item *treeview.TreeViewItem, ref refs.Name) {
 func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 	root := v.newGroupItem(localGroupKey, i18n.T("Pane.Branches.Local"))
 	if s.Detached {
-		leaf := treeview.NewItem(currentPrefix + i18n.T("Pane.Branches.Detached") + " " + shortID(s.HeadID))
+		leaf := treeview.NewItem(i18n.T("Pane.Branches.Detached") + " " + shortID(s.HeadID))
+		leaf.Icon = icons.Tree("branch_current", treeIconSize)
 		v.track(leaf, refs.HEAD)
 		root.AddChild(leaf)
 	}
 	entries := make([]pathEntry, 0, len(s.Local))
 	for _, b := range s.Local {
 		short := b.Name.Short()
+		current := !s.Detached && short == s.Current
+		icon := "branch"
+		if current {
+			icon = "branch_current"
+		}
 		entries = append(entries, pathEntry{
 			path:    short,
 			ref:     b.Name,
-			current: !s.Detached && short == s.Current,
+			current: current,
+			icon:    icon,
 		})
 	}
 	v.buildPathTree(root, localGroupKey, entries)
@@ -153,12 +163,15 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 
 		entries := make([]pathEntry, 0, len(remote.Branches))
 		for _, b := range remote.Branches {
-			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
-			label := ""
-			if b.SymbolicTarget != "" {
-				label = relative + remoteArrow + b.SymbolicTarget.Short()
+			if isRemoteHead(b.Name) {
+				continue
 			}
-			entries = append(entries, pathEntry{path: relative, ref: b.Name, label: label})
+			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
+			icon := "branch_remote"
+			if remote.Head != "" && b.Name == remote.Head {
+				icon = "branch_head"
+			}
+			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon})
 		}
 		v.buildPathTree(node, key, entries)
 	}
@@ -169,7 +182,7 @@ func (v *View) buildTags(s Snapshot) *treeview.TreeViewItem {
 	root := v.newGroupItem(tagsGroupKey, i18n.T("Pane.Branches.Tags"))
 	entries := make([]pathEntry, 0, len(s.Tags))
 	for _, t := range s.Tags {
-		entries = append(entries, pathEntry{path: t.Name.Short(), ref: t.Name})
+		entries = append(entries, pathEntry{path: t.Name.Short(), ref: t.Name, icon: "tag"})
 	}
 	v.buildPathTree(root, tagsGroupKey, entries)
 	return root
@@ -177,6 +190,7 @@ func (v *View) buildTags(s Snapshot) *treeview.TreeViewItem {
 
 func (v *View) buildStash() *treeview.TreeViewItem {
 	item := treeview.NewItem(i18n.T("Pane.Branches.Stash"))
+	item.Icon = icons.Tree("stash", treeIconSize)
 	v.track(item, stashRefName)
 	return item
 }
@@ -209,10 +223,8 @@ func (v *View) leafItem(e pathEntry, segment string) *treeview.TreeViewItem {
 	if label == "" {
 		label = segment
 	}
-	if e.current {
-		label = currentPrefix + label
-	}
 	item := treeview.NewItem(label)
+	item.Icon = icons.Tree(e.icon, treeIconSize)
 	v.track(item, e.ref)
 	return item
 }

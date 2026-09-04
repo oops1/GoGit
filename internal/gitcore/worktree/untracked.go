@@ -27,35 +27,41 @@ func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFil
 	}
 
 	var walk func(dir string, items []dirEntry)
+	recurse := func(rel string) {
+		children, err := w.readDirTyped(rel)
+		if err != nil {
+			reportFail(err)
+			return
+		}
+		if err := w.countBudget(&count, len(children)); err != nil {
+			reportFail(err)
+			return
+		}
+		walk(rel, children)
+	}
 	walk = func(dir string, items []dirEntry) {
 		for _, item := range items {
 			if ctx.Err() != nil {
 				return
 			}
 			rel := joinRel(dir, item.name)
-			ignored := w.isIgnored(rel, item.isDir)
-			if ignored {
-				continue
-			}
 			if !item.isDir {
-				if !trackedFiles[rel] {
-					mu.Lock()
-					out = append(out, Entry{Path: rel, Staged: StatusUnmodified, Unstaged: StatusUntracked})
-					mu.Unlock()
+				if trackedFiles[rel] {
+					continue
 				}
+				if w.isIgnored(rel, false) {
+					mu.Lock()
+					out = append(out, Entry{Path: rel, Staged: StatusUnmodified, Unstaged: StatusIgnored})
+					mu.Unlock()
+					continue
+				}
+				mu.Lock()
+				out = append(out, Entry{Path: rel, Staged: StatusUnmodified, Unstaged: StatusUntracked})
+				mu.Unlock()
 				continue
 			}
 			if trackedDirs[rel] {
-				children, err := w.readDirTyped(rel)
-				if err != nil {
-					reportFail(err)
-					continue
-				}
-				if err := w.countBudget(&count, len(children)); err != nil {
-					reportFail(err)
-					continue
-				}
-				walk(rel, children)
+				recurse(rel)
 				continue
 			}
 			has, err := w.hasVisibleFile(rel)
@@ -66,6 +72,17 @@ func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFil
 			if has {
 				mu.Lock()
 				out = append(out, Entry{Path: rel + "/", IsDir: true, Staged: StatusUnmodified, Unstaged: StatusUntracked})
+				mu.Unlock()
+				continue
+			}
+			anyFile, err := w.hasAnyFile(rel)
+			if err != nil {
+				reportFail(err)
+				continue
+			}
+			if anyFile {
+				mu.Lock()
+				out = append(out, Entry{Path: rel + "/", IsDir: true, Staged: StatusUnmodified, Unstaged: StatusIgnored})
 				mu.Unlock()
 			}
 		}
@@ -118,6 +135,26 @@ func (w *Worktree) hasVisibleFile(dir string) (bool, error) {
 			return true, nil
 		}
 		has, err := w.hasVisibleFile(rel)
+		if err != nil {
+			return false, err
+		}
+		if has {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (w *Worktree) hasAnyFile(dir string) (bool, error) {
+	items, err := w.readDirTyped(dir)
+	if err != nil {
+		return false, err
+	}
+	for _, item := range items {
+		if !item.isDir {
+			return true, nil
+		}
+		has, err := w.hasAnyFile(joinRel(dir, item.name))
 		if err != nil {
 			return false, err
 		}

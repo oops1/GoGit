@@ -189,7 +189,7 @@ func TestRunWorkingDiffLogsAWarningForARealError(t *testing.T) {
 	t.Cleanup(a.Close)
 	a.ActivateRepository("r1")
 
-	a.runWorkingDiff(t.Context(), a.open, worktree.Entry{Path: "ghost.txt"})
+	a.runWorkingDiff(t.Context(), a.opened(), worktree.Entry{Path: "ghost.txt"})
 
 	if !strings.Contains(buf.String(), "load working diff failed") {
 		t.Fatalf("expected the working diff error to be logged: %s", buf.String())

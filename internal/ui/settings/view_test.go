@@ -34,16 +34,18 @@ func clickCheckBox(cb *widget.CheckBox) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"tabs":          widget.NewTabControl(),
-		"language":      widget.NewDropdown(),
-		"theme":         widget.NewDropdown(),
-		"showToolbar":   widget.NewCheckBox(""),
-		"showStatusBar": widget.NewCheckBox(""),
-		"logMaxCount":   widget.NewNumericUpDown(),
-		"autoFetch":     widget.NewCheckBox(""),
-		"fetchInterval": widget.NewNumericUpDown(),
-		"ok":            widget.NewButton(""),
-		"cancel":        widget.NewButton(""),
+		"tabs":            widget.NewTabControl(),
+		"language":        widget.NewDropdown(),
+		"theme":           widget.NewDropdown(),
+		"showToolbar":     widget.NewCheckBox(""),
+		"toolbarCaptions": widget.NewCheckBox(""),
+		"showStatusBar":   widget.NewCheckBox(""),
+		"logMaxCount":     widget.NewNumericUpDown(),
+		"autoFetch":       widget.NewCheckBox(""),
+		"fetchInterval":   widget.NewNumericUpDown(),
+		"workTreeDepth":   widget.NewNumericUpDown(),
+		"ok":              widget.NewButton(""),
+		"cancel":          widget.NewButton(""),
 	}
 }
 
@@ -79,7 +81,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"tabs", "language", "theme", "showToolbar", "showStatusBar", "logMaxCount", "autoFetch", "fetchInterval", "ok", "cancel"}
+	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -114,6 +116,7 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		LogMaxCount:   777,
 		AutoFetch:     true,
 		FetchInterval: 90,
+		WorkTreeDepth: 6,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -137,6 +140,9 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 	}
 	if v.fetchInterval.Value() != 90 {
 		t.Fatalf("fetchInterval = %v", v.fetchInterval.Value())
+	}
+	if v.workTreeDepth.Value() != 6 {
+		t.Fatalf("workTreeDepth = %v", v.workTreeDepth.Value())
 	}
 }
 
@@ -190,6 +196,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		LogMaxCount:   500,
 		AutoFetch:     false,
 		FetchInterval: 300,
+		WorkTreeDepth: 0,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 	v.language.SetSelected(1)
@@ -198,6 +205,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	clickCheckBox(v.autoFetch)
 	v.logMaxCount.SetValue(1234)
 	v.fetchInterval.SetValue(456)
+	v.workTreeDepth.SetValue(8)
 
 	got := v.request()
 	want := Model{
@@ -208,6 +216,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		LogMaxCount:   1234,
 		AutoFetch:     true,
 		FetchInterval: 456,
+		WorkTreeDepth: 8,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)

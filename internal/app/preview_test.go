@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,8 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
 func TestPreviewFrames(t *testing.T) {
@@ -35,17 +38,27 @@ const previewReadmeContent = "# Demo\n\nGo.Git preview repository.\nSecond line 
 
 const previewMainGoContent = "package main\n\nfunc main() {\n\tprintln(\"hello, gogit\")\n}\n"
 
+const previewMainGoStagedContent = "package main\n\nfunc main() {\n\tprintln(\"hello, gogit v2\")\n}\n"
+
+const previewOldNameContent = "this file is about to be renamed\n"
+
+const previewDeletedContent = "this file is about to be deleted\n"
+
 func seedPreviewChangeCommits(t *testing.T, path, branch string, parent hash.ObjectID) hash.ObjectID {
 	t.Helper()
 	db, store := withJournalRepo(t, path)
 	base := putChangesTree(t, db, map[string]string{
-		"README.md": "# Demo\n\nGo.Git preview repository.\n",
-		"main.go":   "package main\n\nfunc main() {\n\tprintln(\"hi\")\n}\n",
+		"README.md":    "# Demo\n\nGo.Git preview repository.\n",
+		"main.go":      "package main\n\nfunc main() {\n\tprintln(\"hi\")\n}\n",
+		"OLD_NAME.txt": previewOldNameContent,
+		"DELETED.md":   previewDeletedContent,
 	})
 	baseCommit := putChangesCommit(t, db, base, parent)
 	changed := putChangesTree(t, db, map[string]string{
-		"README.md": previewReadmeContent,
-		"main.go":   previewMainGoContent,
+		"README.md":    previewReadmeContent,
+		"main.go":      previewMainGoContent,
+		"OLD_NAME.txt": previewOldNameContent,
+		"DELETED.md":   previewDeletedContent,
 	})
 	tip := putChangesCommit(t, db, changed, baseCommit)
 	setRef(t, store, refs.BranchName(branch), tip)
@@ -66,7 +79,12 @@ func seedPreviewIndex(t *testing.T, target string) {
 	defer func() { _ = db.Close() }()
 
 	idx := index.New(index.Version2)
-	for name, content := range map[string]string{"README.md": previewReadmeContent, "main.go": previewMainGoContent} {
+	staged := map[string]string{
+		"README.md":    previewReadmeContent,
+		"main.go":      previewMainGoStagedContent,
+		"NEW_NAME.txt": previewOldNameContent,
+	}
+	for name, content := range staged {
 		id, err := db.Put(object.TypeBlob, []byte(content))
 		if err != nil {
 			t.Fatal(err)
@@ -83,10 +101,13 @@ func seedPreviewWorkingTreeChanges(t *testing.T, path string) {
 	if err := writeFile(path, "README.md", "# Demo\n\nGo.Git preview repository.\nEdited straight in the working copy.\n"); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeFile(path, "main.go", previewMainGoContent); err != nil {
+	if err := writeFile(path, "main.go", previewMainGoStagedContent); err != nil {
 		t.Fatal(err)
 	}
 	if err := writeFile(path, "NOTES.md", "Ideas for the next release.\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(path, "NEW_NAME.txt", previewOldNameContent); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -110,9 +131,13 @@ func TestPreviewOpenedRepository(t *testing.T) {
 	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
 		working := newTestAppWithConfig(t, cfg)
 		working.SetTheme(theme)
+		working.filesGrid.SetColumns(filesgrid.DefaultOrder(), []filesgrid.ColumnID{
+			filesgrid.ColName, filesgrid.ColState, filesgrid.ColIndexState,
+			filesgrid.ColWorkingState, filesgrid.ColSize, filesgrid.ColRelDir,
+		})
 		working.ActivateRepository("r1")
 		waitForJournalRows(t, working, 10)
-		waitForWorkingRows(t, working, 2)
+		waitForWorkingRows(t, working, 5)
 		selectFilesRow(t, working, 0)
 		working.Engine().SaveFrames(dir + "/working-" + theme)
 		working.Engine().Start()
@@ -130,4 +155,42 @@ func TestPreviewOpenedRepository(t *testing.T) {
 		time.Sleep(700 * time.Millisecond)
 		opened.Engine().Stop()
 	}
+}
+
+func TestPreviewOperationWindow(t *testing.T) {
+	dir := os.Getenv("GOGIT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("GOGIT_PREVIEW_DIR not set")
+	}
+	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
+		a := newTestApp(t)
+		a.SetTheme(theme)
+		a.SetActiveRepository("demo", false)
+		views := captureOperationViews(t)
+		release := make(chan struct{})
+		a.RunOperation(i18n.T("Operation.Title.Push"), func(_ context.Context, reporter OperationReporter) error {
+			for _, line := range previewOperationLog {
+				reporter.Log(line)
+			}
+			<-release
+			return nil
+		})
+		view := lastOperationView(t, views)
+		a.Engine().SaveFrames(dir + "/operation-" + theme)
+		a.Engine().Start()
+		time.Sleep(700 * time.Millisecond)
+		a.Engine().Stop()
+		close(release)
+		waitForFinishedOperation(t, a, view)
+	}
+}
+
+var previewOperationLog = []string{
+	"remote: Enumerating objects: 128, done.",
+	"remote: Counting objects: 100% (128/128), done.",
+	"remote: Compressing objects: 100% (74/74), done.",
+	"Writing objects: 100% (96/96), 21.44 KiB | 4.29 MiB/s, done.",
+	"Total 96 (delta 41), reused 0 (delta 0), pack-reused 0",
+	"To https://github.com/oops1/GoGit.git",
+	"   bdf851b..4615a56  develop -> develop",
 }

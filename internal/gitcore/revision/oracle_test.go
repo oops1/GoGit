@@ -13,7 +13,9 @@ import (
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
+	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 )
 
 type oracle struct {
@@ -91,6 +93,15 @@ func (o *oracle) git(args ...string) string {
 func (o *oracle) lines(args ...string) []string {
 	o.t.Helper()
 	out := strings.TrimSpace(o.git(args...))
+	if out == "" {
+		return nil
+	}
+	return strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n")
+}
+
+func (o *oracle) linesIn(dir string, args ...string) []string {
+	o.t.Helper()
+	out := strings.TrimSpace(o.run(dir, args...))
 	if out == "" {
 		return nil
 	}
@@ -462,5 +473,51 @@ func TestOracleIsAncestorMatchesGit(t *testing.T) {
 				t.Errorf("IsAncestor(%s, %s) = %v, git reports %v", pair[0], pair[1], got, want)
 			}
 		})
+	}
+}
+
+func TestOracleWalkMatchesRevListOnAShallowClone(t *testing.T) {
+	o := buildOracleRepository(t)
+	clonePath := filepath.Join(o.root, "shallow-clone")
+	o.run(o.root, "clone", "-q", "--depth=1", "file://"+filepath.ToSlash(o.repo), clonePath)
+
+	r, err := gitrepo.Open(clonePath, gitrepo.OpenOptions{})
+	if err != nil {
+		t.Fatalf("repo.Open returned error %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	shallow, err := r.Shallow()
+	if err != nil {
+		t.Fatalf("Shallow returned error %v", err)
+	}
+	if len(shallow) == 0 {
+		t.Fatal("git clone --depth=1 did not leave a shallow file behind")
+	}
+	db, err := odb.Open(r.ObjectsDir(), odb.Options{})
+	if err != nil {
+		t.Fatalf("odb.Open returned error %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	store, err := refs.Open(refs.Options{GitDir: r.GitDir(), CommonDir: r.CommonDir()})
+	if err != nil {
+		t.Fatalf("refs.Open returned error %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := Context{Objects: db, Refs: store, Shallow: shallow}
+
+	want := o.linesIn(clonePath, "log", "--format=%H", "HEAD")
+	opts, err := Ranges([]string{"HEAD"}, ctx)
+	if err != nil {
+		t.Fatalf("Ranges returned error %v", err)
+	}
+	var got []string
+	for commit, err := range Walk(t.Context(), opts) {
+		if err != nil {
+			t.Fatalf("Walk returned error %v", err)
+		}
+		got = append(got, commit.ID.String())
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("Walk visited\n%s\ngit log visited\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

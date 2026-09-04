@@ -27,8 +27,12 @@ import (
 	"github.com/oops1/gogit/internal/systheme"
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
+	"github.com/oops1/gogit/internal/ui/changes"
+	"github.com/oops1/gogit/internal/ui/commit"
 	"github.com/oops1/gogit/internal/ui/diffview"
+	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
+	"github.com/oops1/gogit/internal/ui/panetitle"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
@@ -66,23 +70,37 @@ type App struct {
 	branchesView      *branches.View
 	journalView       *journal.View
 	diffView          *diffview.DiffView
+	filesGrid         *filesgrid.Grid
+	filesFilterInput  *widget.TextInput
+	filesFilterLabel  *widget.Label
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
+	stateMu           sync.RWMutex
 	selectedNode      string
 	selectedCommit    hash.ObjectID
 	askInput          func(title, prompt string, cb func(text string, ok bool))
+	askConfirm        func(title, message string, cb func(ok bool))
 	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
+	showCommit        func(initial commit.Model, cb func(commit.Model, bool))
 
 	open *openedRepository
 
 	newWatcher func(gitrepo.Layout, watch.Options) watcherIface
 
+	writeRunMu  sync.Mutex
+	writeMu     sync.Mutex
+	writeCancel context.CancelFunc
+	writeWG     sync.WaitGroup
+
+	watchRunMu  sync.Mutex
 	watchMu     sync.Mutex
 	watchCancel context.CancelFunc
+	watchSkip   []string
 	watchWG     sync.WaitGroup
 	watcher     watcherIface
 
+	journalRunMu    sync.Mutex
 	journalMu       sync.Mutex
 	journalCancel   context.CancelFunc
 	journalMore     chan struct{}
@@ -91,23 +109,44 @@ type App struct {
 
 	filesItems *datagrid.ObservableCollection
 
+	diffRunMu  sync.Mutex
 	diffMu     sync.Mutex
 	diffCancel context.CancelFunc
 	diffWG     sync.WaitGroup
 
+	workingRunMu  sync.Mutex
+	workingFlagMu sync.Mutex
+	workingBusy   bool
+	workingAgain  bool
 	workingMu     sync.Mutex
 	workingCancel context.CancelFunc
 	workingWG     sync.WaitGroup
 
-	filesMu        sync.Mutex
-	filesMode      filesMode
-	currentFiles   []diff.File
-	currentEntries []worktree.Entry
-	commitSelected bool
+	filesMu            sync.Mutex
+	filesMode          filesMode
+	currentFiles       []diff.File
+	currentEntries     []worktree.Entry
+	mutedDirs          []string
+	commitSelected     bool
+	filesAllRows       []changes.Row
+	filesFilterQuery   string
+	filesDirFilter     string
+	filesStatusAllowed map[changes.StatusFilter]bool
+	activeModified     bool
+	stagedCount        int
 
-	postCh   chan func()
-	postStop chan struct{}
-	postWG   sync.WaitGroup
+	branchMu    sync.Mutex
+	branchCache map[string]string
+
+	watchdogInterval time.Duration
+	watchdogStall    time.Duration
+
+	postMu     sync.Mutex
+	posted     []func()
+	postClosed bool
+	postWake   chan struct{}
+	postStop   chan struct{}
+	postWG     sync.WaitGroup
 
 	closeOnce sync.Once
 }
@@ -126,6 +165,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	}
 	i18n.Apply(cfg.Language)
 	diffview.Register()
+	filesgrid.Register()
 
 	rootWidget, named, err := widget.LoadUIFromXAML(xaml)
 	if err != nil {
@@ -173,6 +213,29 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
 		}
 	}
+	filesGridWidget, ok := named["filesGrid"].(*filesgrid.Grid)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesGrid", ErrWidgetMissing)
+	}
+	filesFilterWidget, ok := named["filesFilter"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesFilter", ErrWidgetMissing)
+	}
+	filesFilterCountWidget, ok := named["filesFilterCount"].(*widget.Label)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesFilterCount", ErrWidgetMissing)
+	}
+	filesFilterCountWidget.TextAlign = widget.TextAlignRight
+	filesFilterRow, ok := named["filesFilterRow"].(*widget.DockPanel)
+	if !ok {
+		return nil, fmt.Errorf("%w: filesFilterRow", ErrWidgetMissing)
+	}
+	filesFilterRow.LastChildFill = false
+	for _, name := range filesStatusButtons {
+		if _, ok := named[name].(*widget.Button); !ok {
+			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
+		}
+	}
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
@@ -185,6 +248,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		named:             named,
 		menu:              menu,
 		handlers:          map[CommandID]func(){},
+		watchdogInterval:  defaultWatchdogInterval,
+		watchdogStall:     defaultWatchdogStall,
 		detect:            systheme.Detect,
 		log:               log,
 		languages:         cat.Codes(),
@@ -192,6 +257,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		statusBranchLabel: statusBranchWidget,
 		registry:          repo.New(cfg),
 		diffView:          diffWidget,
+		filesGrid:         filesGridWidget,
+		filesFilterInput:  filesFilterWidget,
+		filesFilterLabel:  filesFilterCountWidget,
 		newWatcher:        newRealWatcher,
 		journalPageSize:   defaultJournalPageSize,
 	}
@@ -205,17 +273,23 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.askInput = func(title, prompt string, cb func(text string, ok bool)) {
 		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
 	}
+	a.askConfirm = func(title, message string, cb func(ok bool)) {
+		widget.NewMessageBox(a.eng).ShowQuestion(title, message, func(r widget.MessageBoxResult) {
+			cb(r == widget.MBResultYes)
+		})
+	}
 	a.showAddRepo = a.defaultShowAddRepo
 	a.showSettings = a.defaultShowSettings
+	a.showCommit = a.defaultShowCommit
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
-	a.applyTheme()
 
 	a.reposView = repos.NewView()
 	a.reposView.Bind(reposTreeWidget)
 	a.reposView.OnActivate = a.ActivateRepository
-	a.reposView.OnSelect = func(id string) { a.selectedNode = id }
+	a.reposView.OnSelect = a.onRepoTreeSelect
+	a.reposView.OnSelectDirectory = a.onRepoTreeSelectDirectory
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
 	a.journalView = journal.NewView()
@@ -223,19 +297,26 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.journalView.OnSelect = a.onJournalRowSelected
 	a.journalView.OnNearEnd = a.requestMoreJournal
 	a.filesItems = datagrid.NewObservableCollection()
-	filesGridWidget := a.named["filesGrid"].(*widget.DataGridWidget)
-	filesGridWidget.Grid.SetItemsSource(a.filesItems)
-	filesGridWidget.Grid.OnSelectionChanged = a.onFilesRowSelected
+	a.filesGrid.SetItemsSource(a.filesItems)
+	a.filesGrid.Data().Grid.SelectionMode = datagrid.SelectionExtended
+	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
+	a.restoreFilesColumns()
+	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
+	a.restoreFilesStatusFilter()
+	a.wireFilesStatusButtons()
+	a.wireFilesSubdirsButton()
+	a.filesFilterInput.OnChange = a.onFilesFilterChanged
+	a.applyFilesFilter()
 	a.restoreActiveRepository()
-	a.reposView.Render(a.registry)
+	a.refreshBranchCache()
+	a.applyTheme()
 	a.updateStatusText()
 
-	a.wireMenu()
+	a.wireMenuBar()
 	a.wireToolbar()
 	a.retranslateGrids()
-	a.wireViewMenu()
 	a.wireViewHandlers()
-	a.applyViewTexts()
+	a.applyMenuTexts(viewMenuIndex)
 	a.logLanguageMenuLimit()
 	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
@@ -245,6 +326,11 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
 	a.handlers[CmdSettings] = a.openSettings
+	a.handlers[CmdStage] = a.stageSelected
+	a.handlers[CmdUnstage] = a.unstageSelected
+	a.handlers[CmdDiscard] = a.discardSelected
+	a.handlers[CmdCommit] = a.openCommit
+	a.registerRemoteHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -293,6 +379,26 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 	a.refreshCommands()
 }
 
+func (a *App) setFilesSelected(v bool) {
+	a.mu.Lock()
+	changed := a.state.FilesSelected != v
+	a.state.FilesSelected = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
+func (a *App) setHasStagedChanges(v bool) {
+	a.mu.Lock()
+	changed := a.state.HasStagedChanges != v
+	a.state.HasStagedChanges = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
 func (a *App) CloseRepository() {
 	a.stopWatcher()
 	a.stopJournal()
@@ -305,7 +411,7 @@ func (a *App) CloseRepository() {
 	a.statusBranchLabel.SetText("")
 	a.branchesView.Render(branches.Snapshot{})
 	a.journalView.Reset()
-	a.reposView.Render(a.registry)
+	a.reposView.Render(a.registry, a.repoTreeState())
 }
 
 func (a *App) ActivateRepository(id string) {
@@ -327,53 +433,98 @@ func (a *App) ActivateRepository(id string) {
 		a.statusBranchLabel.SetText("")
 		a.branchesView.Render(branches.Snapshot{})
 		a.journalView.Reset()
-		a.reposView.Render(a.registry)
+		a.refreshBranchCache()
+		a.reposView.Render(a.registry, a.repoTreeState())
 		return
 	}
 	a.stopWatcher()
 	a.stopJournal()
 	a.clearChangesPanels()
 	a.closeOpenRepository()
-	a.open = opened
+	a.setOpened(opened)
 	_ = a.registry.SetActive(id)
 	a.cfg.ActiveRepository = id
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
-	a.reposView.Render(a.registry)
+	a.refreshBranchCache()
+	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
 	a.startWorking()
 }
 
+func (a *App) opened() *openedRepository {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.open
+}
+
+func (a *App) setOpened(o *openedRepository) {
+	a.stateMu.Lock()
+	a.open = o
+	a.stateMu.Unlock()
+}
+
+func (a *App) commitIsSelected() bool {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.commitSelected
+}
+
+func (a *App) setCommitSelected(v bool) {
+	a.stateMu.Lock()
+	a.commitSelected = v
+	a.stateMu.Unlock()
+}
+
+func (a *App) selected() string {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.selectedNode
+}
+
+func (a *App) setSelected(id string) {
+	a.stateMu.Lock()
+	a.selectedNode = id
+	a.stateMu.Unlock()
+}
+
 func (a *App) closeOpenRepository() {
-	if a.open == nil {
+	a.filesMu.Lock()
+	a.mutedDirs = nil
+	a.filesMu.Unlock()
+	o := a.opened()
+	if o == nil {
 		return
 	}
-	if err := a.open.close(); err != nil {
-		a.log.Warn("close repository failed", "path", a.open.path, "error", err)
+	if err := o.close(); err != nil {
+		a.log.Warn("close repository failed", "path", o.path, "error", err)
 	}
-	a.open = nil
+	a.setOpened(nil)
 }
 
 func (a *App) RefreshRepository() {
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return
 	}
-	snap, err := loadBranchSnapshot(a.open.store)
+	snap, err := loadBranchSnapshot(o.store)
 	if err != nil {
-		a.log.Warn("refresh repository failed", "path", a.open.path, "error", err)
+		a.log.Warn("refresh repository failed", "path", o.path, "error", err)
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		return
 	}
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.refreshBranchCache()
+	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startJournal()
-	if a.commitSelected {
+	if a.commitIsSelected() {
 		return
 	}
-	a.startWorking()
+	a.requestWorking()
 }
 
 func branchStatusText(snap branches.Snapshot) string {
@@ -400,11 +551,34 @@ func (a *App) restoreActiveRepository() {
 }
 
 func (a *App) updateStatusText() {
-	if node, ok := a.registry.Active(); ok {
-		a.statusLabel.SetText(node.Name)
+	node, ok := a.registry.Active()
+	if !ok {
+		a.statusLabel.SetText(i18n.T("Status.NoRepository"))
 		return
 	}
-	a.statusLabel.SetText(i18n.T("Status.NoRepository"))
+	a.statusLabel.SetText(statusRepositoryText(node.Name, node.Path, a.statusLabel.Bounds().Dx()))
+}
+
+func statusRepositoryText(name, path string, width int) string {
+	if path == "" {
+		return name
+	}
+	return ellipsizeText(name+statusPathSeparator+path, width)
+}
+
+func ellipsizeText(text string, width int) string {
+	if width <= 0 || widget.MeasureUIText(text, widget.DefaultFontSizePt) <= width {
+		return text
+	}
+	runes := []rune(text)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		shortened := string(runes) + statusEllipsis
+		if widget.MeasureUIText(shortened, widget.DefaultFontSizePt) <= width {
+			return shortened
+		}
+	}
+	return statusEllipsis
 }
 
 func (a *App) addGroup() {
@@ -422,7 +596,7 @@ func (a *App) addGroup() {
 			a.log.Warn("add group failed", "error", err)
 			return
 		}
-		a.reposView.Render(a.registry)
+		a.reposView.Render(a.registry, a.repoTreeState())
 		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 			a.log.Warn("save config failed", "error", err)
 		}
@@ -442,7 +616,8 @@ func (a *App) addOrCreateRepository() {
 		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 			a.log.Warn("save config failed", "error", err)
 		}
-		a.reposView.Render(a.registry)
+		a.refreshBranchCache()
+		a.reposView.Render(a.registry, a.repoTreeState())
 		a.ActivateRepository(node.ID)
 	})
 }
@@ -476,11 +651,11 @@ func (a *App) wireAddRepoView(view *addrepo.View, cb func(addrepo.Result, bool))
 }
 
 func (a *App) groupParentForNewGroup() string {
-	node, ok := a.registry.Find(a.selectedNode)
+	node, ok := a.registry.Find(a.selected())
 	if !ok || node.Kind != repo.KindGroup {
 		return ""
 	}
-	return a.selectedNode
+	return a.selected()
 }
 
 func (a *App) SetTheme(name string) {
@@ -505,7 +680,23 @@ func (a *App) EffectiveTheme() string {
 }
 
 func (a *App) applyTheme() {
-	a.eng.SetTheme(themeFor(a.EffectiveTheme()))
+	theme := themeFor(a.EffectiveTheme())
+	a.eng.SetTheme(theme)
+	a.applyToolbarIcons(theme)
+	a.applyFilesStatusButtonVisuals(theme)
+	a.applyFilesSubdirsButtonVisuals(theme)
+	a.applyRepoTreeTheme(theme)
+	a.applyPaneTitleColors()
+}
+
+func (a *App) applyPaneTitleColors() {
+	panetitle.Apply(a.Dock().Panes())
+}
+
+func (a *App) applyRepoTreeTheme(t *widget.Theme) {
+	a.reposView.SetAccent(t.Accent)
+	a.reposView.SetMuted(t.Disabled)
+	a.reposView.Render(a.registry, a.repoTreeState())
 }
 
 func (a *App) FollowSystemTheme(ctx context.Context) {
@@ -545,6 +736,7 @@ func (a *App) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go a.FollowSystemTheme(ctx)
+	go a.runWatchdog(ctx, a.watches())
 	win := window.New(a.eng, a.root.Title)
 	if a.OnExit == nil {
 		a.OnExit = win.Close
@@ -558,12 +750,12 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		a.closePostQueue()
 		a.stopWatcher()
 		a.stopJournal()
 		a.stopDiff()
 		a.stopWorking()
-		close(a.postStop)
-		a.postWG.Wait()
+		a.stopWrite()
 		a.closeOpenRepository()
 		widget.RemoveLanguageListener(a.langID)
 	})

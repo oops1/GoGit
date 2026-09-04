@@ -73,7 +73,7 @@ func Walk(ctx context.Context, opts Options) iter.Seq2[*Commit, error] {
 
 func newWalker(opts Options) (*walker, error) {
 	w := &walker{
-		graph: newGraph(newStore(opts.Context.Objects)),
+		graph: newGraph(newStore(opts.Context.Objects, opts.Context.Shallow)),
 		opts:  opts,
 		queue: newQueue(byCommitDate),
 		paths: normalizePaths(opts.Paths),
@@ -261,7 +261,11 @@ func matchLines(pattern *regexp.Regexp, text string) bool {
 }
 
 func newCommit(n *node) *Commit {
-	return &Commit{ID: n.id, Commit: n.commit, Parents: n.commit.Parents}
+	parents := n.commit.Parents
+	if n.flags&flagShallow != 0 {
+		parents = nil
+	}
+	return &Commit{ID: n.id, Commit: n.commit, Parents: parents}
 }
 
 type limiter struct {

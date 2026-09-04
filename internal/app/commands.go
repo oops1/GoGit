@@ -23,12 +23,13 @@ const (
 	CmdPull            CommandID = "remote.pull"
 	CmdSync            CommandID = "remote.sync"
 	CmdPush            CommandID = "remote.push"
+	CmdStage           CommandID = "edit.stage"
+	CmdUnstage         CommandID = "edit.unstage"
+	CmdDiscard         CommandID = "edit.discard"
 	CmdCommit          CommandID = "local.commit"
 	CmdResetLayout     CommandID = "view.reset-layout"
 	CmdRefresh         CommandID = "view.refresh"
 )
-
-const cmdSeparator CommandID = ""
 
 const (
 	viewPanePrefix     = "view.pane:"
@@ -84,32 +85,6 @@ func languageKey(code string) string {
 	return "Language." + code
 }
 
-var repositoryMenu = []CommandID{
-	CmdAddOrCreate,
-	CmdAddGroup,
-	CmdSearch,
-	CmdCloseRepository,
-	cmdSeparator,
-	CmdAddWorktree,
-	CmdRemoveWorktree,
-	CmdPruneWorktrees,
-	cmdSeparator,
-	CmdSettings,
-	CmdClose,
-}
-
-var menuKeys = map[CommandID]string{
-	CmdAddOrCreate:     "Menu.Repository.AddOrCreate",
-	CmdAddGroup:        "Menu.Repository.AddGroup",
-	CmdSearch:          "Menu.Repository.Search",
-	CmdCloseRepository: "Menu.Repository.CloseRepository",
-	CmdAddWorktree:     "Menu.Repository.AddWorktree",
-	CmdRemoveWorktree:  "Menu.Repository.RemoveWorktree",
-	CmdPruneWorktrees:  "Menu.Repository.PruneWorktrees",
-	CmdSettings:        "Menu.Repository.Settings",
-	CmdClose:           "Menu.Repository.Close",
-}
-
 var dockSideSizes = map[widget.DockSide]int{
 	widget.DockLeft:   260,
 	widget.DockTop:    200,
@@ -117,7 +92,6 @@ var dockSideSizes = map[widget.DockSide]int{
 }
 
 var gridColumnKeys = map[string][]string{
-	"filesGrid":   {"Files.Column.Status", "Files.Column.Name", "Files.Column.Path"},
 	"journalGrid": {"Journal.Column.Graph", "Journal.Column.Message", "Journal.Column.Author", "Journal.Column.Date", "Journal.Column.Hash"},
 }
 
@@ -128,17 +102,35 @@ var toolbarButtons = map[CommandID]string{
 	CmdCommit: "btnCommit",
 }
 
+var toolbarIcons = map[CommandID]string{
+	CmdPull:   "pull",
+	CmdSync:   "sync",
+	CmdPush:   "push",
+	CmdCommit: "commit",
+}
+
 type State struct {
 	ActiveRepository string
 	ActiveIsWorktree bool
+	FilesSelected    bool
+	HasStagedChanges bool
 }
 
 func (s State) Enabled(id CommandID) bool {
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdPull, CmdSync, CmdPush, CmdCommit, CmdRefresh:
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdPull, CmdSync, CmdPush, CmdRefresh:
 		return s.ActiveRepository != ""
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
+	case CmdStage, CmdUnstage, CmdDiscard:
+		return s.ActiveRepository != "" && s.FilesSelected
+	case CmdCommit:
+		return s.ActiveRepository != "" && s.HasStagedChanges
 	}
 	return true
 }
+
+const (
+	statusPathSeparator = " — "
+	statusEllipsis      = "…"
+)

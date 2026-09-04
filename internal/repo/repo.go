@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/oops1/gogit/internal/config"
 )
@@ -61,6 +62,7 @@ type Registry struct {
 	cfg      *config.Config
 	roots    []*Node
 	byID     map[string]*Node
+	activeMu sync.RWMutex
 	activeID string
 }
 
@@ -116,20 +118,27 @@ func (r *Registry) SetActive(id string) error {
 	if _, ok := r.byID[id]; !ok {
 		return ErrNotFound
 	}
+	r.activeMu.Lock()
 	r.activeID = id
+	r.activeMu.Unlock()
 	return nil
 }
 
 func (r *Registry) Active() (*Node, bool) {
-	if r.activeID == "" {
+	r.activeMu.RLock()
+	id := r.activeID
+	r.activeMu.RUnlock()
+	if id == "" {
 		return nil, false
 	}
-	n, ok := r.byID[r.activeID]
+	n, ok := r.byID[id]
 	return n, ok
 }
 
 func (r *Registry) ClearActive() {
+	r.activeMu.Lock()
 	r.activeID = ""
+	r.activeMu.Unlock()
 }
 
 func findGroupIndex(cfg *config.Config, id string) int {

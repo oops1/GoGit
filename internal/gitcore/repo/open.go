@@ -166,7 +166,7 @@ var commonEntries = []commonEntry{
 	{"config", false},
 	{"gc.pid", false},
 	{"packed-refs", false},
-	{"shallow", false},
+	{shallowFileName, false},
 }
 
 var worktreeEntries = []string{

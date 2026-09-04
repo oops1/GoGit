@@ -18,6 +18,7 @@ const (
 	flagParent2
 	flagStale
 	flagResult
+	flagShallow
 )
 
 type node struct {
@@ -55,6 +56,10 @@ func (g *graph) load(n *node) error {
 	}
 	n.commit = commit
 	n.parents = commit.Parents
+	if g.store.isShallow(n.id) {
+		n.parents = nil
+		n.flags |= flagShallow
+	}
 	return nil
 }
 

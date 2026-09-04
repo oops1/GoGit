@@ -33,7 +33,7 @@ func viewLeafItem(t *testing.T, a *App, groupPos, leafPos int) widget.MenuItem {
 	return subs[leafPos]
 }
 
-func leafIndex(t *testing.T, group *viewGroupEntry, cmd CommandID) int {
+func leafIndex(t *testing.T, group *menuGroupEntry, cmd CommandID) int {
 	t.Helper()
 	for i, leaf := range group.Items {
 		if leaf.Command == cmd {
@@ -47,7 +47,7 @@ func leafIndex(t *testing.T, group *viewGroupEntry, cmd CommandID) int {
 func TestViewMenuTreeStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 2 {
+	if len(items) != 3 {
 		t.Fatalf("top menus = %d", len(items))
 	}
 	if items[viewMenuIndex].Text != widget.Tr("Menu.View") {
@@ -209,8 +209,8 @@ func TestSelectingLanguageUpdatesMenusAndConfig(t *testing.T) {
 	if viewLeafItem(t, a, 4, ruIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("ru should be checked")
 	}
-	if a.MenuItemText(0) != "Добавить или создать..." {
-		t.Fatalf("repository menu not retranslated: %q", a.MenuItemText(0))
+	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Добавить или создать..." {
+		t.Fatalf("repository menu not retranslated: %q", text)
 	}
 	if text := viewTopItems(t, a)[1].Text; text != "Сбросить раскладку" {
 		t.Fatalf("top-level view menu not retranslated: %q", text)

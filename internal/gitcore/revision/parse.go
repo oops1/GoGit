@@ -27,7 +27,7 @@ func Parse(spec string, ctx Context) (Rev, error) {
 }
 
 func newParser(ctx Context) *parser {
-	return &parser{ctx: ctx, store: newStore(ctx.Objects)}
+	return &parser{ctx: ctx, store: newStore(ctx.Objects, ctx.Shallow)}
 }
 
 func (p *parser) parse(spec string) (Rev, error) {

@@ -9,4 +9,5 @@ var (
 	ErrUnsupportedFormatVersion = errors.New("repo: unsupported repository format version")
 	ErrNotBareNoWorkTree        = errors.New("repo: repository is not bare and has no working tree")
 	ErrInvalidPath              = errors.New("repo: invalid path")
+	ErrInvalidShallowFile       = errors.New("repo: invalid shallow file")
 )

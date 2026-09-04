@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="480" Height="320">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="24"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="28"/>
+        <RowDefinition Height="40"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="90"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="staged" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="" FontSize="11" Foreground="#999999"/>
+
+    <TextBox x:Name="message" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+             AcceptsReturn="True" TextWrapping="Wrap"
+             Placeholder="{Loc Dialog.Commit.MessagePlaceholder}"/>
+
+    <CheckBox x:Name="amend" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+              Content="{Loc Dialog.Commit.Amend}"/>
+
+    <Button x:Name="ok" Grid.Row="3" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Commit.OK}"/>
+    <Button x:Name="cancel" Grid.Row="3" Grid.Column="2"
+            Content="{Loc Dialog.Commit.Cancel}"/>
+</Grid>

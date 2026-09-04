@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -65,6 +66,7 @@ height = 10
 [git]
 log_max_count = -1
 fetch_interval_sec = 0
+worktree_scan_depth = -5
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -78,8 +80,32 @@ fetch_interval_sec = 0
 	if cfg.Window.Width != MinWindowWidth || cfg.Window.Height != MinWindowHeight {
 		t.Fatalf("normalize window: %+v", cfg.Window)
 	}
-	if cfg.Git.LogMaxCount != 500 || cfg.Git.FetchInterval != 300 {
+	if cfg.Git.LogMaxCount != 500 || cfg.Git.FetchInterval != 300 || cfg.Git.WorkTreeDepth != 0 {
 		t.Fatalf("normalize git: %+v", cfg.Git)
+	}
+}
+
+func TestDefaultWorkTreeDepthIsUnlimited(t *testing.T) {
+	if got := Default().Git.WorkTreeDepth; got != 0 {
+		t.Fatalf("WorkTreeDepth = %d, want 0 (unlimited)", got)
+	}
+}
+
+func TestNormalizeKeepsAPositiveWorkTreeDepth(t *testing.T) {
+	cfg := Default()
+	cfg.Git.WorkTreeDepth = 4
+	cfg.Normalize()
+	if cfg.Git.WorkTreeDepth != 4 {
+		t.Fatalf("WorkTreeDepth = %d, want 4", cfg.Git.WorkTreeDepth)
+	}
+}
+
+func TestNormalizeClampsNegativeWorkTreeDepthToZero(t *testing.T) {
+	cfg := Default()
+	cfg.Git.WorkTreeDepth = -3
+	cfg.Normalize()
+	if cfg.Git.WorkTreeDepth != 0 {
+		t.Fatalf("WorkTreeDepth = %d, want 0", cfg.Git.WorkTreeDepth)
 	}
 }
 
@@ -102,6 +128,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	cfg.Theme = ThemeLight
 	cfg.Groups = []Group{{ID: "g1", Name: "Work"}}
 	cfg.Repositories = []Repository{{ID: "r1", Name: "gogit", Path: `D:\Projects\gogit`, Group: "g1"}}
+	cfg.UI.FilesStatusFilter = []string{"ignored", "untracked"}
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +154,9 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Groups) != 1 || loaded.Groups[0].Name != "Work" {
 		t.Fatalf("groups: %+v", loaded.Groups)
+	}
+	if !slices.Equal(loaded.UI.FilesStatusFilter, []string{"ignored", "untracked"}) {
+		t.Fatalf("files status filter: %+v", loaded.UI.FilesStatusFilter)
 	}
 }
 

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="560" Height="380">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="24"/>
+        <RowDefinition Height="20"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="40"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="90"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="status" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text=""/>
+
+    <ProgressBar x:Name="progress" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                 Style="Glow" Indeterminate="True"/>
+
+    <ListView x:Name="log" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"/>
+
+    <Button x:Name="cancel" Grid.Row="3" Grid.Column="1" Margin="0,0,6,0"
+            Content=""/>
+    <Button x:Name="close" Grid.Row="3" Grid.Column="2"
+            Content=""/>
+</Grid>

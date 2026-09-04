@@ -21,12 +21,15 @@ var newJournalPager = func(ctx context.Context, source revision.Context, opts re
 }
 
 func (a *App) startJournal() {
-	a.stopJournal()
+	a.journalRunMu.Lock()
+	defer a.journalRunMu.Unlock()
+	a.stopJournalLocked()
 	a.journalView.Reset()
-	if a.open == nil {
+	o := a.opened()
+	if o == nil {
 		return
 	}
-	source := revision.Context{Objects: a.open.db, Refs: a.open.store}
+	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
 	opts := revision.Options{MaxCount: a.cfg.Git.LogMaxCount}
 	ctx, cancel := context.WithCancel(context.Background())
 	pager := newJournalPager(ctx, source, opts)
@@ -36,10 +39,10 @@ func (a *App) startJournal() {
 	a.journalMore = more
 	more <- struct{}{}
 	a.journalMu.Unlock()
-	a.journalWG.Go(func() { a.runJournal(pager, more) })
+	a.journalWG.Go(func() { a.runJournal(ctx, pager, more) })
 }
 
-func (a *App) runJournal(pager journalPager, more chan struct{}) {
+func (a *App) runJournal(ctx context.Context, pager journalPager, more chan struct{}) {
 	defer pager.Cancel()
 	for range more {
 		rows, done, err := pager.Next(a.journalPageSize)
@@ -47,7 +50,12 @@ func (a *App) runJournal(pager journalPager, more chan struct{}) {
 			a.log.Warn("load journal failed", "error", err)
 		}
 		if len(rows) > 0 {
-			a.Post(func() { a.journalView.Append(rows) })
+			a.Post(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				a.journalView.Append(rows)
+			})
 		}
 		if done {
 			return
@@ -68,6 +76,12 @@ func (a *App) requestMoreJournal() {
 }
 
 func (a *App) stopJournal() {
+	a.journalRunMu.Lock()
+	defer a.journalRunMu.Unlock()
+	a.stopJournalLocked()
+}
+
+func (a *App) stopJournalLocked() {
 	a.journalMu.Lock()
 	cancel := a.journalCancel
 	more := a.journalMore
@@ -85,7 +99,8 @@ func (a *App) stopJournal() {
 
 func (a *App) onJournalRowSelected(row journal.Row) {
 	a.selectedCommit = row.ID
-	a.commitSelected = true
+	a.setCommitSelected(true)
+	a.setFilesSelected(false)
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))
 	a.startDiff(row.ID)
 }

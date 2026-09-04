@@ -18,28 +18,30 @@ import (
 )
 
 type Options struct {
-	DB       *odb.DB
-	Refs     *refs.Store
-	Env      func(string) string
-	Workers  int
-	MaxFiles int
+	DB                *odb.DB
+	Refs              *refs.Store
+	Env               func(string) string
+	Workers           int
+	MaxFiles          int
+	IncludeUnmodified bool
 }
 
 type Worktree struct {
-	repo     *repo.Repository
-	db       *odb.DB
-	refs     *refs.Store
-	ownRefs  bool
-	index    *index.Index
-	root     *os.Root
-	ignore   *attributes.Matcher
-	ignoreMu sync.Mutex
-	attrs    *attributes.Attributes
-	attrsMu  sync.Mutex
-	format   hash.Format
-	fileMode bool
-	workers  int
-	maxFiles int
+	repo              *repo.Repository
+	db                *odb.DB
+	refs              *refs.Store
+	ownRefs           bool
+	index             *index.Index
+	root              *os.Root
+	ignore            *attributes.Matcher
+	ignoreMu          sync.Mutex
+	attrs             *attributes.Attributes
+	attrsMu           sync.Mutex
+	format            hash.Format
+	fileMode          bool
+	workers           int
+	maxFiles          int
+	includeUnmodified bool
 }
 
 func Open(r *repo.Repository, opts Options) (*Worktree, error) {
@@ -89,18 +91,19 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		EOL:            core.EOL,
 	})
 	return &Worktree{
-		repo:     r,
-		db:       opts.DB,
-		refs:     refsStore,
-		ownRefs:  ownRefs,
-		index:    idx,
-		root:     root,
-		ignore:   ignore,
-		attrs:    attrs,
-		format:   opts.DB.Format(),
-		fileMode: core.FileMode,
-		workers:  workerCount(opts.Workers),
-		maxFiles: opts.MaxFiles,
+		repo:              r,
+		db:                opts.DB,
+		refs:              refsStore,
+		ownRefs:           ownRefs,
+		index:             idx,
+		root:              root,
+		ignore:            ignore,
+		attrs:             attrs,
+		format:            opts.DB.Format(),
+		fileMode:          core.FileMode,
+		workers:           workerCount(opts.Workers),
+		maxFiles:          opts.MaxFiles,
+		includeUnmodified: opts.IncludeUnmodified,
 	}, nil
 }
 

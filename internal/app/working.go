@@ -21,25 +21,63 @@ const (
 	filesModeCommit
 )
 
+func (a *App) requestWorking() {
+	a.workingFlagMu.Lock()
+	if a.workingBusy {
+		a.workingAgain = true
+		a.workingFlagMu.Unlock()
+		return
+	}
+	a.workingFlagMu.Unlock()
+	a.startWorking()
+}
+
+func (a *App) finishWorking() {
+	a.workingFlagMu.Lock()
+	a.workingBusy = false
+	again := a.workingAgain
+	a.workingAgain = false
+	a.workingFlagMu.Unlock()
+	if again {
+		a.Post(a.requestWorking)
+	}
+}
+
 func (a *App) startWorking() {
-	a.stopWorking()
-	if a.open == nil || a.open.worktree == nil {
+	a.workingRunMu.Lock()
+	defer a.workingRunMu.Unlock()
+	a.stopWorkingLocked()
+	o := a.opened()
+	if o == nil || o.currentWorktree() == nil {
 		a.filesMu.Lock()
 		a.filesMode = filesModeWorking
 		a.currentEntries = nil
+		a.activeModified = false
+		a.stagedCount = 0
 		a.filesMu.Unlock()
-		a.filesItems.Clear()
+		a.setFilesRows(nil)
+		a.reposView.Render(a.registry, a.repoTreeState())
+		a.setHasStagedChanges(false)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.workingMu.Lock()
 	a.workingCancel = cancel
 	a.workingMu.Unlock()
-	wt := a.open.worktree
+	wt := o.currentWorktree()
+	a.workingFlagMu.Lock()
+	a.workingBusy = true
+	a.workingFlagMu.Unlock()
 	a.workingWG.Go(func() { a.runWorking(ctx, wt) })
 }
 
 func (a *App) stopWorking() {
+	a.workingRunMu.Lock()
+	defer a.workingRunMu.Unlock()
+	a.stopWorkingLocked()
+}
+
+func (a *App) stopWorkingLocked() {
 	a.workingMu.Lock()
 	cancel := a.workingCancel
 	a.workingCancel = nil
@@ -51,6 +89,7 @@ func (a *App) stopWorking() {
 }
 
 func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
+	defer a.finishWorking()
 	status, err := wt.Status(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
@@ -63,29 +102,59 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	if len(entries) > changes.MaxFiles {
 		entries = entries[:changes.MaxFiles]
 	}
+	modified := hasWorkingChanges(status.Entries)
+	staged := stagedEntryCount(status.Entries)
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
 	a.currentEntries = entries
 	a.currentFiles = nil
+	a.activeModified = modified
+	a.stagedCount = staged
+	a.mutedDirs = mutedDirectories(entries)
 	a.filesMu.Unlock()
 	a.Post(func() {
-		a.filesItems.Clear()
-		for _, r := range rows {
-			a.filesItems.Add(r)
+		if ctx.Err() != nil {
+			return
 		}
+		a.setFilesRows(rows)
+		a.reposView.Render(a.registry, a.repoTreeState())
+		a.setHasStagedChanges(staged > 0)
+		a.syncWatcherSkips()
 	})
 }
 
+func hasWorkingChanges(entries []worktree.Entry) bool {
+	for _, e := range entries {
+		if e.Staged != worktree.StatusUnmodified || e.Unstaged != worktree.StatusUnmodified {
+			return true
+		}
+	}
+	return false
+}
+
+func stagedEntryCount(entries []worktree.Entry) int {
+	count := 0
+	for _, e := range entries {
+		if e.Conflict == worktree.ConflictNone && e.Staged != worktree.StatusUnmodified {
+			count++
+		}
+	}
+	return count
+}
+
 func (a *App) refreshWorkingStatus() {
-	if a.commitSelected {
+	if a.commitIsSelected() {
 		return
 	}
-	a.startWorking()
+	a.requestWorking()
 }
 
 func (a *App) showWorkingDiff(entry worktree.Entry) {
-	a.stopDiff()
-	if a.open == nil || entry.IsDir {
+	a.diffRunMu.Lock()
+	defer a.diffRunMu.Unlock()
+	a.stopDiffLocked()
+	o := a.opened()
+	if o == nil || entry.IsDir {
 		a.diffView.Clear()
 		return
 	}
@@ -93,7 +162,6 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 	a.diffMu.Lock()
 	a.diffCancel = cancel
 	a.diffMu.Unlock()
-	o := a.open
 	a.diffWG.Go(func() { a.runWorkingDiff(ctx, o, entry) })
 }
 

@@ -114,6 +114,18 @@ func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
 	}
 }
 
+func (w *Worktree) fillWorkingInfo(e *Entry) {
+	if e.IsDir {
+		return
+	}
+	fi, err := fsLstatFile(w.root, filepath.FromSlash(e.Path))
+	if err != nil {
+		return
+	}
+	e.Size = fi.Size()
+	e.ModTime = fi.ModTime()
+}
+
 func (w *Worktree) modeChanged(entry *index.Entry, fi os.FileInfo) bool {
 	if !w.fileMode || entry.Mode.IsSymlink() || entry.Mode.IsSubmodule() {
 		return false

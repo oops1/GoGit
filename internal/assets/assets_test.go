@@ -74,3 +74,70 @@ func TestIcons(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestIconNamesExcludesSubdirectories(t *testing.T) {
+	names := IconNames()
+	if slices.Contains(names, "status") || slices.Contains(names, "tree") {
+		t.Fatalf("icon names leaked subdirectories: %v", names)
+	}
+}
+
+func TestStatusIcons(t *testing.T) {
+	want := []string{
+		"added", "conflict", "copied", "deleted", "ignored", "modified",
+		"renamed", "staged", "typechanged", "unchanged", "untracked",
+	}
+	names := StatusIconNames()
+	if len(names) != len(want) {
+		t.Fatalf("StatusIconNames() = %v, want %v", names, want)
+	}
+	for _, name := range want {
+		if !slices.Contains(names, name) {
+			t.Fatalf("status icon %q missing in %v", name, names)
+		}
+		data, err := StatusIcon(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(strings.TrimSpace(string(data)), "<svg") {
+			t.Fatalf("status icon %q is not svg", name)
+		}
+	}
+}
+
+func TestStatusIconMissing(t *testing.T) {
+	if _, err := StatusIcon("missing"); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestTreeIcons(t *testing.T) {
+	want := []string{
+		"group", "group_open", "repository", "repository_modified",
+		"repository_ahead", "repository_missing", "worktree",
+		"branch", "branch_current", "branch_remote", "branch_head", "tag", "stash",
+		"folder", "file", "directory", "directory_dim", "directory_muted",
+	}
+	names := TreeIconNames()
+	if len(names) != len(want) {
+		t.Fatalf("TreeIconNames() = %v, want %v", names, want)
+	}
+	for _, name := range want {
+		if !slices.Contains(names, name) {
+			t.Fatalf("tree icon %q missing in %v", name, names)
+		}
+		data, err := TreeIcon(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(strings.TrimSpace(string(data)), "<svg") {
+			t.Fatalf("tree icon %q is not svg", name)
+		}
+	}
+}
+
+func TestTreeIconMissing(t *testing.T) {
+	if _, err := TreeIcon("missing"); err == nil {
+		t.Fatal("expected error")
+	}
+}

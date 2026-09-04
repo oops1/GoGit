@@ -22,16 +22,18 @@ var themeOrder = []string{config.ThemeSystem, config.ThemeDark, config.ThemeLigh
 type View struct {
 	dlg *widget.Dialog
 
-	tabs          *widget.TabControl
-	language      *widget.Dropdown
-	theme         *widget.Dropdown
-	showToolbar   *widget.CheckBox
-	showStatusBar *widget.CheckBox
-	logMaxCount   *widget.NumericUpDown
-	autoFetch     *widget.CheckBox
-	fetchInterval *widget.NumericUpDown
-	okBtn         *widget.Button
-	cancelBtn     *widget.Button
+	tabs            *widget.TabControl
+	language        *widget.Dropdown
+	theme           *widget.Dropdown
+	showToolbar     *widget.CheckBox
+	toolbarCaptions *widget.CheckBox
+	showStatusBar   *widget.CheckBox
+	logMaxCount     *widget.NumericUpDown
+	autoFetch       *widget.CheckBox
+	fetchInterval   *widget.NumericUpDown
+	workTreeDepth   *widget.NumericUpDown
+	okBtn           *widget.Button
+	cancelBtn       *widget.Button
 
 	eng       widget.ModalShower
 	languages []string
@@ -71,6 +73,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.showToolbar, ok = named["showToolbar"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showToolbar", ErrWidgetMissing)
 	}
+	if v.toolbarCaptions, ok = named["toolbarCaptions"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: toolbarCaptions", ErrWidgetMissing)
+	}
 	if v.showStatusBar, ok = named["showStatusBar"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showStatusBar", ErrWidgetMissing)
 	}
@@ -82,6 +87,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.fetchInterval, ok = named["fetchInterval"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: fetchInterval", ErrWidgetMissing)
+	}
+	if v.workTreeDepth, ok = named["workTreeDepth"].(*widget.NumericUpDown); !ok {
+		return fmt.Errorf("%w: workTreeDepth", ErrWidgetMissing)
 	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
@@ -112,10 +120,12 @@ func (v *View) apply(m Model) {
 	v.setLanguageSelection(m.Language)
 	v.theme.SetSelected(themeIndex(m.Theme))
 	v.showToolbar.SetChecked(m.ShowToolbar)
+	v.toolbarCaptions.SetChecked(m.ToolbarCaptions)
 	v.showStatusBar.SetChecked(m.ShowStatusBar)
 	v.logMaxCount.SetValue(float64(m.LogMaxCount))
 	v.autoFetch.SetChecked(m.AutoFetch)
 	v.fetchInterval.SetValue(float64(m.FetchInterval))
+	v.workTreeDepth.SetValue(float64(m.WorkTreeDepth))
 }
 
 func (v *View) setLanguageSelection(code string) {
@@ -149,13 +159,15 @@ func (v *View) request() Model {
 		code = v.languages[idx]
 	}
 	return Model{
-		Language:      code,
-		Theme:         themeAt(v.theme.Selected()),
-		ShowToolbar:   v.showToolbar.IsChecked(),
-		ShowStatusBar: v.showStatusBar.IsChecked(),
-		LogMaxCount:   int(v.logMaxCount.Value()),
-		AutoFetch:     v.autoFetch.IsChecked(),
-		FetchInterval: int(v.fetchInterval.Value()),
+		Language:        code,
+		Theme:           themeAt(v.theme.Selected()),
+		ShowToolbar:     v.showToolbar.IsChecked(),
+		ToolbarCaptions: v.toolbarCaptions.IsChecked(),
+		ShowStatusBar:   v.showStatusBar.IsChecked(),
+		LogMaxCount:     int(v.logMaxCount.Value()),
+		AutoFetch:       v.autoFetch.IsChecked(),
+		FetchInterval:   int(v.fetchInterval.Value()),
+		WorkTreeDepth:   int(v.workTreeDepth.Value()),
 	}.Normalized()
 }
 

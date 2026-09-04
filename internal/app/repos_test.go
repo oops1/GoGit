@@ -41,7 +41,7 @@ func TestReposTreeReflectsConfigAfterNew(t *testing.T) {
 	}
 }
 
-func TestActivateRepositorySetsStateStatusTextAndMarker(t *testing.T) {
+func TestActivateRepositorySetsStateAndStatusText(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "main")
 	initTestRepo(t, target)
@@ -54,12 +54,15 @@ func TestActivateRepositorySetsStateStatusTextAndMarker(t *testing.T) {
 	if a.State().ActiveRepository != "r1" || a.State().ActiveIsWorktree {
 		t.Fatalf("state = %+v", a.State())
 	}
-	if got := a.Widget("statusText").(*widget.Label).Text(); got != "Main" {
-		t.Fatalf("status text = %q", got)
+	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
+		t.Fatalf("status text = %q, want the repository name and its path", got)
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "● Main" {
-		t.Fatalf("marker missing: %q", item.DisplayText())
+	if !ok || item.DisplayText() != "Main (master)" {
+		t.Fatalf("tree item missing or text changed: %q", item.DisplayText())
+	}
+	if item.Icon == nil {
+		t.Fatal("active repository must still have an icon")
 	}
 }
 
@@ -157,7 +160,7 @@ func TestCloseRepositoryClearsRegistryTreeAndStatus(t *testing.T) {
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must be reset")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("opened repository must be released")
 	}
 	if _, ok := a.registry.Active(); ok {
@@ -173,7 +176,7 @@ func TestCloseRepositoryClearsRegistryTreeAndStatus(t *testing.T) {
 		t.Fatal("branches pane not cleared")
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "Main" {
+	if !ok || item.DisplayText() != "Main (master)" {
 		t.Fatalf("marker not removed from tree: %q", item.DisplayText())
 	}
 }
@@ -309,12 +312,12 @@ func TestRestoreActiveRepositoryFromConfigOnStartup(t *testing.T) {
 	if a.State().ActiveRepository != "r1" {
 		t.Fatalf("state = %+v", a.State())
 	}
-	if got := a.Widget("statusText").(*widget.Label).Text(); got != "Main" {
-		t.Fatalf("status text = %q", got)
+	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
+		t.Fatalf("status text = %q, want the repository name and its path", got)
 	}
 	item, ok := a.reposView.Item("r1")
-	if !ok || item.DisplayText() != "● Main" {
-		t.Fatalf("marker missing on restore: %q", item.DisplayText())
+	if !ok || item.DisplayText() != "Main" {
+		t.Fatalf("tree item missing or text changed on restore: %q", item.DisplayText())
 	}
 }
 
@@ -349,7 +352,7 @@ func TestStatusTextSurvivesLanguageSwitch(t *testing.T) {
 	a.ActivateRepository("r1")
 
 	a.SetLanguage("ru")
-	if got := a.Widget("statusText").(*widget.Label).Text(); got != "Main" {
+	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
 		t.Fatalf("status text after language switch = %q", got)
 	}
 
@@ -500,8 +503,8 @@ func TestCmdAddOrCreateOpensExistingRepositoryAndActivatesIt(t *testing.T) {
 		t.Fatalf("active node = %+v, ok = %v", node, ok)
 	}
 	item, ok := a.reposView.Item(node.ID)
-	if !ok || item.DisplayText() != "● repo" {
-		t.Fatalf("tree item missing or not marked active: %q", item.DisplayText())
+	if !ok || item.DisplayText() != "repo (master)" {
+		t.Fatalf("tree item missing or text changed: %q", item.DisplayText())
 	}
 	loaded, err := config.Load(paths.ConfigFile())
 	if err != nil {
@@ -727,7 +730,7 @@ func TestActivateRepositoryLoadsLocalBranchAndTagAndSetsStatusBranch(t *testing.
 	if _, ok := a.branchesView.Item(refs.TagName("v1")); !ok {
 		t.Fatal("tag v1 not present in branches pane")
 	}
-	if a.open == nil {
+	if a.opened() == nil {
 		t.Fatal("opened repository must be tracked")
 	}
 }
@@ -772,7 +775,7 @@ func TestActivateRepositoryOnInvalidPathReportsErrorAndClearsState(t *testing.T)
 	if a.State().ActiveRepository != "" {
 		t.Fatalf("state = %+v, want no active repository", a.State())
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a broken repository must not stay open")
 	}
 	if _, ok := a.registry.Active(); ok {
@@ -862,7 +865,7 @@ func TestActivateRepositoryReportsErrorWhenRefsStoreFailsToOpen(t *testing.T) {
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must stay reset when the refs store fails to open")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a failed open must not leave a repository open")
 	}
 }
@@ -883,7 +886,7 @@ func TestActivateRepositoryReportsErrorWhenBranchSnapshotFailsToLoad(t *testing.
 	if a.State().ActiveRepository != "" {
 		t.Fatal("state must stay reset when the branch snapshot fails to load")
 	}
-	if a.open != nil {
+	if a.opened() != nil {
 		t.Fatal("a failed open must not leave a repository open")
 	}
 }
@@ -938,5 +941,25 @@ func TestRefreshRepositoryLogsWarningAndReportsErrorWhenLoadFails(t *testing.T) 
 	}
 	if got := a.Widget("statusText").(*widget.Label).Text(); got == "Main" {
 		t.Fatalf("status text = %q, want an error message", got)
+	}
+}
+
+func TestStatusTextEndsWithAnEllipsisWhenThePathDoesNotFit(t *testing.T) {
+	long := `C:\Users\valer\Projects\a-very-long-directory-name\and-another-one\headless-gui-2`
+	got := statusRepositoryText("headless-gui-2", long, 160)
+	if !strings.HasSuffix(got, statusEllipsis) {
+		t.Fatalf("status text = %q, want it cut with an ellipsis", got)
+	}
+	if !strings.HasPrefix(got, "headless-gui-2") {
+		t.Fatalf("status text = %q, want the repository name kept", got)
+	}
+	if full := statusRepositoryText("headless-gui-2", long, 0); full != "headless-gui-2"+statusPathSeparator+long {
+		t.Fatalf("status text without a known width = %q", full)
+	}
+	if plain := statusRepositoryText("headless-gui-2", "", 160); plain != "headless-gui-2" {
+		t.Fatalf("status text without a path = %q", plain)
+	}
+	if narrow := statusRepositoryText("headless-gui-2", long, 1); narrow != statusEllipsis {
+		t.Fatalf("status text in a one pixel label = %q", narrow)
 	}
 }
