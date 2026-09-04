@@ -299,6 +299,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdUnstage] = a.unstageSelected
 	a.handlers[CmdDiscard] = a.discardSelected
 	a.handlers[CmdCommit] = a.openCommit
+	a.registerRemoteHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)

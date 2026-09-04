@@ -132,5 +132,16 @@
   "Theme.Dark": "Тёмная",
   "Theme.Light": "Светлая",
   "Language.en": "English",
-  "Language.ru": "Русский"
+  "Language.ru": "Русский",
+  "Operation.Status.Running": "Выполняется…",
+  "Operation.Status.Done": "Готово",
+  "Operation.Status.Failed": "Ошибка",
+  "Operation.Status.Canceled": "Отменено",
+  "Operation.Cancel": "Отмена",
+  "Operation.Close": "Закрыть",
+  "Operation.Log.Canceling": "Отмена запрошена…",
+  "Operation.Title.Pull": "Получение изменений",
+  "Operation.Title.Sync": "Синхронизация",
+  "Operation.Title.Push": "Отправка изменений",
+  "Operation.Log.RemoteUnavailable": "Работа с внешними репозиториями появится вместе с сетевым слоем"
 }

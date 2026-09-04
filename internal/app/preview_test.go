@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
@@ -153,4 +155,42 @@ func TestPreviewOpenedRepository(t *testing.T) {
 		time.Sleep(700 * time.Millisecond)
 		opened.Engine().Stop()
 	}
+}
+
+func TestPreviewOperationWindow(t *testing.T) {
+	dir := os.Getenv("GOGIT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("GOGIT_PREVIEW_DIR not set")
+	}
+	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
+		a := newTestApp(t)
+		a.SetTheme(theme)
+		a.SetActiveRepository("demo", false)
+		views := captureOperationViews(t)
+		release := make(chan struct{})
+		a.RunOperation(i18n.T("Operation.Title.Push"), func(_ context.Context, reporter OperationReporter) error {
+			for _, line := range previewOperationLog {
+				reporter.Log(line)
+			}
+			<-release
+			return nil
+		})
+		view := lastOperationView(t, views)
+		a.Engine().SaveFrames(dir + "/operation-" + theme)
+		a.Engine().Start()
+		time.Sleep(700 * time.Millisecond)
+		a.Engine().Stop()
+		close(release)
+		waitForFinishedOperation(t, a, view)
+	}
+}
+
+var previewOperationLog = []string{
+	"remote: Enumerating objects: 128, done.",
+	"remote: Counting objects: 100% (128/128), done.",
+	"remote: Compressing objects: 100% (74/74), done.",
+	"Writing objects: 100% (96/96), 21.44 KiB | 4.29 MiB/s, done.",
+	"Total 96 (delta 41), reused 0 (delta 0), pack-reused 0",
+	"To https://github.com/oops1/GoGit.git",
+	"   bdf851b..4615a56  develop -> develop",
 }

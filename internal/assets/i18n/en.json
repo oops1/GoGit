@@ -132,5 +132,16 @@
   "Theme.Dark": "Dark",
   "Theme.Light": "Light",
   "Language.en": "English",
-  "Language.ru": "Русский"
+  "Language.ru": "Русский",
+  "Operation.Status.Running": "Working…",
+  "Operation.Status.Done": "Done",
+  "Operation.Status.Failed": "Failed",
+  "Operation.Status.Canceled": "Canceled",
+  "Operation.Cancel": "Cancel",
+  "Operation.Close": "Close",
+  "Operation.Log.Canceling": "Cancel requested…",
+  "Operation.Title.Pull": "Pull",
+  "Operation.Title.Sync": "Sync",
+  "Operation.Title.Push": "Push",
+  "Operation.Log.RemoteUnavailable": "Remote operations arrive with the network layer"
 }
