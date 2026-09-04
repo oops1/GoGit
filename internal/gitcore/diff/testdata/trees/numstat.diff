@@ -1,0 +1,89 @@
+=== add-file 190d9338161fe50c1f4cdaef989f93507d43a02c e6d1c14b96caa6d8b964d281f346854e904fbc81
+1	0	added.txt
+=== add-empty-file 190d9338161fe50c1f4cdaef989f93507d43a02c 9757bbab6e7300c8f02eb43cc056fb00fca01294
+0	0	empty.txt
+=== delete-file f6d7edac99ee3e0399e0f043e76c38ed8f77e5e1 190d9338161fe50c1f4cdaef989f93507d43a02c
+0	1	gone.txt
+=== modify-file 190d9338161fe50c1f4cdaef989f93507d43a02c 3e65ff5e4d050afb3ffdce331e34005e46954fe7
+1	1	story.txt
+=== mode-change 190d9338161fe50c1f4cdaef989f93507d43a02c 41c269f3ec2b21876bcee7a12a448dfbc7a4dc8b
+0	0	keep.txt
+=== mode-and-content 190d9338161fe50c1f4cdaef989f93507d43a02c 66d608b2d88ae2ffb5b6382092bbc5a94aa11025
+1	0	keep.txt
+=== exact-rename d481fe1aa9b918c70298ecbf5816ed954cfc022a 5edcb1e9bb918919d19a62d0981595925caaca5e
+0	0	before.txt => after.txt
+=== rename-with-edits d481fe1aa9b918c70298ecbf5816ed954cfc022a efd90314b0532490142098d5dbac88909a2e9b39
+1	1	before.txt => after.txt
+=== rename-into-subdir 76a9c90998dd15d1431810c7ef37d6fd06a90163 7ee8f617487a1586bdf761f7ea51cff07024b2e1
+0	0	top.txt => sub/top.txt
+=== rename-out-of-subdir 5418b90e8f139836d756ac846c947c9b0f584640 2a22770daaae2165c479d012f8cdeb76fb4aa8d4
+0	0	sub/inner.txt => inner.txt
+=== rename-and-modify-other 936315ac0e14704a556eba2cb65778296534856a 33a9e4d82fb851a138f4536d33544b57c9d02ddb
+0	0	before.txt => after.txt
+1	1	other.txt
+=== copy-exact 240da4316dd4a943a0c0b89faded03299cba873f a3d1e7505c109ba1ea8fba284e2fb7a0c0a199e1
+40	0	clone.txt
+=== copy-with-edits 240da4316dd4a943a0c0b89faded03299cba873f 05f492202e21987b755888331454af850f8e4b25
+40	0	clone.txt
+=== copy-from-modified-source 240da4316dd4a943a0c0b89faded03299cba873f 98285f080acca14848c9988c6ad70fc13c86e35a
+0	0	source.txt => clone.txt
+1	0	source.txt
+=== long-paths 23008d605b15452de76061bf3522526a4ae0459b 923aeb585aab9dc1ebee8896b3389b0bd8452f87
+40	40	aVeryLongSingleSegmentFileNameWithoutAnySlashesAtAllInIt.txt
+40	40	very/deeply/nested/directory/structure/with/many/segments/report.txt
+=== wide-change-counts a438fdbfca41118d0ff3376567f49a18bf012c2b 9d2546100fc5ee21d83d953eb2f4428b7e526424
+80	0	huge.txt
+1	1	small.txt
+=== two-identical-renames a6f18b0b1e0daecbebf0391b55055b24e2327b43 af5192619d9f51bb7d9dfc1325b0fdc88f392f6a
+0	0	a.txt => c.txt
+0	0	b.txt => d.txt
+=== rename-below-threshold d481fe1aa9b918c70298ecbf5816ed954cfc022a 10f775f0fb8c7b7e2b4ea5532ced719bff71b1c8
+1	0	after.txt
+0	40	before.txt
+=== basename-rename 3d94c2572e509127a35c51fceb45425bd25a9f30 11fbcfeafd06ebb8ca09f4c486da4e137e4fa900
+1	1	{one => two}/report.txt
+=== binary-add 190d9338161fe50c1f4cdaef989f93507d43a02c af12c01b490d863514b4353b7ca4d9d7ec7a3331
+-	-	blob.bin
+=== binary-modify af12c01b490d863514b4353b7ca4d9d7ec7a3331 cfcd827dd7b1f261d8b75318f925021f02102765
+-	-	blob.bin
+=== binary-delete af12c01b490d863514b4353b7ca4d9d7ec7a3331 190d9338161fe50c1f4cdaef989f93507d43a02c
+-	-	blob.bin
+=== binary-mode-change af12c01b490d863514b4353b7ca4d9d7ec7a3331 f3c39a19ef7c288c58798d7f2a41bedc4a3db060
+-	-	blob.bin
+=== binary-rename af12c01b490d863514b4353b7ca4d9d7ec7a3331 d9f4245bc5036286dbcc0ad4a8616df1d066e58a
+-	-	blob.bin => moved.bin
+=== symlink-add 190d9338161fe50c1f4cdaef989f93507d43a02c bec15c5c0f19d1007dc383511afcecc83c329e35
+1	0	link
+=== symlink-change bec15c5c0f19d1007dc383511afcecc83c329e35 201ca1b9523ffcb8062f5326c901fe407a3905f6
+1	1	link
+=== symlink-to-blob bec15c5c0f19d1007dc383511afcecc83c329e35 41c90c851408bf9b6fbae206d2fb8bd5fdd55751
+0	0	link
+=== blob-to-symlink cb8e9a0231c1fb7e6561728addda965716cee614 731d306eae53e315c03df7384bfbf77040a57079
+0	0	thing
+=== submodule-add 190d9338161fe50c1f4cdaef989f93507d43a02c 34ac129ceaa8eab79d8c46683fa199881dcbe417
+1	0	module
+=== submodule-change 34ac129ceaa8eab79d8c46683fa199881dcbe417 30455a58a58a855a15007eca7aed0bfd0cf8b25c
+1	1	module
+=== submodule-delete 34ac129ceaa8eab79d8c46683fa199881dcbe417 190d9338161fe50c1f4cdaef989f93507d43a02c
+0	1	module
+=== submodule-to-blob 34ac129ceaa8eab79d8c46683fa199881dcbe417 2334a91a6be7f0866533b25379cd7a86e9ea8f74
+1	1	module
+=== file-to-dir 2f001a775336faa71abdb73d23ed314542fd07de 699afce9ad3c743bf2e9a61e7ec079f10301619c
+0	0	thing => thing/inner.txt
+=== dir-to-file 699afce9ad3c743bf2e9a61e7ec079f10301619c 2f001a775336faa71abdb73d23ed314542fd07de
+0	0	thing/inner.txt => thing
+=== deep-subdir-change 76d8d0a221c0ea471ebdd5bed2a16568fb2b0131 dda96a36009e9527e71a52c3f89971df9ff8802e
+1	1	a/b/c/deep.txt
+=== many-files f92016102ed877230af908b63372efd86624b050 e2d84c6adac57eb8bc637cfd07349897834a3c79
+1	0	dir/five.txt
+1	1	dir/four.txt
+1	1	one.txt
+0	1	three.txt
+=== quoted-path 190d9338161fe50c1f4cdaef989f93507d43a02c 57b8fb367fe81f8dfd504e6002407191d42602ec
+1	0	"stra\\nge \"name\".txt"
+=== empty-to-full 4b825dc642cb6eb9a060e54bf8d69288fbee4904 190d9338161fe50c1f4cdaef989f93507d43a02c
+1	0	keep.txt
+40	0	story.txt
+=== full-to-empty 190d9338161fe50c1f4cdaef989f93507d43a02c 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+0	1	keep.txt
+0	40	story.txt

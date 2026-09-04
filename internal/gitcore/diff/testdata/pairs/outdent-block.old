@@ -1,0 +1,6 @@
+def a():
+    one
+    two
+
+def b():
+    three

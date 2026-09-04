@@ -1,0 +1,144 @@
+=== empty-both
+=== empty-to-text
+ {old => new}/empty-to-text.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+=== text-to-empty
+ {old => new}/text-to-empty.txt | 2 --
+ 1 file changed, 2 deletions(-)
+=== identical
+=== single-line
+ {old => new}/single-line.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== myers-abcabba
+ {old => new}/myers-abcabba.txt | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+=== insert-head
+ {old => new}/insert-head.txt | 1 +
+ 1 file changed, 1 insertion(+)
+=== insert-tail
+ {old => new}/insert-tail.txt | 1 +
+ 1 file changed, 1 insertion(+)
+=== delete-middle
+ {old => new}/delete-middle.txt | 2 --
+ 1 file changed, 2 deletions(-)
+=== replace-all
+ {old => new}/replace-all.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+=== no-newline-old
+ {old => new}/no-newline-old.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== no-newline-new
+ {old => new}/no-newline-new.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== no-newline-both
+ {old => new}/no-newline-both.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== no-newline-single
+ {old => new}/no-newline-single.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== crlf-to-lf
+ {old => new}/crlf-to-lf.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+=== lf-to-crlf
+ {old => new}/lf-to-crlf.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+=== crlf-changed
+ {old => new}/crlf-changed.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== trailing-space
+ {old => new}/trailing-space.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+=== internal-space
+ {old => new}/internal-space.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+=== leading-space
+ {old => new}/leading-space.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+=== blank-lines-added
+ {old => new}/blank-lines-added.txt | 3 +++
+ 1 file changed, 3 insertions(+)
+=== blank-lines-removed
+ {old => new}/blank-lines-removed.txt | 3 ---
+ 1 file changed, 3 deletions(-)
+=== blank-and-real
+ {old => new}/blank-and-real.txt | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+=== repeated-lines
+ {old => new}/repeated-lines.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== block-move
+ {old => new}/block-move.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+=== indent-shift
+ {old => new}/indent-shift.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+=== indent-blank
+ {old => new}/indent-blank.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+=== duplicated-block
+ {old => new}/duplicated-block.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+=== many-hunks
+ {old => new}/many-hunks.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+=== close-hunks
+ {old => new}/close-hunks.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+=== unicode
+ {old => new}/unicode.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== long-lines
+ {old => new}/long-lines.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== tabs-only
+ {old => new}/tabs-only.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+=== leading-duplicate-removed
+ {old => new}/leading-duplicate-removed.txt | 1 -
+ 1 file changed, 1 deletion(-)
+=== leading-duplicate-added
+ {old => new}/leading-duplicate-added.txt | 1 +
+ 1 file changed, 1 insertion(+)
+=== trailing-duplicate-added
+ {old => new}/trailing-duplicate-added.txt | 1 +
+ 1 file changed, 1 insertion(+)
+=== blank-run-grows
+ {old => new}/blank-run-grows.txt | 1 +
+ 1 file changed, 1 insertion(+)
+=== blank-run-shrinks
+ {old => new}/blank-run-shrinks.txt | 1 -
+ 1 file changed, 1 deletion(-)
+=== blank-run-around-a-change
+ {old => new}/blank-run-around-a-change.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== nested-indent
+ {old => new}/nested-indent.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+=== deeper-indent
+ {old => new}/deeper-indent.txt | 1 +
+ 1 file changed, 1 insertion(+)
+=== outdent-block
+ {old => new}/outdent-block.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== indent-with-blank-runs
+ {old => new}/indent-with-blank-runs.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+=== blank-inserts-and-a-change
+ {old => new}/blank-inserts-and-a-change.txt | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+=== only-blank-inserts
+ {old => new}/only-blank-inserts.txt | 6 ++++++
+ 1 file changed, 6 insertions(+)
+=== blank-runs-far-apart
+ {old => new}/blank-runs-far-apart.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+=== ignorable-blanks-between-changes
+ {old => new}/ignorable-blanks-between-changes.txt | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+=== large-identical
+=== large-one-change
+ {old => new}/large-one-change.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== large-truncated
+ {old => new}/large-truncated.txt | 500 ---------------------------------------
+ 1 file changed, 500 deletions(-)

@@ -1,8 +1,8 @@
-package config
+package wildmatch
 
 import "testing"
 
-func TestWildMatchFollowsGitPathnameRules(t *testing.T) {
+func TestMatchFollowsGitPathnameRules(t *testing.T) {
 	tests := []struct {
 		name    string
 		pattern string
@@ -60,11 +60,48 @@ func TestWildMatchFollowsGitPathnameRules(t *testing.T) {
 		{"nestedDoubleStar", "a/**/b/**/c", "a/1/b/2/3/c", false, true},
 		{"doubleStarAfterStarIsMalformed", "*/**x", "a/b", false, false},
 		{"starWithNothingLeft", "a*", "a", false, true},
+		{"starFollowedBySlashSkipsComponent", "*/b", "a/b", false, true},
+		{"starFollowedBySlashNeedsSlash", "*/b", "ab", false, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := wildMatch(tc.pattern, tc.text, tc.icase); got != tc.want {
-				t.Fatalf("wildMatch(%q, %q, %v) = %v, want %v", tc.pattern, tc.text, tc.icase, got, tc.want)
+			flags := Pathname
+			if tc.icase {
+				flags |= CaseFold
+			}
+			if got := Match(tc.pattern, tc.text, flags); got != tc.want {
+				t.Fatalf("Match(%q, %q, %v) = %v, want %v", tc.pattern, tc.text, flags, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMatchWithoutPathnameLetsWildcardsCrossSlashes(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		text    string
+		icase   bool
+		want    bool
+	}{
+		{"starCrossesSlash", "a*c", "ab/c", false, true},
+		{"trailingStarCrossesSlash", "a*", "ab/c", false, true},
+		{"questionMatchesSlash", "a?c", "a/c", false, true},
+		{"bracketMatchesSlash", "a[/]c", "a/c", false, true},
+		{"doubleStarInsideComponent", "a**b", "axxb", false, true},
+		{"doubleStarAfterStar", "*/**x", "a/bx", false, true},
+		{"trailingDoubleStar", "a**", "a/b/c", false, true},
+		{"caseFoldedStar", "A*C", "abc", true, true},
+		{"literalMismatch", "abc", "abd", false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var flags Flags
+			if tc.icase {
+				flags |= CaseFold
+			}
+			if got := Match(tc.pattern, tc.text, flags); got != tc.want {
+				t.Fatalf("Match(%q, %q, %v) = %v, want %v", tc.pattern, tc.text, flags, got, tc.want)
 			}
 		})
 	}

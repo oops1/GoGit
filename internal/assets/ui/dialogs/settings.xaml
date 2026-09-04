@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="480" Height="330">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="270"/>
+        <RowDefinition Height="50"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="90"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TabControl x:Name="tabs" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                Width="480" Height="270" SelectedIndex="0">
+        <TabItem Header="{Loc Dialog.Settings.Tab.General}">
+            <Grid Width="480" Height="238">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Loc Dialog.Settings.Language}"/>
+                <ComboBox x:Name="language" Grid.Row="0" Grid.Column="1"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.Theme}"/>
+                <ComboBox x:Name="theme" Grid.Row="1" Grid.Column="1">
+                    <ComboBoxItem Content="{Loc Theme.System}"/>
+                    <ComboBoxItem Content="{Loc Theme.Dark}"/>
+                    <ComboBoxItem Content="{Loc Theme.Light}"/>
+                </ComboBox>
+
+                <CheckBox x:Name="showToolbar" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                          Content="{Loc Dialog.Settings.ShowToolbar}"/>
+                <CheckBox x:Name="showStatusBar" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                          Content="{Loc Dialog.Settings.ShowStatusBar}"/>
+            </Grid>
+        </TabItem>
+        <TabItem Header="{Loc Dialog.Settings.Tab.Git}">
+            <Grid Width="480" Height="238">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Loc Dialog.Settings.LogMaxCount}"/>
+                <NumericUpDown x:Name="logMaxCount" Grid.Row="0" Grid.Column="1"
+                                Minimum="50" Maximum="100000" Increment="50"/>
+
+                <CheckBox x:Name="autoFetch" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                          Content="{Loc Dialog.Settings.AutoFetch}"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.FetchInterval}"/>
+                <NumericUpDown x:Name="fetchInterval" Grid.Row="2" Grid.Column="1"
+                                Minimum="30" Maximum="3600" Increment="10"/>
+            </Grid>
+        </TabItem>
+    </TabControl>
+
+    <Button x:Name="ok" Grid.Row="1" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Settings.OK}"/>
+    <Button x:Name="cancel" Grid.Row="1" Grid.Column="2"
+            Content="{Loc Dialog.Settings.Cancel}"/>
+</Grid>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="520" Height="210">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="24"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="24"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="40"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="180"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="pathLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="{Loc Dialog.AddRepo.PathLabel}"/>
+
+    <TextBox x:Name="path" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,6,0"
+             Placeholder="{Loc Dialog.AddRepo.PathPlaceholder}"/>
+    <Button x:Name="browse" Grid.Row="1" Grid.Column="2"
+            Content="{Loc Dialog.AddRepo.Browse}"/>
+
+    <TextBlock x:Name="hint" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="" FontSize="11" Foreground="#999999"/>
+
+    <RadioButton x:Name="modeOpen" Grid.Row="3" Grid.Column="0"
+                 GroupName="addRepoMode" Content="{Loc Dialog.AddRepo.Mode.Open}" IsChecked="True"/>
+    <RadioButton x:Name="modeCreate" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                 GroupName="addRepoMode" Content="{Loc Dialog.AddRepo.Mode.Create}"/>
+
+    <CheckBox x:Name="bare" Grid.Row="4" Grid.Column="0"
+              Content="{Loc Dialog.AddRepo.Bare}" Visibility="Collapsed"/>
+    <TextBox x:Name="name" Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2"
+             Placeholder="{Loc Dialog.AddRepo.NamePlaceholder}" Visibility="Collapsed"/>
+
+    <Button x:Name="ok" Grid.Row="6" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.AddRepo.OK}"/>
+    <Button x:Name="cancel" Grid.Row="6" Grid.Column="2"
+            Content="{Loc Dialog.AddRepo.Cancel}"/>
+</Grid>

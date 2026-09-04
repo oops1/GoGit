@@ -133,3 +133,7 @@ func Current() string {
 func T(key string) string {
 	return widget.Tr(key)
 }
+
+func Tf(key string, args ...any) string {
+	return widget.Trf(key, args...)
+}

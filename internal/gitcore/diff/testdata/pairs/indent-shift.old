@@ -1,0 +1,7 @@
+func a() {
+	call()
+}
+
+func b() {
+	call()
+}

@@ -54,13 +54,6 @@ func isBlank(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\r' || c == '\v' || c == '\f'
 }
 
-func lower(c byte) byte {
-	if c >= 'A' && c <= 'Z' {
-		return c + 'a' - 'A'
-	}
-	return c
-}
-
 type parser struct {
 	src   string
 	pos   int

@@ -1,0 +1,13 @@
+class C {
+  void a() {
+    x();
+  }
+
+  void mid() {
+    z();
+  }
+
+  void b() {
+    y();
+  }
+}

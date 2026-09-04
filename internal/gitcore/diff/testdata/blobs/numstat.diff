@@ -1,0 +1,97 @@
+=== empty-both
+=== empty-to-text
+2	0	{old => new}/empty-to-text.txt
+=== text-to-empty
+0	2	{old => new}/text-to-empty.txt
+=== identical
+=== single-line
+1	1	{old => new}/single-line.txt
+=== myers-abcabba
+2	3	{old => new}/myers-abcabba.txt
+=== insert-head
+1	0	{old => new}/insert-head.txt
+=== insert-tail
+1	0	{old => new}/insert-tail.txt
+=== delete-middle
+0	2	{old => new}/delete-middle.txt
+=== replace-all
+3	3	{old => new}/replace-all.txt
+=== no-newline-old
+1	1	{old => new}/no-newline-old.txt
+=== no-newline-new
+1	1	{old => new}/no-newline-new.txt
+=== no-newline-both
+1	1	{old => new}/no-newline-both.txt
+=== no-newline-single
+1	1	{old => new}/no-newline-single.txt
+=== crlf-to-lf
+3	3	{old => new}/crlf-to-lf.txt
+=== lf-to-crlf
+3	3	{old => new}/lf-to-crlf.txt
+=== crlf-changed
+1	1	{old => new}/crlf-changed.txt
+=== trailing-space
+2	2	{old => new}/trailing-space.txt
+=== internal-space
+2	2	{old => new}/internal-space.txt
+=== leading-space
+3	3	{old => new}/leading-space.txt
+=== blank-lines-added
+3	0	{old => new}/blank-lines-added.txt
+=== blank-lines-removed
+0	3	{old => new}/blank-lines-removed.txt
+=== blank-and-real
+2	1	{old => new}/blank-and-real.txt
+=== repeated-lines
+1	1	{old => new}/repeated-lines.txt
+=== block-move
+3	3	{old => new}/block-move.txt
+=== indent-shift
+4	0	{old => new}/indent-shift.txt
+=== indent-blank
+4	0	{old => new}/indent-blank.txt
+=== duplicated-block
+4	0	{old => new}/duplicated-block.txt
+=== many-hunks
+3	3	{old => new}/many-hunks.txt
+=== close-hunks
+2	2	{old => new}/close-hunks.txt
+=== unicode
+1	1	{old => new}/unicode.txt
+=== long-lines
+1	1	{old => new}/long-lines.txt
+=== tabs-only
+2	2	{old => new}/tabs-only.txt
+=== leading-duplicate-removed
+0	1	{old => new}/leading-duplicate-removed.txt
+=== leading-duplicate-added
+1	0	{old => new}/leading-duplicate-added.txt
+=== trailing-duplicate-added
+1	0	{old => new}/trailing-duplicate-added.txt
+=== blank-run-grows
+1	0	{old => new}/blank-run-grows.txt
+=== blank-run-shrinks
+0	1	{old => new}/blank-run-shrinks.txt
+=== blank-run-around-a-change
+1	1	{old => new}/blank-run-around-a-change.txt
+=== nested-indent
+4	0	{old => new}/nested-indent.txt
+=== deeper-indent
+1	0	{old => new}/deeper-indent.txt
+=== outdent-block
+1	1	{old => new}/outdent-block.txt
+=== indent-with-blank-runs
+4	0	{old => new}/indent-with-blank-runs.txt
+=== blank-inserts-and-a-change
+3	1	{old => new}/blank-inserts-and-a-change.txt
+=== only-blank-inserts
+6	0	{old => new}/only-blank-inserts.txt
+=== blank-runs-far-apart
+4	0	{old => new}/blank-runs-far-apart.txt
+=== ignorable-blanks-between-changes
+8	3	{old => new}/ignorable-blanks-between-changes.txt
+=== large-identical
+=== large-one-change
+1	1	{old => new}/large-one-change.txt
+=== large-truncated
+0	500	{old => new}/large-truncated.txt

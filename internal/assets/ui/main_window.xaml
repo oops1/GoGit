@@ -24,6 +24,27 @@
                 <MenuItem Header="{Loc Menu.Repository.Settings}"/>
                 <MenuItem Header="{Loc Menu.Repository.Close}"/>
             </MenuItem>
+            <MenuItem Header="{Loc Menu.View}">
+                <MenuItem Header="{Loc Menu.View.Panes}">
+                    <MenuItem Header="{Loc Pane.Repositories}"/>
+                    <MenuItem Header="{Loc Pane.Branches}"/>
+                    <MenuItem Header="{Loc Pane.Files}"/>
+                    <MenuItem Header="{Loc Pane.Journal}"/>
+                </MenuItem>
+                <MenuItem Header="{Loc Menu.View.ResetLayout}"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.View.Theme}">
+                    <MenuItem Header="{Loc Theme.System}"/>
+                    <MenuItem Header="{Loc Theme.Dark}"/>
+                    <MenuItem Header="{Loc Theme.Light}"/>
+                </MenuItem>
+                <MenuItem Header="{Loc Menu.View.Language}">
+                    <MenuItem Header="{Loc Language.en}"/>
+                    <MenuItem Header="{Loc Language.ru}"/>
+                </MenuItem>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.View.Refresh}"/>
+            </MenuItem>
         </Menu>
 
         <Grid>
@@ -69,10 +90,7 @@
                     </DataGrid>
                 </DockPane>
                 <DockContent>
-                    <SplitPanel x:Name="diffSplit" Orientation="Horizontal" Position="0.5" SplitterSize="6" MinFirst="120" MinSecond="120">
-                        <TextBox x:Name="diffLeft" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas"/>
-                        <TextBox x:Name="diffRight" AcceptsReturn="True" IsReadOnly="True" FontFamily="Consolas"/>
-                    </SplitPanel>
+                    <DiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
                 </DockContent>
             </DockManager>
 

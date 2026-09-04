@@ -81,184 +81,13 @@ func TestMenuStructure(t *testing.T) {
 	}
 }
 
-func TestViewMenuStructure(t *testing.T) {
-	a := newTestApp(t)
-	items := a.menu.Items()
-	if items[repositoryMenuIndex].Text != widget.Tr("Menu.Repository") {
-		t.Fatalf("repository menu text = %q", items[repositoryMenuIndex].Text)
-	}
-	if items[viewMenuIndex].Text != widget.Tr("Menu.View") {
-		t.Fatalf("view menu text = %q", items[viewMenuIndex].Text)
-	}
-	subs := items[viewMenuIndex].Items
-	if len(subs) != len(a.viewMenu) {
-		t.Fatalf("view sub items = %d, want %d", len(subs), len(a.viewMenu))
-	}
-	wantSeparators := map[int]bool{4: true, 6: true, 10: true, 13: true}
-	for i, id := range a.viewMenu {
-		item := subs[i]
-		if wantSeparators[i] {
-			if !item.Separator {
-				t.Fatalf("item %d should be a separator", i)
-			}
-			continue
-		}
-		if item.Separator {
-			t.Fatalf("item %d should not be a separator", i)
-		}
-		if item.Text != a.viewItemText(id) {
-			t.Fatalf("item %d text = %q, want %q", i, item.Text, a.viewItemText(id))
-		}
-	}
-	if a.viewMenu[0] != cmdPane("repositories") || a.viewMenu[3] != cmdPane("journal") {
-		t.Fatal("pane commands out of order")
-	}
-	if a.viewMenu[5] != CmdResetLayout {
-		t.Fatal("reset layout command out of place")
-	}
-	if a.viewMenu[7] != cmdTheme("system") || a.viewMenu[8] != cmdTheme("dark") || a.viewMenu[9] != cmdTheme("light") {
-		t.Fatal("theme commands out of order")
-	}
-	if a.viewMenu[11] != cmdLanguage("en") || a.viewMenu[12] != cmdLanguage("ru") {
-		t.Fatal("language commands out of order")
-	}
-	if a.viewMenu[14] != CmdRefresh {
-		t.Fatal("refresh command out of place")
-	}
-}
-
-func TestViewMenuItemsStartChecked(t *testing.T) {
-	a := newTestApp(t)
-	for _, id := range viewPaneIDs {
-		idx := paneMenuIndex(t, a, id)
-		if a.ViewItemText(idx)[:len(checkedPrefix)] != checkedPrefix {
-			t.Fatalf("pane %s must start checked", id)
-		}
-	}
-	systemIdx := indexOf(t, a.viewMenu, cmdTheme("system"))
-	if a.ViewItemText(systemIdx)[:len(checkedPrefix)] != checkedPrefix {
-		t.Fatal("system theme must start checked")
-	}
-	darkIdx := indexOf(t, a.viewMenu, cmdTheme("dark"))
-	if a.ViewItemText(darkIdx)[:len(checkedPrefix)] == checkedPrefix {
-		t.Fatal("dark theme must not start checked")
-	}
-	enIdx := indexOf(t, a.viewMenu, cmdLanguage("en"))
-	if a.ViewItemText(enIdx)[:len(checkedPrefix)] != checkedPrefix {
-		t.Fatal("english must start checked")
-	}
-}
-
-func paneMenuIndex(t *testing.T, a *App, paneID string) int {
-	t.Helper()
-	return indexOf(t, a.viewMenu, cmdPane(paneID))
-}
-
-func indexOf(t *testing.T, ids []CommandID, id CommandID) int {
-	t.Helper()
-	for i, v := range ids {
-		if v == id {
-			return i
-		}
-	}
-	t.Fatalf("%q not found in menu", id)
-	return -1
-}
-
-func TestTogglingPaneFlipsCheckmark(t *testing.T) {
-	a := newTestApp(t)
-	idx := paneMenuIndex(t, a, "journal")
-	before := a.ViewItemText(idx)
-	if before[:len(checkedPrefix)] != checkedPrefix {
-		t.Fatal("journal should start checked")
-	}
-	a.menu.OnSelect(viewMenuIndex, idx, "")
-	after := a.ViewItemText(idx)
-	if after[:len(checkedPrefix)] == checkedPrefix {
-		t.Fatal("journal should be unchecked after toggling off")
-	}
-	if a.PaneVisible("journal") {
-		t.Fatal("journal pane should be hidden")
-	}
-	a.menu.OnSelect(viewMenuIndex, idx, "")
-	if !a.PaneVisible("journal") {
-		t.Fatal("journal pane should be visible again")
-	}
-	if a.ViewItemText(idx)[:len(checkedPrefix)] != checkedPrefix {
-		t.Fatal("journal should be checked again")
-	}
-}
-
-func TestSelectingThemeUpdatesConfigAndCheckmarks(t *testing.T) {
-	a := newTestApp(t)
-	darkIdx := indexOf(t, a.viewMenu, cmdTheme("dark"))
-	systemIdx := indexOf(t, a.viewMenu, cmdTheme("system"))
-	a.menu.OnSelect(viewMenuIndex, darkIdx, "")
-	if a.Config().Theme != config.ThemeDark {
-		t.Fatalf("theme = %q", a.Config().Theme)
-	}
-	if a.ViewItemText(darkIdx)[:len(checkedPrefix)] != checkedPrefix {
-		t.Fatal("dark theme should be checked")
-	}
-	if a.ViewItemText(systemIdx)[:len(checkedPrefix)] == checkedPrefix {
-		t.Fatal("system theme should no longer be checked")
-	}
-}
-
-func TestSelectingLanguageUpdatesMenusAndConfig(t *testing.T) {
-	a := newTestApp(t)
-	ruIdx := indexOf(t, a.viewMenu, cmdLanguage("ru"))
-	a.menu.OnSelect(viewMenuIndex, ruIdx, "")
-	if a.Config().Language != "ru" {
-		t.Fatalf("language = %q", a.Config().Language)
-	}
-	if a.ViewItemText(ruIdx)[:len(checkedPrefix)] != checkedPrefix {
-		t.Fatal("ru should be checked")
-	}
-	if a.MenuItemText(0) != "Добавить или создать..." {
-		t.Fatalf("repository menu not retranslated: %q", a.MenuItemText(0))
-	}
-	if a.subItemText(viewMenuIndex, indexOf(t, a.viewMenu, CmdResetLayout)) != "Сбросить раскладку" {
-		t.Fatal("view menu not retranslated")
-	}
-}
-
-func TestRefreshCommandFollowsActiveRepositoryAndF5Dispatches(t *testing.T) {
-	a := newTestApp(t)
-	refreshIdx := indexOf(t, a.viewMenu, CmdRefresh)
-	if a.ViewItemEnabled(refreshIdx) {
-		t.Fatal("refresh must be disabled without an active repository")
-	}
-	called := 0
-	a.SetHandler(CmdRefresh, func() { called++ })
-	a.Engine().SendKeyEvent(widget.KeyEvent{Code: widget.KeyF5, Pressed: true})
-	if called != 0 {
-		t.Fatal("F5 must not dispatch refresh without an active repository")
-	}
-	a.SetActiveRepository("r1", false)
-	if !a.ViewItemEnabled(refreshIdx) {
-		t.Fatal("refresh must be enabled with an active repository")
-	}
-	a.Engine().SendKeyEvent(widget.KeyEvent{Code: widget.KeyF5, Pressed: true})
-	if called != 1 {
-		t.Fatalf("F5 must dispatch refresh, called = %d", called)
-	}
-}
-
-func TestLanguageLabelFallsBackToCodeWhenKeyMissing(t *testing.T) {
-	newTestApp(t)
-	if got := languageLabel("xx"); got != "xx" {
-		t.Fatalf("languageLabel(xx) = %q", got)
-	}
-	if got := languageLabel("en"); got != "English" {
-		t.Fatalf("languageLabel(en) = %q", got)
-	}
-}
-
 func TestMenuCommandMapping(t *testing.T) {
 	a := newTestApp(t)
 	if _, ok := a.menuCommand(2, 0); ok {
 		t.Fatal("unknown top menu should not map")
+	}
+	if _, ok := a.menuCommand(viewMenuIndex, 0); ok {
+		t.Fatal("view menu is wired through OnClick, not menuCommand")
 	}
 	if _, ok := a.menuCommand(0, -1); ok {
 		t.Fatal("negative index")
@@ -271,12 +100,6 @@ func TestMenuCommandMapping(t *testing.T) {
 	}
 	if id, ok := a.menuCommand(0, 0); !ok || id != CmdAddOrCreate {
 		t.Fatalf("first item = %q", id)
-	}
-	if id, ok := a.menuCommand(1, 0); !ok || id != cmdPane("repositories") {
-		t.Fatalf("first view item = %q", id)
-	}
-	if _, ok := a.menuCommand(1, 4); ok {
-		t.Fatal("view separator should not map")
 	}
 }
 
@@ -459,6 +282,11 @@ func TestNewFromXAMLErrors(t *testing.T) {
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
+		"diff view is not a diff view": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
+			`<DataGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
+			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
+			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
 		"grid is not a datagrid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<TextBlock x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
@@ -480,13 +308,23 @@ func TestNewFromXAMLErrors(t *testing.T) {
 	}
 }
 
+func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
+	a := newTestApp(t)
+	if a.DiffView() == nil {
+		t.Fatal("changes pane widget missing")
+	}
+	if a.DiffView() != a.Widget("diffView") {
+		t.Fatal("DiffView must return the named widget")
+	}
+}
+
 func TestNewFromXAMLToleratesFewerColumns(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)
 	xaml := `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 		`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 		`<DataGrid x:Name="filesGrid"><DataGrid.Columns><DataGridTextColumn Header="x" Binding="{Binding X}"/></DataGrid.Columns></DataGrid>` +
-		`<DataGrid x:Name="journalGrid"/>` +
+		`<DataGrid x:Name="journalGrid"/><DiffView x:Name="diffView"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
 	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml), nil)

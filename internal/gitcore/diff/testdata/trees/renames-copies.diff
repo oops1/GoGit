@@ -1,0 +1,832 @@
+=== add-file 190d9338161fe50c1f4cdaef989f93507d43a02c e6d1c14b96caa6d8b964d281f346854e904fbc81
+diff --git a/added.txt b/added.txt
+new file mode 100644
+index 0000000..d5f7fc3
+--- /dev/null
++++ b/added.txt
+@@ -0,0 +1 @@
++added
+=== add-empty-file 190d9338161fe50c1f4cdaef989f93507d43a02c 9757bbab6e7300c8f02eb43cc056fb00fca01294
+diff --git a/empty.txt b/empty.txt
+new file mode 100644
+index 0000000..e69de29
+=== delete-file f6d7edac99ee3e0399e0f043e76c38ed8f77e5e1 190d9338161fe50c1f4cdaef989f93507d43a02c
+diff --git a/gone.txt b/gone.txt
+deleted file mode 100644
+index 286c5f5..0000000
+--- a/gone.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-gone
+=== modify-file 190d9338161fe50c1f4cdaef989f93507d43a02c 3e65ff5e4d050afb3ffdce331e34005e46954fe7
+diff --git a/story.txt b/story.txt
+index 393a2ae..bed3d08 100644
+--- a/story.txt
++++ b/story.txt
+@@ -5,7 +5,7 @@ story line 3
+ story line 4
+ story line 5
+ story line 6
+-story line 7
++story line seven
+ story line 8
+ story line 9
+ story line 10
+=== mode-change 190d9338161fe50c1f4cdaef989f93507d43a02c 41c269f3ec2b21876bcee7a12a448dfbc7a4dc8b
+diff --git a/keep.txt b/keep.txt
+old mode 100644
+new mode 100755
+=== mode-and-content 190d9338161fe50c1f4cdaef989f93507d43a02c 66d608b2d88ae2ffb5b6382092bbc5a94aa11025
+diff --git a/keep.txt b/keep.txt
+old mode 100644
+new mode 100755
+index 2fa992c..fe5841d
+--- a/keep.txt
++++ b/keep.txt
+@@ -1 +1,2 @@
+ keep
++more
+=== exact-rename d481fe1aa9b918c70298ecbf5816ed954cfc022a 5edcb1e9bb918919d19a62d0981595925caaca5e
+diff --git a/before.txt b/after.txt
+similarity index 100%
+rename from before.txt
+rename to after.txt
+=== rename-with-edits d481fe1aa9b918c70298ecbf5816ed954cfc022a efd90314b0532490142098d5dbac88909a2e9b39
+diff --git a/before.txt b/after.txt
+similarity index 96%
+rename from before.txt
+rename to after.txt
+index a29b8d2..1cbff56 100644
+--- a/before.txt
++++ b/after.txt
+@@ -1,7 +1,7 @@
+ moved line 0
+ moved line 1
+ moved line 2
+-moved line 3
++moved line three
+ moved line 4
+ moved line 5
+ moved line 6
+=== rename-into-subdir 76a9c90998dd15d1431810c7ef37d6fd06a90163 7ee8f617487a1586bdf761f7ea51cff07024b2e1
+diff --git a/top.txt b/sub/top.txt
+similarity index 100%
+rename from top.txt
+rename to sub/top.txt
+=== rename-out-of-subdir 5418b90e8f139836d756ac846c947c9b0f584640 2a22770daaae2165c479d012f8cdeb76fb4aa8d4
+diff --git a/sub/inner.txt b/inner.txt
+similarity index 100%
+rename from sub/inner.txt
+rename to inner.txt
+=== rename-and-modify-other 936315ac0e14704a556eba2cb65778296534856a 33a9e4d82fb851a138f4536d33544b57c9d02ddb
+diff --git a/before.txt b/after.txt
+similarity index 100%
+rename from before.txt
+rename to after.txt
+diff --git a/other.txt b/other.txt
+index 814f4a4..879de50 100644
+--- a/other.txt
++++ b/other.txt
+@@ -1,2 +1,2 @@
+ one
+-two
++TWO
+=== copy-exact 240da4316dd4a943a0c0b89faded03299cba873f a3d1e7505c109ba1ea8fba284e2fb7a0c0a199e1
+diff --git a/clone.txt b/clone.txt
+new file mode 100644
+index 0000000..a853c48
+--- /dev/null
++++ b/clone.txt
+@@ -0,0 +1,40 @@
++copied line 0
++copied line 1
++copied line 2
++copied line 3
++copied line 4
++copied line 5
++copied line 6
++copied line 7
++copied line 8
++copied line 9
++copied line 10
++copied line 11
++copied line 12
++copied line 13
++copied line 14
++copied line 15
++copied line 16
++copied line 17
++copied line 18
++copied line 19
++copied line 20
++copied line 21
++copied line 22
++copied line 23
++copied line 24
++copied line 25
++copied line 26
++copied line 27
++copied line 28
++copied line 29
++copied line 30
++copied line 31
++copied line 32
++copied line 33
++copied line 34
++copied line 35
++copied line 36
++copied line 37
++copied line 38
++copied line 39
+=== copy-with-edits 240da4316dd4a943a0c0b89faded03299cba873f 05f492202e21987b755888331454af850f8e4b25
+diff --git a/clone.txt b/clone.txt
+new file mode 100644
+index 0000000..b30cb7d
+--- /dev/null
++++ b/clone.txt
+@@ -0,0 +1,40 @@
++copied line 0
++copied line 1
++copied line 2
++copied line 3
++copied line 4
++copied line 5
++copied line 6
++copied line 7
++copied line 8
++copied line nine
++copied line 10
++copied line 11
++copied line 12
++copied line 13
++copied line 14
++copied line 15
++copied line 16
++copied line 17
++copied line 18
++copied line 19
++copied line 20
++copied line 21
++copied line 22
++copied line 23
++copied line 24
++copied line 25
++copied line 26
++copied line 27
++copied line 28
++copied line 29
++copied line 30
++copied line 31
++copied line 32
++copied line 33
++copied line 34
++copied line 35
++copied line 36
++copied line 37
++copied line 38
++copied line 39
+=== copy-from-modified-source 240da4316dd4a943a0c0b89faded03299cba873f 98285f080acca14848c9988c6ad70fc13c86e35a
+diff --git a/source.txt b/clone.txt
+similarity index 100%
+copy from source.txt
+copy to clone.txt
+diff --git a/source.txt b/source.txt
+index a853c48..a513faf 100644
+--- a/source.txt
++++ b/source.txt
+@@ -38,3 +38,4 @@ copied line 36
+ copied line 37
+ copied line 38
+ copied line 39
++tail
+=== long-paths 23008d605b15452de76061bf3522526a4ae0459b 923aeb585aab9dc1ebee8896b3389b0bd8452f87
+diff --git a/aVeryLongSingleSegmentFileNameWithoutAnySlashesAtAllInIt.txt b/aVeryLongSingleSegmentFileNameWithoutAnySlashesAtAllInIt.txt
+index 9943e20..9f83f08 100644
+--- a/aVeryLongSingleSegmentFileNameWithoutAnySlashesAtAllInIt.txt
++++ b/aVeryLongSingleSegmentFileNameWithoutAnySlashesAtAllInIt.txt
+@@ -1,40 +1,40 @@
+-single line 0
+-single line 1
+-single line 2
+-single line 3
+-single line 4
+-single line 5
+-single line 6
+-single line 7
+-single line 8
+-single line 9
+-single line 10
+-single line 11
+-single line 12
+-single line 13
+-single line 14
+-single line 15
+-single line 16
+-single line 17
+-single line 18
+-single line 19
+-single line 20
+-single line 21
+-single line 22
+-single line 23
+-single line 24
+-single line 25
+-single line 26
+-single line 27
+-single line 28
+-single line 29
+-single line 30
+-single line 31
+-single line 32
+-single line 33
+-single line 34
+-single line 35
+-single line 36
+-single line 37
+-single line 38
+-single line 39
++other line 0
++other line 1
++other line 2
++other line 3
++other line 4
++other line 5
++other line 6
++other line 7
++other line 8
++other line 9
++other line 10
++other line 11
++other line 12
++other line 13
++other line 14
++other line 15
++other line 16
++other line 17
++other line 18
++other line 19
++other line 20
++other line 21
++other line 22
++other line 23
++other line 24
++other line 25
++other line 26
++other line 27
++other line 28
++other line 29
++other line 30
++other line 31
++other line 32
++other line 33
++other line 34
++other line 35
++other line 36
++other line 37
++other line 38
++other line 39
+diff --git a/very/deeply/nested/directory/structure/with/many/segments/report.txt b/very/deeply/nested/directory/structure/with/many/segments/report.txt
+index 113fb26..dcd111f 100644
+--- a/very/deeply/nested/directory/structure/with/many/segments/report.txt
++++ b/very/deeply/nested/directory/structure/with/many/segments/report.txt
+@@ -1,40 +1,40 @@
+-report line 0
+-report line 1
+-report line 2
+-report line 3
+-report line 4
+-report line 5
+-report line 6
+-report line 7
+-report line 8
+-report line 9
+-report line 10
+-report line 11
+-report line 12
+-report line 13
+-report line 14
+-report line 15
+-report line 16
+-report line 17
+-report line 18
+-report line 19
+-report line 20
+-report line 21
+-report line 22
+-report line 23
+-report line 24
+-report line 25
+-report line 26
+-report line 27
+-report line 28
+-report line 29
+-report line 30
+-report line 31
+-report line 32
+-report line 33
+-report line 34
+-report line 35
+-report line 36
+-report line 37
+-report line 38
+-report line 39
++edited line 0
++edited line 1
++edited line 2
++edited line 3
++edited line 4
++edited line 5
++edited line 6
++edited line 7
++edited line 8
++edited line 9
++edited line 10
++edited line 11
++edited line 12
++edited line 13
++edited line 14
++edited line 15
++edited line 16
++edited line 17
++edited line 18
++edited line 19
++edited line 20
++edited line 21
++edited line 22
++edited line 23
++edited line 24
++edited line 25
++edited line 26
++edited line 27
++edited line 28
++edited line 29
++edited line 30
++edited line 31
++edited line 32
++edited line 33
++edited line 34
++edited line 35
++edited line 36
++edited line 37
++edited line 38
++edited line 39
+=== wide-change-counts a438fdbfca41118d0ff3376567f49a18bf012c2b 9d2546100fc5ee21d83d953eb2f4428b7e526424
+diff --git a/huge.txt b/huge.txt
+index acff96d..bb6395e 100644
+--- a/huge.txt
++++ b/huge.txt
+@@ -38,3 +38,83 @@ huge line 36
+ huge line 37
+ huge line 38
+ huge line 39
++more line 0
++more line 1
++more line 2
++more line 3
++more line 4
++more line 5
++more line 6
++more line 7
++more line 8
++more line 9
++more line 10
++more line 11
++more line 12
++more line 13
++more line 14
++more line 15
++more line 16
++more line 17
++more line 18
++more line 19
++more line 20
++more line 21
++more line 22
++more line 23
++more line 24
++more line 25
++more line 26
++more line 27
++more line 28
++more line 29
++more line 30
++more line 31
++more line 32
++more line 33
++more line 34
++more line 35
++more line 36
++more line 37
++more line 38
++more line 39
++even more line 0
++even more line 1
++even more line 2
++even more line 3
++even more line 4
++even more line 5
++even more line 6
++even more line 7
++even more line 8
++even more line 9
++even more line 10
++even more line 11
++even more line 12
++even more line 13
++even more line 14
++even more line 15
++even more line 16
++even more line 17
++even more line 18
++even more line 19
++even more line 20
++even more line 21
++even more line 22
++even more line 23
++even more line 24
++even more line 25
++even more line 26
++even more line 27
++even more line 28
++even more line 29
++even more line 30
++even more line 31
++even more line 32
++even more line 33
++even more line 34
++even more line 35
++even more line 36
++even more line 37
++even more line 38
++even more line 39
+diff --git a/small.txt b/small.txt
+index de98044..7be73ce 100644
+--- a/small.txt
++++ b/small.txt
+@@ -1,3 +1,3 @@
+ a
+-b
++B
+ c
+=== two-identical-renames a6f18b0b1e0daecbebf0391b55055b24e2327b43 af5192619d9f51bb7d9dfc1325b0fdc88f392f6a
+diff --git a/a.txt b/c.txt
+similarity index 100%
+rename from a.txt
+rename to c.txt
+diff --git a/b.txt b/d.txt
+similarity index 100%
+rename from b.txt
+rename to d.txt
+=== rename-below-threshold d481fe1aa9b918c70298ecbf5816ed954cfc022a 10f775f0fb8c7b7e2b4ea5532ced719bff71b1c8
+diff --git a/after.txt b/after.txt
+new file mode 100644
+index 0000000..8245d90
+--- /dev/null
++++ b/after.txt
+@@ -0,0 +1 @@
++nothing in common at all
+diff --git a/before.txt b/before.txt
+deleted file mode 100644
+index a29b8d2..0000000
+--- a/before.txt
++++ /dev/null
+@@ -1,40 +0,0 @@
+-moved line 0
+-moved line 1
+-moved line 2
+-moved line 3
+-moved line 4
+-moved line 5
+-moved line 6
+-moved line 7
+-moved line 8
+-moved line 9
+-moved line 10
+-moved line 11
+-moved line 12
+-moved line 13
+-moved line 14
+-moved line 15
+-moved line 16
+-moved line 17
+-moved line 18
+-moved line 19
+-moved line 20
+-moved line 21
+-moved line 22
+-moved line 23
+-moved line 24
+-moved line 25
+-moved line 26
+-moved line 27
+-moved line 28
+-moved line 29
+-moved line 30
+-moved line 31
+-moved line 32
+-moved line 33
+-moved line 34
+-moved line 35
+-moved line 36
+-moved line 37
+-moved line 38
+-moved line 39
+=== basename-rename 3d94c2572e509127a35c51fceb45425bd25a9f30 11fbcfeafd06ebb8ca09f4c486da4e137e4fa900
+diff --git a/one/report.txt b/two/report.txt
+similarity index 97%
+rename from one/report.txt
+rename to two/report.txt
+index 113fb26..5d26760 100644
+--- a/one/report.txt
++++ b/two/report.txt
+@@ -1,5 +1,5 @@
+ report line 0
+-report line 1
++report line one
+ report line 2
+ report line 3
+ report line 4
+=== binary-add 190d9338161fe50c1f4cdaef989f93507d43a02c af12c01b490d863514b4353b7ca4d9d7ec7a3331
+diff --git a/blob.bin b/blob.bin
+new file mode 100644
+index 0000000..96eb299
+Binary files /dev/null and b/blob.bin differ
+=== binary-modify af12c01b490d863514b4353b7ca4d9d7ec7a3331 cfcd827dd7b1f261d8b75318f925021f02102765
+diff --git a/blob.bin b/blob.bin
+index 96eb299..6f13b37 100644
+Binary files a/blob.bin and b/blob.bin differ
+=== binary-delete af12c01b490d863514b4353b7ca4d9d7ec7a3331 190d9338161fe50c1f4cdaef989f93507d43a02c
+diff --git a/blob.bin b/blob.bin
+deleted file mode 100644
+index 96eb299..0000000
+Binary files a/blob.bin and /dev/null differ
+=== binary-mode-change af12c01b490d863514b4353b7ca4d9d7ec7a3331 f3c39a19ef7c288c58798d7f2a41bedc4a3db060
+diff --git a/blob.bin b/blob.bin
+old mode 100644
+new mode 100755
+=== binary-rename af12c01b490d863514b4353b7ca4d9d7ec7a3331 d9f4245bc5036286dbcc0ad4a8616df1d066e58a
+diff --git a/blob.bin b/moved.bin
+similarity index 100%
+rename from blob.bin
+rename to moved.bin
+=== symlink-add 190d9338161fe50c1f4cdaef989f93507d43a02c bec15c5c0f19d1007dc383511afcecc83c329e35
+diff --git a/link b/link
+new file mode 120000
+index 0000000..1764325
+--- /dev/null
++++ b/link
+@@ -0,0 +1 @@
++keep.txt
+\ No newline at end of file
+=== symlink-change bec15c5c0f19d1007dc383511afcecc83c329e35 201ca1b9523ffcb8062f5326c901fe407a3905f6
+diff --git a/link b/link
+index 1764325..1ca9282 120000
+--- a/link
++++ b/link
+@@ -1 +1 @@
+-keep.txt
+\ No newline at end of file
++story.txt
+\ No newline at end of file
+=== symlink-to-blob bec15c5c0f19d1007dc383511afcecc83c329e35 41c90c851408bf9b6fbae206d2fb8bd5fdd55751
+diff --git a/link b/link
+deleted file mode 120000
+index 1764325..0000000
+--- a/link
++++ /dev/null
+@@ -1 +0,0 @@
+-keep.txt
+\ No newline at end of file
+diff --git a/link b/link
+new file mode 100644
+index 0000000..1764325
+--- /dev/null
++++ b/link
+@@ -0,0 +1 @@
++keep.txt
+\ No newline at end of file
+=== blob-to-symlink cb8e9a0231c1fb7e6561728addda965716cee614 731d306eae53e315c03df7384bfbf77040a57079
+diff --git a/thing b/thing
+deleted file mode 100644
+index 1ca9282..0000000
+--- a/thing
++++ /dev/null
+@@ -1 +0,0 @@
+-story.txt
+\ No newline at end of file
+diff --git a/thing b/thing
+new file mode 120000
+index 0000000..1ca9282
+--- /dev/null
++++ b/thing
+@@ -0,0 +1 @@
++story.txt
+\ No newline at end of file
+=== submodule-add 190d9338161fe50c1f4cdaef989f93507d43a02c 34ac129ceaa8eab79d8c46683fa199881dcbe417
+diff --git a/module b/module
+new file mode 160000
+index 0000000..1111111
+--- /dev/null
++++ b/module
+@@ -0,0 +1 @@
++Subproject commit 1111111111111111111111111111111111111111
+=== submodule-change 34ac129ceaa8eab79d8c46683fa199881dcbe417 30455a58a58a855a15007eca7aed0bfd0cf8b25c
+diff --git a/module b/module
+index 1111111..2222222 160000
+--- a/module
++++ b/module
+@@ -1 +1 @@
+-Subproject commit 1111111111111111111111111111111111111111
++Subproject commit 2222222222222222222222222222222222222222
+=== submodule-delete 34ac129ceaa8eab79d8c46683fa199881dcbe417 190d9338161fe50c1f4cdaef989f93507d43a02c
+diff --git a/module b/module
+deleted file mode 160000
+index 1111111..0000000
+--- a/module
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit 1111111111111111111111111111111111111111
+=== submodule-to-blob 34ac129ceaa8eab79d8c46683fa199881dcbe417 2334a91a6be7f0866533b25379cd7a86e9ea8f74
+diff --git a/module b/module
+deleted file mode 160000
+index 1111111..0000000
+--- a/module
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit 1111111111111111111111111111111111111111
+diff --git a/module b/module
+new file mode 100644
+index 0000000..b9bca01
+--- /dev/null
++++ b/module
+@@ -0,0 +1 @@
++plain
+=== file-to-dir 2f001a775336faa71abdb73d23ed314542fd07de 699afce9ad3c743bf2e9a61e7ec079f10301619c
+diff --git a/thing b/thing/inner.txt
+similarity index 100%
+rename from thing
+rename to thing/inner.txt
+=== dir-to-file 699afce9ad3c743bf2e9a61e7ec079f10301619c 2f001a775336faa71abdb73d23ed314542fd07de
+diff --git a/thing/inner.txt b/thing
+similarity index 100%
+rename from thing/inner.txt
+rename to thing
+=== deep-subdir-change 76d8d0a221c0ea471ebdd5bed2a16568fb2b0131 dda96a36009e9527e71a52c3f89971df9ff8802e
+diff --git a/a/b/c/deep.txt b/a/b/c/deep.txt
+index 9c64fbc..20a2f12 100644
+--- a/a/b/c/deep.txt
++++ b/a/b/c/deep.txt
+@@ -3,7 +3,7 @@ deep line 1
+ deep line 2
+ deep line 3
+ deep line 4
+-deep line 5
++deep line five
+ deep line 6
+ deep line 7
+ deep line 8
+=== many-files f92016102ed877230af908b63372efd86624b050 e2d84c6adac57eb8bc637cfd07349897834a3c79
+diff --git a/dir/five.txt b/dir/five.txt
+new file mode 100644
+index 0000000..54f9d6d
+--- /dev/null
++++ b/dir/five.txt
+@@ -0,0 +1 @@
++five
+diff --git a/dir/four.txt b/dir/four.txt
+index 8510665..9c89f62 100644
+--- a/dir/four.txt
++++ b/dir/four.txt
+@@ -1 +1 @@
+-four
++FOUR
+diff --git a/one.txt b/one.txt
+index 5626abf..a2628c1 100644
+--- a/one.txt
++++ b/one.txt
+@@ -1 +1 @@
+-one
++ONE
+diff --git a/three.txt b/three.txt
+deleted file mode 100644
+index 2bdf67a..0000000
+--- a/three.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-three
+=== quoted-path 190d9338161fe50c1f4cdaef989f93507d43a02c 57b8fb367fe81f8dfd504e6002407191d42602ec
+diff --git "a/stra\\nge \"name\".txt" "b/stra\\nge \"name\".txt"
+new file mode 100644
+index 0000000..994e126
+--- /dev/null
++++ "b/stra\\nge \"name\".txt"	
+@@ -0,0 +1 @@
++odd
+=== empty-to-full 4b825dc642cb6eb9a060e54bf8d69288fbee4904 190d9338161fe50c1f4cdaef989f93507d43a02c
+diff --git a/keep.txt b/keep.txt
+new file mode 100644
+index 0000000..2fa992c
+--- /dev/null
++++ b/keep.txt
+@@ -0,0 +1 @@
++keep
+diff --git a/story.txt b/story.txt
+new file mode 100644
+index 0000000..393a2ae
+--- /dev/null
++++ b/story.txt
+@@ -0,0 +1,40 @@
++story line 0
++story line 1
++story line 2
++story line 3
++story line 4
++story line 5
++story line 6
++story line 7
++story line 8
++story line 9
++story line 10
++story line 11
++story line 12
++story line 13
++story line 14
++story line 15
++story line 16
++story line 17
++story line 18
++story line 19
++story line 20
++story line 21
++story line 22
++story line 23
++story line 24
++story line 25
++story line 26
++story line 27
++story line 28
++story line 29
++story line 30
++story line 31
++story line 32
++story line 33
++story line 34
++story line 35
++story line 36
++story line 37
++story line 38
++story line 39
+=== full-to-empty 190d9338161fe50c1f4cdaef989f93507d43a02c 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+diff --git a/keep.txt b/keep.txt
+deleted file mode 100644
+index 2fa992c..0000000
+--- a/keep.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-keep
+diff --git a/story.txt b/story.txt
+deleted file mode 100644
+index 393a2ae..0000000
+--- a/story.txt
++++ /dev/null
+@@ -1,40 +0,0 @@
+-story line 0
+-story line 1
+-story line 2
+-story line 3
+-story line 4
+-story line 5
+-story line 6
+-story line 7
+-story line 8
+-story line 9
+-story line 10
+-story line 11
+-story line 12
+-story line 13
+-story line 14
+-story line 15
+-story line 16
+-story line 17
+-story line 18
+-story line 19
+-story line 20
+-story line 21
+-story line 22
+-story line 23
+-story line 24
+-story line 25
+-story line 26
+-story line 27
+-story line 28
+-story line 29
+-story line 30
+-story line 31
+-story line 32
+-story line 33
+-story line 34
+-story line 35
+-story line 36
+-story line 37
+-story line 38
+-story line 39

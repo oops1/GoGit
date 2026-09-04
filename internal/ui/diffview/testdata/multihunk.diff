@@ -1,0 +1,19 @@
+diff --git a/numbers.txt b/numbers.txt
+index 6dfea0f..1c5807a 100644
+--- a/numbers.txt
++++ b/numbers.txt
+@@ -1,5 +1,5 @@
+ one
+-two
++TWO
+ three
+ four
+ five
+@@ -15,6 +15,6 @@ fourteen
+ fifteen
+ sixteen
+ seventeen
+-eighteen
++EIGHTEEN
+ nineteen
+ twenty
