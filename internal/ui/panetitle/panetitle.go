@@ -15,7 +15,7 @@ func Apply(panes []*widget.DockPane) {
 		if pane == nil {
 			continue
 		}
-		pane.TitleBG = pane.TitleActiveBG
-		pane.TitleText = XOR(pane.TitleActiveBG)
+		pane.TitleText = XOR(pane.TitleBG)
+		pane.TitleTextActive = XOR(pane.TitleActiveBG)
 	}
 }

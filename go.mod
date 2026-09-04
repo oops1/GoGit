@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/oops1/headless-gui/v3 v3.16.2
+	github.com/oops1/headless-gui/v3 v3.16.4
 	golang.org/x/sys v0.26.0
 )
 

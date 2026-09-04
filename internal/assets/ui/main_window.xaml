@@ -78,7 +78,7 @@
                 </DockPane>
                 <DockPane Id="files" Title="{Loc Pane.Files}" Side="Top" Size="200">
                     <DockPanel>
-                        <DockPanel DockPanel.Dock="Top" Margin="4,4,4,2">
+                        <DockPanel x:Name="filesFilterRow" DockPanel.Dock="Top" Margin="4,4,4,2">
                             <TextBox x:Name="filesFilter" DockPanel.Dock="Left" Width="220" Margin="0,0,6,0"
                                      Placeholder="{Loc Files.Filter.Placeholder}"/>
                             <StackPanel x:Name="filesFilterButtons" DockPanel.Dock="Right"
@@ -94,7 +94,6 @@
                             </StackPanel>
                             <TextBlock x:Name="filesFilterCount" DockPanel.Dock="Right" Text="" Width="100"
                                        FontSize="9" Margin="0,4,10,4"/>
-                            <Border x:Name="filesFilterSpacer"/>
                         </DockPanel>
                         <FilesGrid x:Name="filesGrid"/>
                     </DockPanel>

@@ -37,18 +37,21 @@ func TestApplySetsTitleTextToInvertedBackground(t *testing.T) {
 
 	Apply([]*widget.DockPane{first, nil, second})
 
-	if got := first.TitleText; got != (color.RGBA{R: 0xB3, G: 0x3D, B: 0x00, A: 255}) {
+	if got := first.TitleText; got != (color.RGBA{R: 0xDF, G: 0xDF, B: 0xDF, A: 255}) {
 		t.Fatalf("dark pane title = %v", got)
 	}
-	if got := second.TitleText; got != (color.RGBA{R: 0xFF, G: 0xA0, B: 0x47, A: 255}) {
+	if got := first.TitleTextActive; got != (color.RGBA{R: 0xB3, G: 0x3D, B: 0x00, A: 255}) {
+		t.Fatalf("dark pane active title = %v", got)
+	}
+	if got := second.TitleText; got != (color.RGBA{R: 0x0C, G: 0x0C, B: 0x0C, A: 255}) {
 		t.Fatalf("light pane title = %v", got)
 	}
+	if got := second.TitleTextActive; got != (color.RGBA{R: 0xFF, G: 0xA0, B: 0x47, A: 255}) {
+		t.Fatalf("light pane active title = %v", got)
+	}
 	for _, pane := range []*widget.DockPane{first, second} {
-		if pane.TitleBG != pane.TitleActiveBG {
-			t.Fatalf("pane %q keeps two title backgrounds: %v and %v", pane.ID, pane.TitleBG, pane.TitleActiveBG)
-		}
-		if pane.TitleText != XOR(pane.TitleBG) {
-			t.Fatalf("pane %q title is not the xor of the painted background", pane.ID)
+		if pane.TitleText != XOR(pane.TitleBG) || pane.TitleTextActive != XOR(pane.TitleActiveBG) {
+			t.Fatalf("pane %q title is not the xor of the background it is drawn on", pane.ID)
 		}
 	}
 }

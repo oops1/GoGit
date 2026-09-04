@@ -19,6 +19,9 @@ func TestPaneTitlesUseInvertedBackgroundInBothThemes(t *testing.T) {
 			if got, want := pane.TitleText, panetitle.XOR(pane.TitleBG); got != want {
 				t.Fatalf("theme %s pane %q title = %v, want %v", theme, pane.ID, got, want)
 			}
+			if got, want := pane.TitleTextActive, panetitle.XOR(pane.TitleActiveBG); got != want {
+				t.Fatalf("theme %s pane %q active title = %v, want %v", theme, pane.ID, got, want)
+			}
 		}
 	}
 }
