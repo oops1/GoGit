@@ -108,7 +108,7 @@ func journalRowCountOnDispatcher(t *testing.T, a *App) int {
 	select {
 	case n := <-result:
 		return n
-	case <-time.After(2 * time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("post queue did not drain in time")
 		return 0
 	}
@@ -124,7 +124,7 @@ func journalRowOnDispatcher(t *testing.T, a *App, index int) journal.Row {
 	select {
 	case row := <-result:
 		return row
-	case <-time.After(2 * time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("post queue did not drain in time")
 		return journal.Row{}
 	}
@@ -132,7 +132,7 @@ func journalRowOnDispatcher(t *testing.T, a *App, index int) journal.Row {
 
 func waitForJournalRows(t *testing.T, a *App, want int) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testTimeout)
 	for {
 		if journalRowCountOnDispatcher(t, a) >= want {
 			return

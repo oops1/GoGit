@@ -476,7 +476,7 @@ func TestRunReportsHeadChangeWithinMinInterval(t *testing.T) {
 			if !cs.Has(Head) {
 				t.Fatalf("changes = %v, want Head", cs)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(testTimeout):
 			t.Fatal("no change reported within MinInterval")
 		}
 		cancel()
@@ -528,7 +528,7 @@ func TestRunPokeTriggersAnImmediatePoll(t *testing.T) {
 		w.Poke()
 		select {
 		case <-polled:
-		case <-time.After(time.Second):
+		case <-time.After(testTimeout):
 			t.Fatal("Poke did not trigger an immediate poll")
 		}
 		cancel()
@@ -577,7 +577,7 @@ func TestRunContextCancelWhilePausedEndsIterator(t *testing.T) {
 		cancel()
 		select {
 		case <-done:
-		case <-time.After(time.Second):
+		case <-time.After(testTimeout):
 			t.Fatal("Run did not stop after context cancellation while paused")
 		}
 	})
@@ -628,7 +628,7 @@ func TestRunPauseSuppressesPollingUntilResume(t *testing.T) {
 			if !cs.Has(Head) {
 				t.Fatalf("changes = %v, want Head", cs)
 			}
-		case <-time.After(2 * time.Second):
+		case <-time.After(testTimeout):
 			t.Fatal("expected a Head change after resume")
 		}
 		cancel()
@@ -656,7 +656,7 @@ func TestRunStopsWhenConsumerBreaksEarly(t *testing.T) {
 		}
 		select {
 		case <-done:
-		case <-time.After(2 * time.Second):
+		case <-time.After(testTimeout):
 			t.Fatal("Run did not stop after the consumer broke out of the loop")
 		}
 	})

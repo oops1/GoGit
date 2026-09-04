@@ -57,7 +57,7 @@ func waitForPostQueueDrain(t *testing.T, a *App) {
 	a.Post(func() { close(marker) })
 	select {
 	case <-marker:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("post queue did not drain in time")
 	}
 }
@@ -72,7 +72,7 @@ func branchItemExistsOnDispatcher(t *testing.T, a *App, name refs.Name) bool {
 	select {
 	case ok := <-result:
 		return ok
-	case <-time.After(2 * time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("post queue did not drain in time")
 		return false
 	}
@@ -128,7 +128,7 @@ func TestSyntheticRefsChangeSetTriggersRefreshRepositoryThroughPostQueue(t *test
 
 	select {
 	case <-called:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("loadBranchSnapshot was not invoked for the synthetic Refs change")
 	}
 
@@ -252,7 +252,7 @@ func TestAppCloseStopsTheWatcherAndThePostQueue(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(time.Second):
+	case <-time.After(testTimeout):
 		t.Fatal("Post after Close must not block")
 	}
 }
@@ -367,7 +367,7 @@ func TestActivateRepositoryWithARealWatcherPicksUpABranchCreationWithinTwoSecond
 		t.Fatal(err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testTimeout)
 	for {
 		if branchItemExistsOnDispatcher(t, a, refs.BranchName("feature")) {
 			return
