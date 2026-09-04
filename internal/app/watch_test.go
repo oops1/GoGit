@@ -4,6 +4,7 @@ import (
 	"context"
 	"iter"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -520,6 +521,36 @@ func TestActivateRepositoryWithARealWatcherPicksUpABranchCreationWithinTwoSecond
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("the real watcher did not pick up the branch creation within 2s")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestWatcherSkipsTheDirectoriesGitIgnores(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	if err := writeFile(target, ".gitignore", "out/\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(target, "out"), "build.log", "x\n"); err != nil {
+		t.Fatal(err)
+	}
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 1)
+
+	deadline := time.Now().Add(testTimeout)
+	for {
+		skip := readOnDispatcher(t, a, func() []string {
+			a.watchMu.Lock()
+			defer a.watchMu.Unlock()
+			return slices.Clone(a.watchSkip)
+		})
+		if slices.Contains(skip, "out") {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the watcher never picked up the ignored directory, skip = %v", skip)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

@@ -208,7 +208,7 @@ func TestCollectWorkTreeDirsWalksUpToDepth(t *testing.T) {
 			t.Fatalf("MkdirAll(%q) returned error %v", dir, err)
 		}
 	}
-	dirs, ok := collectWorkTreeDirs(root, 2, 100)
+	dirs, ok := collectWorkTreeDirs(root, 2, 100, nil)
 	if !ok {
 		t.Fatal("collectWorkTreeDirs reported an exceeded budget")
 	}
@@ -235,7 +235,7 @@ func TestCollectWorkTreeDirsWithZeroDepthWalksTheWholeTree(t *testing.T) {
 			t.Fatalf("MkdirAll(%q) returned error %v", dir, err)
 		}
 	}
-	dirs, ok := collectWorkTreeDirs(root, 0, 100)
+	dirs, ok := collectWorkTreeDirs(root, 0, 100, nil)
 	if !ok {
 		t.Fatal("collectWorkTreeDirs reported an exceeded budget")
 	}
@@ -258,7 +258,7 @@ func TestCollectWorkTreeDirsSkipsDotGitAndPlainFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "README"), []byte("x"), 0o644); err != nil {
 		t.Fatalf("WriteFile returned error %v", err)
 	}
-	dirs, ok := collectWorkTreeDirs(root, 1, 100)
+	dirs, ok := collectWorkTreeDirs(root, 1, 100, nil)
 	if !ok {
 		t.Fatal("collectWorkTreeDirs reported an exceeded budget")
 	}
@@ -274,7 +274,7 @@ func TestCollectWorkTreeDirsSkipsDotGitAndPlainFiles(t *testing.T) {
 }
 
 func TestCollectWorkTreeDirsReturnsFalseWithNoBudget(t *testing.T) {
-	if dirs, ok := collectWorkTreeDirs(t.TempDir(), 2, 0); ok || dirs != nil {
+	if dirs, ok := collectWorkTreeDirs(t.TempDir(), 2, 0, nil); ok || dirs != nil {
 		t.Fatalf("collectWorkTreeDirs(budget=0) = (%v, %v), want (nil, false)", dirs, ok)
 	}
 }
@@ -287,7 +287,7 @@ func TestCollectWorkTreeDirsReturnsFalseWhenBudgetExceededMidWalk(t *testing.T) 
 			t.Fatalf("Mkdir(%q) returned error %v", dir, err)
 		}
 	}
-	if dirs, ok := collectWorkTreeDirs(root, 1, 3); ok || dirs != nil {
+	if dirs, ok := collectWorkTreeDirs(root, 1, 3, nil); ok || dirs != nil {
 		t.Fatalf("collectWorkTreeDirs = (%v, %v), want (nil, false)", dirs, ok)
 	}
 }
@@ -297,7 +297,7 @@ func TestCollectWorkTreeDirsTreatsAnUnreadableRootAsASingleEntry(t *testing.T) {
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatalf("WriteFile returned error %v", err)
 	}
-	dirs, ok := collectWorkTreeDirs(file, 2, 10)
+	dirs, ok := collectWorkTreeDirs(file, 2, 10, nil)
 	if !ok {
 		t.Fatal("collectWorkTreeDirs reported an exceeded budget for an unreadable root")
 	}
@@ -834,4 +834,31 @@ func TestConcurrentPokePauseResumeIsRaceFree(t *testing.T) {
 	wg.Wait()
 	cancel()
 	<-done
+}
+
+func TestCollectWorkTreeDirsSkipsTheDirectoriesItIsToldTo(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"src/pkg", "output/logs", "vendor"} {
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(rel)), 0o777); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dirs, ok := collectWorkTreeDirs(root, 0, 100, []string{"output", "vendor"})
+	if !ok {
+		t.Fatal("the walk must fit in the budget")
+	}
+	for _, dir := range dirs {
+		rel, err := filepath.Rel(root, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch filepath.ToSlash(rel) {
+		case "output", "output/logs", "vendor":
+			t.Fatalf("skipped directory %q reached the snapshot", rel)
+		}
+	}
+	if len(dirs) != 3 {
+		t.Fatalf("dirs = %v, want the root, src and src/pkg", dirs)
+	}
 }

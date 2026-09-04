@@ -119,6 +119,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		a.setFilesRows(rows)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
+		a.syncWatcherSkips()
 	})
 }
 

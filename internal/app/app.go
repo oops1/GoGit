@@ -96,6 +96,7 @@ type App struct {
 	watchRunMu  sync.Mutex
 	watchMu     sync.Mutex
 	watchCancel context.CancelFunc
+	watchSkip   []string
 	watchWG     sync.WaitGroup
 	watcher     watcherIface
 
