@@ -54,10 +54,7 @@ var viewThemeKeys = map[string]string{
 	config.ThemeLight:  "Theme.Light",
 }
 
-var viewStaticKeys = map[CommandID]string{
-	CmdResetLayout: "Menu.View.ResetLayout",
-	CmdRefresh:     "Menu.View.Refresh",
-}
+var viewLanguageOrder = []string{"en", "ru"}
 
 func cmdPane(id string) CommandID       { return CommandID(viewPanePrefix + id) }
 func cmdTheme(name string) CommandID    { return CommandID(viewThemePrefix + name) }
