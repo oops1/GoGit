@@ -26,10 +26,27 @@ jobs:
       - run: go vet -unsafeptr=false ./...
       - run: go build ./...
       - name: race tests
-        run: go test -count=1 -race ./...
         env:
           CGO_ENABLED: "1"
-      - run: go test -count=1 -tags oracle -coverprofile=cover.out -covermode=atomic ./...
+        run: |
+          set +e
+          go test -count=1 -race ./... 2>&1 | tee race.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" race.log | head -40 |
+              while IFS= read -r line; do echo "::error::$line"; done
+          fi
+          exit "$status"
+      - name: oracle tests with coverage
+        run: |
+          set +e
+          go test -count=1 -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" oracle.log | head -40 |
+              while IFS= read -r line; do echo "::error::$line"; done
+          fi
+          exit "$status"
       - name: coverage gate
         shell: bash
         run: |

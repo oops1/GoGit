@@ -13,3 +13,5 @@
 /cmd/gogit/*.syso
 /cmd/gogit/rsrc/
 /gogit
+/race.log
+/oracle.log
