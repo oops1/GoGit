@@ -21,6 +21,28 @@ const (
 	filesModeCommit
 )
 
+func (a *App) requestWorking() {
+	a.workingFlagMu.Lock()
+	if a.workingBusy {
+		a.workingAgain = true
+		a.workingFlagMu.Unlock()
+		return
+	}
+	a.workingFlagMu.Unlock()
+	a.startWorking()
+}
+
+func (a *App) finishWorking() {
+	a.workingFlagMu.Lock()
+	a.workingBusy = false
+	again := a.workingAgain
+	a.workingAgain = false
+	a.workingFlagMu.Unlock()
+	if again {
+		a.Post(a.requestWorking)
+	}
+}
+
 func (a *App) startWorking() {
 	a.workingRunMu.Lock()
 	defer a.workingRunMu.Unlock()
@@ -43,6 +65,9 @@ func (a *App) startWorking() {
 	a.workingCancel = cancel
 	a.workingMu.Unlock()
 	wt := o.currentWorktree()
+	a.workingFlagMu.Lock()
+	a.workingBusy = true
+	a.workingFlagMu.Unlock()
 	a.workingWG.Go(func() { a.runWorking(ctx, wt) })
 }
 
@@ -64,6 +89,7 @@ func (a *App) stopWorkingLocked() {
 }
 
 func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
+	defer a.finishWorking()
 	status, err := wt.Status(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
@@ -119,7 +145,7 @@ func (a *App) refreshWorkingStatus() {
 	if a.commitIsSelected() {
 		return
 	}
-	a.startWorking()
+	a.requestWorking()
 }
 
 func (a *App) showWorkingDiff(entry worktree.Entry) {

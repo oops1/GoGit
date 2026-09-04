@@ -485,3 +485,30 @@ func TestHasWorkingChangesIsTrueWhenAnyEntryHasARealChange(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkingScanIsNotRestartedWhileItRunsAndRepeatsAfterwards(t *testing.T) {
+	a := newTestApp(t)
+
+	a.workingFlagMu.Lock()
+	a.workingBusy = true
+	a.workingFlagMu.Unlock()
+
+	a.requestWorking()
+
+	a.workingFlagMu.Lock()
+	again := a.workingAgain
+	a.workingFlagMu.Unlock()
+	if !again {
+		t.Fatal("a request during a running scan must be remembered")
+	}
+
+	a.finishWorking()
+	waitForPostQueueDrain(t, a)
+
+	a.workingFlagMu.Lock()
+	busy, pending := a.workingBusy, a.workingAgain
+	a.workingFlagMu.Unlock()
+	if busy || pending {
+		t.Fatalf("after the repeat the scan flags must be clear, busy=%v again=%v", busy, pending)
+	}
+}

@@ -114,6 +114,9 @@ type App struct {
 	diffWG     sync.WaitGroup
 
 	workingRunMu  sync.Mutex
+	workingFlagMu sync.Mutex
+	workingBusy   bool
+	workingAgain  bool
 	workingMu     sync.Mutex
 	workingCancel context.CancelFunc
 	workingWG     sync.WaitGroup
@@ -520,7 +523,7 @@ func (a *App) RefreshRepository() {
 	if a.commitIsSelected() {
 		return
 	}
-	a.startWorking()
+	a.requestWorking()
 }
 
 func branchStatusText(snap branches.Snapshot) string {

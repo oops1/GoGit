@@ -12,7 +12,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const MaxFiles = 500
+const MaxFiles = 10000
 
 const modifiedLayout = "2006-01-02 15:04:05"
 
