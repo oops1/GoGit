@@ -28,6 +28,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/addrepo"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/changes"
+	"github.com/oops1/gogit/internal/ui/commit"
 	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -76,12 +77,18 @@ type App struct {
 	selectedNode      string
 	selectedCommit    hash.ObjectID
 	askInput          func(title, prompt string, cb func(text string, ok bool))
+	askConfirm        func(title, message string, cb func(ok bool))
 	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
+	showCommit        func(initial commit.Model, cb func(commit.Model, bool))
 
 	open *openedRepository
 
 	newWatcher func(gitrepo.Layout, watch.Options) watcherIface
+
+	writeMu     sync.Mutex
+	writeCancel context.CancelFunc
+	writeWG     sync.WaitGroup
 
 	watchMu     sync.Mutex
 	watchCancel context.CancelFunc
@@ -113,6 +120,7 @@ type App struct {
 	filesFilterQuery   string
 	filesStatusAllowed map[changes.StatusFilter]bool
 	activeModified     bool
+	stagedCount        int
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -235,8 +243,14 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.askInput = func(title, prompt string, cb func(text string, ok bool)) {
 		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
 	}
+	a.askConfirm = func(title, message string, cb func(ok bool)) {
+		widget.NewMessageBox(a.eng).ShowQuestion(title, message, func(r widget.MessageBoxResult) {
+			cb(r == widget.MBResultYes)
+		})
+	}
 	a.showAddRepo = a.defaultShowAddRepo
 	a.showSettings = a.defaultShowSettings
+	a.showCommit = a.defaultShowCommit
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
@@ -253,6 +267,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.journalView.OnNearEnd = a.requestMoreJournal
 	a.filesItems = datagrid.NewObservableCollection()
 	a.filesGrid.SetItemsSource(a.filesItems)
+	a.filesGrid.Data().Grid.SelectionMode = datagrid.SelectionExtended
 	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
 	a.restoreFilesColumns()
 	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
@@ -278,6 +293,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
 	a.handlers[CmdSettings] = a.openSettings
+	a.handlers[CmdStage] = a.stageSelected
+	a.handlers[CmdUnstage] = a.unstageSelected
+	a.handlers[CmdDiscard] = a.discardSelected
+	a.handlers[CmdCommit] = a.openCommit
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -324,6 +343,26 @@ func (a *App) SetActiveRepository(id string, worktree bool) {
 	a.state = State{ActiveRepository: id, ActiveIsWorktree: worktree}
 	a.mu.Unlock()
 	a.refreshCommands()
+}
+
+func (a *App) setFilesSelected(v bool) {
+	a.mu.Lock()
+	changed := a.state.FilesSelected != v
+	a.state.FilesSelected = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
+func (a *App) setHasStagedChanges(v bool) {
+	a.mu.Lock()
+	changed := a.state.HasStagedChanges != v
+	a.state.HasStagedChanges = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
 }
 
 func (a *App) CloseRepository() {
@@ -604,6 +643,7 @@ func (a *App) Close() {
 		a.stopJournal()
 		a.stopDiff()
 		a.stopWorking()
+		a.stopWrite()
 		close(a.postStop)
 		a.postWG.Wait()
 		a.closeOpenRepository()

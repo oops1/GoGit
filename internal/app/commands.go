@@ -23,6 +23,9 @@ const (
 	CmdPull            CommandID = "remote.pull"
 	CmdSync            CommandID = "remote.sync"
 	CmdPush            CommandID = "remote.push"
+	CmdStage           CommandID = "edit.stage"
+	CmdUnstage         CommandID = "edit.unstage"
+	CmdDiscard         CommandID = "edit.discard"
 	CmdCommit          CommandID = "local.commit"
 	CmdResetLayout     CommandID = "view.reset-layout"
 	CmdRefresh         CommandID = "view.refresh"
@@ -109,14 +112,20 @@ var toolbarIcons = map[CommandID]string{
 type State struct {
 	ActiveRepository string
 	ActiveIsWorktree bool
+	FilesSelected    bool
+	HasStagedChanges bool
 }
 
 func (s State) Enabled(id CommandID) bool {
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdPull, CmdSync, CmdPush, CmdCommit, CmdRefresh:
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdPull, CmdSync, CmdPush, CmdRefresh:
 		return s.ActiveRepository != ""
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
+	case CmdStage, CmdUnstage, CmdDiscard:
+		return s.ActiveRepository != "" && s.FilesSelected
+	case CmdCommit:
+		return s.ActiveRepository != "" && s.HasStagedChanges
 	}
 	return true
 }

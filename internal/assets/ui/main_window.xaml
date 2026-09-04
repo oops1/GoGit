@@ -24,6 +24,13 @@
                 <MenuItem Header="{Loc Menu.Repository.Settings}"/>
                 <MenuItem Header="{Loc Menu.Repository.Close}"/>
             </MenuItem>
+            <MenuItem Header="{Loc Menu.Edit}">
+                <MenuItem Header="{Loc Menu.Edit.Stage}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Edit.Unstage}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Edit.Discard}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Edit.Commit}" IsEnabled="False"/>
+            </MenuItem>
             <MenuItem Header="{Loc Menu.View}">
                 <MenuItem Header="{Loc Menu.View.Panes}">
                     <MenuItem Header="{Loc Pane.Repositories}"/>

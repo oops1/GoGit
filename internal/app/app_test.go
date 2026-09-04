@@ -58,7 +58,7 @@ func TestNewLoadsMainWindow(t *testing.T) {
 func TestMenuStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 2 {
+	if len(items) != 3 {
 		t.Fatalf("top menus = %d", len(items))
 	}
 	if len(items[0].Items) != len(repositoryMenuTree) {
@@ -146,10 +146,15 @@ func TestCommandStatesFollowActiveRepository(t *testing.T) {
 	if _, enabled, ok := a.MenuItemByCommand(CmdRemoveWorktree); !ok || !enabled {
 		t.Fatal("remove worktree must be enabled on a worktree")
 	}
-	for _, name := range toolbarButtons {
-		if !a.Widget(name).(*widget.Button).IsEnabled() {
-			t.Fatalf("%s must be enabled", name)
+	for cmd, name := range toolbarButtons {
+		want := cmd != CmdCommit
+		if got := a.Widget(name).(*widget.Button).IsEnabled(); got != want {
+			t.Fatalf("%s enabled = %v, want %v", name, got, want)
 		}
+	}
+	a.setHasStagedChanges(true)
+	if !a.Widget("btnCommit").(*widget.Button).IsEnabled() {
+		t.Fatal("btnCommit must be enabled once there are staged changes")
 	}
 	a.CloseRepository()
 	if a.State().ActiveRepository != "" {

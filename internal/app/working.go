@@ -28,9 +28,11 @@ func (a *App) startWorking() {
 		a.filesMode = filesModeWorking
 		a.currentEntries = nil
 		a.activeModified = false
+		a.stagedCount = 0
 		a.filesMu.Unlock()
 		a.setFilesRows(nil)
 		a.reposView.Render(a.registry, a.repoTreeState())
+		a.setHasStagedChanges(false)
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -66,16 +68,32 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		entries = entries[:changes.MaxFiles]
 	}
 	modified := len(status.Entries) > 0
+	staged := stagedEntryCount(status.Entries)
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
 	a.currentEntries = entries
 	a.currentFiles = nil
 	a.activeModified = modified
+	a.stagedCount = staged
 	a.filesMu.Unlock()
 	a.Post(func() {
+		if ctx.Err() != nil {
+			return
+		}
 		a.setFilesRows(rows)
 		a.reposView.Render(a.registry, a.repoTreeState())
+		a.setHasStagedChanges(staged > 0)
 	})
+}
+
+func stagedEntryCount(entries []worktree.Entry) int {
+	count := 0
+	for _, e := range entries {
+		if e.Conflict == worktree.ConflictNone && e.Staged != worktree.StatusUnmodified {
+			count++
+		}
+	}
+	return count
 }
 
 func (a *App) refreshWorkingStatus() {

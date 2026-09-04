@@ -141,8 +141,6 @@ func TestCombiningTextAndStatusButtonFiltersNarrowsTheGridFurther(t *testing.T) 
 	a := activatedWorkingApp(t, target)
 	waitForWorkingRows(t, a, 4)
 
-	// "e" alone matches staged/modified/untracked (not conflict); disabling
-	// "added" additionally removes staged.txt, leaving the intersection.
 	a.toggleFilesStatusFilter(changes.FilterAdded)
 	a.onFilesFilterChanged("e")
 

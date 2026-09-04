@@ -33,10 +33,9 @@ var loadCommitObject = func(db *odb.DB, id hash.ObjectID) (*object.Commit, error
 }
 
 func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
-	if _, ok := e.SelectedItem.(changes.Row); !ok {
-		return
-	}
-	if e.SelectedIndex < 0 {
+	row, ok := e.SelectedItem.(changes.Row)
+	if !ok || e.SelectedIndex < 0 {
+		a.setFilesSelected(false)
 		return
 	}
 	a.filesMu.Lock()
@@ -44,6 +43,7 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	files := a.currentFiles
 	entries := a.currentEntries
 	a.filesMu.Unlock()
+	a.setFilesSelected(mode == filesModeWorking && row.RelPath != "")
 	if mode == filesModeCommit {
 		if e.SelectedIndex >= len(files) {
 			return
@@ -173,4 +173,6 @@ func (a *App) clearChangesPanels() {
 	a.commitSelected = false
 	a.setFilesRows(nil)
 	a.diffView.Clear()
+	a.setFilesSelected(false)
+	a.setHasStagedChanges(false)
 }

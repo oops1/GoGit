@@ -8,7 +8,8 @@ import (
 )
 
 const repositoryMenuIndex = 0
-const viewMenuIndex = 1
+const editMenuIndex = 1
+const viewMenuIndex = 2
 
 type menuLeafEntry struct {
 	Key     string
@@ -33,10 +34,12 @@ type menuDef struct {
 }
 
 var repositoryMenuTree = buildRepositoryMenuTree()
+var editMenuTree = buildEditMenuTree()
 var viewMenuTree = buildViewMenuTree()
 
 var menuBarDefs = []menuDef{
 	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Edit", Tree: editMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
 }
 
@@ -57,6 +60,19 @@ func buildRepositoryMenuTree() []menuTreeEntry {
 		separator,
 		leaf("Menu.Repository.Settings", CmdSettings),
 		leaf("Menu.Repository.Close", CmdClose),
+	}
+}
+
+func buildEditMenuTree() []menuTreeEntry {
+	leaf := func(key string, cmd CommandID) menuTreeEntry {
+		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
+	}
+	return []menuTreeEntry{
+		leaf("Menu.Edit.Stage", CmdStage),
+		leaf("Menu.Edit.Unstage", CmdUnstage),
+		leaf("Menu.Edit.Discard", CmdDiscard),
+		{Separator: true},
+		leaf("Menu.Edit.Commit", CmdCommit),
 	}
 }
 

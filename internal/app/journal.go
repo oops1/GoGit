@@ -36,10 +36,10 @@ func (a *App) startJournal() {
 	a.journalMore = more
 	more <- struct{}{}
 	a.journalMu.Unlock()
-	a.journalWG.Go(func() { a.runJournal(pager, more) })
+	a.journalWG.Go(func() { a.runJournal(ctx, pager, more) })
 }
 
-func (a *App) runJournal(pager journalPager, more chan struct{}) {
+func (a *App) runJournal(ctx context.Context, pager journalPager, more chan struct{}) {
 	defer pager.Cancel()
 	for range more {
 		rows, done, err := pager.Next(a.journalPageSize)
@@ -47,7 +47,12 @@ func (a *App) runJournal(pager journalPager, more chan struct{}) {
 			a.log.Warn("load journal failed", "error", err)
 		}
 		if len(rows) > 0 {
-			a.Post(func() { a.journalView.Append(rows) })
+			a.Post(func() {
+				if ctx.Err() != nil {
+					return
+				}
+				a.journalView.Append(rows)
+			})
 		}
 		if done {
 			return
@@ -86,6 +91,7 @@ func (a *App) stopJournal() {
 func (a *App) onJournalRowSelected(row journal.Row) {
 	a.selectedCommit = row.ID
 	a.commitSelected = true
+	a.setFilesSelected(false)
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))
 	a.startDiff(row.ID)
 }
