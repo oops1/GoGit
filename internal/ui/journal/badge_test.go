@@ -3,6 +3,8 @@ package journal
 import (
 	"image/color"
 	"testing"
+
+	"github.com/oops1/gogit/internal/ui/panetitle"
 )
 
 func TestAuthorColorIsDeterministicForTheSameName(t *testing.T) {
@@ -40,29 +42,11 @@ func TestAuthorColorIsAlwaysFromThePalette(t *testing.T) {
 	}
 }
 
-func TestBadgeTextColorIsDarkOnALightBackground(t *testing.T) {
-	light := color.RGBA{R: 0xF5, G: 0xF5, B: 0xF5, A: 0xFF}
-	if got := badgeTextColor(light); got != badgeTextOnLight {
-		t.Fatalf("badgeTextColor(light) = %v, want %v", got, badgeTextOnLight)
-	}
-}
-
-func TestBadgeTextColorIsWhiteOnADarkBackground(t *testing.T) {
-	dark := color.RGBA{R: 0x10, G: 0x10, B: 0x10, A: 0xFF}
-	if got := badgeTextColor(dark); got != badgeTextOnDark {
-		t.Fatalf("badgeTextColor(dark) = %v, want %v", got, badgeTextOnDark)
-	}
-}
-
-func TestLuminanceOfWhiteIsMaximal(t *testing.T) {
-	if got := luminance(color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}); got != 255 {
-		t.Fatalf("luminance(white) = %d, want 255", got)
-	}
-}
-
-func TestLuminanceOfBlackIsZero(t *testing.T) {
-	if got := luminance(color.RGBA{A: 0xFF}); got != 0 {
-		t.Fatalf("luminance(black) = %d, want 0", got)
+func TestBadgeTextColorIsTheXorOfTheBadgeColour(t *testing.T) {
+	for _, bg := range badgePalette {
+		if got, want := badgeTextColor(bg), panetitle.XOR(bg); got != want {
+			t.Fatalf("badgeTextColor(%v) = %v, want %v", bg, got, want)
+		}
 	}
 }
 

@@ -281,6 +281,7 @@ func (a *App) retranslateGrids() {
 		}
 	}
 	a.filesGrid.Retranslate()
+	a.journalView.SetFullAuthorName(a.cfg.UI.JournalFullAuthorName)
 }
 
 func (a *App) ColumnHeaders(grid string) []string {

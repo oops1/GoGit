@@ -98,9 +98,12 @@ func (g *Grid) rebuildColumns() {
 		}
 		def, _ := columnByID(id)
 		var col datagrid.Column
-		if id == ColName {
+		switch id {
+		case ColName:
 			col = datagrid.NewTemplateColumn(i18n.T(def.key), g.drawNameCell)
-		} else {
+		case ColState:
+			col = datagrid.NewTemplateColumn(i18n.T(def.key), drawStateCell)
+		default:
 			col = datagrid.NewTextColumn(i18n.T(def.key), def.path)
 		}
 		col.SetWidth(def.width)

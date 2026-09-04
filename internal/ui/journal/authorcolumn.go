@@ -5,25 +5,30 @@ import (
 )
 
 const (
-	authorColumnIndex   = 2
-	authorBadgeSize     = 16
-	authorBadgePaddingX = 4
+	authorColumnIndex     = 2
+	authorBadgePaddingX   = 3
+	authorBadgePaddingY   = 1
+	authorBadgeColumnWide = 160
 )
 
-func newAuthorColumn(header string, fullName bool) datagrid.Column {
+func authorBadgeColumnWidth(rowHeight int) int {
+	return badgeFitSize(rowHeight) + 2*authorBadgePaddingX
+}
+
+func (v *View) newAuthorColumn(header string, fullName bool) datagrid.Column {
 	if fullName {
 		return datagrid.NewTextColumn(header, "Author")
 	}
-	return datagrid.NewTemplateColumn(header, drawAuthorBadgeCell)
+	return datagrid.NewTemplateColumn(header, v.drawAuthorBadgeCell)
 }
 
-func drawAuthorBadgeCell(cdc datagrid.CellDrawContext) {
+func (v *View) drawAuthorBadgeCell(cdc datagrid.CellDrawContext) {
 	row, ok := cdc.Item.(Row)
 	if !ok {
 		return
 	}
 	initials := Initials(row.Author)
-	if initials == "" {
+	if initials == "" || v.sameAuthorAbove(cdc.RowIndex, row.Author) {
 		return
 	}
 	size := badgeFitSize(cdc.Rect.Dy())
@@ -38,15 +43,18 @@ func drawAuthorBadgeCell(cdc datagrid.CellDrawContext) {
 
 	textColor := badgeTextColor(authorColor(row.Author))
 	textWidth := cdc.DrawCtx.MeasureText(initials, cdc.FontSize)
-	textX := x + (size-textWidth)/2
-	textY := cdc.Rect.Min.Y + (cdc.Rect.Dy()-14)/2
-	cdc.DrawCtx.DrawTextSize(initials, textX, textY, cdc.FontSize, textColor)
+	textHeight := int(cdc.FontSize * fontHeightRatio)
+	cdc.DrawCtx.DrawTextSize(initials, x+(size-textWidth)/2, y+(size-textHeight)/2, cdc.FontSize, textColor)
+}
+
+func (v *View) sameAuthorAbove(index int, author string) bool {
+	if index <= 0 {
+		return false
+	}
+	previous, ok := v.items.Get(index - 1).(Row)
+	return ok && previous.Author == author
 }
 
 func badgeFitSize(rowHeight int) int {
-	size := authorBadgeSize
-	if avail := rowHeight - 2*authorBadgePaddingX; avail < size {
-		size = avail
-	}
-	return size
+	return rowHeight - 2*authorBadgePaddingY
 }

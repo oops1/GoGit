@@ -5,15 +5,11 @@ import (
 	"image"
 	"image/color"
 	"sync"
+
+	"github.com/oops1/gogit/internal/ui/panetitle"
 )
 
 const badgeCornerRadius = 3
-
-const badgeLuminanceThreshold = 140
-
-var badgeTextOnLight = color.RGBA{R: 0x0D, G: 0x11, B: 0x17, A: 0xFF}
-
-var badgeTextOnDark = color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 
 var badgePalette = []color.RGBA{
 	{R: 0x2F, G: 0x81, B: 0xF7, A: 0xFF},
@@ -35,15 +31,8 @@ func authorColor(author string) color.RGBA {
 	return badgePalette[idx]
 }
 
-func luminance(c color.RGBA) int {
-	return (299*int(c.R) + 587*int(c.G) + 114*int(c.B)) / 1000
-}
-
 func badgeTextColor(bg color.RGBA) color.RGBA {
-	if luminance(bg) >= badgeLuminanceThreshold {
-		return badgeTextOnLight
-	}
-	return badgeTextOnDark
+	return panetitle.XOR(bg)
 }
 
 type badgeKey struct {
