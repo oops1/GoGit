@@ -33,6 +33,8 @@ jobs:
           go test -count=1 -race ./... 2>&1 | tee race.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
+            sed -n '/WARNING: DATA RACE/,/^==================$/p' race.log | head -60 |
+              while IFS= read -r line; do echo "::error::$line"; done
             grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" race.log | head -40 |
               while IFS= read -r line; do echo "::error::$line"; done
           fi
