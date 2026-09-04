@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -102,6 +103,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	cfg.Theme = ThemeLight
 	cfg.Groups = []Group{{ID: "g1", Name: "Work"}}
 	cfg.Repositories = []Repository{{ID: "r1", Name: "gogit", Path: `D:\Projects\gogit`, Group: "g1"}}
+	cfg.UI.FilesStatusFilter = []string{"ignored", "untracked"}
 	if err := cfg.Save(path); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +129,9 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Groups) != 1 || loaded.Groups[0].Name != "Work" {
 		t.Fatalf("groups: %+v", loaded.Groups)
+	}
+	if !slices.Equal(loaded.UI.FilesStatusFilter, []string{"ignored", "untracked"}) {
+		t.Fatalf("files status filter: %+v", loaded.UI.FilesStatusFilter)
 	}
 }
 

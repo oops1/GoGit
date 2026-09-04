@@ -188,8 +188,10 @@ func (a *App) retranslate() {
 		a.applyMenuTexts(i)
 	}
 	a.retranslateGrids()
+	a.retranslateFilesStatusButtons()
 	a.root.Title = i18n.T("App.Title")
 	a.updateStatusText()
+	a.applyFilesFilter()
 }
 
 func (a *App) applyMenuTexts(idx int) {

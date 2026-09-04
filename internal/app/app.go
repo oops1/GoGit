@@ -104,14 +104,15 @@ type App struct {
 	workingCancel context.CancelFunc
 	workingWG     sync.WaitGroup
 
-	filesMu          sync.Mutex
-	filesMode        filesMode
-	currentFiles     []diff.File
-	currentEntries   []worktree.Entry
-	commitSelected   bool
-	filesAllRows     []changes.Row
-	filesFilterQuery string
-	activeModified   bool
+	filesMu            sync.Mutex
+	filesMode          filesMode
+	currentFiles       []diff.File
+	currentEntries     []worktree.Entry
+	commitSelected     bool
+	filesAllRows       []changes.Row
+	filesFilterQuery   string
+	filesStatusAllowed map[changes.StatusFilter]bool
+	activeModified     bool
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -194,6 +195,11 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: filesFilterCount", ErrWidgetMissing)
 	}
+	for _, name := range filesStatusButtons {
+		if _, ok := named[name].(*widget.Button); !ok {
+			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
+		}
+	}
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
@@ -250,6 +256,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
 	a.restoreFilesColumns()
 	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
+	a.restoreFilesStatusFilter()
+	a.wireFilesStatusButtons()
 	a.filesFilterInput.OnChange = a.onFilesFilterChanged
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
@@ -533,6 +541,7 @@ func (a *App) applyTheme() {
 	theme := themeFor(a.EffectiveTheme())
 	a.eng.SetTheme(theme)
 	a.applyToolbarIcons(theme)
+	a.applyFilesStatusButtonVisuals(theme)
 	a.applyRepoTreeTheme(theme)
 }
 

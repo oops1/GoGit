@@ -1,8 +1,6 @@
 package app
 
 import (
-	"strings"
-
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/changes"
 )
@@ -25,15 +23,16 @@ func (a *App) applyFilesFilter() {
 	a.filesMu.Lock()
 	rows := a.filesAllRows
 	query := a.filesFilterQuery
+	allowed := a.filesStatusAllowed
 	a.filesMu.Unlock()
 
-	filtered := changes.FilterRows(rows, query)
+	filtered := changes.FilterRowsByStatus(rows, query, allowed)
 	items := make([]interface{}, len(filtered))
 	for i, r := range filtered {
 		items[i] = r
 	}
 	a.filesItems.SetItems(items)
-	a.setFilesCounterText(len(filtered), len(rows), strings.TrimSpace(query) != "")
+	a.setFilesCounterText(len(filtered), len(rows), len(filtered) != len(rows))
 }
 
 func (a *App) setFilesCounterText(shown, total int, filtered bool) {

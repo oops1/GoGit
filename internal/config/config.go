@@ -56,6 +56,7 @@ type UI struct {
 	ShowStatusBar       bool     `toml:"show_status_bar"`
 	FilesColumns        []string `toml:"files_columns"`
 	FilesVisibleColumns []string `toml:"files_visible_columns"`
+	FilesStatusFilter   []string `toml:"files_status_filter"`
 }
 
 type Group struct {

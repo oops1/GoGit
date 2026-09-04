@@ -10,6 +10,11 @@ import (
 	"github.com/oops1/gogit/internal/config"
 )
 
+const filesStatusButtonsXAML = `<Button x:Name="filesFilterStaged"/><Button x:Name="filesFilterModified"/>` +
+	`<Button x:Name="filesFilterAdded"/><Button x:Name="filesFilterDeleted"/>` +
+	`<Button x:Name="filesFilterRenamed"/><Button x:Name="filesFilterUntracked"/>` +
+	`<Button x:Name="filesFilterIgnored"/><Button x:Name="filesFilterConflict"/>`
+
 func writeFile(dir, name, content string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
