@@ -2,6 +2,7 @@ package journal
 
 import (
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -220,4 +221,45 @@ func TestPagerCancelIsSafeToCallTwice(t *testing.T) {
 	pager := NewPager(t.Context(), source, revision.Options{})
 	pager.Cancel()
 	pager.Cancel()
+}
+
+func TestNewPagerDefersIterationUntilTheFirstNext(t *testing.T) {
+	source, ids := buildChainRepo(t, 3)
+	counted := &countingObjects{inner: source.Objects}
+	source.Objects = counted
+	pager := NewPager(t.Context(), source, revision.Options{})
+	t.Cleanup(pager.Cancel)
+	if counted.gets != 0 {
+		t.Fatalf("NewPager read %d objects before the first Next", counted.gets)
+	}
+	rows, _, err := pager.Next(1)
+	if err != nil || len(rows) != 1 || rows[0].ID != ids[len(ids)-1] {
+		t.Fatalf("Next returned %d rows, error %v", len(rows), err)
+	}
+	if counted.gets == 0 {
+		t.Fatal("Next did not read any object")
+	}
+}
+
+func TestPagerNextWorksWhenNewPagerRanOnAThreadLockedGoroutine(t *testing.T) {
+	source, _ := buildChainRepo(t, 3)
+	created := make(chan *Pager, 1)
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		created <- NewPager(t.Context(), source, revision.Options{})
+	}()
+	pager := <-created
+	done := make(chan error, 1)
+	go func() {
+		rows, _, err := pager.Next(2)
+		pager.Cancel()
+		if err == nil && len(rows) != 2 {
+			err = errors.New("pager returned no rows")
+		}
+		done <- err
+	}()
+	if err := <-done; err != nil {
+		t.Fatalf("Next on another goroutine returned %v", err)
+	}
 }

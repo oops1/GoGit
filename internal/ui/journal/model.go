@@ -73,6 +73,7 @@ func loadDecorations(source revision.Context) (map[hash.ObjectID][]string, error
 }
 
 type Pager struct {
+	seq    iter.Seq2[Row, error]
 	cancel context.CancelFunc
 	next   func() (Row, error, bool)
 	stop   func()
@@ -80,17 +81,24 @@ type Pager struct {
 
 func NewPager(ctx context.Context, source revision.Context, opts revision.Options) *Pager {
 	walkCtx, cancel := context.WithCancel(ctx)
-	next, stop := iter.Pull2(Load(walkCtx, source, opts))
-	return &Pager{cancel: cancel, next: next, stop: stop}
+	return &Pager{seq: Load(walkCtx, source, opts), cancel: cancel}
+}
+
+func (p *Pager) pull() func() (Row, error, bool) {
+	if p.next == nil {
+		p.next, p.stop = iter.Pull2(p.seq)
+	}
+	return p.next
 }
 
 func (p *Pager) Next(n int) ([]Row, bool, error) {
 	if n <= 0 {
 		return nil, false, nil
 	}
+	next := p.pull()
 	rows := make([]Row, 0, n)
 	for len(rows) < n {
-		row, err, ok := p.next()
+		row, err, ok := next()
 		if !ok {
 			return rows, true, nil
 		}
@@ -104,5 +112,7 @@ func (p *Pager) Next(n int) ([]Row, bool, error) {
 
 func (p *Pager) Cancel() {
 	p.cancel()
-	p.stop()
+	if p.stop != nil {
+		p.stop()
+	}
 }
