@@ -18,6 +18,7 @@ type Branch struct {
 
 type Remote struct {
 	Name     string
+	Head     refs.Name
 	Branches []Branch
 }
 
@@ -114,6 +115,10 @@ func loadRemotes(store *refs.Store) ([]Remote, error) {
 			index[remoteName] = position
 			remotes = append(remotes, Remote{Name: remoteName})
 		}
+		if isRemoteHead(ref.Name) {
+			remotes[position].Head = ref.SymbolicTarget
+			continue
+		}
 		remotes[position].Branches = append(remotes[position].Branches, Branch{
 			Name:           ref.Name,
 			Target:         ref.Target,
@@ -121,6 +126,10 @@ func loadRemotes(store *refs.Store) ([]Remote, error) {
 		})
 	}
 	return remotes, nil
+}
+
+func isRemoteHead(name refs.Name) bool {
+	return strings.HasSuffix(string(name), "/"+string(refs.HEAD))
 }
 
 func loadTags(store *refs.Store) ([]Tag, error) {

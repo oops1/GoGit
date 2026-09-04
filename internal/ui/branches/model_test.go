@@ -262,7 +262,7 @@ func TestLoadGroupsRemoteBranchesByRemoteName(t *testing.T) {
 	}
 }
 
-func TestLoadResolvesRemoteHeadSymbolicTarget(t *testing.T) {
+func TestLoadKeepsRemoteHeadOutOfBranchesAndRecordsItsTarget(t *testing.T) {
 	r := initTestRepo(t, "main")
 	store := openTestStore(t, r, nil)
 	setRef(t, store, refs.RemoteBranchName("origin", "main"), oid(t, "11"))
@@ -275,20 +275,31 @@ func TestLoadResolvesRemoteHeadSymbolicTarget(t *testing.T) {
 	if len(snap.Remotes) != 1 {
 		t.Fatalf("Remotes = %d, want 1", len(snap.Remotes))
 	}
-	var head *Branch
-	for i, b := range snap.Remotes[0].Branches {
+	remote := snap.Remotes[0]
+	if remote.Head != refs.RemoteBranchName("origin", "main") {
+		t.Fatalf("Head = %q, want origin/main", remote.Head)
+	}
+	for _, b := range remote.Branches {
 		if b.Name == refs.Name("refs/remotes/origin/HEAD") {
-			head = &snap.Remotes[0].Branches[i]
+			t.Fatal("the symbolic HEAD must not be listed as a branch of its own")
 		}
 	}
-	if head == nil {
-		t.Fatal("origin/HEAD missing from Branches")
+	if len(remote.Branches) != 1 || remote.Branches[0].Name != refs.RemoteBranchName("origin", "main") {
+		t.Fatalf("Branches = %+v", remote.Branches)
 	}
-	if head.SymbolicTarget != refs.RemoteBranchName("origin", "main") {
-		t.Fatalf("SymbolicTarget = %q, want origin/main", head.SymbolicTarget)
+}
+
+func TestLoadLeavesRemoteHeadEmptyWithoutTheSymbolicRef(t *testing.T) {
+	r := initTestRepo(t, "main")
+	store := openTestStore(t, r, nil)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), oid(t, "11"))
+
+	snap, err := Load(store)
+	if err != nil {
+		t.Fatalf("Load returned error %v", err)
 	}
-	if head.Target != oid(t, "11") {
-		t.Fatalf("Target = %s, want %s", head.Target, oid(t, "11"))
+	if snap.Remotes[0].Head != "" {
+		t.Fatalf("Head = %q, want empty", snap.Remotes[0].Head)
 	}
 }
 

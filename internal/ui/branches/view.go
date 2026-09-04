@@ -17,7 +17,6 @@ const (
 	remotesGroupKey = "remotes"
 	tagsGroupKey    = "tags"
 
-	remoteArrow   = " → "
 	shortIDLength = 7
 
 	treeIconSize = 16
@@ -164,12 +163,15 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 
 		entries := make([]pathEntry, 0, len(remote.Branches))
 		for _, b := range remote.Branches {
-			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
-			label := ""
-			if b.SymbolicTarget != "" {
-				label = relative + remoteArrow + b.SymbolicTarget.Short()
+			if isRemoteHead(b.Name) {
+				continue
 			}
-			entries = append(entries, pathEntry{path: relative, ref: b.Name, label: label, icon: "branch_remote"})
+			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
+			icon := "branch_remote"
+			if remote.Head != "" && b.Name == remote.Head {
+				icon = "branch_head"
+			}
+			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon})
 		}
 		v.buildPathTree(node, key, entries)
 	}

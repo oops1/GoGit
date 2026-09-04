@@ -39,6 +39,7 @@ func fullSnapshot(t *testing.T) Snapshot {
 		Remotes: []Remote{
 			{
 				Name: "origin",
+				Head: refs.RemoteBranchName("origin", "main"),
 				Branches: []Branch{
 					{
 						Name:           refs.Name("refs/remotes/origin/HEAD"),
@@ -131,11 +132,8 @@ func TestRenderBuildsRemotesGroupWithHeadArrowAndNesting(t *testing.T) {
 	if origin.DisplayText() != "origin" {
 		t.Fatalf("remote node text = %q", origin.DisplayText())
 	}
-	if len(origin.Children) != 3 {
-		t.Fatalf("origin children = %v", childTexts(origin))
-	}
-	if origin.Children[0].DisplayText() != "HEAD → origin/main" {
-		t.Fatalf("origin/HEAD text = %q", origin.Children[0].DisplayText())
+	if len(origin.Children) != 2 {
+		t.Fatalf("origin children = %v, the symbolic HEAD must not get a row of its own", childTexts(origin))
 	}
 	feature := findChild(t, origin, "feature")
 	if len(feature.Children) != 1 || feature.Children[0].DisplayText() != "x" {
@@ -144,6 +142,9 @@ func TestRenderBuildsRemotesGroupWithHeadArrowAndNesting(t *testing.T) {
 	main := findChild(t, origin, "main")
 	if main.DisplayText() != "main" {
 		t.Fatalf("origin/main text = %q", main.DisplayText())
+	}
+	if main.Icon == feature.Children[0].Icon {
+		t.Fatal("the branch the remote HEAD points at must carry its own icon")
 	}
 }
 
