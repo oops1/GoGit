@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/repo"
@@ -58,11 +59,25 @@ func (a *App) repoTreeState() map[string]repos.State {
 
 func (a *App) onRepoTreeSelect(id string) {
 	a.setSelected(id)
+	a.leaveCommitView()
 	a.clearFilesDirFilter()
 }
 
 func (a *App) onRepoTreeSelectDirectory(_, relPath string) {
+	a.leaveCommitView()
 	a.setFilesDirFilter(relPath)
+}
+
+func (a *App) leaveCommitView() {
+	if !a.commitIsSelected() {
+		return
+	}
+	a.stopDiff()
+	a.selectedCommit = hash.ObjectID{}
+	a.setCommitSelected(false)
+	a.journalView.ClearSelection()
+	a.diffView.Clear()
+	a.requestWorking()
 }
 
 func mutedDirectories(entries []worktree.Entry) []string {

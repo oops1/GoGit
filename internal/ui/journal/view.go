@@ -44,6 +44,13 @@ func (v *View) Reset() {
 	v.items.Clear()
 }
 
+func (v *View) ClearSelection() {
+	if v.grid == nil {
+		return
+	}
+	v.grid.Grid.SetSelectedIndex(-1)
+}
+
 func (v *View) Append(rows []Row) {
 	for _, row := range rows {
 		v.items.Add(row)

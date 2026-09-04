@@ -15,6 +15,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
+	"github.com/oops1/gogit/internal/ui/journal"
 )
 
 func buildModifiedNestedFilesFixture(t *testing.T, target string) {
@@ -280,5 +281,31 @@ func TestRepoTreeStateMutesIgnoredAndUntrackedDirectories(t *testing.T) {
 	got := mutedDirectories(entries)
 	if !slices.Equal(got, []string{"output", "drafts"}) {
 		t.Fatalf("muted = %v", got)
+	}
+}
+
+func TestPickingADirectoryLeavesTheCommitView(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 1)
+	waitForJournalRows(t, a, 1)
+
+	first := readOnDispatcher(t, a, func() journal.Row {
+		row, _ := a.named["journalGrid"].(*widget.DataGridWidget).Grid.ItemsSource().Get(0).(journal.Row)
+		return row
+	})
+	readOnDispatcher(t, a, func() bool { a.onJournalRowSelected(first); return true })
+	waitForFilesMode(t, a, filesModeCommit, 1)
+
+	readOnDispatcher(t, a, func() bool { a.onRepoTreeSelectDirectory("r1", "src"); return true })
+	waitForFilesMode(t, a, filesModeWorking, 0)
+
+	if readOnDispatcher(t, a, a.commitIsSelected) {
+		t.Fatal("the commit must be deselected after picking a directory")
+	}
+	if doc := diffDocumentOnDispatcher(t, a); doc.OldName != "" || doc.NewName != "" {
+		t.Fatalf("diff document = %+v, want it cleared", doc)
 	}
 }

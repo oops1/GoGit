@@ -215,3 +215,23 @@ func TestEnsureLoadedNotSetDoesNotPanic(t *testing.T) {
 	v, _ := bound(t)
 	v.EnsureLoaded(5)
 }
+
+func TestClearSelectionDropsTheHighlightedRow(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	v.Append([]Row{{Message: "one"}, {Message: "two"}})
+	clickRow(grid, 1)
+	if grid.Grid.SelectedItem() == nil {
+		t.Fatal("a click must select the row")
+	}
+
+	v.ClearSelection()
+
+	if got := grid.Grid.SelectedItem(); got != nil {
+		t.Fatalf("selected item = %v, want none", got)
+	}
+}
+
+func TestClearSelectionWithoutAGridIsANoOp(t *testing.T) {
+	NewView().ClearSelection()
+}

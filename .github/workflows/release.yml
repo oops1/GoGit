@@ -61,4 +61,4 @@ jobs:
             dist/gogit-*.zip
             dist/gogit-*.tar.gz
             dist/SHA256SUMS
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
