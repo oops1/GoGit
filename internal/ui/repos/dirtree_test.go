@@ -620,3 +620,30 @@ func TestRepositoryIconIsMutedWhileAnotherRepositoryIsActive(t *testing.T) {
 		t.Fatal("the active repository must not look like the closed one")
 	}
 }
+
+func TestDirTreeDimsTrackedDotDirectoriesButKeepsThemApartFromIgnoredOnes(t *testing.T) {
+	dir := t.TempDir()
+	mkdirs(t, dir, ".github", ".idea", "assets")
+	reg, repoID := repoRegistry(t, dir)
+	v, tw := bound(t)
+	v.Render(reg, map[string]State{repoID: {MutedDirs: []string{".idea"}}})
+
+	root, _ := v.Item(repoID)
+	tw.Tree.ExpandItem(root)
+
+	github := findChild(root, ".github")
+	idea := findChild(root, ".idea")
+	assets := findChild(root, "assets")
+	if github == nil || idea == nil || assets == nil {
+		t.Fatalf("children = %+v", root.Children)
+	}
+	if github.Icon == assets.Icon {
+		t.Fatal("a service directory must be dimmer than an ordinary one")
+	}
+	if github.Icon == idea.Icon {
+		t.Fatal("a tracked service directory must not look ignored")
+	}
+	if idea.Icon == assets.Icon {
+		t.Fatal("an ignored directory must not look ordinary")
+	}
+}

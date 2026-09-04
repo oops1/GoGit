@@ -312,10 +312,18 @@ func (v *View) iconLocked(name string, active bool) image.Image {
 }
 
 func directoryIconLocked(muted []string, rel string) string {
-	if isMutedDir(muted, rel) {
+	switch {
+	case isMutedDir(muted, rel):
 		return "directory_muted"
+	case isDotDir(rel):
+		return "directory_dim"
+	default:
+		return "directory"
 	}
-	return "directory"
+}
+
+func isDotDir(rel string) bool {
+	return strings.HasPrefix(filepath.Base(rel), ".")
 }
 
 func isMutedDir(muted []string, rel string) bool {
