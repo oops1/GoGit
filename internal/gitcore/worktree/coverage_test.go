@@ -101,20 +101,24 @@ func TestStatusDoesNotMatchARenameAcrossDifferentObjectTypes(t *testing.T) {
 	}
 }
 
-func TestStatusHidesADirectoryContainingOnlyIgnoredFiles(t *testing.T) {
+func TestStatusCollapsesADirectoryContainingOnlyIgnoredFilesAsIgnored(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage(".gitignore", "*.log\n")
 	tr.commit("initial")
 	tr.writeFile("mixed/notes.log", "content\n")
+	tr.writeFile("mixed/deep/more.log", "content\n")
 	w := tr.open()
 	status, err := w.Status(t.Context())
 	if err != nil {
 		t.Fatalf("Status returned error %v", err)
 	}
-	for path := range entryMap(status.Entries) {
-		if path == "mixed/" || path == "mixed/notes.log" {
-			t.Fatalf("a directory holding only ignored files should not be reported, got %q", path)
-		}
+	entries := entryMap(status.Entries)
+	entry, ok := entries["mixed/"]
+	if !ok || entry.Staged != StatusUnmodified || entry.Unstaged != StatusIgnored || !entry.IsDir {
+		t.Fatalf("mixed/ entry = %#v, want a collapsed ignored directory", entry)
+	}
+	if _, ok := entries["mixed/notes.log"]; ok {
+		t.Fatalf("mixed/notes.log should have been collapsed into the parent directory")
 	}
 }
 

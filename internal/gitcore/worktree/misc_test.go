@@ -107,8 +107,9 @@ func TestOpenUsesTheConfiguredExcludesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status returned error %v", err)
 	}
-	if _, ok := entryMap(status.Entries)["ignored-globally.txt"]; ok {
-		t.Fatalf("ignored-globally.txt should be hidden by the configured excludes file")
+	entry, ok := entryMap(status.Entries)["ignored-globally.txt"]
+	if !ok || entry.Unstaged != StatusIgnored {
+		t.Fatalf("ignored-globally.txt entry = %#v, want Unstaged=Ignored per the configured excludes file", entry)
 	}
 }
 

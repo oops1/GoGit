@@ -220,6 +220,9 @@ func compareStatus(t *testing.T, ours Status, wantChanged map[string]porcelainEn
 	}
 
 	for _, entry := range ours.Entries {
+		if entry.Unstaged == StatusIgnored && entry.Staged == StatusUnmodified && entry.Conflict == ConflictNone {
+			continue
+		}
 		if entry.Unstaged == StatusUntracked && entry.Staged == StatusUnmodified && entry.Conflict == ConflictNone {
 			if !wantUntracked[entry.Path] {
 				t.Errorf("we report %q as untracked, git does not", entry.Path)
@@ -422,6 +425,152 @@ func TestOracleStatusMatchesGitStatusPorcelainV2(t *testing.T) {
 			o.run(dir, "config", "core.autocrlf", "false")
 			tc.setup(o, dir)
 			o.compare(dir)
+		})
+	}
+}
+
+type ignoredPorcelain struct {
+	changed   map[string]porcelainEntry
+	untracked map[string]bool
+	ignored   map[string]bool
+}
+
+func parsePorcelainV2WithIgnored(t *testing.T, out string) ignoredPorcelain {
+	t.Helper()
+	changed, untracked := parsePorcelainV2(t, out)
+	result := ignoredPorcelain{changed: changed, untracked: untracked, ignored: map[string]bool{}}
+	fields := strings.Split(out, "\x00")
+	if len(fields) > 0 && fields[len(fields)-1] == "" {
+		fields = fields[:len(fields)-1]
+	}
+	for _, record := range fields {
+		if strings.HasPrefix(record, "! ") {
+			result.ignored[record[2:]] = true
+		}
+	}
+	return result
+}
+
+func (o *oracle) statusIgnored(dir string) ignoredPorcelain {
+	o.t.Helper()
+	out := o.run(dir, "status", "--porcelain=v2", "-z", "--ignored=traditional")
+	return parsePorcelainV2WithIgnored(o.t, out)
+}
+
+func compareStatusWithIgnored(t *testing.T, ours Status, want ignoredPorcelain) {
+	t.Helper()
+	remainingChanged := make(map[string]porcelainEntry, len(want.changed))
+	for path, entry := range want.changed {
+		remainingChanged[path] = entry
+	}
+	remainingUntracked := make(map[string]bool, len(want.untracked))
+	for path := range want.untracked {
+		remainingUntracked[path] = true
+	}
+	remainingIgnored := make(map[string]bool, len(want.ignored))
+	for path := range want.ignored {
+		remainingIgnored[path] = true
+	}
+
+	for _, entry := range ours.Entries {
+		switch {
+		case entry.Staged == StatusUnmodified && entry.Unstaged == StatusIgnored && entry.Conflict == ConflictNone:
+			if !want.ignored[entry.Path] {
+				t.Errorf("we report %q as ignored, git does not", entry.Path)
+			}
+			delete(remainingIgnored, entry.Path)
+		case entry.Unstaged == StatusUntracked && entry.Staged == StatusUnmodified && entry.Conflict == ConflictNone:
+			if !want.untracked[entry.Path] {
+				t.Errorf("we report %q as untracked, git does not", entry.Path)
+			}
+			delete(remainingUntracked, entry.Path)
+		default:
+			x, y := translateCode(entry.Staged), translateCode(entry.Unstaged)
+			wantEntry, ok := want.changed[entry.Path]
+			if !ok {
+				t.Errorf("we report %q as %c%c, git does not report it as changed", entry.Path, x, y)
+				continue
+			}
+			if wantEntry.x != x || wantEntry.y != y {
+				t.Errorf("%s: our XY = %c%c, git XY = %c%c", entry.Path, x, y, wantEntry.x, wantEntry.y)
+			}
+			delete(remainingChanged, entry.Path)
+		}
+	}
+	for path, entry := range remainingChanged {
+		t.Errorf("git reports %q as %c%c, we do not report it", path, entry.x, entry.y)
+	}
+	for path := range remainingUntracked {
+		t.Errorf("git reports %q as untracked, we do not report it", path)
+	}
+	for path := range remainingIgnored {
+		t.Errorf("git reports %q as ignored, we do not report it", path)
+	}
+}
+
+func (o *oracle) compareIgnored(dir string) {
+	o.t.Helper()
+	want := o.statusIgnored(dir)
+	ours := o.ourStatus(dir)
+	compareStatusWithIgnored(o.t, ours, want)
+}
+
+func TestOracleIgnoredEntriesMatchGitStatusPorcelainIgnoredTraditional(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(o *oracle, dir string)
+	}{
+		{"ignored directory without tracked files collapses to one entry", func(o *oracle, dir string) {
+			o.write(dir, ".gitignore", "ignored/\n")
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "ignored/one.txt", "content\n")
+			o.write(dir, "ignored/nested/two.txt", "content\n")
+		}},
+		{"ignored directory holding a force-tracked file is walked into", func(o *oracle, dir string) {
+			o.write(dir, ".gitignore", "ignored/\n")
+			o.write(dir, "ignored/tracked.txt", "hello\n")
+			o.run(dir, "add", "-f", "ignored/tracked.txt")
+			o.run(dir, "add", ".gitignore")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "ignored/tracked.txt", "changed\n")
+			o.write(dir, "ignored/untracked.txt", "content\n")
+		}},
+		{"ignored file sits next to a modified tracked file", func(o *oracle, dir string) {
+			o.write(dir, ".gitignore", "*.log\n")
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "a.txt", "goodbye\n")
+			o.write(dir, "debug.log", "noise\n")
+		}},
+		{"a directory holding only ignored files collapses as ignored", func(o *oracle, dir string) {
+			o.write(dir, ".gitignore", "*.log\n")
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "mixed/notes.log", "content\n")
+			o.write(dir, "mixed/deep/more.log", "content\n")
+		}},
+		{"an untracked file next to an ignored directory", func(o *oracle, dir string) {
+			o.write(dir, ".gitignore", "build/\n")
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "build/output.bin", "binary\n")
+			o.write(dir, "scratch/notes.txt", "todo\n")
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			o := newOracle(t)
+			dir := o.repoDir("work")
+			o.run(dir, "init", "-q", "-b", "main", ".")
+			o.run(dir, "config", "core.autocrlf", "false")
+			tc.setup(o, dir)
+			o.compareIgnored(dir)
 		})
 	}
 }

@@ -259,7 +259,7 @@ func TestStatusIgnoresAnEmptyUntrackedDirectory(t *testing.T) {
 	}
 }
 
-func TestStatusHidesAnIgnoredFile(t *testing.T) {
+func TestStatusReportsAnIgnoredFile(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage(".gitignore", "ignored.txt\n")
 	tr.commit("initial")
@@ -269,25 +269,79 @@ func TestStatusHidesAnIgnoredFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status returned error %v", err)
 	}
-	if _, ok := entryMap(status.Entries)["ignored.txt"]; ok {
-		t.Fatalf("ignored.txt should not be reported")
+	entry, ok := entryMap(status.Entries)["ignored.txt"]
+	if !ok || entry.Staged != StatusUnmodified || entry.Unstaged != StatusIgnored || entry.IsDir {
+		t.Fatalf("ignored.txt entry = %#v, want Staged=Unmodified Unstaged=Ignored IsDir=false", entry)
 	}
 }
 
-func TestStatusHidesAnIgnoredDirectory(t *testing.T) {
+func TestStatusCollapsesAnIgnoredDirectoryWithoutTrackedFiles(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage(".gitignore", "ignored/\n")
 	tr.commit("initial")
 	tr.writeFile("ignored/one.txt", "content\n")
+	tr.writeFile("ignored/nested/two.txt", "content\n")
 	w := tr.open()
 	status, err := w.Status(t.Context())
 	if err != nil {
 		t.Fatalf("Status returned error %v", err)
 	}
-	for path := range entryMap(status.Entries) {
-		if path == "ignored/" || path == "ignored/one.txt" {
-			t.Fatalf("ignored directory should not be reported, got %q", path)
-		}
+	entries := entryMap(status.Entries)
+	entry, ok := entries["ignored/"]
+	if !ok || entry.Staged != StatusUnmodified || entry.Unstaged != StatusIgnored || !entry.IsDir {
+		t.Fatalf("ignored/ entry = %#v, want a collapsed ignored directory", entry)
+	}
+	if _, ok := entries["ignored/one.txt"]; ok {
+		t.Fatalf("ignored/one.txt should have been collapsed into the parent directory")
+	}
+}
+
+func TestStatusRecursesIntoAnIgnoredDirectoryHoldingAForceTrackedFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage(".gitignore", "ignored/\n")
+	tr.stage("ignored/tracked.txt", "hello\n")
+	tr.commit("initial")
+	tr.writeFile("ignored/tracked.txt", "changed\n")
+	tr.writeFile("ignored/untracked.txt", "content\n")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entries := entryMap(status.Entries)
+	if _, ok := entries["ignored/"]; ok {
+		t.Fatalf("ignored/ must not collapse since it holds a tracked file")
+	}
+	tracked, ok := entries["ignored/tracked.txt"]
+	if !ok || tracked.Unstaged != StatusModified {
+		t.Fatalf("ignored/tracked.txt entry = %#v, want Unstaged=Modified", tracked)
+	}
+	untracked, ok := entries["ignored/untracked.txt"]
+	if !ok || untracked.Staged != StatusUnmodified || untracked.Unstaged != StatusIgnored {
+		t.Fatalf("ignored/untracked.txt entry = %#v, want Staged=Unmodified Unstaged=Ignored", untracked)
+	}
+}
+
+func TestStatusReportsAnIgnoredFileNextToAModifiedFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.stage(".gitignore", "*.log\n")
+	tr.stage("a.txt", "hello\n")
+	tr.commit("initial")
+	tr.writeFile("a.txt", "goodbye\n")
+	tr.writeFile("debug.log", "noise\n")
+	w := tr.open()
+	status, err := w.Status(t.Context())
+	if err != nil {
+		t.Fatalf("Status returned error %v", err)
+	}
+	entries := entryMap(status.Entries)
+	modified, ok := entries["a.txt"]
+	if !ok || modified.Unstaged != StatusModified {
+		t.Fatalf("a.txt entry = %#v, want Unstaged=Modified", modified)
+	}
+	ignored, ok := entries["debug.log"]
+	if !ok || ignored.Staged != StatusUnmodified || ignored.Unstaged != StatusIgnored {
+		t.Fatalf("debug.log entry = %#v, want Staged=Unmodified Unstaged=Ignored", ignored)
 	}
 }
 
