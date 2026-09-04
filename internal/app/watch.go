@@ -39,11 +39,8 @@ func (a *App) handleChangeSet(set watch.ChangeSet) {
 	if set.Has(watch.Head) || set.Has(watch.Refs) || set.Has(watch.State) {
 		a.Post(a.RefreshRepository)
 	}
-	if set.Has(watch.Index) {
-		a.log.Debug("index changed on disk")
-	}
-	if set.Has(watch.WorkTree) {
-		a.log.Debug("work tree changed on disk")
+	if set.Has(watch.Index) || set.Has(watch.WorkTree) {
+		a.Post(a.refreshWorkingStatus)
 	}
 }
 

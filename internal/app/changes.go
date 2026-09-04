@@ -35,17 +35,30 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	if _, ok := e.SelectedItem.(changes.Row); !ok {
 		return
 	}
-	a.filesMu.Lock()
-	files := a.currentFiles
-	a.filesMu.Unlock()
-	if e.SelectedIndex < 0 || e.SelectedIndex >= len(files) {
+	if e.SelectedIndex < 0 {
 		return
 	}
-	a.diffView.SetDocument(changes.FromFile(files[e.SelectedIndex]))
+	a.filesMu.Lock()
+	mode := a.filesMode
+	files := a.currentFiles
+	entries := a.currentEntries
+	a.filesMu.Unlock()
+	if mode == filesModeCommit {
+		if e.SelectedIndex >= len(files) {
+			return
+		}
+		a.diffView.SetDocument(changes.FromFile(files[e.SelectedIndex]))
+		return
+	}
+	if e.SelectedIndex >= len(entries) {
+		return
+	}
+	a.showWorkingDiff(entries[e.SelectedIndex])
 }
 
 func (a *App) startDiff(id hash.ObjectID) {
 	a.stopDiff()
+	a.stopWorking()
 	if a.open == nil {
 		return
 	}
@@ -81,7 +94,9 @@ func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
 		files = files[:changes.MaxFiles]
 	}
 	a.filesMu.Lock()
+	a.filesMode = filesModeCommit
 	a.currentFiles = files
+	a.currentEntries = nil
 	a.filesMu.Unlock()
 	var first diff.File
 	hasFirst := len(files) > 0
@@ -119,9 +134,14 @@ func (a *App) loadDiffFiles(ctx context.Context, db *odb.DB, id hash.ObjectID) (
 
 func (a *App) clearChangesPanels() {
 	a.stopDiff()
+	a.stopWorking()
 	a.filesMu.Lock()
+	a.filesMode = filesModeWorking
 	a.currentFiles = nil
+	a.currentEntries = nil
 	a.filesMu.Unlock()
+	a.selectedCommit = hash.ObjectID{}
+	a.commitSelected = false
 	a.filesItems.Clear()
 	a.diffView.Clear()
 }

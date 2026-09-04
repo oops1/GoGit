@@ -85,6 +85,7 @@ func (a *App) stopJournal() {
 
 func (a *App) onJournalRowSelected(row journal.Row) {
 	a.selectedCommit = row.ID
+	a.commitSelected = true
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))
 	a.startDiff(row.ID)
 }

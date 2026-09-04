@@ -288,14 +288,62 @@ func TestStopWatcherIsANoOpWithoutAnActiveWatcher(t *testing.T) {
 	a.stopWatcher()
 }
 
-func TestHandleChangeSetLogsIndexAndWorkTreeButDoesNotEnqueueARefresh(t *testing.T) {
+func TestHandleChangeSetDoesNotPostAHeadRefsRefreshForIndexOrWorkTreeChanges(t *testing.T) {
 	a := newTestApp(t)
 
 	a.handleChangeSet(watch.ChangeSet{watch.Change{Kind: watch.Index}: struct{}{}})
+	waitForPostQueueDrain(t, a)
 	a.handleChangeSet(watch.ChangeSet{watch.Change{Kind: watch.WorkTree}: struct{}{}})
+	waitForPostQueueDrain(t, a)
 
-	if len(a.postCh) != 0 {
-		t.Fatalf("Index/WorkTree changes must not enqueue a refresh: postCh len = %d", len(a.postCh))
+	if filesModeOnDispatcher(a) != filesModeWorking || filesRowCountOnDispatcher(t, a) != 0 {
+		t.Fatal("Index/WorkTree changes must reload the working copy status, not the branch snapshot")
+	}
+}
+
+func TestHandleChangeSetPostsAWorkingStatusReloadForIndexOrWorkTreeChanges(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepoWithBranch(t, target, "main")
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+	waitForWorkingRows(t, a, 0)
+	if err := writeFile(target, "new.txt", "hello\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	a.handleChangeSet(watch.ChangeSet{watch.Change{Kind: watch.Index}: struct{}{}})
+
+	waitForWorkingRows(t, a, 1)
+	row := filesRowOnDispatcher(t, a, 0)
+	if row.Path != "new.txt" {
+		t.Fatalf("row = %+v, want the untracked new.txt", row)
+	}
+}
+
+func TestHandleChangeSetSkipsTheWorkingStatusReloadWhileACommitIsSelected(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepoWithBranch(t, target, "main")
+	db, store := withJournalRepo(t, target)
+	tree := putChangesTree(t, db, map[string]string{"a.txt": "hello\n"})
+	root := putChangesCommit(t, db, tree)
+	setRef(t, store, refs.BranchName("main"), root)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+	waitForJournalRows(t, a, 1)
+	selectJournalRow(t, a, 0)
+	waitForFilesRows(t, a, 1)
+
+	a.handleChangeSet(watch.ChangeSet{watch.Change{Kind: watch.WorkTree}: struct{}{}})
+	waitForPostQueueDrain(t, a)
+
+	if got := filesRowCountOnDispatcher(t, a); got != 1 || filesModeOnDispatcher(a) != filesModeCommit {
+		t.Fatalf("a WorkTree change must not disturb the selected commit's diff: rows=%d mode=%v", got, filesModeOnDispatcher(a))
 	}
 }
 

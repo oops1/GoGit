@@ -89,18 +89,34 @@ func filesRowOnDispatcher(t *testing.T, a *App, index int) changes.Row {
 	}
 }
 
-func waitForFilesRows(t *testing.T, a *App, want int) {
+func filesModeOnDispatcher(a *App) filesMode {
+	a.filesMu.Lock()
+	defer a.filesMu.Unlock()
+	return a.filesMode
+}
+
+func waitForFilesMode(t *testing.T, a *App, mode filesMode, want int) {
 	t.Helper()
 	deadline := time.Now().Add(testTimeout)
 	for {
-		if filesRowCountOnDispatcher(t, a) >= want {
+		if filesModeOnDispatcher(a) == mode && filesRowCountOnDispatcher(t, a) >= want {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("files grid did not reach %d rows in time", want)
+			t.Fatalf("files grid did not reach mode %v with %d rows in time", mode, want)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func waitForFilesRows(t *testing.T, a *App, want int) {
+	t.Helper()
+	waitForFilesMode(t, a, filesModeCommit, want)
+}
+
+func waitForWorkingRows(t *testing.T, a *App, want int) {
+	t.Helper()
+	waitForFilesMode(t, a, filesModeWorking, want)
 }
 
 func diffDocumentOnDispatcher(t *testing.T, a *App) diffview.Document {
@@ -289,33 +305,6 @@ func TestActivateRepositoryOnAnotherRepositoryClearsChangesPanels(t *testing.T) 
 	}
 	if doc := diffDocumentOnDispatcher(t, a); !doc.IsEmpty() {
 		t.Fatalf("diff view not cleared on repository switch: %+v", doc)
-	}
-}
-
-func TestRefreshRepositoryClearsChangesPanels(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "main")
-	initTestRepoWithBranch(t, target, "main")
-	db, store := withJournalRepo(t, target)
-	tree := putChangesTree(t, db, map[string]string{"a.txt": "hello\n"})
-	root := putChangesCommit(t, db, tree)
-	setRef(t, store, refs.BranchName("main"), root)
-
-	cfg := config.Default()
-	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
-	a := newTestAppWithConfig(t, cfg)
-	a.ActivateRepository("r1")
-	waitForJournalRows(t, a, 1)
-	selectJournalRow(t, a, 0)
-	waitForFilesRows(t, a, 1)
-
-	a.Dispatch(CmdRefresh)
-
-	if got := filesRowCountOnDispatcher(t, a); got != 0 {
-		t.Fatalf("files grid not cleared by refresh: %d rows", got)
-	}
-	if doc := diffDocumentOnDispatcher(t, a); !doc.IsEmpty() {
-		t.Fatalf("diff view not cleared by refresh: %+v", doc)
 	}
 }
 

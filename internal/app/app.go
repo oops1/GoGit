@@ -19,6 +19,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/layout"
 	"github.com/oops1/gogit/internal/repo"
@@ -94,8 +95,15 @@ type App struct {
 	diffCancel context.CancelFunc
 	diffWG     sync.WaitGroup
 
-	filesMu      sync.Mutex
-	currentFiles []diff.File
+	workingMu     sync.Mutex
+	workingCancel context.CancelFunc
+	workingWG     sync.WaitGroup
+
+	filesMu        sync.Mutex
+	filesMode      filesMode
+	currentFiles   []diff.File
+	currentEntries []worktree.Entry
+	commitSelected bool
 
 	postCh   chan func()
 	postStop chan struct{}
@@ -336,6 +344,7 @@ func (a *App) ActivateRepository(id string) {
 	a.reposView.Render(a.registry)
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
+	a.startWorking()
 }
 
 func (a *App) closeOpenRepository() {
@@ -360,8 +369,11 @@ func (a *App) RefreshRepository() {
 	}
 	a.branchesView.Render(snap)
 	a.statusBranchLabel.SetText(branchStatusText(snap))
-	a.clearChangesPanels()
 	a.startJournal()
+	if a.commitSelected {
+		return
+	}
+	a.startWorking()
 }
 
 func branchStatusText(snap branches.Snapshot) string {
@@ -549,6 +561,7 @@ func (a *App) Close() {
 		a.stopWatcher()
 		a.stopJournal()
 		a.stopDiff()
+		a.stopWorking()
 		close(a.postStop)
 		a.postWG.Wait()
 		a.closeOpenRepository()
