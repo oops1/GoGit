@@ -1,0 +1,9 @@
+class C {
+  void a() {
+    x();
+  }
+
+  void b() {
+    y();
+  }
+}

@@ -1,0 +1,11 @@
+func a() {
+	call()
+}
+
+func mid() {
+	call()
+}
+
+func b() {
+	call()
+}
