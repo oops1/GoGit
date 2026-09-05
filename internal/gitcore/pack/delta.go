@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"encoding/binary"
 	"fmt"
 	"sync"
 )
@@ -11,6 +12,11 @@ const (
 	copySizeBytes   = 3
 	copySizeShift   = 4
 	defaultCopySize = 0x10000
+
+	deltaHashLength    = 4
+	deltaMaxCopy       = 0xffffff
+	deltaMaxInsert     = 127
+	deltaMaxCandidates = 16
 )
 
 func ApplyDelta(base, delta []byte) ([]byte, error) {
@@ -46,7 +52,7 @@ func ApplyDelta(base, delta []byte) ([]byte, error) {
 	if int64(len(out)) != targetSize {
 		return nil, fmt.Errorf("%w: %d bytes instead of %d", ErrDeltaSizeMismatch, len(out), targetSize)
 	}
-	return out, nil
+	return out[:len(out):len(out)], nil
 }
 
 func applyCopy(out, base, delta []byte, position int, opcode byte, limit int64) ([]byte, int, error) {
@@ -132,4 +138,127 @@ func acquirePayload(size int64) *payload {
 
 func releasePayload(buffer *payload) {
 	payloads.Put(buffer)
+}
+
+func EncodeDelta(base, target []byte) []byte {
+	out := appendDeltaSize(nil, int64(len(base)))
+	out = appendDeltaSize(out, int64(len(target)))
+	index := buildDeltaIndex(base)
+	var pending []byte
+	position := 0
+	for position < len(target) {
+		if matchOffset, length, ok := findDeltaMatch(index, base, target, position); ok {
+			out = appendDeltaInsert(out, pending)
+			pending = pending[:0]
+			out = appendDeltaCopies(out, matchOffset, length)
+			position += length
+			continue
+		}
+		pending = append(pending, target[position])
+		position++
+	}
+	return appendDeltaInsert(out, pending)
+}
+
+func findDeltaMatch(index map[uint32][]int, base, target []byte, position int) (int, int, bool) {
+	if position+deltaHashLength > len(target) {
+		return 0, 0, false
+	}
+	key := binary.LittleEndian.Uint32(target[position:])
+	positions, ok := index[key]
+	if !ok {
+		return 0, 0, false
+	}
+	bestPosition, bestLength := positions[0], deltaMatchLength(base[positions[0]:], target[position:])
+	for _, candidate := range positions[1:] {
+		length := deltaMatchLength(base[candidate:], target[position:])
+		if length > bestLength {
+			bestPosition, bestLength = candidate, length
+		}
+	}
+	return bestPosition, bestLength, true
+}
+
+func deltaMatchLength(base, target []byte) int {
+	limit := min(len(base), len(target))
+	length := 0
+	for length < limit && base[length] == target[length] {
+		length++
+	}
+	return length
+}
+
+func buildDeltaIndex(base []byte) map[uint32][]int {
+	if len(base) < deltaHashLength {
+		return nil
+	}
+	index := make(map[uint32][]int)
+	for position := 0; position+deltaHashLength <= len(base); position++ {
+		key := binary.LittleEndian.Uint32(base[position:])
+		if list := index[key]; len(list) < deltaMaxCandidates {
+			index[key] = append(list, position)
+		}
+	}
+	return index
+}
+
+func appendDeltaSize(out []byte, size int64) []byte {
+	for {
+		current := byte(size & payloadMask)
+		size >>= payloadBits
+		if size == 0 {
+			return append(out, current)
+		}
+		out = append(out, current|continuation)
+	}
+}
+
+func appendDeltaInsert(out, pending []byte) []byte {
+	for len(pending) > 0 {
+		chunk := min(len(pending), deltaMaxInsert)
+		out = append(out, byte(chunk))
+		out = append(out, pending[:chunk]...)
+		pending = pending[chunk:]
+	}
+	return out
+}
+
+func appendDeltaCopies(out []byte, base, length int) []byte {
+	for length > 0 {
+		chunk := min(length, deltaMaxCopy)
+		out = appendDeltaCopy(out, uint32(base), uint32(chunk))
+		base += chunk
+		length -= chunk
+	}
+	return out
+}
+
+func appendDeltaCopy(out []byte, offset, size uint32) []byte {
+	opcode := byte(copyOpcode)
+	var tail [copyOffsetBytes + copySizeBytes]byte
+	written := 0
+	for i := range copyOffsetBytes {
+		current := byte(offset >> (8 * uint(i)))
+		if current == 0 {
+			continue
+		}
+		opcode |= 1 << uint(i)
+		tail[written] = current
+		written++
+	}
+	encoded := size
+	if encoded == defaultCopySize {
+		encoded = 0
+	}
+	for i := range copySizeBytes {
+		current := byte(encoded >> (8 * uint(i)))
+		if current == 0 {
+			continue
+		}
+		opcode |= 1 << uint(copySizeShift+i)
+		tail[written] = current
+		written++
+	}
+	out = append(out, opcode)
+	return append(out, tail[:written]...)
 }
