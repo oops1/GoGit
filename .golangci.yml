@@ -49,6 +49,10 @@ linters:
         linters:
           - gosec
         text: "G103"
+      - path: internal/vault/dpapi_windows\.go
+        linters:
+          - gosec
+        text: "G103"
 formatters:
   enable:
     - gofmt
