@@ -41,6 +41,30 @@ func startFakeGitServer(t *testing.T, handle func(t *testing.T, conn net.Conn)) 
 	return ln.Addr().String()
 }
 
+func startFakeGitServerCapturingRequest(t *testing.T) (string, func() string) {
+	t.Helper()
+	captured := make(chan string, 1)
+	addr := startFakeGitServer(t, func(t *testing.T, conn net.Conn) {
+		dec := NewDecoder(conn)
+		if !dec.Scan() {
+			t.Errorf("no request line: %v", dec.Err())
+			captured <- ""
+			return
+		}
+		captured <- string(dec.Bytes())
+	})
+	return addr, func() string {
+		t.Helper()
+		select {
+		case line := <-captured:
+			return line
+		case <-time.After(5 * time.Second):
+			t.Errorf("fake git server received no request within 5s")
+			return ""
+		}
+	}
+}
+
 func gitV1AdvertisementBytes(headCaps string, refs [][2]string) []byte {
 	b := newPktBuilder()
 	for i, r := range refs {
@@ -516,21 +540,14 @@ func TestGitRequestLineFormat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var got string
-			addr := startFakeGitServer(t, func(t *testing.T, conn net.Conn) {
-				dec := NewDecoder(conn)
-				if !dec.Scan() {
-					t.Errorf("no request line: %v", dec.Err())
-					return
-				}
-				got = string(dec.Bytes())
-			})
+			addr, requestLine := startFakeGitServerCapturingRequest(t)
 			session, err := Dial(t.Context(), "git://"+addr+"/repo.git", UploadPack, Options{Version: tt.version})
 			if err != nil {
 				t.Fatalf("Dial returned error %v", err)
 			}
 			defer func() { _ = session.Close() }()
 			_, _ = session.Advertise(t.Context())
+			got := requestLine()
 			if !strings.HasPrefix(got, "git-upload-pack /repo.git\x00host=") {
 				t.Fatalf("request line = %q", got)
 			}
@@ -542,21 +559,14 @@ func TestGitRequestLineFormat(t *testing.T) {
 }
 
 func TestGitRequestLineIncludesVersionTwoByDefault(t *testing.T) {
-	var got string
-	addr := startFakeGitServer(t, func(t *testing.T, conn net.Conn) {
-		dec := NewDecoder(conn)
-		if !dec.Scan() {
-			t.Errorf("no request line: %v", dec.Err())
-			return
-		}
-		got = string(dec.Bytes())
-	})
+	addr, requestLine := startFakeGitServerCapturingRequest(t)
 	session, err := Dial(t.Context(), "git://"+addr+"/repo.git", UploadPack, Options{})
 	if err != nil {
 		t.Fatalf("Dial returned error %v", err)
 	}
 	defer func() { _ = session.Close() }()
 	_, _ = session.Advertise(t.Context())
+	got := requestLine()
 	want := "git-upload-pack /repo.git\x00host=127.0.0.1\x00\x00version=2\x00"
 	if got != want {
 		t.Fatalf("request line = %q, want %q", got, want)
