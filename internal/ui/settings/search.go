@@ -289,6 +289,7 @@ func (v *View) applySearchSection(s *searchSectionState, hidden map[int]bool, em
 	s.grid.RowDefs = defs
 	s.grid.SetBounds(s.grid.Bounds())
 	s.emptyLabel.SetVisible(empty)
+	hideRowContents(s.grid, hidden, empty, s.emptyLabel)
 	v.syncScroll()
 }
 
@@ -302,6 +303,7 @@ func (v *View) applyAdvancedContentRows(hidden map[int]bool) {
 	}
 	v.gitAdvancedContent.RowDefs = defs
 	v.gitAdvancedContent.SetBounds(v.gitAdvancedContent.Bounds())
+	hideRowContents(v.gitAdvancedContent, hidden, false, nil)
 }
 
 func (v *View) filterCredentialsTable(query string) int {
@@ -375,10 +377,10 @@ func (v *View) updateNavMatchCounts(counts map[string]int, searching bool) {
 		id := s.id
 		base := i18n.T(navKeyFor(id))
 		if searching && counts[id] > 0 {
-			v.nav.SetCaption(i, i18n.Tf("Dialog.Settings.Nav.MatchCount", base, counts[id]))
+			v.setNavCaption(i, i18n.Tf("Dialog.Settings.Nav.MatchCount", base, counts[id]))
 			continue
 		}
-		v.nav.SetCaption(i, base)
+		v.setNavCaption(i, base)
 	}
 }
 
@@ -389,4 +391,30 @@ func navKeyFor(id string) string {
 		}
 	}
 	return ""
+}
+
+type gridChild interface {
+	GetGridRow() int
+	GetGridRowSpan() int
+	SetVisible(bool)
+}
+
+func hideRowContents(grid *widget.Grid, hidden map[int]bool, empty bool, skip widget.Widget) {
+	for _, child := range grid.Children() {
+		placed, ok := child.(gridChild)
+		if !ok || child == skip {
+			continue
+		}
+		placed.SetVisible(!empty && !spansHiddenRow(placed, hidden))
+	}
+}
+
+func spansHiddenRow(placed gridChild, hidden map[int]bool) bool {
+	first := placed.GetGridRow()
+	for row := first; row < first+placed.GetGridRowSpan(); row++ {
+		if hidden[row] {
+			return true
+		}
+	}
+	return false
 }

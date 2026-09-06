@@ -41,48 +41,38 @@ func isKnownSection(id string) bool {
 	return false
 }
 
-type navPanel struct {
-	*widget.NavPanel
-
-	items []widget.NavPanelItem
-}
-
-func newNavPanel() *navPanel {
-	n := &navPanel{NavPanel: widget.NewNavPanel()}
-	n.ExpandedWidth = navWidth
-	n.ItemHeight = navItemHeight
-	n.IconSize = navIconSize
+func newNavItems() []widget.NavPanelItem {
+	items := make([]widget.NavPanelItem, 0, len(sectionOrder))
 	for _, s := range sectionOrder {
-		n.items = append(n.items, widget.NavPanelItem{
+		items = append(items, widget.NavPanelItem{
 			Icon: icons.ToolbarPlain(s.icon, navIconSize),
 			Text: i18n.T(s.navKey),
 			Tag:  s.id,
 		})
 	}
-	n.SetItems(n.items)
-	return n
+	return items
 }
 
-func (n *navPanel) SetSelectedSection(id string) {
+func (v *View) selectNavSection(id string) {
 	for i, s := range sectionOrder {
 		if s.id == id {
-			n.SetSelected(i)
+			v.nav.SetSelected(i)
 			return
 		}
 	}
 }
 
-func (n *navPanel) SetCaption(index int, text string) {
-	if index < 0 || index >= len(n.items) {
+func (v *View) setNavCaption(index int, text string) {
+	if index < 0 || index >= len(v.navItems) {
 		return
 	}
-	n.items[index].Text = text
-	n.SetItems(n.items)
+	v.navItems[index].Text = text
+	v.nav.SetItems(v.navItems)
 }
 
-func (n *navPanel) Caption(index int) string {
-	if index < 0 || index >= len(n.items) {
+func (v *View) navCaption(index int) string {
+	if index < 0 || index >= len(v.navItems) {
 		return ""
 	}
-	return n.items[index].Text
+	return v.navItems[index].Text
 }

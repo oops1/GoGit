@@ -40,9 +40,10 @@ type View struct {
 	sectionCredentials *widget.Grid
 	sectionSSH         *widget.Grid
 
-	nav     *navPanel
-	section string
-	initial Model
+	nav      *widget.NavPanel
+	navItems []widget.NavPanelItem
+	section  string
+	initial  Model
 
 	unsavedDialog *widget.Dialog
 

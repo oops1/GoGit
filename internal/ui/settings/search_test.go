@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"image"
 	"image/color"
 	"testing"
 
@@ -22,7 +23,7 @@ func findSearchSection(v *View, id string) *searchSectionState {
 func navHeaderFor(v *View, id string) string {
 	for i, s := range sectionOrder {
 		if s.id == id {
-			return v.nav.Caption(i)
+			return v.navCaption(i)
 		}
 	}
 	return ""
@@ -423,5 +424,76 @@ func TestClearingSearchRestoresPlainNavigationLabels(t *testing.T) {
 		if got, want := navHeaderFor(v, s.id), i18n.T(s.navKey); got != want {
 			t.Fatalf("%s nav header = %q, want %q after clearing", s.id, got, want)
 		}
+	}
+}
+
+func TestSearchHidesTheWidgetsOfCollapsedRows(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{})
+	v.SetSection("general")
+
+	v.applySearch("toolbar")
+
+	for _, child := range v.sectionGeneral.Children() {
+		hint, ok := child.(*hintLabel)
+		if !ok {
+			continue
+		}
+		if hint.Text() == i18n.T("Dialog.Settings.ShowStatusBar.Hint") && widget.IsWidgetVisible(hint) {
+			t.Fatal("a hint whose row collapsed must not stay on screen")
+		}
+	}
+
+	v.applySearch("")
+
+	for _, child := range v.sectionGeneral.Children() {
+		hint, ok := child.(*hintLabel)
+		if !ok {
+			continue
+		}
+		if !widget.IsWidgetVisible(hint) {
+			t.Fatalf("hint %q must come back when the query is cleared", hint.Text())
+		}
+	}
+}
+
+func TestSearchWithoutMatchesLeavesOnlyTheEmptyState(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{})
+	v.SetSection("general")
+
+	v.applySearch("zzz")
+
+	for _, child := range v.sectionGeneral.Children() {
+		if _, ok := child.(*searchEmptyLabel); ok {
+			continue
+		}
+		if widget.IsWidgetVisible(child) && !child.Bounds().Empty() {
+			t.Fatalf("%T stayed on screen while nothing matched", child)
+		}
+	}
+}
+
+type plainWidget struct {
+	bounds  image.Rectangle
+	visible bool
+}
+
+func (p *plainWidget) Draw(widget.DrawContext)     {}
+func (p *plainWidget) Bounds() image.Rectangle     { return p.bounds }
+func (p *plainWidget) SetBounds(r image.Rectangle) { p.bounds = r }
+func (p *plainWidget) Children() []widget.Widget   { return nil }
+func (p *plainWidget) AddChild(widget.Widget)      {}
+func (p *plainWidget) IsVisible() bool             { return p.visible }
+
+func TestHideRowContentsSkipsWidgetsWithoutAGridPlacement(t *testing.T) {
+	grid := widget.NewGrid()
+	grid.RowDefs = []widget.GridDefinition{{Mode: widget.GridSizePixel, Value: 10}}
+	grid.ColDefs = []widget.GridDefinition{{Mode: widget.GridSizePixel, Value: 10}}
+	stranger := &plainWidget{visible: true}
+	grid.AddChild(stranger)
+
+	hideRowContents(grid, map[int]bool{0: true}, false, nil)
+
+	if !widget.IsWidgetVisible(stranger) {
+		t.Fatal("a widget that carries no grid placement must be left alone")
 	}
 }

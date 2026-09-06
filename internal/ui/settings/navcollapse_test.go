@@ -12,7 +12,7 @@ func TestNavigationStartsExpandedWithTheChosenSection(t *testing.T) {
 	if v.nav.IsCollapsed() {
 		t.Fatal("navigation must start expanded")
 	}
-	if got := v.nav.Caption(0); got != i18n.T("Dialog.Settings.Nav.General") {
+	if got := v.navCaption(0); got != i18n.T("Dialog.Settings.Nav.General") {
 		t.Fatalf("nav caption = %q, want the section name", got)
 	}
 	if got := v.nav.Selected(); got != 0 {
@@ -63,7 +63,7 @@ func TestSearchCountsAppearNextToTheSectionName(t *testing.T) {
 
 	v.applySearch("journal")
 
-	if got := v.nav.Caption(0); got == i18n.T("Dialog.Settings.Nav.General") {
+	if got := v.navCaption(0); got == i18n.T("Dialog.Settings.Nav.General") {
 		t.Fatal("the matching section must show how many settings matched")
 	}
 }
@@ -71,16 +71,16 @@ func TestSearchCountsAppearNextToTheSectionName(t *testing.T) {
 func TestCaptionIgnoresIndexesOutsideTheNavigation(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
 
-	v.nav.SetCaption(-1, "x")
-	v.nav.SetCaption(len(sectionOrder), "x")
+	v.setNavCaption(-1, "x")
+	v.setNavCaption(len(sectionOrder), "x")
 
-	if got := v.nav.Caption(-1); got != "" {
+	if got := v.navCaption(-1); got != "" {
 		t.Fatalf("Caption(-1) = %q, want it empty", got)
 	}
-	if got := v.nav.Caption(len(sectionOrder)); got != "" {
+	if got := v.navCaption(len(sectionOrder)); got != "" {
 		t.Fatalf("Caption past the end = %q, want it empty", got)
 	}
-	if got := v.nav.Caption(0); got != i18n.T("Dialog.Settings.Nav.General") {
+	if got := v.navCaption(0); got != i18n.T("Dialog.Settings.Nav.General") {
 		t.Fatalf("nav caption = %q, want it untouched", got)
 	}
 }
@@ -88,9 +88,28 @@ func TestCaptionIgnoresIndexesOutsideTheNavigation(t *testing.T) {
 func TestSelectingAnUnknownSectionLeavesTheNavigationAlone(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
 
-	v.nav.SetSelectedSection("nothing")
+	v.selectNavSection("nothing")
 
 	if got := v.nav.Selected(); got != 0 {
 		t.Fatalf("selected item = %d, want it unchanged", got)
+	}
+}
+
+func TestCollapsingTheNavigationGivesItsWidthToTheContent(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{})
+	v.Dialog().Resize(dialogDefaultWidth, dialogDefaultHeight)
+	before := v.root.Bounds()
+
+	v.Dialog().SetNavCollapsed(true)
+
+	after := v.root.Bounds()
+	if after.Min.X >= before.Min.X {
+		t.Fatalf("content starts at x=%d, want it left of %d once the panel collapsed", after.Min.X, before.Min.X)
+	}
+	if after != v.Dialog().ContentBounds() {
+		t.Fatalf("content bounds = %v, want %v", after, v.Dialog().ContentBounds())
+	}
+	if got := v.nav.Bounds().Dx(); got != v.nav.Width() {
+		t.Fatalf("panel column = %d, want its collapsed width %d", got, v.nav.Width())
 	}
 }

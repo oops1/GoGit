@@ -16,6 +16,7 @@ import (
 
 type previewVariant struct {
 	name      string
+	query     string
 	lang      string
 	theme     *widget.Theme
 	width     int
@@ -26,13 +27,15 @@ type previewVariant struct {
 
 func previewVariants() []previewVariant {
 	return []previewVariant{
-		{"dark", "en", widget.Win11DarkTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
-		{"light", "en", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
-		{"ru", "ru", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
-		{"ru-narrow", "ru", widget.Win11LightTheme(), dialogMinWidth, dialogDefaultHeight, false, false},
-		{"wide", "en", widget.Win11LightTheme(), 1200, dialogDefaultHeight, false, false},
-		{"advanced", "ru", widget.Win11LightTheme(), dialogMinWidth, dialogDefaultHeight, true, false},
-		{"collapsed", "ru", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, true},
+		{"dark", "", "en", widget.Win11DarkTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
+		{"light", "", "en", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
+		{"ru", "", "ru", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
+		{"ru-narrow", "", "ru", widget.Win11LightTheme(), dialogMinWidth, dialogDefaultHeight, false, false},
+		{"wide", "", "en", widget.Win11LightTheme(), 1200, dialogDefaultHeight, false, false},
+		{"advanced", "", "ru", widget.Win11LightTheme(), dialogMinWidth, dialogDefaultHeight, true, false},
+		{"collapsed", "", "ru", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, true},
+		{"search", "показывать", "ru", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
+		{"nomatch", "zzz", "ru", widget.Win11LightTheme(), dialogDefaultWidth, dialogDefaultHeight, false, false},
 	}
 }
 
@@ -93,6 +96,10 @@ func renderPreviewFrames(t *testing.T, dir string, variant previewVariant, secti
 		view.Dialog().SetNavCollapsed(true)
 	}
 	view.Dialog().Resize(variant.width, variant.height)
+	if variant.query != "" {
+		view.search.SetText(variant.query)
+		view.applySearch(variant.query)
+	}
 	eng.ShowModal(view.Dialog())
 
 	eng.SaveFrames(dir + "/settings-" + section + "-" + variant.name + "-" + strconv.Itoa(variant.width))
