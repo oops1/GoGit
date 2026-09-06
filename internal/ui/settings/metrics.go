@@ -35,6 +35,7 @@ const (
 	hintLeftGapFromControl  = 12
 	hintTopGapUnderCheckbox = 4
 	hintLineHeight          = 17
+	hintFieldRowSpan        = 2
 	checkboxTextIndent      = 22
 
 	tableRowHeight            = 28

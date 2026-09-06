@@ -15,6 +15,8 @@ type hintLabel struct {
 func newHintLabel(key string) *hintLabel {
 	lbl := widget.NewLabel(i18n.T(key), widget.CurrentTheme().SecondaryText)
 	lbl.FontSize = hintFontSize
+	lbl.PaddingX = 0
+	lbl.PaddingY = 0
 	return &hintLabel{Label: lbl}
 }
 
@@ -22,15 +24,15 @@ func (h *hintLabel) ApplyTheme(t *widget.Theme) {
 	h.TextColor = t.SecondaryText
 }
 
-func addHint(grid *widget.Grid, key string, row, col, colSpan int) *hintLabel {
+func addHint(grid *widget.Grid, key string, row, col, rowSpan, colSpan int) *hintLabel {
 	h := newHintLabel(key)
-	h.SetGridProps(row, col, 1, colSpan)
+	h.SetGridProps(row, col, rowSpan, colSpan)
 	grid.AddChild(h)
 	return h
 }
 
 func addFieldHint(grid *widget.Grid, key string, row, maxLines int) *hintLabel {
-	h := addHint(grid, key, row, 2, 1)
+	h := addHint(grid, key, row, 2, hintFieldRowSpan, 1)
 	h.WrapText = true
 	h.SetXAMLSize(0, maxLines*hintLineHeight)
 	h.SetVAlign(widget.VAlignCenter)
@@ -39,20 +41,22 @@ func addFieldHint(grid *widget.Grid, key string, row, maxLines int) *hintLabel {
 }
 
 func addCheckboxHint(grid *widget.Grid, key string, row int) *hintLabel {
-	h := addHint(grid, key, row, 0, 3)
+	h := addHint(grid, key, row, 0, 1, 3)
 	h.SetXAMLSize(0, hintLineHeight)
 	h.SetMargin(widget.Margin{Left: checkboxTextIndent, Top: hintTopGapUnderCheckbox})
 	return h
 }
 
 func addGroupDescription(grid *widget.Grid, key string, row int) *hintLabel {
-	h := addHint(grid, key, row, 0, 3)
+	h := addHint(grid, key, row, 0, 1, 3)
 	h.SetXAMLSize(0, hintLineHeight)
 	return h
 }
 
 func (v *View) buildHints() {
 	addGroupDescription(v.sectionGeneral, "Dialog.Settings.Group.LanguageAppearance.Desc", 1)
+	addFieldHint(v.sectionGeneral, "Dialog.Settings.Language.Hint", 3, 2)
+	addFieldHint(v.sectionGeneral, "Dialog.Settings.Theme.Hint", 5, 2)
 	addGroupDescription(v.sectionGeneral, "Dialog.Settings.Group.Interface.Desc", 10)
 	addCheckboxHint(v.sectionGeneral, "Dialog.Settings.ShowToolbar.Hint", 13)
 	addCheckboxHint(v.sectionGeneral, "Dialog.Settings.ShowStatusBar.Hint", 16)
@@ -60,17 +64,24 @@ func (v *View) buildHints() {
 	addCheckboxHint(v.sectionGeneral, "Dialog.Settings.JournalFullAuthorName.Hint", 22)
 	v.sectionGeneral.SetBounds(v.sectionGeneral.Bounds())
 
-	addFieldHint(v.sectionGit, "Dialog.Settings.LogMaxCount.Hint", 2, 5)
-	addCheckboxHint(v.sectionGit, "Dialog.Settings.AutoFetch.Hint", 5)
-	addFieldHint(v.sectionGit, "Dialog.Settings.FetchInterval.Hint", 7, 4)
-	addFieldHint(v.sectionGit, "Dialog.Settings.DefaultRemote.Hint", 9, 5)
-	addCheckboxHint(v.sectionGit, "Dialog.Settings.PruneOnFetch.Hint", 12)
+	addGroupDescription(v.sectionGit, "Dialog.Settings.Group.FetchSync.Desc", 1)
+	addFieldHint(v.sectionGit, "Dialog.Settings.LogMaxCount.Hint", 3, 2)
+	addCheckboxHint(v.sectionGit, "Dialog.Settings.AutoFetch.Hint", 6)
+	addFieldHint(v.sectionGit, "Dialog.Settings.FetchInterval.Hint", 8, 2)
+	addFieldHint(v.sectionGit, "Dialog.Settings.DefaultRemote.Hint", 10, 2)
+	addCheckboxHint(v.sectionGit, "Dialog.Settings.PruneOnFetch.Hint", 13)
 	v.sectionGit.SetBounds(v.sectionGit.Bounds())
 
-	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.WorkTreeDepth.Hint", 0, 5)
-	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.PullStrategy.Hint", 2, 7)
-	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.ShallowDepth.Hint", 4, 7)
+	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.WorkTreeDepth.Hint", 0, 2)
+	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.PullStrategy.Hint", 2, 2)
+	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.ShallowDepth.Hint", 4, 2)
 	v.gitAdvancedContent.SetBounds(v.gitAdvancedContent.Bounds())
+
+	addGroupDescription(v.sectionCredentials, "Dialog.Settings.Credentials.Desc", 1)
+	v.sectionCredentials.SetBounds(v.sectionCredentials.Bounds())
+
+	addGroupDescription(v.sectionSSH, "Dialog.Settings.SSH.Desc", 1)
+	v.sectionSSH.SetBounds(v.sectionSSH.Bounds())
 }
 
 func (v *View) syncAdvancedWidth() {

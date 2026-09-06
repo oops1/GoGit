@@ -109,7 +109,7 @@ func TestAddHintPositionsLabelInTheGridAndSurvivesRelayout(t *testing.T) {
 	}
 	grid.SetBounds(image.Rect(0, 0, 200, 40))
 
-	h := addHint(grid, "Dialog.Settings.Language.Hint", 1, 0, 2)
+	h := addHint(grid, "Dialog.Settings.Language.Hint", 1, 0, 1, 2)
 	grid.SetBounds(grid.Bounds())
 
 	if h.Bounds().Empty() {

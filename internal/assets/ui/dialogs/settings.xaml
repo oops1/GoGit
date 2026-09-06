@@ -87,9 +87,9 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="230"/>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="240"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="300"/>
                     </Grid.ColumnDefinitions>
 
                     <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
@@ -98,12 +98,12 @@
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.Language}"
                                Height="18" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="language" Grid.Row="3" Grid.Column="2"
+                    <ComboBox x:Name="language" Grid.Row="3" Grid.Column="1"
                               Height="30" VerticalAlignment="Center"/>
 
                     <TextBlock Grid.Row="5" Grid.Column="0" Text="{Loc Dialog.Settings.Theme}"
                                Height="18" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="theme" Grid.Row="5" Grid.Column="2"
+                    <ComboBox x:Name="theme" Grid.Row="5" Grid.Column="1"
                               Height="30" VerticalAlignment="Center">
                         <ComboBoxItem Content="{Loc Theme.System}"/>
                         <ComboBoxItem Content="{Loc Theme.Dark}"/>
@@ -128,26 +128,27 @@
 
                 <Grid x:Name="sectionGit">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="24"/>
-                        <RowDefinition Height="4"/>
-                        <RowDefinition Height="88"/>
+                        <RowDefinition Height="22"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="17"/>
+                        <RowDefinition Height="14"/>
+                        <RowDefinition Height="30"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="26"/>
+                        <RowDefinition Height="17"/>
                         <RowDefinition Height="18"/>
-                        <RowDefinition Height="12"/>
-                        <RowDefinition Height="71"/>
-                        <RowDefinition Height="12"/>
-                        <RowDefinition Height="88"/>
-                        <RowDefinition Height="12"/>
-                        <RowDefinition Height="30"/>
-                        <RowDefinition Height="18"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="140"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="230"/>
-                        <ColumnDefinition Width="260"/>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="240"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
@@ -155,42 +156,43 @@
                                Text="{Loc Dialog.Settings.Group.FetchSync}"
                                FontSize="13" FontWeight="Bold"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.LogMaxCount}"
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.LogMaxCount}"
                                Height="18" VerticalAlignment="Center"/>
-                    <NumericUpDown x:Name="logMaxCount" Grid.Row="2" Grid.Column="1"
+                    <NumericUpDown x:Name="logMaxCount" Grid.Row="3" Grid.Column="1"
                                     Height="30" VerticalAlignment="Center"
                                     Minimum="50" Maximum="100000" Increment="50"/>
 
-                    <CheckBox x:Name="autoFetch" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
-                              Content="{Loc Dialog.Settings.AutoFetch}"/>
+                    <CheckBox x:Name="autoFetch" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                              FontSize="10" Content="{Loc Dialog.Settings.AutoFetch}"/>
 
-                    <TextBlock Grid.Row="7" Grid.Column="0" Text="{Loc Dialog.Settings.FetchInterval}"
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="{Loc Dialog.Settings.FetchInterval}"
                                Height="18" VerticalAlignment="Center"/>
-                    <NumericUpDown x:Name="fetchInterval" Grid.Row="7" Grid.Column="1"
+                    <NumericUpDown x:Name="fetchInterval" Grid.Row="8" Grid.Column="1"
                                     Height="30" VerticalAlignment="Center"
                                     Minimum="30" Maximum="3600" Increment="10"/>
 
-                    <TextBlock Grid.Row="9" Grid.Column="0" Text="{Loc Dialog.Settings.DefaultRemote}"
+                    <TextBlock Grid.Row="10" Grid.Column="0" Text="{Loc Dialog.Settings.DefaultRemote}"
                                Height="18" VerticalAlignment="Center"/>
-                    <TextBox x:Name="defaultRemote" Grid.Row="9" Grid.Column="1"
+                    <TextBox x:Name="defaultRemote" Grid.Row="10" Grid.Column="1"
                              Height="30" VerticalAlignment="Center"/>
 
-                    <CheckBox x:Name="pruneOnFetch" Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="3"
-                              Content="{Loc Dialog.Settings.PruneOnFetch}"/>
+                    <CheckBox x:Name="pruneOnFetch" Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3"
+                              FontSize="10" Content="{Loc Dialog.Settings.PruneOnFetch}"/>
 
-                    <StackPanel x:Name="gitAdvancedStack" Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="3">
+                    <StackPanel x:Name="gitAdvancedStack" Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="3">
                         <Expander x:Name="gitAdvanced" Header="{Loc Dialog.Settings.Group.Advanced}">
-                            <Grid x:Name="gitAdvancedContent" Height="366">
+                            <Grid x:Name="gitAdvancedContent" Height="138">
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="91"/>
+                                    <RowDefinition Height="30"/>
                                     <RowDefinition Height="12"/>
-                                    <RowDefinition Height="126"/>
+                                    <RowDefinition Height="30"/>
                                     <RowDefinition Height="12"/>
-                                    <RowDefinition Height="126"/>
+                                    <RowDefinition Height="30"/>
+                                    <RowDefinition Height="12"/>
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="230"/>
-                                    <ColumnDefinition Width="260"/>
+                                    <ColumnDefinition Width="200"/>
+                                    <ColumnDefinition Width="240"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
