@@ -794,7 +794,7 @@ func (a *App) Run() error {
 	go a.FollowSystemTheme(ctx)
 	go a.runWatchdog(ctx, a.watches())
 	win := window.New(a.eng, a.root.Title)
-	a.eng.Post(func() { a.applyWindowIcon(win) })
+	a.applyWindowIcon(win)
 	if a.OnExit == nil {
 		a.OnExit = win.Close
 	}
