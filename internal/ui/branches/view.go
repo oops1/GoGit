@@ -180,12 +180,37 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 
 func (v *View) buildTags(s Snapshot) *treeview.TreeViewItem {
 	root := v.newGroupItem(tagsGroupKey, i18n.T("Pane.Branches.Tags"))
-	entries := make([]pathEntry, 0, len(s.Tags))
+	byName := make(map[string]refs.Name, len(s.Tags))
+	names := make([]string, 0, len(s.Tags))
+	nested := make([]pathEntry, 0, len(s.Tags))
 	for _, t := range s.Tags {
-		entries = append(entries, pathEntry{path: t.Name.Short(), ref: t.Name, icon: "tag"})
+		short := t.Name.Short()
+		byName[short] = t.Name
+		if strings.Contains(short, "/") {
+			nested = append(nested, pathEntry{path: short, ref: t.Name, icon: "tag"})
+			continue
+		}
+		names = append(names, short)
 	}
-	v.buildPathTree(root, tagsGroupKey, entries)
+	v.buildPathTree(root, tagsGroupKey, nested)
+	recent, nodes := GroupTags(names)
+	for _, name := range recent {
+		root.AddChild(v.leafItem(pathEntry{path: name, ref: byName[name], icon: "tag"}, name))
+	}
+	v.addTagNodes(root, tagsGroupKey, nodes, byName)
 	return root
+}
+
+func (v *View) addTagNodes(parent *treeview.TreeViewItem, key string, nodes []TagNode, byName map[string]refs.Name) {
+	for _, n := range nodes {
+		if n.IsTag() {
+			parent.AddChild(v.leafItem(pathEntry{path: n.Tag, ref: byName[n.Tag], icon: "tag"}, n.Label))
+			continue
+		}
+		group := v.newGroupItem(key+"/"+n.Label, n.Label)
+		parent.AddChild(group)
+		v.addTagNodes(group, key+"/"+n.Label, n.Children, byName)
+	}
 }
 
 func (v *View) buildStash() *treeview.TreeViewItem {
