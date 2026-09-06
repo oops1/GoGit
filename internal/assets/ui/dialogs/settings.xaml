@@ -132,17 +132,25 @@
                 <PasswordBox x:Name="credentialSecret" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
                              Placeholder="{Loc Dialog.Settings.Credentials.Secret}"/>
 
-                <Button x:Name="credentialAdd" Grid.Row="4" Grid.Column="0" Margin="0,0,6,0"
-                        Content="{Loc Dialog.Settings.Credentials.Add}"/>
-                <Button x:Name="credentialRemove" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
-                        Content="{Loc Dialog.Settings.Credentials.Remove}"/>
-                <Button x:Name="credentialMasterPassword" Grid.Row="4" Grid.Column="2"
-                        Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
+                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Width="480" Height="30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="85"/>
+                        <ColumnDefinition Width="85"/>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="110"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="credentialAdd" Grid.Column="0" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.Credentials.Add}"/>
+                    <Button x:Name="credentialRemove" Grid.Column="1" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.Credentials.Remove}"/>
+                    <Button x:Name="credentialMasterPassword" Grid.Column="2" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
+                    <Button x:Name="credentialsUnlock" Grid.Column="3"
+                            Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+                </Grid>
 
-                <TextBlock x:Name="credentialsStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
-                           Text="" FontSize="11" Foreground="#CC4444"/>
-                <Button x:Name="credentialsUnlock" Grid.Row="5" Grid.Column="2"
-                        Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+                <TextBlock x:Name="credentialsStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                           Text="" FontSize="11"/>
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.SSH}">
@@ -179,15 +187,22 @@
                 <PasswordBox x:Name="sshPassphrase" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
                              Placeholder="{Loc Dialog.Settings.SSH.Passphrase}"/>
 
-                <Button x:Name="sshAdd" Grid.Row="4" Grid.Column="0" Margin="0,0,6,0"
-                        Content="{Loc Dialog.Settings.SSH.Add}"/>
-                <Button x:Name="sshRemove" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
-                        Content="{Loc Dialog.Settings.SSH.Remove}"/>
+                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Width="480" Height="30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="160"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="sshAdd" Grid.Column="0" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.SSH.Add}"/>
+                    <Button x:Name="sshRemove" Grid.Column="1" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.SSH.Remove}"/>
+                    <Button x:Name="sshUnlock" Grid.Column="2"
+                            Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+                </Grid>
 
-                <TextBlock x:Name="sshStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
-                           Text="" FontSize="11" Foreground="#CC4444"/>
-                <Button x:Name="sshUnlock" Grid.Row="5" Grid.Column="2"
-                        Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+                <TextBlock x:Name="sshStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                           Text="" FontSize="11"/>
             </Grid>
         </TabItem>
     </TabControl>

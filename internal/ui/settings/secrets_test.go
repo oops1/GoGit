@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"image/color"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
@@ -53,12 +54,19 @@ func TestSetKeysPopulatesTableAndClearsSelection(t *testing.T) {
 
 func TestSetSecretsStatusUpdatesBothStatusLabels(t *testing.T) {
 	v := newTestView(t, nil, Model{})
-	v.SetSecretsStatus("locked")
+	want := color.RGBA{R: 220, G: 80, B: 80, A: 255}
+	v.SetSecretsStatus("locked", want)
 	if v.credentialsStatus.Text() != "locked" {
 		t.Fatalf("credentialsStatus = %q", v.credentialsStatus.Text())
 	}
 	if v.sshStatus.Text() != "locked" {
 		t.Fatalf("sshStatus = %q", v.sshStatus.Text())
+	}
+	if v.credentialsStatus.TextColor != want {
+		t.Fatalf("credentialsStatus color = %+v, want %+v", v.credentialsStatus.TextColor, want)
+	}
+	if v.sshStatus.TextColor != want {
+		t.Fatalf("sshStatus color = %+v, want %+v", v.sshStatus.TextColor, want)
 	}
 }
 

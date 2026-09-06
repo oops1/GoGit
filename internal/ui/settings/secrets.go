@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"github.com/oops1/headless-gui/v3/widget"
@@ -137,9 +138,11 @@ func (v *View) SetKeys(entries []KeyEntry) {
 	v.updateKeySelection("", false)
 }
 
-func (v *View) SetSecretsStatus(text string) {
+func (v *View) SetSecretsStatus(text string, textColor color.RGBA) {
 	v.credentialsStatus.SetText(text)
+	v.credentialsStatus.TextColor = textColor
 	v.sshStatus.SetText(text)
+	v.sshStatus.TextColor = textColor
 }
 
 func (v *View) SetSecretsLocked(locked bool) {

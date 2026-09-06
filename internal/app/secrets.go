@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"image/color"
 	"io/fs"
 	"os"
 	"sync"
@@ -13,6 +14,8 @@ import (
 	"github.com/oops1/gogit/internal/ui/settings"
 	"github.com/oops1/gogit/internal/vault"
 )
+
+var secretsErrorTextColor = color.RGBA{R: 220, G: 80, B: 80, A: 255}
 
 const secretServiceLabel = "gogit-vault"
 
@@ -209,12 +212,24 @@ func (a *App) pushSecretsState(view *settings.View, v *vault.Vault, err error) {
 		}
 	}
 	status := secretsStatusText(v, err)
+	isError := secretsStatusIsError(err)
 	a.Post(func() {
 		view.SetCredentials(creds)
 		view.SetKeys(keys)
 		view.SetSecretsLocked(locked)
-		view.SetSecretsStatus(status)
+		view.SetSecretsStatus(status, a.secretsStatusColor(isError))
 	})
+}
+
+func secretsStatusIsError(err error) bool {
+	return err != nil && !errors.Is(err, vault.ErrLocked)
+}
+
+func (a *App) secretsStatusColor(isError bool) color.RGBA {
+	if isError {
+		return secretsErrorTextColor
+	}
+	return themeFor(a.EffectiveTheme()).LabelText
 }
 
 func secretsStatusText(v *vault.Vault, err error) string {
