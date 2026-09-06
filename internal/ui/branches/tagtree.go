@@ -46,46 +46,55 @@ func reversed(names []string) []string {
 	return out
 }
 
-func tagSegments(name string) []string {
+func tagPath(name string) []string {
 	parts := strings.Split(name, ".")
-	out := make([]string, 0, len(parts))
+	segments := make([]string, 0, len(parts))
 	for _, p := range parts {
 		if p != "" {
-			out = append(out, p)
+			segments = append(segments, p)
 		}
 	}
-	return out
+	if len(segments) < 2 {
+		return nil
+	}
+	path := []string{segments[0]}
+	for _, segment := range segments[1 : len(segments)-1] {
+		for _, digit := range segment {
+			path = append(path, string(digit))
+		}
+	}
+	return path
 }
 
 func groupByPrefix(names []string) []TagNode {
-	return groupBySegment(names, 0)
+	return groupAtDepth(names, 0)
 }
 
-func groupBySegment(names []string, depth int) []TagNode {
+func groupAtDepth(names []string, depth int) []TagNode {
 	order := make([]string, 0, len(names))
 	buckets := map[string][]string{}
-	var leafNames []string
+	var here []string
 	for _, name := range names {
-		segments := tagSegments(name)
-		if depth >= len(segments)-1 {
-			leafNames = append(leafNames, name)
+		path := tagPath(name)
+		if depth >= len(path) {
+			here = append(here, name)
 			continue
 		}
-		key := segments[depth]
+		key := path[depth]
 		if _, seen := buckets[key]; !seen {
 			order = append(order, key)
 		}
 		buckets[key] = append(buckets[key], name)
 	}
 	sort.Slice(order, func(i, j int) bool { return compareTagNames(order[i], order[j]) < 0 })
-	nodes := leaves(leafNames)
+	nodes := leaves(here)
 	for _, key := range order {
 		group := buckets[key]
 		if len(group) == 1 {
 			nodes = append(nodes, leaves(group)...)
 			continue
 		}
-		nodes = append(nodes, TagNode{Label: key, Children: groupBySegment(group, depth+1)})
+		nodes = append(nodes, TagNode{Label: key, Children: groupAtDepth(group, depth+1)})
 	}
 	return nodes
 }

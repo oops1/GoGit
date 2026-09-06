@@ -41,7 +41,7 @@ func TestFewTagsStayFlat(t *testing.T) {
 	}
 }
 
-func TestManyTagsCollapseByVersionSegments(t *testing.T) {
+func TestManyTagsCollapseDigitByDigit(t *testing.T) {
 	names := append(manyTags(20), "v3.16.6", "v3.16.8", "v3.20.0", "v3.21.0", "v3.22.0")
 	recent, nodes := GroupTags(names)
 	if len(recent) != tagRecentCount {
@@ -54,8 +54,8 @@ func TestManyTagsCollapseByVersionSegments(t *testing.T) {
 			found = p
 		}
 	}
-	if found != "v3/16/v3.16.6" {
-		t.Fatalf("path of v3.16.6 = %q, want v3/16/v3.16.6 (one folder per version segment)", found)
+	if found != "v3/1/6/v3.16.6" {
+		t.Fatalf("path of v3.16.6 = %q, want v3/1/6/v3.16.6 (a folder per digit, ten per level)", found)
 	}
 }
 
@@ -106,5 +106,31 @@ func TestTagsWithoutACommonPrefixGroupByTheirFirstSegment(t *testing.T) {
 func TestNaturalOrderPutsTenAfterNine(t *testing.T) {
 	if compareTagNames("v3.9.0", "v3.10.0") >= 0 {
 		t.Fatal("v3.9.0 must sort before v3.10.0")
+	}
+}
+
+func TestTwoDigitMinorSplitsIntoTwoLevels(t *testing.T) {
+	names := []string{
+		"v3.1.0", "v3.1.1", "v3.13.0", "v3.13.7", "v3.16.6", "v3.16.7",
+		"v3.2.0", "v3.3.0", "v3.4.0", "v3.5.0", "v3.6.0", "v3.7.0", "v3.8.0", "v3.9.0",
+		"v3.20.0", "v3.21.0", "v3.22.0",
+	}
+	_, nodes := GroupTags(names)
+	paths := pathsOf(nodes, "")
+	want := map[string]string{
+		"v3.13.0": "v3/1/3/v3.13.0",
+		"v3.16.6": "v3/1/6/v3.16.6",
+		"v3.1.0":  "v3/1/v3.1.0",
+	}
+	for tag, wantPath := range want {
+		found := ""
+		for _, p := range paths {
+			if strings.HasSuffix(p, "/"+tag) {
+				found = p
+			}
+		}
+		if found != wantPath {
+			t.Fatalf("path of %s = %q, want %q", tag, found, wantPath)
+		}
 	}
 }
