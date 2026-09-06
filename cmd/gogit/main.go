@@ -7,6 +7,7 @@ import (
 	"github.com/oops1/gogit/internal/app"
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/logx"
+	"github.com/oops1/gogit/internal/winconsole"
 )
 
 func main() {
@@ -17,6 +18,7 @@ func main() {
 }
 
 func run() error {
+	winconsole.Hide()
 	paths, err := config.DefaultPaths()
 	if err != nil {
 		return err

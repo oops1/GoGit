@@ -12,6 +12,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/treeview"
 
+	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/ui/icons"
 )
@@ -19,10 +20,13 @@ import (
 const treeIconSize = 16
 
 type State struct {
-	Modified  bool
-	Missing   bool
-	Branch    string
-	MutedDirs []string
+	Modified    bool
+	Missing     bool
+	Branch      string
+	MutedDirs   []string
+	HasUpstream bool
+	Ahead       int
+	Behind      int
 }
 
 type dirEntry struct {
@@ -200,7 +204,7 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 	items := make([]*treeview.TreeViewItem, 0, len(nodes))
 	for _, n := range nodes {
 		st := state[n.ID]
-		item := treeview.NewItem(displayName(n, st.Branch))
+		item := treeview.NewItem(displayName(n, st, n.ID == activeID))
 		v.idByItem[item] = n.ID
 		v.itemByID[n.ID] = item
 		switch n.Kind {
@@ -222,11 +226,30 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 	return items
 }
 
-func displayName(n *repo.Node, branch string) string {
-	if branch == "" || n.Kind == repo.KindGroup {
-		return n.Name
+func displayName(n *repo.Node, st State, active bool) string {
+	name := n.Name
+	if st.Branch != "" && n.Kind != repo.KindGroup {
+		name += " (" + st.Branch + ")"
 	}
-	return n.Name + " (" + branch + ")"
+	if active {
+		name += divergenceBadge(st)
+	}
+	return name
+}
+
+func divergenceBadge(st State) string {
+	switch {
+	case !st.HasUpstream:
+		return ""
+	case st.Ahead > 0 && st.Behind > 0:
+		return " " + i18n.Tf("Status.Diverged", st.Ahead, st.Behind)
+	case st.Ahead > 0:
+		return " " + i18n.Tf("Status.Ahead", st.Ahead)
+	case st.Behind > 0:
+		return " " + i18n.Tf("Status.Behind", st.Behind)
+	default:
+		return ""
+	}
 }
 
 func (v *View) attachDirChildrenLocked(item *treeview.TreeViewItem, repoID, root, rel string) {

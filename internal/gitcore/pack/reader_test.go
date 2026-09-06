@@ -197,8 +197,12 @@ func TestReaderRejectsTruncatedObjectHeaders(t *testing.T) {
 			head := slices.Concat(packMagic, binary.BigEndian.AppendUint32(nil, packVersion),
 				binary.BigEndian.AppendUint32(nil, 1))
 			reader := readerOf(t, slices.Concat(head, tc.entry))
-			if _, err := reader.NextObject(); !errors.Is(err, ErrTruncated) {
+			_, err := reader.NextObject()
+			if !errors.Is(err, ErrTruncated) {
 				t.Fatalf("NextObject returned %v, want %v", err, ErrTruncated)
+			}
+			if errors.Is(err, io.EOF) {
+				t.Fatalf("NextObject returned %v, which a caller could mistake for a clean end of stream", err)
 			}
 		})
 	}
@@ -268,7 +272,33 @@ func TestReaderRejectsTruncatedDeltaOffsets(t *testing.T) {
 	head := slices.Concat(packMagic, binary.BigEndian.AppendUint32(nil, packVersion),
 		binary.BigEndian.AppendUint32(nil, 1))
 	reader := readerOf(t, slices.Concat(head, []byte{0x60, continuation | 0x01}))
-	if _, err := reader.NextObject(); !errors.Is(err, ErrTruncated) {
+	_, err := reader.NextObject()
+	if !errors.Is(err, ErrTruncated) {
 		t.Fatalf("NextObject returned %v, want %v", err, ErrTruncated)
+	}
+	if errors.Is(err, io.EOF) {
+		t.Fatalf("NextObject returned %v, which a caller could mistake for a clean end of stream", err)
+	}
+}
+
+func TestReaderNeverMistakesATruncatedDeltaBaseForACleanEndOfStream(t *testing.T) {
+	builder := newPackBuilder()
+	base := builder.addObject(t, KindBlob, []byte("base object"))
+	builder.addOffsetDelta(t, base, []byte{0})
+	builder.addRaw([]byte{0x61, continuation | 0x01})
+	binary.BigEndian.PutUint32(builder.body[8:12], uint32(len(builder.offsets)))
+
+	reader := readerOf(t, builder.body)
+	var last error
+	seen := 0
+	for _, err := range readAll(t, reader) {
+		if err != nil {
+			last = err
+			break
+		}
+		seen++
+	}
+	if !errors.Is(last, ErrTruncated) {
+		t.Fatalf("the reader stopped after %d objects with %v, want %v", seen, last, ErrTruncated)
 	}
 }

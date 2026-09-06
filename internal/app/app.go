@@ -35,6 +35,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/panetitle"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
+	"github.com/oops1/gogit/internal/vault"
 )
 
 const shortHashLength = 7
@@ -83,10 +84,18 @@ type App struct {
 	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
 	showCommit        func(initial commit.Model, cb func(commit.Model, bool))
+	showError         func(title, message string)
 
-	open *openedRepository
+	open                  *openedRepository
+	divergence            repo.Divergence
+	divergenceHasUpstream bool
 
 	newWatcher func(gitrepo.Layout, watch.Options) watcherIface
+
+	autoFetchRunMu  sync.Mutex
+	autoFetchMu     sync.Mutex
+	autoFetchCancel context.CancelFunc
+	autoFetchWG     sync.WaitGroup
 
 	writeRunMu  sync.Mutex
 	writeMu     sync.Mutex
@@ -147,6 +156,13 @@ type App struct {
 	postWake   chan struct{}
 	postStop   chan struct{}
 	postWG     sync.WaitGroup
+
+	netMu     sync.Mutex
+	netCancel context.CancelFunc
+	netWG     sync.WaitGroup
+
+	vaultMu   sync.Mutex
+	vaultInst *vault.Vault
 
 	closeOnce sync.Once
 }
@@ -281,6 +297,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.showAddRepo = a.defaultShowAddRepo
 	a.showSettings = a.defaultShowSettings
 	a.showCommit = a.defaultShowCommit
+	a.showError = func(title, message string) {
+		widget.NewMessageBox(a.eng).ShowError(title, message)
+	}
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
@@ -400,7 +419,19 @@ func (a *App) setHasStagedChanges(v bool) {
 	}
 }
 
+func (a *App) setHasRemotes(v bool) {
+	a.mu.Lock()
+	changed := a.state.HasRemotes != v
+	a.state.HasRemotes = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
 func (a *App) CloseRepository() {
+	a.stopAutoFetch()
+	a.stopNetOperations()
 	a.stopWatcher()
 	a.stopJournal()
 	a.clearChangesPanels()
@@ -408,6 +439,7 @@ func (a *App) CloseRepository() {
 	a.registry.ClearActive()
 	a.cfg.ActiveRepository = ""
 	a.SetActiveRepository("", false)
+	a.setDivergence(repo.Divergence{}, false)
 	a.updateStatusText()
 	a.statusBranchLabel.SetText("")
 	a.branchesView.Render(branches.Snapshot{})
@@ -423,6 +455,8 @@ func (a *App) ActivateRepository(id string) {
 	opened, snap, err := openRepositoryAt(id, node.Path)
 	if err != nil {
 		a.log.Warn("open repository failed", "path", node.Path, "error", err)
+		a.stopAutoFetch()
+		a.stopNetOperations()
 		a.stopWatcher()
 		a.stopJournal()
 		a.clearChangesPanels()
@@ -430,6 +464,7 @@ func (a *App) ActivateRepository(id string) {
 		a.registry.ClearActive()
 		a.cfg.ActiveRepository = ""
 		a.SetActiveRepository("", false)
+		a.setDivergence(repo.Divergence{}, false)
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		a.statusBranchLabel.SetText("")
 		a.branchesView.Render(branches.Snapshot{})
@@ -438,6 +473,8 @@ func (a *App) ActivateRepository(id string) {
 		a.reposView.Render(a.registry, a.repoTreeState())
 		return
 	}
+	a.stopAutoFetch()
+	a.stopNetOperations()
 	a.stopWatcher()
 	a.stopJournal()
 	a.clearChangesPanels()
@@ -448,12 +485,15 @@ func (a *App) ActivateRepository(id string) {
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
-	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.refreshDivergence(opened)
+	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
+	a.refreshRemoteState()
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
 	a.startWorking()
+	a.startAutoFetch()
 }
 
 func (a *App) opened() *openedRepository {
@@ -518,8 +558,10 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.branchesView.Render(snap)
-	a.statusBranchLabel.SetText(branchStatusText(snap))
+	a.refreshDivergence(o)
+	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
+	a.refreshRemoteState()
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startJournal()
 	if a.commitIsSelected() {
@@ -533,6 +575,10 @@ func branchStatusText(snap branches.Snapshot) string {
 		return i18n.T("Pane.Branches.Detached") + " " + shortHash(snap.HeadID)
 	}
 	return snap.Current
+}
+
+func (a *App) branchStatusTextWithDivergence(snap branches.Snapshot) string {
+	return branchStatusText(snap) + divergenceStatusSuffix(a.getDivergence())
 }
 
 func shortHash(id hash.ObjectID) string {
@@ -612,6 +658,7 @@ func (a *App) addOrCreateRepository() {
 		node, err := a.registry.AddRepository(result.Name, result.Path, a.groupParentForNewGroup())
 		if err != nil {
 			a.log.Warn("add repository failed", "error", err)
+			a.reportAddRepositoryFailure(err, result.Path)
 			return
 		}
 		if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
@@ -641,6 +688,7 @@ func (a *App) wireAddRepoView(view *addrepo.View, cb func(addrepo.Result, bool))
 		result, err := addrepo.Apply(req)
 		if err != nil {
 			a.log.Warn("create repository failed", "error", err)
+			a.showError(i18n.T("Dialog.AddRepo.Title"), i18n.Tf("Dialog.AddRepo.Hint.InitFailed", err))
 			return
 		}
 		cb(result, true)
@@ -649,6 +697,13 @@ func (a *App) wireAddRepoView(view *addrepo.View, cb func(addrepo.Result, bool))
 		a.eng.CloseModal(view.Dialog())
 		cb(addrepo.Result{}, false)
 	}
+}
+
+func (a *App) reportAddRepositoryFailure(err error, path string) {
+	if !errors.Is(err, repo.ErrDuplicatePath) {
+		return
+	}
+	a.showError(i18n.T("Dialog.AddRepo.Title"), i18n.Tf("Dialog.AddRepo.Hint.Duplicate", path))
 }
 
 func (a *App) groupParentForNewGroup() string {
@@ -739,6 +794,7 @@ func (a *App) Run() error {
 	go a.FollowSystemTheme(ctx)
 	go a.runWatchdog(ctx, a.watches())
 	win := window.New(a.eng, a.root.Title)
+	a.applyWindowIcon(win)
 	if a.OnExit == nil {
 		a.OnExit = win.Close
 	}
@@ -751,6 +807,8 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		a.stopAutoFetch()
+		a.stopNetOperations()
 		a.closePostQueue()
 		a.stopWatcher()
 		a.stopJournal()

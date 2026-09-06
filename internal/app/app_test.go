@@ -58,7 +58,7 @@ func TestNewLoadsMainWindow(t *testing.T) {
 func TestMenuStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 3 {
+	if len(items) != 4 {
 		t.Fatalf("top menus = %d", len(items))
 	}
 	if len(items[0].Items) != len(repositoryMenuTree) {
@@ -146,6 +146,7 @@ func TestCommandStatesFollowActiveRepository(t *testing.T) {
 	if _, enabled, ok := a.MenuItemByCommand(CmdRemoveWorktree); !ok || !enabled {
 		t.Fatal("remove worktree must be enabled on a worktree")
 	}
+	a.setHasRemotes(true)
 	for cmd, name := range toolbarButtons {
 		want := cmd != CmdCommit
 		if got := a.Widget(name).(*widget.Button).IsEnabled(); got != want {
@@ -180,6 +181,10 @@ func TestDispatch(t *testing.T) {
 		t.Fatal("disabled command must not run")
 	}
 	a.SetActiveRepository("r", false)
+	if a.Dispatch(CmdPull) {
+		t.Fatal("command without a remote must still be disabled")
+	}
+	a.setHasRemotes(true)
 	if !a.Dispatch(CmdPull) || called != 2 {
 		t.Fatal("enabled command must run")
 	}

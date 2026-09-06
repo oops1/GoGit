@@ -133,7 +133,7 @@ func readBaseOffset(source io.ByteReader, offset int64) (int64, int64, error) {
 	distance := int64(current & payloadMask)
 	for current&continuation != 0 {
 		if current, err = source.ReadByte(); err != nil {
-			return read, 0, fmt.Errorf("%w: delta base offset at %d: %w", ErrTruncated, offset, err)
+			return read, 0, fmt.Errorf("%w: delta base offset at %d: %v", ErrTruncated, offset, err)
 		}
 		read++
 		if distance > maxBaseOffsetStep {
@@ -153,7 +153,7 @@ func readBaseName(source io.ByteReader, offset int64) (int64, hash.ObjectID, err
 	for i := range id {
 		current, err := source.ReadByte()
 		if err != nil {
-			return int64(i), hash.Zero, fmt.Errorf("%w: delta base name at %d: %w", ErrTruncated, offset, err)
+			return int64(i), hash.Zero, fmt.Errorf("%w: delta base name at %d: %v", ErrTruncated, offset, err)
 		}
 		id[i] = current
 	}

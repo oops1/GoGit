@@ -26,6 +26,7 @@ func (a *App) applySettings(m settings.Model, ok bool) {
 	a.setStatusBarVisible(a.cfg.UI.ShowStatusBar)
 	a.journalView.SetFullAuthorName(a.cfg.UI.JournalFullAuthorName)
 	a.restartWatcherForCurrentRepository()
+	a.restartAutoFetch()
 	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 		a.log.Warn("save config failed", "error", err)
 	}
@@ -51,6 +52,8 @@ func (a *App) defaultShowSettings(initial settings.Model, cb func(settings.Model
 	}
 	a.wireSettingsView(view, cb)
 	a.eng.ShowModal(view.Dialog())
+	a.wireSecretsView(view)
+	a.refreshCredentialSourceInfo(view)
 }
 
 func (a *App) wireSettingsView(view *settings.View, cb func(settings.Model, bool)) {

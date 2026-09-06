@@ -19,6 +19,12 @@ var loadDialog = dialogs.Load
 
 var themeOrder = []string{config.ThemeSystem, config.ThemeDark, config.ThemeLight}
 
+var credentialSourceOrder = []string{
+	config.CredentialSourceVault,
+	config.CredentialSourceVaultThenHelper,
+	config.CredentialSourceHelper,
+}
+
 type View struct {
 	dlg *widget.Dialog
 
@@ -33,14 +39,59 @@ type View struct {
 	autoFetch             *widget.CheckBox
 	fetchInterval         *widget.NumericUpDown
 	workTreeDepth         *widget.NumericUpDown
+	pullStrategy          *widget.TextInput
+	defaultRemote         *widget.TextInput
+	pruneOnFetch          *widget.CheckBox
+	shallowDepth          *widget.NumericUpDown
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
+
+	credentialSource              *widget.Dropdown
+	credentialSourceStorePath     *widget.Label
+	credentialSourceKeyProtection *widget.Label
+	credentialSourceHelpers       *widget.Label
+
+	credentialsTable     *widget.DataGridWidget
+	credentialResource   *widget.TextInput
+	credentialUsername   *widget.TextInput
+	credentialSecret     *widget.TextInput
+	credentialAddBtn     *widget.Button
+	credentialRemoveBtn  *widget.Button
+	masterPasswordBtn    *widget.Button
+	credentialsStatus    *widget.Label
+	credentialsUnlockBtn *widget.Button
+
+	sshTable           *widget.DataGridWidget
+	sshHostInput       *widget.TextInput
+	sshPathInput       *widget.TextInput
+	sshPassphraseInput *widget.TextInput
+	sshAddBtn          *widget.Button
+	sshBrowseBtn       *widget.Button
+	sshRemoveBtn       *widget.Button
+	sshStatus          *widget.Label
+	sshUnlockBtn       *widget.Button
+
+	credentials      []SecretEntry
+	keys             []KeyEntry
+	selectedResource string
+	hasCredSelection bool
+	selectedHost     string
+	hasKeySelection  bool
+	secretsLocked    bool
 
 	eng       widget.ModalShower
 	languages []string
 
 	OnOK     func(Model)
 	OnCancel func()
+
+	OnAddCredential     func(resource, username string, secret []byte)
+	OnRemoveCredential  func(resource string)
+	OnAddKey            func(host, path string, passphrase []byte)
+	OnRemoveKey         func(host string)
+	OnSetMasterPassword func()
+	OnUnlockSecrets     func()
+	OnBrowseKeyFile     func()
 }
 
 func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, error) {
@@ -55,6 +106,9 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	v.populateLanguages()
 	v.apply(initial.Normalized())
 	v.wire()
+	v.buildSecretsColumns()
+	v.wireSecrets()
+	v.SetSecretsLocked(false)
 	return v, nil
 }
 
@@ -95,13 +149,37 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.workTreeDepth, ok = named["workTreeDepth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: workTreeDepth", ErrWidgetMissing)
 	}
+	if v.pullStrategy, ok = named["pullStrategy"].(*widget.TextInput); !ok {
+		return fmt.Errorf("%w: pullStrategy", ErrWidgetMissing)
+	}
+	if v.defaultRemote, ok = named["defaultRemote"].(*widget.TextInput); !ok {
+		return fmt.Errorf("%w: defaultRemote", ErrWidgetMissing)
+	}
+	if v.pruneOnFetch, ok = named["pruneOnFetch"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: pruneOnFetch", ErrWidgetMissing)
+	}
+	if v.shallowDepth, ok = named["shallowDepth"].(*widget.NumericUpDown); !ok {
+		return fmt.Errorf("%w: shallowDepth", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
 	if v.cancelBtn, ok = named["cancel"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: cancel", ErrWidgetMissing)
 	}
-	return nil
+	if v.credentialSource, ok = named["credentialSource"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: credentialSource", ErrWidgetMissing)
+	}
+	if v.credentialSourceStorePath, ok = named["credentialSourceStorePath"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialSourceStorePath", ErrWidgetMissing)
+	}
+	if v.credentialSourceKeyProtection, ok = named["credentialSourceKeyProtection"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialSourceKeyProtection", ErrWidgetMissing)
+	}
+	if v.credentialSourceHelpers, ok = named["credentialSourceHelpers"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialSourceHelpers", ErrWidgetMissing)
+	}
+	return v.bindSecrets(named)
 }
 
 func (v *View) populateLanguages() {
@@ -131,6 +209,11 @@ func (v *View) apply(m Model) {
 	v.autoFetch.SetChecked(m.AutoFetch)
 	v.fetchInterval.SetValue(float64(m.FetchInterval))
 	v.workTreeDepth.SetValue(float64(m.WorkTreeDepth))
+	v.pullStrategy.SetText(m.PullStrategy)
+	v.defaultRemote.SetText(m.DefaultRemote)
+	v.pruneOnFetch.SetChecked(m.PruneOnFetch)
+	v.shallowDepth.SetValue(float64(m.ShallowDepth))
+	v.credentialSource.SetSelected(credentialSourceIndex(m.CredentialSource))
 }
 
 func (v *View) setLanguageSelection(code string) {
@@ -158,6 +241,22 @@ func themeAt(idx int) string {
 	return themeOrder[idx]
 }
 
+func credentialSourceIndex(source string) int {
+	for i, s := range credentialSourceOrder {
+		if s == source {
+			return i
+		}
+	}
+	return 0
+}
+
+func credentialSourceAt(idx int) string {
+	if idx < 0 || idx >= len(credentialSourceOrder) {
+		return config.CredentialSourceVault
+	}
+	return credentialSourceOrder[idx]
+}
+
 func (v *View) request() Model {
 	code := ""
 	if idx := v.language.Selected(); idx >= 0 && idx < len(v.languages) {
@@ -174,6 +273,11 @@ func (v *View) request() Model {
 		AutoFetch:             v.autoFetch.IsChecked(),
 		FetchInterval:         int(v.fetchInterval.Value()),
 		WorkTreeDepth:         int(v.workTreeDepth.Value()),
+		PullStrategy:          v.pullStrategy.GetText(),
+		DefaultRemote:         v.defaultRemote.GetText(),
+		PruneOnFetch:          v.pruneOnFetch.IsChecked(),
+		ShallowDepth:          int(v.shallowDepth.Value()),
+		CredentialSource:      credentialSourceAt(v.credentialSource.Selected()),
 	}.Normalized()
 }
 

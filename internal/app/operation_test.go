@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/operation"
 )
@@ -147,37 +147,70 @@ func TestRunOperationKeepsQuietWhenTheWindowCannotOpen(t *testing.T) {
 	}
 }
 
-func TestRemoteCommandsOpenTheOperationWindow(t *testing.T) {
-	for _, tc := range []struct {
-		command CommandID
-		key     string
-	}{
-		{CmdPull, "Operation.Title.Pull"},
-		{CmdSync, "Operation.Title.Sync"},
-		{CmdPush, "Operation.Title.Push"},
-	} {
-		t.Run(string(tc.command), func(t *testing.T) {
-			a := newTestApp(t)
-			a.SetActiveRepository("r", false)
-			views := captureOperationViews(t)
+func TestOperationProgressLogsEveryCorePhaseTranslated(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
 
-			if !a.Dispatch(tc.command) {
-				t.Fatalf("%s was not dispatched", tc.command)
-			}
-
-			view := lastOperationView(t, views)
-			waitForFinishedOperation(t, a, view)
-			lines := readOnDispatcher(t, a, view.Lines)
-			joined := strings.Join(lines, "\n")
-			if !strings.Contains(joined, i18n.T("Operation.Log.RemoteUnavailable")) {
-				t.Fatalf("log = %v", lines)
-			}
-			if !strings.Contains(joined, ErrRemoteUnavailable.Error()) {
-				t.Fatalf("failure is missing from the log = %v", lines)
-			}
-			if view.Dialog().Title != i18n.T(tc.key) {
-				t.Fatalf("title = %q, want %q", view.Dialog().Title, i18n.T(tc.key))
-			}
-		})
+	phases := []string{
+		"init",
+		"connecting",
+		"negotiating",
+		progress.PhaseReceiving,
+		progress.PhaseCounting,
+		progress.PhaseCompressing,
+		progress.PhaseWriting,
+		progress.PhaseResolving,
+		"updating-refs",
+		progress.PhaseCheckout,
 	}
+	a.RunOperation("Fetch", func(_ context.Context, reporter OperationReporter) error {
+		prog := newOperationProgress(reporter)
+		for _, phase := range phases {
+			prog.Phase(phase)
+		}
+		return nil
+	})
+
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+	lines := readOnDispatcher(t, a, view.Lines)
+
+	want := []string{
+		i18n.T("Operation.Log.Initializing"),
+		i18n.T("Operation.Log.Connecting"),
+		i18n.T("Operation.Log.Negotiating"),
+		i18n.T("Operation.Log.Receiving"),
+		i18n.T("Operation.Log.Counting"),
+		i18n.T("Operation.Log.Compressing"),
+		i18n.T("Operation.Log.Writing"),
+		i18n.T("Operation.Log.Resolving"),
+		i18n.T("Operation.Log.Updating"),
+		i18n.T("Operation.Log.Checkout"),
+	}
+	for _, w := range want {
+		if !slices.Contains(lines, w) {
+			t.Fatalf("log = %v, missing phase line %q", lines, w)
+		}
+	}
+}
+
+func TestStopNetOperationsCancelsARunningOperationAndWaits(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+	started := make(chan struct{})
+
+	a.RunOperation("Fetch", func(ctx context.Context, _ OperationReporter) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	<-started
+
+	a.stopNetOperations()
+
+	view := lastOperationView(t, views)
+	if readOnDispatcher(t, a, view.Running) {
+		t.Fatal("stopping net operations must cancel the running one")
+	}
+	a.stopNetOperations()
 }

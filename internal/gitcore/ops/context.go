@@ -2,6 +2,9 @@ package ops
 
 import (
 	"errors"
+	"os"
+	"os/user"
+	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -25,8 +28,42 @@ func identityOf(r *repo.Repository, when time.Time) (object.Signature, error) {
 	return object.Signature{Name: user.Name, Email: user.Email, When: when}, nil
 }
 
+var accountIdentity = systemAccountIdentity
+
+func systemAccountIdentity() (string, string) {
+	name := "gogit"
+	if account, err := user.Current(); err == nil {
+		switch {
+		case account.Name != "":
+			name = account.Name
+		case account.Username != "":
+			name = account.Username
+		}
+	}
+	host := "localhost"
+	if reported, err := os.Hostname(); err == nil && reported != "" {
+		host = reported
+	}
+	return name, strings.ReplaceAll(name, " ", ".") + "@" + host
+}
+
+func fallbackIdentity(when time.Time) object.Signature {
+	name, email := accountIdentity()
+	return object.Signature{Name: name, Email: email, When: when}
+}
+
+func reflogIdentity(r *repo.Repository, when time.Time) object.Signature {
+	sig, err := identityOf(r, when)
+	if err != nil {
+		return fallbackIdentity(when)
+	}
+	return sig
+}
+
 func openRepoContext(r *repo.Repository) (*repoContext, error) {
-	sig, err := identityOf(r, time.Now())
+	now := time.Now()
+	sig, err := identityOf(r, now)
+	committer := reflogIdentity(r, now)
 	if err != nil {
 		sig = object.Signature{}
 	}
@@ -39,7 +76,7 @@ func openRepoContext(r *repo.Repository) (*repoContext, error) {
 		CommonDir: r.CommonDir(),
 		Bare:      r.IsBare(),
 		Peeler:    db,
-		Committer: func() object.Signature { return sig },
+		Committer: func() object.Signature { return committer },
 	})
 	if err != nil {
 		_ = db.Close()

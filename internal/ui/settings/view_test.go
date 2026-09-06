@@ -45,8 +45,37 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"autoFetch":             widget.NewCheckBox(""),
 		"fetchInterval":         widget.NewNumericUpDown(),
 		"workTreeDepth":         widget.NewNumericUpDown(),
+		"pullStrategy":          widget.NewTextInput(""),
+		"defaultRemote":         widget.NewTextInput(""),
+		"pruneOnFetch":          widget.NewCheckBox(""),
+		"shallowDepth":          widget.NewNumericUpDown(),
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
+
+		"credentialSource":              widget.NewDropdown(),
+		"credentialSourceStorePath":     widget.NewWin10Label(""),
+		"credentialSourceKeyProtection": widget.NewWin10Label(""),
+		"credentialSourceHelpers":       widget.NewWin10Label(""),
+
+		"credentialsTable":         widget.NewDataGridWidget(),
+		"credentialResource":       widget.NewTextInput(""),
+		"credentialUsername":       widget.NewTextInput(""),
+		"credentialSecret":         widget.NewPasswordInput(""),
+		"credentialAdd":            widget.NewButton(""),
+		"credentialRemove":         widget.NewButton(""),
+		"credentialMasterPassword": widget.NewButton(""),
+		"credentialsStatus":        widget.NewWin10Label(""),
+		"credentialsUnlock":        widget.NewButton(""),
+
+		"sshTable":      widget.NewDataGridWidget(),
+		"sshHost":       widget.NewTextInput(""),
+		"sshPath":       widget.NewTextInput(""),
+		"sshBrowse":     widget.NewButton(""),
+		"sshPassphrase": widget.NewPasswordInput(""),
+		"sshAdd":        widget.NewButton(""),
+		"sshRemove":     widget.NewButton(""),
+		"sshStatus":     widget.NewWin10Label(""),
+		"sshUnlock":     widget.NewButton(""),
 	}
 }
 
@@ -82,7 +111,15 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
+	keys := []string{
+		"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
+		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
+		"shallowDepth", "ok", "cancel",
+		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
+		"credentialsTable", "credentialResource", "credentialUsername", "credentialSecret", "credentialAdd",
+		"credentialRemove", "credentialMasterPassword", "credentialsStatus", "credentialsUnlock",
+		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshAdd", "sshRemove", "sshStatus", "sshUnlock",
+	}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -91,9 +128,24 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 			t.Fatalf("missing %q: expected error", key)
 		}
 	}
+	labelKeys := map[string]bool{
+		"credentialSourceStorePath": true, "credentialSourceKeyProtection": true, "credentialSourceHelpers": true,
+		"credentialsStatus": true, "sshStatus": true,
+	}
 	for _, key := range keys {
+		if labelKeys[key] {
+			continue
+		}
 		named := fullNamedWidgets()
 		named[key] = widget.NewWin10Label("wrong-type")
+		v := &View{}
+		if err := v.bind(named); err == nil {
+			t.Fatalf("mistyped %q: expected error", key)
+		}
+	}
+	for key := range labelKeys {
+		named := fullNamedWidgets()
+		named[key] = widget.NewButton("wrong-type")
 		v := &View{}
 		if err := v.bind(named); err == nil {
 			t.Fatalf("mistyped %q: expected error", key)
@@ -119,6 +171,11 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		AutoFetch:             true,
 		FetchInterval:         90,
 		WorkTreeDepth:         6,
+		PullStrategy:          config.PullStrategyMerge,
+		DefaultRemote:         "upstream",
+		PruneOnFetch:          true,
+		ShallowDepth:          15,
+		CredentialSource:      config.CredentialSourceHelper,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -148,6 +205,21 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 	}
 	if v.workTreeDepth.Value() != 6 {
 		t.Fatalf("workTreeDepth = %v", v.workTreeDepth.Value())
+	}
+	if v.pullStrategy.GetText() != config.PullStrategyMerge {
+		t.Fatalf("pullStrategy = %q", v.pullStrategy.GetText())
+	}
+	if v.defaultRemote.GetText() != "upstream" {
+		t.Fatalf("defaultRemote = %q", v.defaultRemote.GetText())
+	}
+	if !v.pruneOnFetch.IsChecked() {
+		t.Fatal("pruneOnFetch must be checked")
+	}
+	if v.shallowDepth.Value() != 15 {
+		t.Fatalf("shallowDepth = %v", v.shallowDepth.Value())
+	}
+	if v.credentialSource.Selected() != credentialSourceIndex(config.CredentialSourceHelper) {
+		t.Fatalf("credentialSource selection = %d", v.credentialSource.Selected())
 	}
 }
 
@@ -192,6 +264,32 @@ func TestThemeAtFallsBackToSystemForOutOfRangeIndex(t *testing.T) {
 	}
 }
 
+func TestCredentialSourceIndexAndAtRoundTripKnownValues(t *testing.T) {
+	for i, source := range credentialSourceOrder {
+		if credentialSourceIndex(source) != i {
+			t.Fatalf("credentialSourceIndex(%q) = %d, want %d", source, credentialSourceIndex(source), i)
+		}
+		if credentialSourceAt(i) != source {
+			t.Fatalf("credentialSourceAt(%d) = %q, want %q", i, credentialSourceAt(i), source)
+		}
+	}
+}
+
+func TestCredentialSourceIndexFallsBackToZeroForUnknownValue(t *testing.T) {
+	if credentialSourceIndex("bogus") != 0 {
+		t.Fatal("unknown credential source must map to index 0")
+	}
+}
+
+func TestCredentialSourceAtFallsBackToVaultForOutOfRangeIndex(t *testing.T) {
+	if credentialSourceAt(-1) != config.CredentialSourceVault {
+		t.Fatal("negative index must fall back to vault")
+	}
+	if credentialSourceAt(len(credentialSourceOrder)) != config.CredentialSourceVault {
+		t.Fatal("index past the end must fall back to vault")
+	}
+}
+
 func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	initial := Model{
 		Language:              "en",
@@ -203,6 +301,11 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		AutoFetch:             false,
 		FetchInterval:         300,
 		WorkTreeDepth:         0,
+		PullStrategy:          config.PullStrategyFF,
+		DefaultRemote:         "origin",
+		PruneOnFetch:          false,
+		ShallowDepth:          0,
+		CredentialSource:      config.CredentialSourceVault,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 	v.language.SetSelected(1)
@@ -210,9 +313,14 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	clickCheckBox(v.showToolbar)
 	clickCheckBox(v.autoFetch)
 	clickCheckBox(v.journalFullAuthorName)
+	clickCheckBox(v.pruneOnFetch)
 	v.logMaxCount.SetValue(1234)
 	v.fetchInterval.SetValue(456)
 	v.workTreeDepth.SetValue(8)
+	v.pullStrategy.SetText(config.PullStrategyRebase)
+	v.defaultRemote.SetText("upstream")
+	v.shallowDepth.SetValue(15)
+	v.credentialSource.SetSelected(credentialSourceIndex(config.CredentialSourceHelper))
 
 	got := v.request()
 	want := Model{
@@ -225,6 +333,11 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		AutoFetch:             true,
 		FetchInterval:         456,
 		WorkTreeDepth:         8,
+		PullStrategy:          config.PullStrategyRebase,
+		DefaultRemote:         "upstream",
+		PruneOnFetch:          true,
+		ShallowDepth:          15,
+		CredentialSource:      config.CredentialSourceHelper,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)

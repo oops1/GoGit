@@ -26,14 +26,31 @@ func TestApplyDeltaCopiesAndInserts(t *testing.T) {
 }
 
 func TestApplyDeltaTreatsZeroSizeAsSixtyFourKilobytes(t *testing.T) {
-	base := bytes.Repeat([]byte("a"), defaultCopySize+16)
-	delta := slices.Concat(deltaSizes(int64(len(base)), defaultCopySize), copyOp(0, defaultCopySize))
+	const wantSize = 65536
+	base := bytes.Repeat([]byte("a"), wantSize+16)
+	delta := slices.Concat(deltaSizes(int64(len(base)), wantSize), []byte{copyOpcode})
 	got, err := ApplyDelta(base, delta)
 	if err != nil {
 		t.Fatalf("ApplyDelta returned error %v", err)
 	}
-	if len(got) != defaultCopySize {
-		t.Fatalf("ApplyDelta produced %d bytes, want %d", len(got), defaultCopySize)
+	if len(got) != wantSize {
+		t.Fatalf("ApplyDelta produced %d bytes, want %d", len(got), wantSize)
+	}
+}
+
+func TestApplyDeltaResultCarriesNoSpareCapacity(t *testing.T) {
+	size := maxPrealloc*2 + 17
+	base := bytes.Repeat([]byte("q"), size)
+	delta := slices.Concat(deltaSizes(int64(size), int64(size)), appendDeltaCopies(nil, 0, size))
+	got, err := ApplyDelta(base, delta)
+	if err != nil {
+		t.Fatalf("ApplyDelta returned error %v", err)
+	}
+	if len(got) != size {
+		t.Fatalf("ApplyDelta produced %d bytes, want %d", len(got), size)
+	}
+	if cap(got) != len(got) {
+		t.Fatalf("ApplyDelta returned a slice with %d bytes of spare capacity, a caller appending to it could corrupt a cached copy of the same object", cap(got)-len(got))
 	}
 }
 

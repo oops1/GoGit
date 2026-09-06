@@ -17,6 +17,13 @@ func setupTruncationString(t *testing.T) {
 	t.Cleanup(widget.ClearStrings)
 }
 
+func setupNoNewlineString(t *testing.T) {
+	t.Helper()
+	widget.RegisterString("en", "Diff.NoNewline", "No newline at end of file")
+	widget.SetLanguage("en")
+	t.Cleanup(widget.ClearStrings)
+}
+
 func TestFromFileMapsContextAddedAndRemovedLinesWithLineNumbers(t *testing.T) {
 	f := diff.File{
 		OldPath: "a.txt",
@@ -104,6 +111,7 @@ func TestFromFileBuildsHunkBannerWithDecrementedStartForEmptyRange(t *testing.T)
 }
 
 func TestFromFileAppendsNoNewlineMarkerAfterTheAffectedLine(t *testing.T) {
+	setupNoNewlineString(t)
 	f := diff.File{
 		OldPath: "a.txt", NewPath: "a.txt",
 		Hunks: []diff.Hunk{{
@@ -121,7 +129,7 @@ func TestFromFileAppendsNoNewlineMarkerAfterTheAffectedLine(t *testing.T) {
 	if lines[0].Text != "eof" {
 		t.Fatalf("first line = %+v", lines[0])
 	}
-	if lines[1].Kind != diffview.NoNewline || lines[1].Text != "No newline at end of file" {
+	if lines[1].Kind != diffview.NoNewline || lines[1].Text != i18n.T("Diff.NoNewline") {
 		t.Fatalf("marker line = %+v", lines[1])
 	}
 }

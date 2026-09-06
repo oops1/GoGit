@@ -19,7 +19,11 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
-      - run: cd cmd/gogit && go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64
+      - name: windows resources
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cd cmd/gogit
+          go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64             --file-version "$version" --product-version "$version"
       - run: mkdir -p dist/windows-amd64 dist/linux-amd64 dist/linux-arm64
 
       - name: build windows amd64

@@ -11,7 +11,6 @@ coverage.html
 *.log
 /docs/
 /CLAUDE.md
-/cmd/gogit/*.syso
 /cmd/gogit/rsrc/
 /gogit
 /race.log

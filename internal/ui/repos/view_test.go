@@ -9,9 +9,19 @@ import (
 	"github.com/oops1/headless-gui/v3/widget/treeview"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/ui/icons"
 )
+
+func TestMain(m *testing.M) {
+	cat, err := i18n.Builtin()
+	if err != nil {
+		panic(err)
+	}
+	cat.Register()
+	m.Run()
+}
 
 func newTestRegistry(t *testing.T) (*repo.Registry, *config.Config) {
 	t.Helper()
@@ -501,5 +511,124 @@ func TestRenderOnEmptyRegistryProducesNoRoots(t *testing.T) {
 	v.Render(reg, nil)
 	if len(tw.Tree.Roots()) != 0 {
 		t.Fatalf("roots = %d, want 0", len(tw.Tree.Roots()))
+	}
+}
+
+func findRepositoryID(t *testing.T, reg *repo.Registry) string {
+	t.Helper()
+	for n := range reg.Walk() {
+		if n.Kind == repo.KindRepository {
+			return n.ID
+		}
+	}
+	t.Fatal("no repository node found")
+	return ""
+}
+
+func TestRenderShowsAheadBadgeOnlyForTheActiveRepository(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	mainID := findRepositoryID(t, reg)
+	if err := reg.SetActive(mainID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {HasUpstream: true, Ahead: 2}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	want := "Main " + i18n.Tf("Status.Ahead", 2)
+	if item.DisplayText() != want {
+		t.Fatalf("text = %q, want %q", item.DisplayText(), want)
+	}
+}
+
+func TestRenderShowsBehindBadgeForTheActiveRepository(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	mainID := findRepositoryID(t, reg)
+	if err := reg.SetActive(mainID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {HasUpstream: true, Behind: 3}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	want := "Main " + i18n.Tf("Status.Behind", 3)
+	if item.DisplayText() != want {
+		t.Fatalf("text = %q, want %q", item.DisplayText(), want)
+	}
+}
+
+func TestRenderShowsDivergedBadgeForTheActiveRepository(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	mainID := findRepositoryID(t, reg)
+	if err := reg.SetActive(mainID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {HasUpstream: true, Ahead: 1, Behind: 2}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	want := "Main " + i18n.Tf("Status.Diverged", 1, 2)
+	if item.DisplayText() != want {
+		t.Fatalf("text = %q, want %q", item.DisplayText(), want)
+	}
+}
+
+func TestRenderOmitsTheBadgeWithoutAnUpstream(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	mainID := findRepositoryID(t, reg)
+	if err := reg.SetActive(mainID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {Ahead: 2, Behind: 3}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.DisplayText() != "Main" {
+		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	}
+}
+
+func TestRenderOmitsTheBadgeWhenUpToDate(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	mainID := findRepositoryID(t, reg)
+	if err := reg.SetActive(mainID); err != nil {
+		t.Fatal(err)
+	}
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {HasUpstream: true}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.DisplayText() != "Main" {
+		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	}
+}
+
+func TestRenderOmitsTheBadgeForAnInactiveRepositoryEvenWithDivergence(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	mainID := findRepositoryID(t, reg)
+	v, _ := bound(t)
+	v.Render(reg, map[string]State{mainID: {HasUpstream: true, Ahead: 2, Behind: 1}})
+
+	item, ok := v.Item(mainID)
+	if !ok {
+		t.Fatal("item not tracked")
+	}
+	if item.DisplayText() != "Main" {
+		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
 	}
 }

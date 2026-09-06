@@ -22,6 +22,12 @@ var (
 	ErrUnbornHead        = errors.New("ops: HEAD does not point to a commit yet")
 	ErrDetachedHead      = errors.New("ops: HEAD does not point to a branch")
 	ErrInvalidPath       = errors.New("ops: invalid repository path")
+	ErrNoUpstream        = errors.New("ops: branch has no upstream")
+	ErrNotFastForward    = errors.New("ops: pull would not be a fast-forward")
+	ErrDirtyWorkTree     = errors.New("ops: working tree has local changes")
+	ErrRemoteExists      = errors.New("ops: remote already exists")
+	ErrInvalidRemoteName = errors.New("ops: invalid remote name")
+	ErrNoLocalConfig     = errors.New("ops: repository has no local config")
 )
 
 type OverwriteError struct {

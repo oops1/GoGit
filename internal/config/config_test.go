@@ -67,6 +67,9 @@ height = 10
 log_max_count = -1
 fetch_interval_sec = 0
 worktree_scan_depth = -5
+pull_strategy = "octopus"
+default_remote = ""
+shallow_depth = -3
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -82,6 +85,37 @@ worktree_scan_depth = -5
 	}
 	if cfg.Git.LogMaxCount != 500 || cfg.Git.FetchInterval != 300 || cfg.Git.WorkTreeDepth != 0 {
 		t.Fatalf("normalize git: %+v", cfg.Git)
+	}
+	if cfg.Git.PullStrategy != PullStrategyFF || cfg.Git.DefaultRemote != "origin" || cfg.Git.ShallowDepth != 0 {
+		t.Fatalf("normalize git network settings: %+v", cfg.Git)
+	}
+}
+
+func TestDefaultCredentialSourceIsVault(t *testing.T) {
+	if got := Default().Git.CredentialSource; got != CredentialSourceVault {
+		t.Fatalf("CredentialSource = %q, want %q", got, CredentialSourceVault)
+	}
+}
+
+func TestNormalizeUnknownCredentialSourceFallsBackToVault(t *testing.T) {
+	for _, value := range []string{"", "bogus", "Vault", "VAULT+HELPER"} {
+		cfg := Default()
+		cfg.Git.CredentialSource = value
+		cfg.Normalize()
+		if cfg.Git.CredentialSource != CredentialSourceVault {
+			t.Fatalf("CredentialSource(%q) = %q, want %q", value, cfg.Git.CredentialSource, CredentialSourceVault)
+		}
+	}
+}
+
+func TestNormalizeKeepsValidCredentialSources(t *testing.T) {
+	for _, value := range []string{CredentialSourceVault, CredentialSourceVaultThenHelper, CredentialSourceHelper} {
+		cfg := Default()
+		cfg.Git.CredentialSource = value
+		cfg.Normalize()
+		if cfg.Git.CredentialSource != value {
+			t.Fatalf("CredentialSource(%q) = %q, want unchanged", value, cfg.Git.CredentialSource)
+		}
 	}
 }
 
@@ -240,6 +274,117 @@ func TestEncodeContainsSections(t *testing.T) {
 		if !strings.Contains(string(data), section) {
 			t.Fatalf("missing %s in %s", section, data)
 		}
+	}
+}
+
+func TestDefaultNetworkSettings(t *testing.T) {
+	cfg := Default()
+	if cfg.Git.PullStrategy != PullStrategyFF {
+		t.Fatalf("PullStrategy = %q, want %q", cfg.Git.PullStrategy, PullStrategyFF)
+	}
+	if cfg.Git.DefaultRemote != "origin" {
+		t.Fatalf("DefaultRemote = %q, want origin", cfg.Git.DefaultRemote)
+	}
+	if cfg.Git.PruneOnFetch {
+		t.Fatal("PruneOnFetch must default to false")
+	}
+	if cfg.Git.ShallowDepth != 0 {
+		t.Fatalf("ShallowDepth = %d, want 0", cfg.Git.ShallowDepth)
+	}
+}
+
+func TestNormalizeKeepsValidPullStrategies(t *testing.T) {
+	for _, strategy := range []string{PullStrategyFF, PullStrategyMerge, PullStrategyRebase} {
+		cfg := Default()
+		cfg.Git.PullStrategy = strategy
+		cfg.Normalize()
+		if cfg.Git.PullStrategy != strategy {
+			t.Fatalf("PullStrategy = %q, want %q", cfg.Git.PullStrategy, strategy)
+		}
+	}
+}
+
+func TestNormalizeFallsBackToFFForUnknownPullStrategy(t *testing.T) {
+	for _, strategy := range []string{"", "bogus", "FF"} {
+		cfg := Default()
+		cfg.Git.PullStrategy = strategy
+		cfg.Normalize()
+		if cfg.Git.PullStrategy != PullStrategyFF {
+			t.Fatalf("PullStrategy(%q) = %q, want %q", strategy, cfg.Git.PullStrategy, PullStrategyFF)
+		}
+	}
+}
+
+func TestNormalizeFallsBackToOriginForEmptyDefaultRemote(t *testing.T) {
+	cfg := Default()
+	cfg.Git.DefaultRemote = ""
+	cfg.Normalize()
+	if cfg.Git.DefaultRemote != "origin" {
+		t.Fatalf("DefaultRemote = %q, want origin", cfg.Git.DefaultRemote)
+	}
+}
+
+func TestNormalizeKeepsNonEmptyDefaultRemote(t *testing.T) {
+	cfg := Default()
+	cfg.Git.DefaultRemote = "upstream"
+	cfg.Normalize()
+	if cfg.Git.DefaultRemote != "upstream" {
+		t.Fatalf("DefaultRemote = %q, want upstream", cfg.Git.DefaultRemote)
+	}
+}
+
+func TestNormalizeClampsNegativeShallowDepthToZero(t *testing.T) {
+	cfg := Default()
+	cfg.Git.ShallowDepth = -10
+	cfg.Normalize()
+	if cfg.Git.ShallowDepth != 0 {
+		t.Fatalf("ShallowDepth = %d, want 0", cfg.Git.ShallowDepth)
+	}
+}
+
+func TestNormalizeKeepsAPositiveShallowDepth(t *testing.T) {
+	cfg := Default()
+	cfg.Git.ShallowDepth = 50
+	cfg.Normalize()
+	if cfg.Git.ShallowDepth != 50 {
+		t.Fatalf("ShallowDepth = %d, want 50", cfg.Git.ShallowDepth)
+	}
+}
+
+func TestNormalizeKeepsPruneOnFetchTrue(t *testing.T) {
+	cfg := Default()
+	cfg.Git.PruneOnFetch = true
+	cfg.Normalize()
+	if !cfg.Git.PruneOnFetch {
+		t.Fatal("PruneOnFetch must stay true")
+	}
+}
+
+func TestNetworkSettingsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.Git.PullStrategy = PullStrategyRebase
+	cfg.Git.DefaultRemote = "upstream"
+	cfg.Git.PruneOnFetch = true
+	cfg.Git.ShallowDepth = 20
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Git.PullStrategy != PullStrategyRebase {
+		t.Fatalf("PullStrategy = %q, want %q", loaded.Git.PullStrategy, PullStrategyRebase)
+	}
+	if loaded.Git.DefaultRemote != "upstream" {
+		t.Fatalf("DefaultRemote = %q, want upstream", loaded.Git.DefaultRemote)
+	}
+	if !loaded.Git.PruneOnFetch {
+		t.Fatal("PruneOnFetch must round trip as true")
+	}
+	if loaded.Git.ShallowDepth != 20 {
+		t.Fatalf("ShallowDepth = %d, want 20", loaded.Git.ShallowDepth)
 	}
 }
 

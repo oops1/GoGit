@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Width="480" Height="330">
+      Width="480" Height="540">
 
     <Grid.RowDefinitions>
-        <RowDefinition Height="270"/>
+        <RowDefinition Height="480"/>
         <RowDefinition Height="50"/>
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
@@ -14,9 +14,9 @@
     </Grid.ColumnDefinitions>
 
     <TabControl x:Name="tabs" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-                Width="480" Height="270" SelectedIndex="0">
+                Width="480" Height="480" SelectedIndex="0">
         <TabItem Header="{Loc Dialog.Settings.Tab.General}">
-            <Grid Width="480" Height="238">
+            <Grid Width="480" Height="448">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -52,8 +52,12 @@
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.Git}">
-            <Grid Width="480" Height="238">
+            <Grid Width="480" Height="448">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -81,6 +85,147 @@
                 <NumericUpDown x:Name="workTreeDepth" Grid.Row="3" Grid.Column="1"
                                 ToolTip="{Loc Dialog.Settings.WorkTreeDepth.Tip}"
                                 Minimum="0" Maximum="100" Increment="1"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="{Loc Dialog.Settings.PullStrategy}"/>
+                <TextBox x:Name="pullStrategy" Grid.Row="4" Grid.Column="1"/>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="{Loc Dialog.Settings.DefaultRemote}"/>
+                <TextBox x:Name="defaultRemote" Grid.Row="5" Grid.Column="1"/>
+
+                <CheckBox x:Name="pruneOnFetch" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                          Content="{Loc Dialog.Settings.PruneOnFetch}"/>
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="{Loc Dialog.Settings.ShallowDepth}"/>
+                <NumericUpDown x:Name="shallowDepth" Grid.Row="7" Grid.Column="1"
+                                Minimum="0" Maximum="100000" Increment="1"/>
+            </Grid>
+        </TabItem>
+        <TabItem Header="{Loc Dialog.Settings.Tab.Credentials}">
+            <Grid Width="480" Height="448">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="20"/>
+                    <RowDefinition Height="20"/>
+                    <RowDefinition Height="20"/>
+                    <RowDefinition Height="180"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="24"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="110"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Loc Dialog.Settings.CredentialSource}"/>
+                <ComboBox x:Name="credentialSource" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2">
+                    <ComboBoxItem Content="{Loc Dialog.Settings.CredentialSource.Vault}"/>
+                    <ComboBoxItem Content="{Loc Dialog.Settings.CredentialSource.VaultThenHelper}"/>
+                    <ComboBoxItem Content="{Loc Dialog.Settings.CredentialSource.Helper}"/>
+                </ComboBox>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.Secrets.StorePath}"/>
+                <TextBlock x:Name="credentialSourceStorePath" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="" FontSize="11"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.Secrets.KeyProtection}"/>
+                <TextBlock x:Name="credentialSourceKeyProtection" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="" FontSize="11"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.Secrets.Helpers}"/>
+                <TextBlock x:Name="credentialSourceHelpers" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="" FontSize="11"/>
+
+                <DataGrid x:Name="credentialsTable" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                          Width="480" Height="180"
+                          IsReadOnly="True" AutoGenerateColumns="False"
+                          CanUserSortColumns="False" SelectionMode="Single"/>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Resource}"/>
+                <TextBox x:Name="credentialResource" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"/>
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.User}"/>
+                <TextBox x:Name="credentialUsername" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2"/>
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Secret}"/>
+                <PasswordBox x:Name="credentialSecret" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2"
+                             Placeholder="{Loc Dialog.Settings.Credentials.Secret}"/>
+
+                <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" Width="480" Height="30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="85"/>
+                        <ColumnDefinition Width="85"/>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="110"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="credentialAdd" Grid.Column="0" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.Credentials.Add}"/>
+                    <Button x:Name="credentialRemove" Grid.Column="1" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.Credentials.Remove}"/>
+                    <Button x:Name="credentialMasterPassword" Grid.Column="2" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
+                    <Button x:Name="credentialsUnlock" Grid.Column="3"
+                            Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+                </Grid>
+
+                <TextBlock x:Name="credentialsStatus" Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
+                           Text="" FontSize="11"/>
+            </Grid>
+        </TabItem>
+        <TabItem Header="{Loc Dialog.Settings.Tab.SSH}">
+            <Grid Width="480" Height="448">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="180"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="24"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="110"/>
+                </Grid.ColumnDefinitions>
+
+                <DataGrid x:Name="sshTable" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                          Width="480" Height="180"
+                          IsReadOnly="True" AutoGenerateColumns="False"
+                          CanUserSortColumns="False" SelectionMode="Single"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.SSH.Host}"/>
+                <TextBox x:Name="sshHost" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.SSH.KeyFile}"/>
+                <TextBox x:Name="sshPath" Grid.Row="2" Grid.Column="1"/>
+                <Button x:Name="sshBrowse" Grid.Row="2" Grid.Column="2"
+                        Content="{Loc Dialog.Settings.SSH.Browse}"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.SSH.Passphrase}"/>
+                <PasswordBox x:Name="sshPassphrase" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                             Placeholder="{Loc Dialog.Settings.SSH.Passphrase}"/>
+
+                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Width="480" Height="30">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="160"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="sshAdd" Grid.Column="0" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.SSH.Add}"/>
+                    <Button x:Name="sshRemove" Grid.Column="1" Margin="0,0,6,0"
+                            Content="{Loc Dialog.Settings.SSH.Remove}"/>
+                    <Button x:Name="sshUnlock" Grid.Column="2"
+                            Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+                </Grid>
+
+                <TextBlock x:Name="sshStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                           Text="" FontSize="11"/>
             </Grid>
         </TabItem>
     </TabControl>

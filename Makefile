@@ -63,4 +63,4 @@ release-local: build-windows build-linux
 	cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS && cd ..
 
 clean:
-	rm -rf bin dist cover.out coverage.html cmd/gogit/*.syso
+	rm -rf bin dist cover.out coverage.html

@@ -20,6 +20,18 @@ const (
 )
 
 const (
+	PullStrategyFF     = "ff"
+	PullStrategyMerge  = "merge"
+	PullStrategyRebase = "rebase"
+)
+
+const (
+	CredentialSourceVault           = "vault"
+	CredentialSourceVaultThenHelper = "vault+helper"
+	CredentialSourceHelper          = "helper"
+)
+
+const (
 	MinWindowWidth  = 800
 	MinWindowHeight = 600
 )
@@ -45,11 +57,16 @@ type Window struct {
 }
 
 type Git struct {
-	Executable    string `toml:"executable"`
-	LogMaxCount   int    `toml:"log_max_count"`
-	AutoFetch     bool   `toml:"auto_fetch"`
-	FetchInterval int    `toml:"fetch_interval_sec"`
-	WorkTreeDepth int    `toml:"worktree_scan_depth"`
+	Executable       string `toml:"executable"`
+	LogMaxCount      int    `toml:"log_max_count"`
+	AutoFetch        bool   `toml:"auto_fetch"`
+	FetchInterval    int    `toml:"fetch_interval_sec"`
+	WorkTreeDepth    int    `toml:"worktree_scan_depth"`
+	PullStrategy     string `toml:"pull_strategy"`
+	DefaultRemote    string `toml:"default_remote"`
+	PruneOnFetch     bool   `toml:"prune_on_fetch"`
+	ShallowDepth     int    `toml:"shallow_depth"`
+	CredentialSource string `toml:"credential_source"`
 }
 
 type UI struct {
@@ -86,7 +103,7 @@ func Default() *Config {
 		Language: "en",
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
-		Git:      Git{LogMaxCount: 500, FetchInterval: 300},
+		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault},
 		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
 	}
 }
@@ -136,6 +153,22 @@ func (c *Config) Normalize() {
 	}
 	if c.Git.WorkTreeDepth < 0 {
 		c.Git.WorkTreeDepth = 0
+	}
+	switch c.Git.PullStrategy {
+	case PullStrategyMerge, PullStrategyRebase:
+	default:
+		c.Git.PullStrategy = PullStrategyFF
+	}
+	if c.Git.DefaultRemote == "" {
+		c.Git.DefaultRemote = "origin"
+	}
+	if c.Git.ShallowDepth < 0 {
+		c.Git.ShallowDepth = 0
+	}
+	switch c.Git.CredentialSource {
+	case CredentialSourceVaultThenHelper, CredentialSourceHelper:
+	default:
+		c.Git.CredentialSource = CredentialSourceVault
 	}
 }
 

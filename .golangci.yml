@@ -43,6 +43,27 @@ linters:
           disabled: true
         - name: package-comments
           disabled: true
+  exclusions:
+    rules:
+      - path: internal/winconsole/console_windows\.go
+        linters:
+          - gosec
+        text: "G103"
+      - path: internal/vault/dpapi_windows\.go
+        linters:
+          - gosec
+        text: "G103"
+      - path: internal/gitcore/transport/agent_other\.go
+        linters:
+          - gosec
+        text: "G704"
+      - path: internal/gitcore/credential/exec\.go
+        linters:
+          - gosec
+        text: "G204"
+      - path: internal/gitcore/credential/.*_test\.go
+        linters:
+          - gosec
 formatters:
   enable:
     - gofmt

@@ -3,12 +3,17 @@ package app
 import (
 	"bytes"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/journal"
 )
 
 func viewTopItems(t *testing.T, a *App) []widget.MenuItem {
@@ -47,7 +52,7 @@ func leafIndex(t *testing.T, group *menuGroupEntry, cmd CommandID) int {
 func TestViewMenuTreeStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 3 {
+	if len(items) != 4 {
 		t.Fatalf("top menus = %d", len(items))
 	}
 	if items[viewMenuIndex].Text != widget.Tr("Menu.View") {
@@ -277,5 +282,259 @@ func TestLogLanguageMenuLimitWarnsAboutExtraLanguages(t *testing.T) {
 	t.Cleanup(a.Close)
 	if !strings.Contains(buf.String(), "view menu shows only built-in languages") {
 		t.Fatal("expected language menu limit to be logged")
+	}
+}
+
+func TestRemoteMenuTreeStructure(t *testing.T) {
+	a := newTestApp(t)
+	items := a.menu.Items()
+	if items[remoteMenuIndex].Text != widget.Tr("Menu.Remote") {
+		t.Fatalf("remote menu text = %q", items[remoteMenuIndex].Text)
+	}
+	sub := items[remoteMenuIndex].Items
+	if len(sub) != len(remoteMenuTree) {
+		t.Fatalf("remote sub items = %d, want %d", len(sub), len(remoteMenuTree))
+	}
+	for i, entry := range remoteMenuTree {
+		if entry.Separator {
+			if !sub[i].Separator {
+				t.Fatalf("item %d should be a separator", i)
+			}
+			continue
+		}
+		if entry.Leaf == nil {
+			t.Fatalf("item %d must be a leaf", i)
+		}
+		if sub[i].Text != widget.Tr(entry.Leaf.Key) {
+			t.Fatalf("item %d text = %q, want %q", i, sub[i].Text, widget.Tr(entry.Leaf.Key))
+		}
+	}
+}
+
+func TestRemoteMenuAndToolbarShowTranslatedTextNotRawKeys(t *testing.T) {
+	a := newTestApp(t)
+	toolbarKeys := map[string]string{
+		"btnPull": "Toolbar.Pull",
+		"btnSync": "Toolbar.Sync",
+		"btnPush": "Toolbar.Push",
+	}
+	for _, lang := range []string{"en", "ru"} {
+		a.SetLanguage(lang)
+		sub := a.menu.Items()[remoteMenuIndex].Items
+		for i, entry := range remoteMenuTree {
+			if entry.Leaf == nil {
+				continue
+			}
+			switch entry.Leaf.Command {
+			case CmdPull, CmdPush, CmdSync:
+			default:
+				continue
+			}
+			text := sub[i].Text
+			if text == "" || text == entry.Leaf.Key {
+				t.Fatalf("lang %q: remote menu item for command %v shows %q instead of translated text",
+					lang, entry.Leaf.Command, text)
+			}
+		}
+		for name, key := range toolbarKeys {
+			btn, ok := a.Widget(name).(*widget.Button)
+			if !ok {
+				t.Fatalf("widget %s is not a Button", name)
+			}
+			if btn.Text == "" || btn.Text == key {
+				t.Fatalf("lang %q: %s caption shows %q instead of translated text", lang, name, btn.Text)
+			}
+		}
+	}
+}
+
+func TestDockPaneTitlesRetranslateOnLanguageChange(t *testing.T) {
+	a := newTestApp(t)
+	if len(viewPaneKeys) == 0 {
+		t.Fatal("viewPaneKeys must not be empty")
+	}
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		for _, pane := range a.Dock().Panes() {
+			key, ok := viewPaneKeys[pane.ID]
+			if !ok {
+				continue
+			}
+			want := widget.Tr(key)
+			if pane.Title != want {
+				t.Fatalf("lang %q: pane %q title = %q, want %q", lang, pane.ID, pane.Title, want)
+			}
+		}
+	}
+}
+
+func TestDockPaneTitlesIgnoreAPaneWithNoKnownKey(t *testing.T) {
+	a := newTestApp(t)
+	bogus := widget.NewDockPane("bogus-pane", "Bogus", nil)
+	a.Dock().AddPane(bogus, widget.DockLeft)
+	a.SetLanguage("ru")
+	if bogus.Title != "Bogus" {
+		t.Fatalf("pane with no known key must keep its title, got %q", bogus.Title)
+	}
+}
+
+func TestBranchesTreeGroupLabelsRetranslateOnLanguageChange(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+
+	tree := a.Widget("branchesTree").(*widget.TreeViewWidget)
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		roots := tree.Tree.Roots()
+		if len(roots) < 3 {
+			t.Fatalf("lang %q: got %d root groups, want at least 3", lang, len(roots))
+		}
+		wantLocal := i18n.T("Pane.Branches.Local")
+		wantRemotes := i18n.T("Pane.Branches.Remotes")
+		wantTags := i18n.T("Pane.Branches.Tags")
+		if roots[0].DisplayText() != wantLocal {
+			t.Fatalf("lang %q: local group label = %q, want %q", lang, roots[0].DisplayText(), wantLocal)
+		}
+		if roots[1].DisplayText() != wantRemotes {
+			t.Fatalf("lang %q: remotes group label = %q, want %q", lang, roots[1].DisplayText(), wantRemotes)
+		}
+		if roots[2].DisplayText() != wantTags {
+			t.Fatalf("lang %q: tags group label = %q, want %q", lang, roots[2].DisplayText(), wantTags)
+		}
+	}
+}
+
+func TestBranchesTreeAndStatusRetranslateOnLanguageChangeWhenDetached(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	head := oid(t, "aa")
+	detachTestHead(t, target, head)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+
+	shortHead := head.String()[:shortHashLength]
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		want := i18n.T("Pane.Branches.Detached") + " " + shortHead
+		item, ok := a.branchesView.Item(refs.HEAD)
+		if !ok {
+			t.Fatalf("lang %q: detached branch item missing", lang)
+		}
+		if item.DisplayText() != want {
+			t.Fatalf("lang %q: branches tree detached item = %q, want %q", lang, item.DisplayText(), want)
+		}
+		if got := a.statusBranchLabel.Text(); got != want {
+			t.Fatalf("lang %q: status branch label = %q, want %q", lang, got, want)
+		}
+	}
+}
+
+func TestRetranslateRepoTreesLogsAWarningWhenTheBranchSnapshotFailsToLoad(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	a, buf := newChangesTestApp(t, target)
+	a.ActivateRepository("r1")
+	withFailingBranchSnapshotLoad(t)
+
+	a.SetLanguage("ru")
+
+	if !strings.Contains(buf.String(), "retranslate branches failed") {
+		t.Fatalf("expected the branch snapshot error to be logged: %s", buf.String())
+	}
+}
+
+func TestFilesGridStateColumnRetranslatesOnLanguageChange(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 5)
+
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		want := i18n.T("Files.State.Modified")
+		deadline := time.Now().Add(testTimeout)
+		for {
+			row := filesRowOnDispatcher(t, a, 2)
+			if row.State == want {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("lang %q: modified file state = %q, want %q", lang, row.State, want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func TestRetranslateSkipsWorkingRefreshWhileACommitIsSelected(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 1)
+	waitForJournalRows(t, a, 1)
+
+	first := readOnDispatcher(t, a, func() journal.Row {
+		row, _ := a.named["journalGrid"].(*widget.DataGridWidget).Grid.ItemsSource().Get(0).(journal.Row)
+		return row
+	})
+	readOnDispatcher(t, a, func() bool { a.onJournalRowSelected(first); return true })
+	waitForFilesMode(t, a, filesModeCommit, 1)
+	before := filesRowOnDispatcher(t, a, 0)
+
+	a.SetLanguage("ru")
+	a.SetLanguage("en")
+	a.diffWG.Wait()
+
+	if got := filesModeOnDispatcher(a); got != filesModeCommit {
+		t.Fatalf("files grid mode = %v after a language change with a commit selected, want %v", got, filesModeCommit)
+	}
+	if after := filesRowOnDispatcher(t, a, 0); after != before {
+		t.Fatalf("commit diff row changed while a commit was selected: %+v -> %+v", before, after)
+	}
+}
+
+func TestRemoteMenuItemsFollowHasRemotes(t *testing.T) {
+	a := newTestApp(t)
+	fetchIdx := -1
+	manageIdx := -1
+	for i, entry := range remoteMenuTree {
+		if entry.Leaf == nil {
+			continue
+		}
+		switch entry.Leaf.Command {
+		case CmdFetch:
+			fetchIdx = i
+		case CmdManageRemotes:
+			manageIdx = i
+		}
+	}
+	if fetchIdx < 0 || manageIdx < 0 {
+		t.Fatal("fetch and manage remotes must be part of the remote menu")
+	}
+	sub := func() []widget.MenuItem { return a.menu.Items()[remoteMenuIndex].Items }
+	if !sub()[fetchIdx].Disabled || !sub()[manageIdx].Disabled {
+		t.Fatal("remote commands must start disabled without an active repository")
+	}
+	a.SetActiveRepository("r1", false)
+	if !sub()[fetchIdx].Disabled {
+		t.Fatal("fetch must stay disabled without a remote")
+	}
+	if sub()[manageIdx].Disabled {
+		t.Fatal("manage remotes must be enabled once a repository is open")
+	}
+	a.setHasRemotes(true)
+	if sub()[fetchIdx].Disabled {
+		t.Fatal("fetch must be enabled once a remote exists")
 	}
 }
