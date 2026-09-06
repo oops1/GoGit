@@ -288,14 +288,12 @@
                             <Button x:Name="credentialsUnlock" Grid.Row="6" Grid.Column="2" Height="30" Margin="10,0,0,0"
                                     Content="{Loc Dialog.Settings.Secrets.Unlock}" Visibility="Collapsed"/>
 
-                            <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2">
+                            <Grid x:Name="credentialsSecureRow" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="22"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Image x:Name="credentialsLockIcon" Grid.Column="0"/>
-                                <TextBlock x:Name="credentialsSecureNote" Grid.Column="1"
-                                           Text="{Loc Dialog.Settings.Secrets.SecureStorage}" FontSize="11"/>
                             </Grid>
                             <Button x:Name="credentialMasterPassword" Grid.Row="8" Grid.Column="2" Height="30" Margin="10,0,0,0"
                                     Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
@@ -380,14 +378,12 @@
                             <Button x:Name="sshUnlock" Grid.Row="6" Grid.Column="2" Height="30" Margin="10,0,0,0"
                                     Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
 
-                            <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2">
+                            <Grid x:Name="sshSecureRow" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="22"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <Image x:Name="sshLockIcon" Grid.Column="0"/>
-                                <TextBlock x:Name="sshSecureNote" Grid.Column="1"
-                                           Text="{Loc Dialog.Settings.Secrets.SecureStorage}" FontSize="11"/>
                             </Grid>
 
                             <TextBlock x:Name="sshStatus" Grid.Row="8" Grid.Column="2" Text="" FontSize="11"

@@ -88,7 +88,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"credentialsStatus":        widget.NewWin10Label(""),
 		"credentialsUnlock":        widget.NewButton(""),
 		"credentialsLockIcon":      widget.NewImageWidget(),
-		"credentialsSecureNote":    widget.NewWin10Label(""),
+		"credentialsSecureRow":     widget.NewGrid(),
 
 		"sshTable":          widget.NewDataGridWidget(),
 		"sshHost":           widget.NewTextInput(""),
@@ -103,7 +103,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"sshStatus":         widget.NewWin10Label(""),
 		"sshUnlock":         widget.NewButton(""),
 		"sshLockIcon":       widget.NewImageWidget(),
-		"sshSecureNote":     widget.NewWin10Label(""),
+		"sshSecureRow":      widget.NewGrid(),
 	}
 }
 
@@ -148,9 +148,9 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
 		"credentialsTable", "credentialResource", "credentialUsername", "credentialType", "credentialSecret",
 		"credentialAdd", "credentialEdit", "credentialRemove", "credentialTestConnection", "credentialMasterPassword",
-		"credentialsStatus", "credentialsUnlock", "credentialsLockIcon", "credentialsSecureNote",
+		"credentialsStatus", "credentialsUnlock", "credentialsLockIcon", "credentialsSecureRow",
 		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshUseDefault", "sshAdd", "sshEdit",
-		"sshRemove", "sshTestConnection", "sshStatus", "sshUnlock", "sshLockIcon", "sshSecureNote",
+		"sshRemove", "sshTestConnection", "sshStatus", "sshUnlock", "sshLockIcon", "sshSecureRow",
 	}
 	for _, key := range keys {
 		named := fullNamedWidgets()
@@ -163,7 +163,6 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	labelKeys := map[string]bool{
 		"credentialSourceStorePath": true, "credentialSourceKeyProtection": true, "credentialSourceHelpers": true,
 		"credentialsStatus": true, "sshStatus": true, "sectionTitle": true,
-		"credentialsSecureNote": true, "sshSecureNote": true,
 	}
 	for _, key := range keys {
 		if labelKeys[key] {

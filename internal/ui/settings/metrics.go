@@ -31,6 +31,7 @@ const (
 	searchTextLeftInset = 34
 
 	hintFontSize            = 11
+	secureNoteFontSize      = 11
 	hintLeftGapFromControl  = 12
 	hintTopGapUnderCheckbox = 4
 	hintLineHeight          = 17

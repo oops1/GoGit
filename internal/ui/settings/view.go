@@ -89,7 +89,8 @@ type View struct {
 	credentialsStatus     *widget.Label
 	credentialsUnlockBtn  *widget.Button
 	credentialsLockIcon   *widget.ImageWidget
-	credentialsSecureNote *widget.Label
+	credentialsSecureRow  *widget.Grid
+	credentialsSecureNote *secureNote
 
 	sshTable              *widget.DataGridWidget
 	sshHostInput          *widget.TextInput
@@ -104,7 +105,8 @@ type View struct {
 	sshStatus             *widget.Label
 	sshUnlockBtn          *widget.Button
 	sshLockIcon           *widget.ImageWidget
-	sshSecureNote         *widget.Label
+	sshSecureRow          *widget.Grid
+	sshSecureNote         *secureNote
 
 	credentials      []SecretEntry
 	keys             []KeyEntry

@@ -110,8 +110,8 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	if v.credentialsLockIcon, ok = named["credentialsLockIcon"].(*widget.ImageWidget); !ok {
 		return fmt.Errorf("%w: credentialsLockIcon", ErrWidgetMissing)
 	}
-	if v.credentialsSecureNote, ok = named["credentialsSecureNote"].(*widget.Label); !ok {
-		return fmt.Errorf("%w: credentialsSecureNote", ErrWidgetMissing)
+	if v.credentialsSecureRow, ok = named["credentialsSecureRow"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: credentialsSecureRow", ErrWidgetMissing)
 	}
 	if v.sshTable, ok = named["sshTable"].(*widget.DataGridWidget); !ok {
 		return fmt.Errorf("%w: sshTable", ErrWidgetMissing)
@@ -152,8 +152,8 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	if v.sshLockIcon, ok = named["sshLockIcon"].(*widget.ImageWidget); !ok {
 		return fmt.Errorf("%w: sshLockIcon", ErrWidgetMissing)
 	}
-	if v.sshSecureNote, ok = named["sshSecureNote"].(*widget.Label); !ok {
-		return fmt.Errorf("%w: sshSecureNote", ErrWidgetMissing)
+	if v.sshSecureRow, ok = named["sshSecureRow"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sshSecureRow", ErrWidgetMissing)
 	}
 	return nil
 }
@@ -191,16 +191,15 @@ func (v *View) buildSecretsColumns() {
 }
 
 func (v *View) buildSecretNotes() {
-	tint := widget.CurrentTheme().SecondaryText
-	icon := buildLockIcon(tint)
+	v.credentialsSecureNote = newSecureNote(v.credentialsLockIcon)
+	v.credentialsSecureNote.SetGridProps(0, 1, 1, 1)
+	v.credentialsSecureRow.AddChild(v.credentialsSecureNote)
+	v.credentialsSecureRow.SetBounds(v.credentialsSecureRow.Bounds())
 
-	v.credentialsLockIcon.Stretch = widget.ImageStretchUniform
-	v.credentialsLockIcon.SetImage(icon)
-	v.credentialsSecureNote.TextColor = tint
-
-	v.sshLockIcon.Stretch = widget.ImageStretchUniform
-	v.sshLockIcon.SetImage(icon)
-	v.sshSecureNote.TextColor = tint
+	v.sshSecureNote = newSecureNote(v.sshLockIcon)
+	v.sshSecureNote.SetGridProps(0, 1, 1, 1)
+	v.sshSecureRow.AddChild(v.sshSecureNote)
+	v.sshSecureRow.SetBounds(v.sshSecureRow.Bounds())
 }
 
 func (v *View) wireSecrets() {
