@@ -9,7 +9,8 @@ import (
 
 const repositoryMenuIndex = 0
 const editMenuIndex = 1
-const viewMenuIndex = 2
+const remoteMenuIndex = 2
+const viewMenuIndex = 3
 
 type menuLeafEntry struct {
 	Key     string
@@ -35,11 +36,13 @@ type menuDef struct {
 
 var repositoryMenuTree = buildRepositoryMenuTree()
 var editMenuTree = buildEditMenuTree()
+var remoteMenuTree = buildRemoteMenuTree()
 var viewMenuTree = buildViewMenuTree()
 
 var menuBarDefs = []menuDef{
 	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Edit", Tree: editMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Remote", Tree: remoteMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
 }
 
@@ -51,6 +54,7 @@ func buildRepositoryMenuTree() []menuTreeEntry {
 	return []menuTreeEntry{
 		leaf("Menu.Repository.AddOrCreate", CmdAddOrCreate),
 		leaf("Menu.Repository.AddGroup", CmdAddGroup),
+		leaf("Menu.Repository.Clone", CmdClone),
 		leaf("Menu.Repository.Search", CmdSearch),
 		leaf("Menu.Repository.CloseRepository", CmdCloseRepository),
 		separator,
@@ -60,6 +64,23 @@ func buildRepositoryMenuTree() []menuTreeEntry {
 		separator,
 		leaf("Menu.Repository.Settings", CmdSettings),
 		leaf("Menu.Repository.Close", CmdClose),
+	}
+}
+
+func buildRemoteMenuTree() []menuTreeEntry {
+	leaf := func(key string, cmd CommandID) menuTreeEntry {
+		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
+	}
+	separator := menuTreeEntry{Separator: true}
+	return []menuTreeEntry{
+		leaf("Menu.Remote.Fetch", CmdFetch),
+		leaf("Menu.Remote.Pull", CmdPull),
+		leaf("Menu.Remote.Push", CmdPush),
+		leaf("Menu.Remote.Sync", CmdSync),
+		separator,
+		leaf("Menu.Remote.Prune", CmdPrune),
+		separator,
+		leaf("Menu.Remote.Manage", CmdManageRemotes),
 	}
 }
 

@@ -47,7 +47,7 @@ func leafIndex(t *testing.T, group *menuGroupEntry, cmd CommandID) int {
 func TestViewMenuTreeStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 3 {
+	if len(items) != 4 {
 		t.Fatalf("top menus = %d", len(items))
 	}
 	if items[viewMenuIndex].Text != widget.Tr("Menu.View") {
@@ -277,5 +277,66 @@ func TestLogLanguageMenuLimitWarnsAboutExtraLanguages(t *testing.T) {
 	t.Cleanup(a.Close)
 	if !strings.Contains(buf.String(), "view menu shows only built-in languages") {
 		t.Fatal("expected language menu limit to be logged")
+	}
+}
+
+func TestRemoteMenuTreeStructure(t *testing.T) {
+	a := newTestApp(t)
+	items := a.menu.Items()
+	if items[remoteMenuIndex].Text != widget.Tr("Menu.Remote") {
+		t.Fatalf("remote menu text = %q", items[remoteMenuIndex].Text)
+	}
+	sub := items[remoteMenuIndex].Items
+	if len(sub) != len(remoteMenuTree) {
+		t.Fatalf("remote sub items = %d, want %d", len(sub), len(remoteMenuTree))
+	}
+	for i, entry := range remoteMenuTree {
+		if entry.Separator {
+			if !sub[i].Separator {
+				t.Fatalf("item %d should be a separator", i)
+			}
+			continue
+		}
+		if entry.Leaf == nil {
+			t.Fatalf("item %d must be a leaf", i)
+		}
+		if sub[i].Text != widget.Tr(entry.Leaf.Key) {
+			t.Fatalf("item %d text = %q, want %q", i, sub[i].Text, widget.Tr(entry.Leaf.Key))
+		}
+	}
+}
+
+func TestRemoteMenuItemsFollowHasRemotes(t *testing.T) {
+	a := newTestApp(t)
+	fetchIdx := -1
+	manageIdx := -1
+	for i, entry := range remoteMenuTree {
+		if entry.Leaf == nil {
+			continue
+		}
+		switch entry.Leaf.Command {
+		case CmdFetch:
+			fetchIdx = i
+		case CmdManageRemotes:
+			manageIdx = i
+		}
+	}
+	if fetchIdx < 0 || manageIdx < 0 {
+		t.Fatal("fetch and manage remotes must be part of the remote menu")
+	}
+	sub := func() []widget.MenuItem { return a.menu.Items()[remoteMenuIndex].Items }
+	if !sub()[fetchIdx].Disabled || !sub()[manageIdx].Disabled {
+		t.Fatal("remote commands must start disabled without an active repository")
+	}
+	a.SetActiveRepository("r1", false)
+	if !sub()[fetchIdx].Disabled {
+		t.Fatal("fetch must stay disabled without a remote")
+	}
+	if sub()[manageIdx].Disabled {
+		t.Fatal("manage remotes must be enabled once a repository is open")
+	}
+	a.setHasRemotes(true)
+	if sub()[fetchIdx].Disabled {
+		t.Fatal("fetch must be enabled once a remote exists")
 	}
 }

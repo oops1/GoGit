@@ -14,6 +14,7 @@
             <MenuItem Header="{Loc Menu.Repository}">
                 <MenuItem Header="{Loc Menu.Repository.AddOrCreate}"/>
                 <MenuItem Header="{Loc Menu.Repository.AddGroup}"/>
+                <MenuItem Header="{Loc Menu.Repository.Clone}"/>
                 <MenuItem Header="{Loc Menu.Repository.Search}"/>
                 <MenuItem Header="{Loc Menu.Repository.CloseRepository}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
@@ -30,6 +31,16 @@
                 <MenuItem Header="{Loc Menu.Edit.Discard}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Edit.Commit}" IsEnabled="False"/>
+            </MenuItem>
+            <MenuItem Header="{Loc Menu.Remote}">
+                <MenuItem Header="{Loc Menu.Remote.Fetch}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Remote.Pull}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Remote.Push}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Remote.Sync}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Remote.Prune}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Remote.Manage}" IsEnabled="False"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.View}">
                 <MenuItem Header="{Loc Menu.View.Panes}">

@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
-	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/operation"
 )
 
@@ -147,37 +145,23 @@ func TestRunOperationKeepsQuietWhenTheWindowCannotOpen(t *testing.T) {
 	}
 }
 
-func TestRemoteCommandsOpenTheOperationWindow(t *testing.T) {
-	for _, tc := range []struct {
-		command CommandID
-		key     string
-	}{
-		{CmdPull, "Operation.Title.Pull"},
-		{CmdSync, "Operation.Title.Sync"},
-		{CmdPush, "Operation.Title.Push"},
-	} {
-		t.Run(string(tc.command), func(t *testing.T) {
-			a := newTestApp(t)
-			a.SetActiveRepository("r", false)
-			views := captureOperationViews(t)
+func TestStopNetOperationsCancelsARunningOperationAndWaits(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+	started := make(chan struct{})
 
-			if !a.Dispatch(tc.command) {
-				t.Fatalf("%s was not dispatched", tc.command)
-			}
+	a.RunOperation("Fetch", func(ctx context.Context, _ OperationReporter) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	<-started
 
-			view := lastOperationView(t, views)
-			waitForFinishedOperation(t, a, view)
-			lines := readOnDispatcher(t, a, view.Lines)
-			joined := strings.Join(lines, "\n")
-			if !strings.Contains(joined, i18n.T("Operation.Log.RemoteUnavailable")) {
-				t.Fatalf("log = %v", lines)
-			}
-			if !strings.Contains(joined, ErrRemoteUnavailable.Error()) {
-				t.Fatalf("failure is missing from the log = %v", lines)
-			}
-			if view.Dialog().Title != i18n.T(tc.key) {
-				t.Fatalf("title = %q, want %q", view.Dialog().Title, i18n.T(tc.key))
-			}
-		})
+	a.stopNetOperations()
+
+	view := lastOperationView(t, views)
+	if readOnDispatcher(t, a, view.Running) {
+		t.Fatal("stopping net operations must cancel the running one")
 	}
+	a.stopNetOperations()
 }

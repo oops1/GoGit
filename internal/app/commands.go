@@ -20,9 +20,13 @@ const (
 	CmdPruneWorktrees  CommandID = "repository.prune-worktrees"
 	CmdSettings        CommandID = "repository.settings"
 	CmdClose           CommandID = "repository.close"
+	CmdClone           CommandID = "repository.clone"
+	CmdFetch           CommandID = "remote.fetch"
 	CmdPull            CommandID = "remote.pull"
 	CmdSync            CommandID = "remote.sync"
 	CmdPush            CommandID = "remote.push"
+	CmdPrune           CommandID = "remote.prune"
+	CmdManageRemotes   CommandID = "remote.manage"
 	CmdStage           CommandID = "edit.stage"
 	CmdUnstage         CommandID = "edit.unstage"
 	CmdDiscard         CommandID = "edit.discard"
@@ -114,12 +118,15 @@ type State struct {
 	ActiveIsWorktree bool
 	FilesSelected    bool
 	HasStagedChanges bool
+	HasRemotes       bool
 }
 
 func (s State) Enabled(id CommandID) bool {
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdPull, CmdSync, CmdPush, CmdRefresh:
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh:
 		return s.ActiveRepository != ""
+	case CmdFetch, CmdPull, CmdSync, CmdPush, CmdPrune:
+		return s.ActiveRepository != "" && s.HasRemotes
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
 	case CmdStage, CmdUnstage, CmdDiscard:

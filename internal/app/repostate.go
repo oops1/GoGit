@@ -53,6 +53,10 @@ func (a *App) repoTreeState() map[string]repos.State {
 	a.filesMu.Unlock()
 	s.Modified = modified
 	s.MutedDirs = muted
+	div := a.getDivergence()
+	s.HasUpstream = div.HasUpstream
+	s.Ahead = div.Ahead
+	s.Behind = div.Behind
 	state[node.ID] = s
 	return state
 }
