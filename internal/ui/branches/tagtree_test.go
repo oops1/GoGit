@@ -41,7 +41,7 @@ func TestFewTagsStayFlat(t *testing.T) {
 	}
 }
 
-func TestManyTagsCollapseByPrefixIgnoringDots(t *testing.T) {
+func TestManyTagsCollapseByVersionSegments(t *testing.T) {
 	names := append(manyTags(20), "v3.16.6", "v3.16.8", "v3.20.0", "v3.21.0", "v3.22.0")
 	recent, nodes := GroupTags(names)
 	if len(recent) != tagRecentCount {
@@ -54,8 +54,8 @@ func TestManyTagsCollapseByPrefixIgnoringDots(t *testing.T) {
 			found = p
 		}
 	}
-	if found != "v3/1/6/v3.16.6" {
-		t.Fatalf("path of v3.16.6 = %q, want v3/1/6/v3.16.6 (dots ignored, one character per level)", found)
+	if found != "v3/16/v3.16.6" {
+		t.Fatalf("path of v3.16.6 = %q, want v3/16/v3.16.6 (one folder per version segment)", found)
 	}
 }
 
@@ -84,19 +84,22 @@ func TestSingleTagInAGroupIsNotWrappedInAFolder(t *testing.T) {
 	}
 }
 
-func TestTagsWithoutACommonPrefixGroupByTheFirstCharacter(t *testing.T) {
-	names := make([]string, 0, 14)
+func TestTagsWithoutACommonPrefixGroupByTheirFirstSegment(t *testing.T) {
+	names := make([]string, 0, 28)
 	for i := range 7 {
-		names = append(names, fmt.Sprintf("alpha%d.0", i), fmt.Sprintf("beta%d.0", i))
+		names = append(names,
+			fmt.Sprintf("alpha.%d.0", i), fmt.Sprintf("alpha.%d.1", i),
+			fmt.Sprintf("beta.%d.0", i), fmt.Sprintf("beta.%d.1", i))
 	}
 	_, nodes := GroupTags(names)
+	labels := map[string]bool{}
 	for _, n := range nodes {
-		if n.IsTag() {
-			continue
+		if !n.IsTag() {
+			labels[n.Label] = true
 		}
-		if len(n.Label) != 1 {
-			t.Fatalf("top level label = %q, want a single character when tags share nothing", n.Label)
-		}
+	}
+	if !labels["alpha"] || !labels["beta"] {
+		t.Fatalf("top level folders = %v, want alpha and beta", labels)
 	}
 }
 

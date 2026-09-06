@@ -46,77 +46,46 @@ func reversed(names []string) []string {
 	return out
 }
 
-func tagKey(name string) string { return strings.ReplaceAll(name, ".", "") }
+func tagSegments(name string) []string {
+	parts := strings.Split(name, ".")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 func groupByPrefix(names []string) []TagNode {
-	if len(names) == 0 {
-		return nil
-	}
-	prefix := commonPrefix(names)
-	if prefix == "" {
-		return groupByCharacter(names, 0)
-	}
-	return []TagNode{{Label: prefix, Children: groupByCharacter(names, len(prefix))}}
+	return groupBySegment(names, 0)
 }
 
-func commonPrefix(names []string) string {
-	prefix := majorPrefix(tagKey(names[0]))
-	if prefix == "" {
-		return ""
-	}
-	for _, name := range names[1:] {
-		if !strings.HasPrefix(tagKey(name), prefix) {
-			return ""
-		}
-	}
-	if len(prefix) >= len(tagKey(names[0])) {
-		return ""
-	}
-	return prefix
-}
-
-func majorPrefix(key string) string {
-	at := 0
-	for at < len(key) && !isDigit(key[at]) {
-		at++
-	}
-	if at >= len(key) {
-		return ""
-	}
-	for at < len(key) && isDigit(key[at]) {
-		at++
-		break
-	}
-	return key[:at]
-}
-
-func groupByCharacter(names []string, depth int) []TagNode {
-	if len(names) == 1 {
-		return leaves(names)
-	}
-	buckets := make([]string, 0, len(names))
-	byChar := map[string][]string{}
+func groupBySegment(names []string, depth int) []TagNode {
+	order := make([]string, 0, len(names))
+	buckets := map[string][]string{}
+	var leafNames []string
 	for _, name := range names {
-		key := tagKey(name)
-		if depth >= len(key)-1 {
-			byChar[""] = append(byChar[""], name)
+		segments := tagSegments(name)
+		if depth >= len(segments)-1 {
+			leafNames = append(leafNames, name)
 			continue
 		}
-		char := string(key[depth])
-		if _, seen := byChar[char]; !seen {
-			buckets = append(buckets, char)
+		key := segments[depth]
+		if _, seen := buckets[key]; !seen {
+			order = append(order, key)
 		}
-		byChar[char] = append(byChar[char], name)
+		buckets[key] = append(buckets[key], name)
 	}
-	nodes := leaves(byChar[""])
-	sort.Strings(buckets)
-	for _, char := range buckets {
-		group := byChar[char]
+	sort.Slice(order, func(i, j int) bool { return compareTagNames(order[i], order[j]) < 0 })
+	nodes := leaves(leafNames)
+	for _, key := range order {
+		group := buckets[key]
 		if len(group) == 1 {
 			nodes = append(nodes, leaves(group)...)
 			continue
 		}
-		nodes = append(nodes, TagNode{Label: char, Children: groupByCharacter(group, depth+1)})
+		nodes = append(nodes, TagNode{Label: key, Children: groupBySegment(group, depth+1)})
 	}
 	return nodes
 }
