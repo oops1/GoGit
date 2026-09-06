@@ -1,58 +1,63 @@
-# Go.Git 1.0.0
+# Go.Git 1.1.0 — Network and secrets
 
-First release of Go.Git — a free desktop git client for Windows and Linux, and a
-free alternative to SmartGit. Git is implemented from scratch in pure Go: no
-system git is called, no CGO is compiled, and the whole application ships as a
-single executable with every resource inside it.
+Go.Git can now clone, fetch, pull and push. As before, it never runs the system
+git: the whole protocol stack is written in Go, and the binary needs nothing
+installed next to it.
 
-## Working with a repository
+## Talking to remotes
 
-- **Repositories panel** — groups, repositories and worktrees. The open
-  repository expands into the directory tree of its working copy, read one level
-  at a time, and picking a directory narrows the file list to it. The current
-  branch is shown next to the name; folders git does not track are greyed out
-  and tracked dot-directories are dimmed.
-- **Branches panel** — local branches, remotes, tags and stash. The checked out
-  branch and the branch a remote HEAD resolves to carry their own icons; the
-  symbolic HEAD is not repeated as a separate row.
-- **Files panel** — every path with its state, including ignored files and
-  tracked files with no changes, exactly as `git status --ignored=traditional`
-  reports them. Filter by name, by state (nine toggles that persist across
-  restarts), by directory, and with or without subdirectories.
-- **Journal** — commit history paged in as you scroll. The author is a coloured
-  badge with two initials, drawn once for a run of commits by the same person;
-  a setting brings the full name back.
-- **Diff** — two panes, side by side, with changed lines highlighted. Selecting
-  a commit shows its files and their diff.
-- **Write operations** — stage, unstage, discard, commit, create, rename and
-  delete branches, switch branches.
-- **Long operations** — a modal window with an endless progress bar, a log of
-  what is happening and a cancel button.
+- Git protocol versions 1 and 2 over Smart HTTP/HTTPS, `git://`, SSH and plain
+  paths on disk, with pkt-line framing, side-band progress and capability
+  negotiation.
+- Local repositories are read directly, so cloning from a folder next to yours
+  works with no network and no helper programs.
+- Real multi-round `have` negotiation instead of a single step, so an
+  incremental fetch transfers only what is missing.
+- Packfiles are written with delta compression and received as a stream, with
+  thin packs completed from the local object database.
+- `clone` (full, bare, single branch, by branch, shallow), `fetch`, `pull`
+  (fast-forward only), `push`, `prune`, and remote management.
+- `FETCH_HEAD` and the `shallow` file are written in git's own format, so the
+  system git reads the result without a complaint.
+- `--force-with-lease` refuses to overwrite a remote branch that moved since
+  you last saw it.
 
-## Behaviour
+## Credentials and keys
 
-- Changes made by another git — a command line, an IDE, another client — are
-  picked up automatically. The watcher skips directories git ignores, so an IDE
-  writing to `.idea` or a build writing to `output` costs nothing.
-- History stops at the commits listed in `shallow`, so the journal works on
-  repositories cloned with `--depth`.
-- Windows 11 light and dark themes, following the system by default.
-- Russian and English out of the box; any other language is a single JSON file.
-- Dock panels can be hidden, moved to another edge or torn off, and the layout
-  is restored on the next start.
+- An encrypted store, `vault.bin`: XChaCha20-Poly1305 content key wrapped by
+  key slots — DPAPI on Windows, Secret Service on Linux, an Argon2id master
+  password, or a key file. Slots can be added and removed like LUKS.
+- Credentials are matched by the longest URL prefix, the way `git credential`
+  does it.
+- SSH keys come from your key directory, from the store, or from ssh-agent —
+  through a socket on Unix and through the named pipe on Windows.
+- `known_hosts` is honoured: an unknown host key is shown with its SHA256
+  fingerprint and stored only after you accept it; a changed key is refused
+  outright.
+- Secrets live in byte slices, are wiped right after use and never reach the log.
 
-## Not in this release
+## In the window
 
-Network operations (clone, fetch, pull, push), the encrypted credential store,
-SSH, merge, rebase, cherry-pick, stash operations and line-level staging. Pull,
-Sync and Push open the operation window and say so. They are planned for 1.1.0
-and the releases after it — see `docs/RELEASE_PLAN.md`.
+- A clone dialog that checks the address and offers the branches the server
+  advertises.
+- Pull, Sync and Push on the toolbar and the new Remote menu now do the work,
+  showing progress and a log while it runs, cancellable at any point.
+- Dialogs for credentials, for confirming a host key and for unlocking the store.
+- Settings pages listing stored credentials and SSH keys, with adding, removing
+  and setting a master password.
+- Optional auto-fetch on a timer, with the distance to the upstream branch shown
+  in the repository tree and the status bar.
+- New settings: pull strategy, default remote, pruning gone branches on fetch,
+  and clone depth.
+
+## Not here yet
+
+Merge, rebase, cherry-pick, revert, reset, worktrees, conflict resolution and
+line-level staging. They are next, in that order.
 
 ## Downloads
 
-- `gogit-v1.0.0-windows-amd64.zip` — Windows 10/11, 64-bit.
-- `gogit-v1.0.0-linux-amd64.tar.gz`, `gogit-v1.0.0-linux-arm64.tar.gz` — Linux,
-  X11 and Wayland.
-- `SHA256SUMS` — checksums for the archives above.
+- `gogit-v1.1.0-windows-amd64.zip` — Windows 10/11, no installer required.
+- `gogit-v1.1.0-linux-amd64.tar.gz`, `gogit-v1.1.0-linux-arm64.tar.gz` — Linux.
 
-No installer: unpack the archive and run the binary.
+Verify the archives against `SHA256SUMS`.
