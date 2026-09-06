@@ -16,7 +16,10 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-var ErrNoKeys = errors.New("transport: no usable ssh keys")
+var (
+	ErrNoKeys  = errors.New("transport: no usable ssh keys")
+	ErrNoAgent = errors.New("transport: ssh agent is not available")
+)
 
 const defaultSSHPort = "22"
 

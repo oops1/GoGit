@@ -53,6 +53,10 @@ linters:
         linters:
           - gosec
         text: "G103"
+      - path: internal/gitcore/transport/agent_other\.go
+        linters:
+          - gosec
+        text: "G704"
 formatters:
   enable:
     - gofmt
