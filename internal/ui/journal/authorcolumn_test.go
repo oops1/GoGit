@@ -22,9 +22,11 @@ type recordingDrawCtx struct {
 	}
 }
 
-func (c *recordingDrawCtx) FillRect(x, y, w, h int, col color.RGBA)      {}
-func (c *recordingDrawCtx) FillRectAlpha(x, y, w, h int, col color.RGBA) {}
-func (c *recordingDrawCtx) DrawBorder(x, y, w, h int, col color.RGBA)    {}
+func (c *recordingDrawCtx) FillRect(x, y, w, h int, col color.RGBA)          {}
+func (c *recordingDrawCtx) FillRectAlpha(x, y, w, h int, col color.RGBA)     {}
+func (c *recordingDrawCtx) FillEllipseAA(cx, cy, rx, ry int, col color.RGBA) {}
+func (c *recordingDrawCtx) FillRoundRect(x, y, w, h, r int, col color.RGBA)  {}
+func (c *recordingDrawCtx) DrawBorder(x, y, w, h int, col color.RGBA)        {}
 func (c *recordingDrawCtx) DrawText(text string, x, y int, col color.RGBA) {
 	c.DrawTextSize(text, x, y, 12, col)
 }
