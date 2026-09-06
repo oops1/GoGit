@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/remote"
@@ -364,7 +367,7 @@ func TestPullFailsWhenTheBranchTransactionFails(t *testing.T) {
 	}
 }
 
-func TestPullFailsWhenIdentityIsMissing(t *testing.T) {
+func TestPullSucceedsWithoutAConfiguredIdentity(t *testing.T) {
 	src := newFetchServer(t)
 	client := newTestRepoNoIdentity(t)
 	if err := AddRemote(client.repo, "origin", src.dir); err != nil {
@@ -373,15 +376,44 @@ func TestPullFailsWhenIdentityIsMissing(t *testing.T) {
 	client.appendConfig("[branch \"main\"]\n\tremote = origin\n\tmerge = refs/heads/main\n")
 	client.repo = client.reopen()
 
-	_, err := Pull(t.Context(), client.repo, PullOptions{})
-	if !errors.Is(err, ErrMissingIdentity) {
-		t.Fatalf("Pull returned %v, want %v", err, ErrMissingIdentity)
+	result, err := Pull(t.Context(), client.repo, PullOptions{})
+	if err != nil {
+		t.Fatalf("Pull returned error %v", err)
 	}
-	if client.exists("a.txt") {
-		t.Fatalf("Pull wrote a.txt to the working tree despite failing before updating the branch")
+	if !result.Updated {
+		t.Fatal("Pull reported no update")
 	}
-	if _, ok, err := pullTrackingRef(client.repo, refs.BranchName("main")); err != nil || ok {
-		t.Fatalf("main = ok=%v err=%v, want the branch left unborn", ok, err)
+	if !client.exists("a.txt") {
+		t.Fatal("Pull did not write a.txt to the working tree")
+	}
+	id, ok, err := pullTrackingRef(client.repo, refs.BranchName("main"))
+	if err != nil || !ok {
+		t.Fatalf("main = ok=%v err=%v, want the branch created", ok, err)
+	}
+	if id != result.New {
+		t.Fatalf("main = %s, want %s", id, result.New)
+	}
+}
+
+func TestFallbackIdentityDescribesTheAccountAndHost(t *testing.T) {
+	previous := accountIdentity
+	accountIdentity = func() (string, string) { return "Test Account", "test.account@host" }
+	t.Cleanup(func() { accountIdentity = previous })
+	when := time.Unix(1700000000, 0)
+	got := fallbackIdentity(when)
+	want := object.Signature{Name: "Test Account", Email: "test.account@host", When: when}
+	if got != want {
+		t.Fatalf("fallbackIdentity = %+v, want %+v", got, want)
+	}
+}
+
+func TestSystemAccountIdentityFillsBothFields(t *testing.T) {
+	name, email := systemAccountIdentity()
+	if name == "" {
+		t.Fatal("systemAccountIdentity returned an empty name")
+	}
+	if !strings.Contains(email, "@") {
+		t.Fatalf("systemAccountIdentity returned email %q without a host", email)
 	}
 }
 

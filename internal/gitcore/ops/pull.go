@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -129,10 +128,6 @@ func Pull(ctx context.Context, r *repo.Repository, opts PullOptions) (PullResult
 		if !ancestor {
 			return PullResult{Fetch: fetchResult, Old: oldCommit, New: newCommit}, ErrNotFastForward
 		}
-	}
-
-	if _, err := identityOf(r, time.Now()); err != nil {
-		return PullResult{Fetch: fetchResult, Old: oldCommit, New: newCommit}, err
 	}
 
 	if !r.IsBare() {
