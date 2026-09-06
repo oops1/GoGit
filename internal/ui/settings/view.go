@@ -28,7 +28,22 @@ var credentialSourceOrder = []string{
 type View struct {
 	dlg *widget.Dialog
 
-	tabs                  *widget.TabControl
+	root         *widget.Grid
+	navHost      *widget.Grid
+	search       *widget.TextInput
+	sectionTitle *widget.Label
+
+	sectionGeneral     *widget.Grid
+	sectionGit         *widget.Grid
+	sectionCredentials *widget.Grid
+	sectionSSH         *widget.Grid
+
+	nav     *navTree
+	section string
+	initial Model
+
+	unsavedDialog *widget.Dialog
+
 	language              *widget.Dropdown
 	theme                 *widget.Dropdown
 	showToolbar           *widget.CheckBox
@@ -46,30 +61,44 @@ type View struct {
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
 
+	gitAdvancedStack   *widget.StackPanel
+	gitAdvanced        *widget.Expander
+	gitAdvancedContent *widget.Grid
+
 	credentialSource              *widget.Dropdown
 	credentialSourceStorePath     *widget.Label
 	credentialSourceKeyProtection *widget.Label
 	credentialSourceHelpers       *widget.Label
 
-	credentialsTable     *widget.DataGridWidget
-	credentialResource   *widget.TextInput
-	credentialUsername   *widget.TextInput
-	credentialSecret     *widget.TextInput
-	credentialAddBtn     *widget.Button
-	credentialRemoveBtn  *widget.Button
-	masterPasswordBtn    *widget.Button
-	credentialsStatus    *widget.Label
-	credentialsUnlockBtn *widget.Button
+	credentialsTable      *widget.DataGridWidget
+	credentialResource    *widget.TextInput
+	credentialUsername    *widget.TextInput
+	credentialType        *widget.Dropdown
+	credentialSecret      *widget.TextInput
+	credentialAddBtn      *widget.Button
+	credentialEditBtn     *widget.Button
+	credentialRemoveBtn   *widget.Button
+	credentialTestBtn     *widget.Button
+	masterPasswordBtn     *widget.Button
+	credentialsStatus     *widget.Label
+	credentialsUnlockBtn  *widget.Button
+	credentialsLockIcon   *widget.ImageWidget
+	credentialsSecureNote *widget.Label
 
-	sshTable           *widget.DataGridWidget
-	sshHostInput       *widget.TextInput
-	sshPathInput       *widget.TextInput
-	sshPassphraseInput *widget.TextInput
-	sshAddBtn          *widget.Button
-	sshBrowseBtn       *widget.Button
-	sshRemoveBtn       *widget.Button
-	sshStatus          *widget.Label
-	sshUnlockBtn       *widget.Button
+	sshTable              *widget.DataGridWidget
+	sshHostInput          *widget.TextInput
+	sshPathInput          *widget.TextInput
+	sshPassphraseInput    *widget.TextInput
+	sshUseDefaultCheckBox *widget.CheckBox
+	sshAddBtn             *widget.Button
+	sshEditBtn            *widget.Button
+	sshBrowseBtn          *widget.Button
+	sshRemoveBtn          *widget.Button
+	sshTestBtn            *widget.Button
+	sshStatus             *widget.Label
+	sshUnlockBtn          *widget.Button
+	sshLockIcon           *widget.ImageWidget
+	sshSecureNote         *widget.Label
 
 	credentials      []SecretEntry
 	keys             []KeyEntry
@@ -78,6 +107,13 @@ type View struct {
 	selectedHost     string
 	hasKeySelection  bool
 	secretsLocked    bool
+
+	searchFields                 []searchField
+	searchGroups                 []searchGroupSpec
+	searchSections               []*searchSectionState
+	searchAdvancedOriginalRows   []widget.GridDefinition
+	searchActive                 bool
+	searchAdvancedExpandedBefore bool
 
 	eng       widget.ModalShower
 	languages []string
@@ -92,6 +128,7 @@ type View struct {
 	OnSetMasterPassword func()
 	OnUnlockSecrets     func()
 	OnBrowseKeyFile     func()
+	OnTestConnection    func(section string)
 }
 
 func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, error) {
@@ -103,12 +140,25 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
+	v.attachContent()
 	v.populateLanguages()
-	v.apply(initial.Normalized())
+	norm := initial.Normalized()
+	v.apply(norm)
+	v.initial = norm
 	v.wire()
 	v.buildSecretsColumns()
 	v.wireSecrets()
+	v.buildSecretNotes()
 	v.SetSecretsLocked(false)
+	v.buildNav()
+	v.search.LeadingIcon = buildSearchIcon(widget.CurrentTheme().InputPlaceholder)
+	v.wireModifiedTracking()
+	v.refreshSaveEnabled()
+	v.buildHints()
+	v.wireAdvanced()
+	v.buildSearchIndex()
+	v.buildSearchSections()
+	v.search.OnChange = v.applySearch
 	return v, nil
 }
 
@@ -116,8 +166,29 @@ func (v *View) Dialog() *widget.Dialog { return v.dlg }
 
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool
-	if v.tabs, ok = named["tabs"].(*widget.TabControl); !ok {
-		return fmt.Errorf("%w: tabs", ErrWidgetMissing)
+	if v.root, ok = named["root"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: root", ErrWidgetMissing)
+	}
+	if v.navHost, ok = named["navHost"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: navHost", ErrWidgetMissing)
+	}
+	if v.search, ok = named["search"].(*widget.TextInput); !ok {
+		return fmt.Errorf("%w: search", ErrWidgetMissing)
+	}
+	if v.sectionTitle, ok = named["sectionTitle"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: sectionTitle", ErrWidgetMissing)
+	}
+	if v.sectionGeneral, ok = named["sectionGeneral"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sectionGeneral", ErrWidgetMissing)
+	}
+	if v.sectionGit, ok = named["sectionGit"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sectionGit", ErrWidgetMissing)
+	}
+	if v.sectionCredentials, ok = named["sectionCredentials"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sectionCredentials", ErrWidgetMissing)
+	}
+	if v.sectionSSH, ok = named["sectionSSH"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sectionSSH", ErrWidgetMissing)
 	}
 	if v.language, ok = named["language"].(*widget.Dropdown); !ok {
 		return fmt.Errorf("%w: language", ErrWidgetMissing)
@@ -161,6 +232,15 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.shallowDepth, ok = named["shallowDepth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: shallowDepth", ErrWidgetMissing)
 	}
+	if v.gitAdvancedStack, ok = named["gitAdvancedStack"].(*widget.StackPanel); !ok {
+		return fmt.Errorf("%w: gitAdvancedStack", ErrWidgetMissing)
+	}
+	if v.gitAdvanced, ok = named["gitAdvanced"].(*widget.Expander); !ok {
+		return fmt.Errorf("%w: gitAdvanced", ErrWidgetMissing)
+	}
+	if v.gitAdvancedContent, ok = named["gitAdvancedContent"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: gitAdvancedContent", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
@@ -180,6 +260,13 @@ func (v *View) bind(named map[string]widget.Widget) error {
 		return fmt.Errorf("%w: credentialSourceHelpers", ErrWidgetMissing)
 	}
 	return v.bindSecrets(named)
+}
+
+func (v *View) attachContent() {
+	v.dlg.RemoveChild(v.root)
+	v.dlg.SetContent(v.root)
+	v.dlg.SetResizable(true)
+	v.dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
 }
 
 func (v *View) populateLanguages() {
@@ -295,6 +382,14 @@ func (v *View) confirm() {
 }
 
 func (v *View) cancel() {
+	if v.Modified() {
+		v.confirmUnsavedChanges()
+		return
+	}
+	v.doCancel()
+}
+
+func (v *View) doCancel() {
 	if v.OnCancel != nil {
 		v.OnCancel()
 	}

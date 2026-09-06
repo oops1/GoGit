@@ -11,11 +11,50 @@ import (
 
 func TestBuildSecretsColumnsCreatesExpectedColumnCounts(t *testing.T) {
 	v := newTestView(t, nil, Model{})
-	if got := len(v.credentialsTable.Grid.Columns()); got != 2 {
-		t.Fatalf("credentials columns = %d, want 2", got)
+	if got := len(v.credentialsTable.Grid.Columns()); got != 4 {
+		t.Fatalf("credentials columns = %d, want 4", got)
 	}
-	if got := len(v.sshTable.Grid.Columns()); got != 2 {
-		t.Fatalf("ssh columns = %d, want 2", got)
+	if got := len(v.sshTable.Grid.Columns()); got != 4 {
+		t.Fatalf("ssh columns = %d, want 4", got)
+	}
+}
+
+func TestBuildSecretsColumnsSetsMinWidthOnTheStatusColumn(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	credCols := v.credentialsTable.Grid.Columns()
+	if got := credCols[len(credCols)-1].MinWidth(); got != tableStatusColumnMinWidth {
+		t.Fatalf("credentials status column MinWidth = %d, want %d", got, tableStatusColumnMinWidth)
+	}
+	sshCols := v.sshTable.Grid.Columns()
+	if got := sshCols[len(sshCols)-1].MinWidth(); got != tableStatusColumnMinWidth {
+		t.Fatalf("ssh status column MinWidth = %d, want %d", got, tableStatusColumnMinWidth)
+	}
+}
+
+func TestBuildSecretsColumnsSetsLocalizedEmptyStateText(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	if got := v.credentialsTable.Grid.EmptyStateText; got != i18n.T("Dialog.Settings.Credentials.Table.Empty") {
+		t.Fatalf("credentials EmptyStateText = %q", got)
+	}
+	if got := v.sshTable.Grid.EmptyStateText; got != i18n.T("Dialog.Settings.SSH.Table.Empty") {
+		t.Fatalf("ssh EmptyStateText = %q", got)
+	}
+}
+
+func TestBuildSecretNotesSetsIconsAndSecondaryTextColor(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	if v.credentialsLockIcon.Image() == nil {
+		t.Fatal("credentialsLockIcon must have an image")
+	}
+	if v.sshLockIcon.Image() == nil {
+		t.Fatal("sshLockIcon must have an image")
+	}
+	want := i18n.T("Dialog.Settings.Secrets.SecureStorage")
+	if v.credentialsSecureNote.Text() != want {
+		t.Fatalf("credentialsSecureNote text = %q, want %q", v.credentialsSecureNote.Text(), want)
+	}
+	if v.sshSecureNote.Text() != want {
+		t.Fatalf("sshSecureNote text = %q, want %q", v.sshSecureNote.Text(), want)
 	}
 }
 
@@ -23,7 +62,10 @@ func TestSetCredentialsPopulatesTableAndClearsSelection(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.updateCredentialSelection("example.com", true)
 
-	entries := []SecretEntry{{Resource: "example.com", Username: "alice"}, {Resource: "example.org", Username: "bob"}}
+	entries := []SecretEntry{
+		{Resource: "example.com", Username: "alice", Type: "password", Status: StatusSaved},
+		{Resource: "example.org", Username: "bob", Type: "token", Status: StatusError},
+	}
 	v.SetCredentials(entries)
 
 	if len(v.credentials) != 2 {
@@ -32,8 +74,8 @@ func TestSetCredentialsPopulatesTableAndClearsSelection(t *testing.T) {
 	if v.hasCredSelection {
 		t.Fatal("selection must be cleared after SetCredentials")
 	}
-	if v.credentialRemoveBtn.IsEnabled() {
-		t.Fatal("remove button must be disabled without a selection")
+	if v.credentialRemoveBtn.IsEnabled() || v.credentialEditBtn.IsEnabled() {
+		t.Fatal("edit and remove buttons must be disabled without a selection")
 	}
 }
 
@@ -41,7 +83,7 @@ func TestSetKeysPopulatesTableAndClearsSelection(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.updateKeySelection("example.com", true)
 
-	v.SetKeys([]KeyEntry{{Host: "example.com", Path: "/home/user/.ssh/id_ed25519"}})
+	v.SetKeys([]KeyEntry{{Host: "example.com", Path: "/home/user/.ssh/id_ed25519", Type: "ed25519", Status: StatusSaved}})
 
 	if len(v.keys) != 1 {
 		t.Fatalf("keys = %d, want 1", len(v.keys))
@@ -49,8 +91,8 @@ func TestSetKeysPopulatesTableAndClearsSelection(t *testing.T) {
 	if v.hasKeySelection {
 		t.Fatal("selection must be cleared after SetKeys")
 	}
-	if v.sshRemoveBtn.IsEnabled() {
-		t.Fatal("remove button must be disabled without a selection")
+	if v.sshRemoveBtn.IsEnabled() || v.sshEditBtn.IsEnabled() {
+		t.Fatal("edit and remove buttons must be disabled without a selection")
 	}
 }
 
@@ -77,20 +119,26 @@ func TestSetSecretsLockedDisablesEverythingExceptUnlockButtons(t *testing.T) {
 	v.SetSecretsLocked(true)
 
 	for name, w := range map[string]interface{ IsEnabled() bool }{
-		"credentialsTable":    v.credentialsTable,
-		"credentialResource":  v.credentialResource,
-		"credentialUsername":  v.credentialUsername,
-		"credentialSecret":    v.credentialSecret,
-		"credentialAddBtn":    v.credentialAddBtn,
-		"masterPasswordBtn":   v.masterPasswordBtn,
-		"credentialRemoveBtn": v.credentialRemoveBtn,
-		"sshTable":            v.sshTable,
-		"sshHostInput":        v.sshHostInput,
-		"sshPathInput":        v.sshPathInput,
-		"sshPassphraseInput":  v.sshPassphraseInput,
-		"sshAddBtn":           v.sshAddBtn,
-		"sshBrowseBtn":        v.sshBrowseBtn,
-		"sshRemoveBtn":        v.sshRemoveBtn,
+		"credentialsTable":      v.credentialsTable,
+		"credentialResource":    v.credentialResource,
+		"credentialUsername":    v.credentialUsername,
+		"credentialType":        v.credentialType,
+		"credentialSecret":      v.credentialSecret,
+		"credentialAddBtn":      v.credentialAddBtn,
+		"credentialTestBtn":     v.credentialTestBtn,
+		"masterPasswordBtn":     v.masterPasswordBtn,
+		"credentialRemoveBtn":   v.credentialRemoveBtn,
+		"credentialEditBtn":     v.credentialEditBtn,
+		"sshTable":              v.sshTable,
+		"sshHostInput":          v.sshHostInput,
+		"sshPathInput":          v.sshPathInput,
+		"sshPassphraseInput":    v.sshPassphraseInput,
+		"sshUseDefaultCheckBox": v.sshUseDefaultCheckBox,
+		"sshAddBtn":             v.sshAddBtn,
+		"sshEditBtn":            v.sshEditBtn,
+		"sshTestBtn":            v.sshTestBtn,
+		"sshBrowseBtn":          v.sshBrowseBtn,
+		"sshRemoveBtn":          v.sshRemoveBtn,
 	} {
 		if w.IsEnabled() {
 			t.Fatalf("%s must be disabled when locked", name)
@@ -107,11 +155,23 @@ func TestSetSecretsLockedDisablesEverythingExceptUnlockButtons(t *testing.T) {
 	if v.credentialRemoveBtn.IsEnabled() || v.sshRemoveBtn.IsEnabled() {
 		t.Fatal("remove buttons must stay disabled without a selection even when unlocked")
 	}
+	if v.credentialEditBtn.IsEnabled() || v.sshEditBtn.IsEnabled() {
+		t.Fatal("edit buttons must stay disabled without a selection even when unlocked")
+	}
 }
 
-func TestCredentialSelectionChangedFillsFieldsAndEnablesRemove(t *testing.T) {
+func TestSetSecretsLockedKeepsTheSSHHostFieldDisabledWhenUsingTheDefaultKey(t *testing.T) {
 	v := newTestView(t, nil, Model{})
-	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice"}})
+	v.sshUseDefaultCheckBox.SetChecked(true)
+	v.SetSecretsLocked(false)
+	if v.sshHostInput.IsEnabled() {
+		t.Fatal("host field must stay disabled while the default-key checkbox is checked")
+	}
+}
+
+func TestCredentialSelectionChangedFillsFieldsAndEnablesEditAndRemove(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice", Type: "token"}})
 
 	v.onCredentialSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.credentials[0]})
 
@@ -121,17 +181,20 @@ func TestCredentialSelectionChangedFillsFieldsAndEnablesRemove(t *testing.T) {
 	if v.credentialUsername.GetText() != "alice" {
 		t.Fatalf("username = %q", v.credentialUsername.GetText())
 	}
-	if !v.credentialRemoveBtn.IsEnabled() {
-		t.Fatal("remove button must be enabled after selecting a row")
+	if v.credentialType.Selected() != credentialAuthTypeIndex("token") {
+		t.Fatalf("type selection = %d, want %d", v.credentialType.Selected(), credentialAuthTypeIndex("token"))
+	}
+	if !v.credentialRemoveBtn.IsEnabled() || !v.credentialEditBtn.IsEnabled() {
+		t.Fatal("edit and remove buttons must be enabled after selecting a row")
 	}
 
 	v.onCredentialSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: -1, SelectedItem: nil})
-	if v.hasCredSelection || v.credentialRemoveBtn.IsEnabled() {
-		t.Fatal("clearing the selection must disable remove")
+	if v.hasCredSelection || v.credentialRemoveBtn.IsEnabled() || v.credentialEditBtn.IsEnabled() {
+		t.Fatal("clearing the selection must disable edit and remove")
 	}
 }
 
-func TestKeySelectionChangedFillsFieldsAndEnablesRemove(t *testing.T) {
+func TestKeySelectionChangedFillsFieldsAndEnablesEditAndRemove(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.SetKeys([]KeyEntry{{Host: "example.com", Path: "/keys/id_ed25519"}})
 
@@ -143,37 +206,57 @@ func TestKeySelectionChangedFillsFieldsAndEnablesRemove(t *testing.T) {
 	if v.sshPathInput.GetText() != "/keys/id_ed25519" {
 		t.Fatalf("path = %q", v.sshPathInput.GetText())
 	}
-	if !v.sshRemoveBtn.IsEnabled() {
-		t.Fatal("remove button must be enabled after selecting a row")
+	if v.sshUseDefaultCheckBox.IsChecked() {
+		t.Fatal("use-default checkbox must be unchecked for a non-default host")
+	}
+	if !v.sshHostInput.IsEnabled() {
+		t.Fatal("host field must stay enabled for a non-default host")
+	}
+	if !v.sshRemoveBtn.IsEnabled() || !v.sshEditBtn.IsEnabled() {
+		t.Fatal("edit and remove buttons must be enabled after selecting a row")
 	}
 
 	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: -1, SelectedItem: nil})
-	if v.hasKeySelection || v.sshRemoveBtn.IsEnabled() {
-		t.Fatal("clearing the selection must disable remove")
+	if v.hasKeySelection || v.sshRemoveBtn.IsEnabled() || v.sshEditBtn.IsEnabled() {
+		t.Fatal("clearing the selection must disable edit and remove")
 	}
 }
 
-func TestCredentialSelectionChangedWhileLockedKeepsRemoveDisabled(t *testing.T) {
+func TestKeySelectionChangedOnADefaultHostChecksTheBoxAndDisablesHost(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetKeys([]KeyEntry{{Host: defaultKeyHost, Path: "/keys/id_ed25519"}})
+
+	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.keys[0]})
+
+	if !v.sshUseDefaultCheckBox.IsChecked() {
+		t.Fatal("use-default checkbox must be checked for the default host")
+	}
+	if v.sshHostInput.IsEnabled() {
+		t.Fatal("host field must be disabled while showing the default host")
+	}
+}
+
+func TestCredentialSelectionChangedWhileLockedKeepsEditAndRemoveDisabled(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice"}})
 	v.SetSecretsLocked(true)
 
 	v.onCredentialSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.credentials[0]})
 
-	if v.credentialRemoveBtn.IsEnabled() {
-		t.Fatal("remove button must stay disabled while the store is locked, even after selecting a row")
+	if v.credentialRemoveBtn.IsEnabled() || v.credentialEditBtn.IsEnabled() {
+		t.Fatal("edit and remove buttons must stay disabled while the store is locked, even after selecting a row")
 	}
 }
 
-func TestKeySelectionChangedWhileLockedKeepsRemoveDisabled(t *testing.T) {
+func TestKeySelectionChangedWhileLockedKeepsEditAndRemoveDisabled(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.SetKeys([]KeyEntry{{Host: "example.com", Path: "/keys/id_ed25519"}})
 	v.SetSecretsLocked(true)
 
 	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.keys[0]})
 
-	if v.sshRemoveBtn.IsEnabled() {
-		t.Fatal("remove button must stay disabled while the store is locked, even after selecting a row")
+	if v.sshRemoveBtn.IsEnabled() || v.sshEditBtn.IsEnabled() {
+		t.Fatal("edit and remove buttons must stay disabled while the store is locked, even after selecting a row")
 	}
 }
 
@@ -225,6 +308,23 @@ func TestAddCredentialClickedDoesNothingWithoutResourceOrSecret(t *testing.T) {
 
 	if called {
 		t.Fatal("OnAddCredential must not be called without both a resource and a secret")
+	}
+}
+
+func TestEditCredentialButtonUsesTheSameUpsertAsAdd(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice"}})
+	v.onCredentialSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.credentials[0]})
+	v.credentialUsername.SetText("alice2")
+	v.credentialSecret.SetText("newsecret")
+
+	var gotUsername string
+	v.OnAddCredential = func(resource, username string, secret []byte) { gotUsername = username }
+
+	v.credentialEditBtn.OnClick()
+
+	if gotUsername != "alice2" {
+		t.Fatalf("username = %q, want alice2", gotUsername)
 	}
 }
 
@@ -282,6 +382,21 @@ func TestAddKeyClickedCallsCallbackAndWipesThePassphraseAfterwards(t *testing.T)
 	}
 }
 
+func TestAddKeyClickedUsesTheDefaultHostWhenTheCheckboxIsChecked(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.sshHostInput.SetText("ignored.example.com")
+	v.sshUseDefaultCheckBox.SetChecked(true)
+	v.sshPathInput.SetText("/keys/id_ed25519")
+
+	var gotHost string
+	v.OnAddKey = func(host, path string, passphrase []byte) { gotHost = host }
+	v.onAddKeyClicked()
+
+	if gotHost != defaultKeyHost {
+		t.Fatalf("host = %q, want %q", gotHost, defaultKeyHost)
+	}
+}
+
 func TestAddKeyClickedDoesNothingWithoutHostOrPath(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	called := false
@@ -297,6 +412,43 @@ func TestAddKeyClickedDoesNothingWithoutHostOrPath(t *testing.T) {
 
 	if called {
 		t.Fatal("OnAddKey must not be called without both a host and a path")
+	}
+}
+
+func TestEditKeyButtonUsesTheSameUpsertAsAdd(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetKeys([]KeyEntry{{Host: "example.com", Path: "/keys/id_ed25519"}})
+	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.keys[0]})
+	v.sshPathInput.SetText("/keys/id_ed25519_new")
+	v.sshPassphraseInput.SetText("p4ss")
+
+	var gotPath string
+	v.OnAddKey = func(host, path string, passphrase []byte) { gotPath = path }
+	v.sshEditBtn.OnClick()
+
+	if gotPath != "/keys/id_ed25519_new" {
+		t.Fatalf("path = %q, want /keys/id_ed25519_new", gotPath)
+	}
+}
+
+func TestSSHUseDefaultCheckboxTogglesTheHostFieldEnabledState(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.onSSHUseDefaultChanged(true)
+	if v.sshHostInput.IsEnabled() {
+		t.Fatal("host field must be disabled once the checkbox is checked")
+	}
+	v.onSSHUseDefaultChanged(false)
+	if !v.sshHostInput.IsEnabled() {
+		t.Fatal("host field must be re-enabled once the checkbox is unchecked")
+	}
+}
+
+func TestSSHUseDefaultCheckboxRespectsTheLockedState(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetSecretsLocked(true)
+	v.onSSHUseDefaultChanged(false)
+	if v.sshHostInput.IsEnabled() {
+		t.Fatal("host field must stay disabled while the store is locked")
 	}
 }
 
@@ -351,6 +503,25 @@ func TestBrowseKeyFileClickedInvokesCallback(t *testing.T) {
 	}
 }
 
+func TestTestConnectionButtonsReportTheirSection(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	var gotSections []string
+	v.OnTestConnection = func(section string) { gotSections = append(gotSections, section) }
+
+	v.credentialTestBtn.OnClick()
+	v.sshTestBtn.OnClick()
+
+	if len(gotSections) != 2 || gotSections[0] != "credentials" || gotSections[1] != "ssh" {
+		t.Fatalf("sections reported = %v, want [credentials ssh]", gotSections)
+	}
+}
+
+func TestTestConnectionClickedToleratesNilCallback(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.credentialTestBtn.OnClick()
+	v.sshTestBtn.OnClick()
+}
+
 func TestSetCredentialSourceInfoFillsTheInfoLabels(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.SetCredentialSourceInfo("C:\\Users\\alice\\.gogit\\vault.bin", "Master password", []CredentialHelperEntry{
@@ -358,13 +529,16 @@ func TestSetCredentialSourceInfoFillsTheInfoLabels(t *testing.T) {
 		{Name: "!some-shell-script", Supported: false},
 	})
 
-	if v.credentialSourceStorePath.Text() != "C:\\Users\\alice\\.gogit\\vault.bin" {
-		t.Fatalf("storePath = %q", v.credentialSourceStorePath.Text())
+	wantStorePath := i18n.T("Dialog.Settings.Secrets.StorePath") + " C:\\Users\\alice\\.gogit\\vault.bin"
+	if v.credentialSourceStorePath.Text() != wantStorePath {
+		t.Fatalf("storePath = %q, want %q", v.credentialSourceStorePath.Text(), wantStorePath)
 	}
-	if v.credentialSourceKeyProtection.Text() != "Master password" {
-		t.Fatalf("keyProtection = %q", v.credentialSourceKeyProtection.Text())
+	wantKeyProtection := i18n.T("Dialog.Settings.Secrets.KeyProtection") + " Master password"
+	if v.credentialSourceKeyProtection.Text() != wantKeyProtection {
+		t.Fatalf("keyProtection = %q, want %q", v.credentialSourceKeyProtection.Text(), wantKeyProtection)
 	}
-	want := "manager-core, " + i18n.Tf("Dialog.Settings.Secrets.HelperUnsupported", "!some-shell-script")
+	want := i18n.T("Dialog.Settings.Secrets.Helpers") + " manager-core, " +
+		i18n.Tf("Dialog.Settings.Secrets.HelperUnsupported", "!some-shell-script")
 	if v.credentialSourceHelpers.Text() != want {
 		t.Fatalf("helpers = %q, want %q", v.credentialSourceHelpers.Text(), want)
 	}
@@ -374,8 +548,9 @@ func TestSetCredentialSourceInfoWithNoHelpersShowsNone(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.SetCredentialSourceInfo("", "", nil)
 
-	if v.credentialSourceHelpers.Text() != i18n.T("Dialog.Settings.Secrets.HelpersNone") {
-		t.Fatalf("helpers = %q, want the empty-list placeholder", v.credentialSourceHelpers.Text())
+	want := i18n.T("Dialog.Settings.Secrets.Helpers") + " " + i18n.T("Dialog.Settings.Secrets.HelpersNone")
+	if v.credentialSourceHelpers.Text() != want {
+		t.Fatalf("helpers = %q, want the empty-list placeholder %q", v.credentialSourceHelpers.Text(), want)
 	}
 }
 
@@ -427,5 +602,31 @@ func TestClickingAddAndRemoveButtonsCallTheHandlers(t *testing.T) {
 	v.sshBrowseBtn.OnClick()
 	if !browseCalled {
 		t.Fatal("clicking Browse must call OnBrowseKeyFile")
+	}
+}
+
+func TestCredentialAuthTypeIndexAndAtRoundTripKnownValues(t *testing.T) {
+	for i, value := range credentialAuthTypeOrder {
+		if credentialAuthTypeIndex(value) != i {
+			t.Fatalf("credentialAuthTypeIndex(%q) = %d, want %d", value, credentialAuthTypeIndex(value), i)
+		}
+		if credentialAuthTypeAt(i) != value {
+			t.Fatalf("credentialAuthTypeAt(%d) = %q, want %q", i, credentialAuthTypeAt(i), value)
+		}
+	}
+}
+
+func TestCredentialAuthTypeIndexFallsBackToZeroForUnknownValue(t *testing.T) {
+	if credentialAuthTypeIndex("bogus") != 0 {
+		t.Fatal("unknown auth type must map to index 0")
+	}
+}
+
+func TestCredentialAuthTypeAtFallsBackToFirstForOutOfRangeIndex(t *testing.T) {
+	if credentialAuthTypeAt(-1) != credentialAuthTypeOrder[0] {
+		t.Fatal("negative index must fall back to the first auth type")
+	}
+	if credentialAuthTypeAt(len(credentialAuthTypeOrder)) != credentialAuthTypeOrder[0] {
+		t.Fatal("index past the end must fall back to the first auth type")
 	}
 }

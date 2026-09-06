@@ -25,25 +25,19 @@ func TestPreviewSettingsDialog(t *testing.T) {
 		{"dark", widget.Win11DarkTheme()},
 		{"light", widget.Win11LightTheme()},
 	}
-	tabs := []struct {
-		name  string
-		index int
-	}{
-		{"general", 0},
-		{"git", 1},
-	}
+	sections := []string{"general", "git", "credentials", "ssh"}
 	for _, theme := range themes {
-		for _, tab := range tabs {
+		for _, section := range sections {
 			widget.ClearStrings()
 			if _, err := i18n.Install(""); err != nil {
 				t.Fatal(err)
 			}
 			i18n.Apply("en")
 
-			eng := engine.New(800, 600, 30)
+			eng := engine.New(previewCanvasWidth, previewCanvasHeight, 30)
 			eng.SetTheme(theme.theme)
 			root := widget.NewPanel(theme.theme.WindowBG)
-			root.SetBounds(image.Rect(0, 0, 800, 600))
+			root.SetBounds(image.Rect(0, 0, previewCanvasWidth, previewCanvasHeight))
 			eng.SetRoot(root)
 
 			view, err := NewView(eng, []string{"en", "ru"}, Model{
@@ -58,10 +52,10 @@ func TestPreviewSettingsDialog(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			view.tabs.SetActive(tab.index)
+			view.SetSection(section)
 			eng.ShowModal(view.Dialog())
 
-			eng.SaveFrames(dir + "/settings-" + tab.name + "-" + theme.name)
+			eng.SaveFrames(dir + "/settings-" + section + "-" + theme.name)
 			eng.Start()
 			time.Sleep(700 * time.Millisecond)
 			eng.Stop()
