@@ -35,6 +35,10 @@ installed next to it.
   fingerprint and stored only after you accept it; a changed key is refused
   outright.
 - Secrets live in byte slices, are wiped right after use and never reach the log.
+- You choose where passwords come from and go: the built-in store, the system git
+  credential helper, or the store first and the helper as a fallback. The settings
+  page shows the store path, how its key is protected, and which helpers the open
+  repository actually uses.
 
 ## In the window
 
@@ -48,12 +52,15 @@ installed next to it.
 - Optional auto-fetch on a timer, with the distance to the upstream branch shown
   in the repository tree and the status bar.
 - New settings: pull strategy, default remote, pruning gone branches on fetch,
-  and clone depth.
+  clone depth, and the password source.
+- The window now carries its own icon on Linux as well, not only on Windows.
 
 ## Not here yet
 
 Merge, rebase, cherry-pick, revert, reset, worktrees, conflict resolution and
-line-level staging. They are next, in that order.
+line-level staging. Next up is a rebuilt settings window — one window with a side
+navigation, a search box and tables instead of stacked fields — followed by
+worktrees and then the merge machinery.
 
 ## Downloads
 
