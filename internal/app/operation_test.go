@@ -9,6 +9,8 @@ import (
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/gitcore/progress"
+	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/operation"
 )
 
@@ -142,6 +144,53 @@ func TestRunOperationKeepsQuietWhenTheWindowCannotOpen(t *testing.T) {
 	})
 	if called {
 		t.Fatal("the operation body must not run without its window")
+	}
+}
+
+func TestOperationProgressLogsEveryCorePhaseTranslated(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+
+	phases := []string{
+		"init",
+		"connecting",
+		"negotiating",
+		progress.PhaseReceiving,
+		progress.PhaseCounting,
+		progress.PhaseCompressing,
+		progress.PhaseWriting,
+		progress.PhaseResolving,
+		"updating-refs",
+		progress.PhaseCheckout,
+	}
+	a.RunOperation("Fetch", func(_ context.Context, reporter OperationReporter) error {
+		prog := newOperationProgress(reporter)
+		for _, phase := range phases {
+			prog.Phase(phase)
+		}
+		return nil
+	})
+
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+	lines := readOnDispatcher(t, a, view.Lines)
+
+	want := []string{
+		i18n.T("Operation.Log.Initializing"),
+		i18n.T("Operation.Log.Connecting"),
+		i18n.T("Operation.Log.Negotiating"),
+		i18n.T("Operation.Log.Receiving"),
+		i18n.T("Operation.Log.Counting"),
+		i18n.T("Operation.Log.Compressing"),
+		i18n.T("Operation.Log.Writing"),
+		i18n.T("Operation.Log.Resolving"),
+		i18n.T("Operation.Log.Updating"),
+		i18n.T("Operation.Log.Checkout"),
+	}
+	for _, w := range want {
+		if !slices.Contains(lines, w) {
+			t.Fatalf("log = %v, missing phase line %q", lines, w)
+		}
 	}
 }
 

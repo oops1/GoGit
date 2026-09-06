@@ -306,6 +306,43 @@ func TestRemoteMenuTreeStructure(t *testing.T) {
 	}
 }
 
+func TestRemoteMenuAndToolbarShowTranslatedTextNotRawKeys(t *testing.T) {
+	a := newTestApp(t)
+	toolbarKeys := map[string]string{
+		"btnPull": "Toolbar.Pull",
+		"btnSync": "Toolbar.Sync",
+		"btnPush": "Toolbar.Push",
+	}
+	for _, lang := range []string{"en", "ru"} {
+		a.SetLanguage(lang)
+		sub := a.menu.Items()[remoteMenuIndex].Items
+		for i, entry := range remoteMenuTree {
+			if entry.Leaf == nil {
+				continue
+			}
+			switch entry.Leaf.Command {
+			case CmdPull, CmdPush, CmdSync:
+			default:
+				continue
+			}
+			text := sub[i].Text
+			if text == "" || text == entry.Leaf.Key {
+				t.Fatalf("lang %q: remote menu item for command %v shows %q instead of translated text",
+					lang, entry.Leaf.Command, text)
+			}
+		}
+		for name, key := range toolbarKeys {
+			btn, ok := a.Widget(name).(*widget.Button)
+			if !ok {
+				t.Fatalf("widget %s is not a Button", name)
+			}
+			if btn.Text == "" || btn.Text == key {
+				t.Fatalf("lang %q: %s caption shows %q instead of translated text", lang, name, btn.Text)
+			}
+		}
+	}
+}
+
 func TestRemoteMenuItemsFollowHasRemotes(t *testing.T) {
 	a := newTestApp(t)
 	fetchIdx := -1

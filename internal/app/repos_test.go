@@ -608,6 +608,66 @@ func TestCmdAddOrCreateLogsWarningWhenConfigSaveFails(t *testing.T) {
 	}
 }
 
+func TestCmdAddOrCreateShowsATranslatedErrorForADuplicatePath(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "repo")
+	initTestRepo(t, target)
+	a := newTestApp(t)
+	if _, err := a.registry.AddRepository("existing", target, ""); err != nil {
+		t.Fatal(err)
+	}
+	stubShowAddRepo(a, addrepo.Result{Name: "repo", Path: target}, true)
+	var gotTitle, gotMessage string
+	a.showError = func(title, message string) { gotTitle, gotMessage = title, message }
+
+	a.Dispatch(CmdAddOrCreate)
+
+	if gotTitle != i18n.T("Dialog.AddRepo.Title") {
+		t.Fatalf("title = %q", gotTitle)
+	}
+	if want := i18n.Tf("Dialog.AddRepo.Hint.Duplicate", target); gotMessage != want {
+		t.Fatalf("message = %q, want %q", gotMessage, want)
+	}
+}
+
+func TestReportAddRepositoryFailureIgnoresErrorsOtherThanADuplicatePath(t *testing.T) {
+	a := newTestApp(t)
+	called := false
+	a.showError = func(string, string) { called = true }
+
+	a.reportAddRepositoryFailure(errors.New("boom"), "/tmp/repo")
+
+	if called {
+		t.Fatal("only a duplicate-path failure must show an error dialog")
+	}
+}
+
+func TestWireAddRepoViewShowsATranslatedErrorWhenApplyFails(t *testing.T) {
+	a := newTestApp(t)
+	view, err := addrepo.NewView(a.Engine(), addrepo.Request{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := addrepo.Request{Path: t.TempDir(), Mode: addrepo.ModeOpen}
+	_, applyErr := addrepo.Apply(req)
+	if applyErr == nil {
+		t.Fatal("expected Apply to fail for a plain directory that is not a repository")
+	}
+	want := i18n.Tf("Dialog.AddRepo.Hint.InitFailed", applyErr)
+	var gotTitle, gotMessage string
+	a.showError = func(title, message string) { gotTitle, gotMessage = title, message }
+
+	a.wireAddRepoView(view, func(addrepo.Result, bool) {})
+	view.OnOK(req)
+
+	if gotTitle != i18n.T("Dialog.AddRepo.Title") {
+		t.Fatalf("title = %q", gotTitle)
+	}
+	if gotMessage != want {
+		t.Fatalf("message = %q, want %q", gotMessage, want)
+	}
+}
+
 func TestDefaultShowAddRepoShowsModalWithoutPanicking(t *testing.T) {
 	a := newTestApp(t)
 	a.showAddRepo(addrepo.Request{}, func(addrepo.Result, bool) {})

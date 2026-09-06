@@ -393,4 +393,7 @@ func TestSetErrorUpdatesLabel(t *testing.T) {
 	if v.errorLabel.Text() != "custom error" {
 		t.Fatalf("error = %q", v.errorLabel.Text())
 	}
+	if got := v.Error(); got != "custom error" {
+		t.Fatalf("Error() = %q, want %q", got, "custom error")
+	}
 }

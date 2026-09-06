@@ -12,8 +12,6 @@ import (
 
 const MaxLinesPerFile = 5000
 
-const noNewlineText = "No newline at end of file"
-
 func FromFile(f diff.File) diffview.Document {
 	doc := diffview.Document{OldName: f.OldPath, NewName: f.NewPath, Binary: f.Binary}
 	if f.Binary {
@@ -65,7 +63,7 @@ func fromHunk(h diff.Hunk, budget int) (diffview.Hunk, int) {
 		}
 		out = append(out, line)
 		if l.NoNewline {
-			out = append(out, diffview.Line{Kind: diffview.NoNewline, Text: noNewlineText})
+			out = append(out, diffview.Line{Kind: diffview.NoNewline, Text: i18n.T("Diff.NoNewline")})
 		}
 	}
 	return diffview.Hunk{Header: hunkBanner(h), Lines: out}, limit

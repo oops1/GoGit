@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/gitcore/remote"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/transport"
 	"github.com/oops1/gogit/internal/i18n"
@@ -21,6 +23,64 @@ import (
 	"github.com/oops1/gogit/internal/ui/clone"
 	"github.com/oops1/gogit/internal/ui/remotes"
 )
+
+func TestRemoteErrorMessageTranslatesKnownCoreErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"invalid name", fmt.Errorf("%w: %q", ops.ErrInvalidRemoteName, "has space"), i18n.T("Dialog.Remotes.Error.InvalidName")},
+		{"already exists", fmt.Errorf("%w: origin", ops.ErrRemoteExists), i18n.T("Dialog.Remotes.Error.Duplicate")},
+		{"no such remote", fmt.Errorf("%w: origin", remote.ErrNoRemote), i18n.T("Dialog.Remotes.Error.NotFound")},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := remoteErrorMessage(c.err); got != c.want {
+				t.Fatalf("remoteErrorMessage(%v) = %q, want %q", c.err, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRemoteErrorMessageFallsBackToATranslatedWrapperForUnknownErrors(t *testing.T) {
+	err := errors.New("boom")
+	want := i18n.Tf("Dialog.Remotes.Error.Failed", err)
+	if got := remoteErrorMessage(err); got != want {
+		t.Fatalf("remoteErrorMessage(%v) = %q, want %q", err, got, want)
+	}
+}
+
+func TestMutateRemoteShowsATranslatedMessageWhenTheCoreRejectsTheName(t *testing.T) {
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain")
+	initTestRepoWithBranch(t, plain, "main")
+
+	a := newRemoteTestApp(t)
+	node, err := a.registry.AddRepository("plain", plain, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.ActivateRepository(node.ID)
+
+	var view *remotes.View
+	prev := newRemotesView
+	newRemotesView = func(eng widget.ModalShower, entries []remotes.Entry) (*remotes.View, error) {
+		v, err := prev(eng, entries)
+		if err != nil {
+			return nil, err
+		}
+		view = v
+		return v, nil
+	}
+	t.Cleanup(func() { newRemotesView = prev })
+	a.openManageRemotes()
+
+	view.OnAdd("has space", "https://example.invalid/repo.git")
+	if got := view.Error(); got != i18n.T("Dialog.Remotes.Error.InvalidName") {
+		t.Fatalf("error label = %q, want the translated invalid-name message", got)
+	}
+}
 
 func newRemoteTestApp(t *testing.T) *App {
 	t.Helper()

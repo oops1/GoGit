@@ -12,12 +12,16 @@ import (
 var newOperationView = operation.NewView
 
 var phaseLogKeys = map[string]string{
-	"connecting":    "Operation.Log.Connecting",
-	"negotiating":   "Operation.Log.Negotiating",
-	"receiving":     "Operation.Log.Receiving",
-	"resolving":     "Operation.Log.Resolving",
-	"updating-refs": "Operation.Log.Updating",
-	"checkout":      "Operation.Log.Checkout",
+	"init":                    "Operation.Log.Initializing",
+	"connecting":              "Operation.Log.Connecting",
+	"negotiating":             "Operation.Log.Negotiating",
+	progress.PhaseReceiving:   "Operation.Log.Receiving",
+	progress.PhaseCounting:    "Operation.Log.Counting",
+	progress.PhaseCompressing: "Operation.Log.Compressing",
+	progress.PhaseWriting:     "Operation.Log.Writing",
+	progress.PhaseResolving:   "Operation.Log.Resolving",
+	"updating-refs":           "Operation.Log.Updating",
+	progress.PhaseCheckout:    "Operation.Log.Checkout",
 }
 
 type OperationReporter struct {

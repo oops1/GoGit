@@ -343,15 +343,28 @@ func (a *App) remoteEntries(o *openedRepository) []remotes.Entry {
 	return entries
 }
 
+func remoteErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, ops.ErrInvalidRemoteName):
+		return i18n.T("Dialog.Remotes.Error.InvalidName")
+	case errors.Is(err, ops.ErrRemoteExists):
+		return i18n.T("Dialog.Remotes.Error.Duplicate")
+	case errors.Is(err, remote.ErrNoRemote):
+		return i18n.T("Dialog.Remotes.Error.NotFound")
+	default:
+		return i18n.Tf("Dialog.Remotes.Error.Failed", err)
+	}
+}
+
 func (a *App) mutateRemote(view *remotes.View, o *openedRepository, mutate func(*gitrepo.Repository) error) {
 	r, err := a.freshRepo(o)
 	if err != nil {
-		view.SetError(err.Error())
+		view.SetError(remoteErrorMessage(err))
 		return
 	}
 	defer func() { _ = r.Close() }()
 	if err := mutate(r); err != nil {
-		view.SetError(err.Error())
+		view.SetError(remoteErrorMessage(err))
 		return
 	}
 	view.SetError("")

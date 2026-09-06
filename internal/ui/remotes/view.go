@@ -132,6 +132,10 @@ func (v *View) SetError(text string) {
 	v.errorLabel.SetText(text)
 }
 
+func (v *View) Error() string {
+	return v.errorLabel.Text()
+}
+
 func (v *View) onSelectionChanged(ev datagrid.SelectionChangedEvent) {
 	entry, ok := ev.SelectedItem.(Entry)
 	if !ok {
