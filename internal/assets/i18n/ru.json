@@ -68,6 +68,7 @@
   "Dialog.Remotes.Error.Name": "Введите имя удалённого репозитория",
   "Dialog.Remotes.Error.URL": "Введите адрес репозитория",
   "Dialog.Remotes.Name": "Имя",
+  "Dialog.Remotes.PushURL": "Адрес отправки",
   "Dialog.Remotes.Remove": "Удалить",
   "Dialog.Remotes.Title": "Управление внешними репозиториями",
   "Dialog.Remotes.URL": "URL",

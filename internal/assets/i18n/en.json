@@ -68,6 +68,7 @@
   "Dialog.Remotes.Error.Name": "Enter a remote name",
   "Dialog.Remotes.Error.URL": "Enter a repository address",
   "Dialog.Remotes.Name": "Name",
+  "Dialog.Remotes.PushURL": "Push URL",
   "Dialog.Remotes.Remove": "Remove",
   "Dialog.Remotes.Title": "Manage Remotes",
   "Dialog.Remotes.URL": "URL",

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="560" Height="360">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="200"/>
+        <RowDefinition Height="20"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="40"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="120"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="90"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <DataGrid x:Name="table" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
+              Width="560" Height="200"
+              IsReadOnly="True" AutoGenerateColumns="False"
+              CanUserSortColumns="False" SelectionMode="Single"/>
+
+    <TextBlock x:Name="error" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+               Text="" FontSize="11" Foreground="#CC4444"/>
+
+    <TextBlock x:Name="nameLabel" Grid.Row="2" Grid.Column="0"
+               Text="{Loc Dialog.Remotes.Name}"/>
+    <TextBox x:Name="name" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3"/>
+
+    <TextBlock x:Name="urlLabel" Grid.Row="3" Grid.Column="0"
+               Text="{Loc Dialog.Remotes.URL}"/>
+    <TextBox x:Name="url" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3"/>
+
+    <Button x:Name="add" Grid.Row="4" Grid.Column="0" Margin="0,0,6,0"
+            Content="{Loc Dialog.Remotes.Add}"/>
+    <Button x:Name="edit" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Remotes.Edit}"/>
+    <Button x:Name="remove" Grid.Row="4" Grid.Column="2" Margin="0,0,6,0"
+            Content="{Loc Dialog.Remotes.Remove}"/>
+    <Button x:Name="close" Grid.Row="4" Grid.Column="3"
+            Content="{Loc Dialog.Remotes.Close}"/>
+</Grid>
