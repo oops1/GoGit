@@ -30,7 +30,7 @@ func commitTreeEntries(db *odb.DB, commitID hash.ObjectID) (map[string]treeEntry
 	if commitID.IsZero() {
 		return out, nil
 	}
-	commit, err := db.Commit(commitID)
+	commit, err := dbCommit(db, commitID)
 	if err != nil {
 		return nil, err
 	}

@@ -62,12 +62,8 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 	if err != nil {
 		return err
 	}
-	commit, err := dbCommit(db, commitID)
+	targetTree, err := commitTreeEntries(db, commitID)
 	if err != nil {
-		return err
-	}
-	targetTree := map[string]treeEntry{}
-	if err := collectTree(db, commit.Tree, "", targetTree); err != nil {
 		return err
 	}
 
@@ -76,6 +72,14 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		return err
 	}
 
+	if err := layoutWorkingTree(ctx, r, wt, db, targetTree, opts.Force); err != nil {
+		return err
+	}
+
+	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
+}
+
+func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, targetTree map[string]treeEntry, force bool) error {
 	lock, err := lockIndex(r)
 	if err != nil {
 		return err
@@ -89,7 +93,7 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		lock.abort()
 		return err
 	}
-	if len(conflicts) > 0 && !opts.Force {
+	if len(conflicts) > 0 && !force {
 		lock.abort()
 		return &OverwriteError{Paths: conflicts}
 	}
@@ -98,11 +102,7 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		lock.abort()
 		return err
 	}
-	if err := lock.commit(); err != nil {
-		return err
-	}
-
-	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
+	return lock.commit()
 }
 
 func resolveSwitchTarget(target string, db *odb.DB, store *refs.Store) (hash.ObjectID, refs.Name, error) {
@@ -189,6 +189,9 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targ
 	check := func(rel string) error {
 		if seen[rel] {
 			return nil
+		}
+		if err := sw.ctx.Err(); err != nil {
+			return err
 		}
 		seen[rel] = true
 		cur, curOK := currentIndex[rel]
@@ -278,6 +281,9 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if _, ok := targetTree[rel]; ok {
 			continue
 		}
+		if err := sw.ctx.Err(); err != nil {
+			return err
+		}
 		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
@@ -285,6 +291,9 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		removedDirs = append(removedDirs, rel)
 	}
 	for rel, tgt := range targetTree {
+		if err := sw.ctx.Err(); err != nil {
+			return err
+		}
 		if err := sw.checkout(rel, tgt); err != nil {
 			return err
 		}
