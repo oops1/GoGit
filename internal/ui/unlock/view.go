@@ -81,10 +81,8 @@ func (v *View) wire() {
 }
 
 func (v *View) confirm() {
-	text := v.passwordInput.GetText()
-	v.password = []byte(text)
+	v.password = v.passwordInput.TakeSecret()
 	result := Result{Password: append([]byte(nil), v.password...)}
-	v.passwordInput.SetText("")
 	if v.OnOK != nil {
 		v.OnOK(result)
 	}
@@ -93,7 +91,7 @@ func (v *View) confirm() {
 }
 
 func (v *View) cancel() {
-	v.passwordInput.SetText("")
+	v.passwordInput.WipeSecret()
 	if v.OnCancel != nil {
 		v.OnCancel()
 	}

@@ -19,6 +19,12 @@ var loadDialog = dialogs.Load
 
 var themeOrder = []string{config.ThemeSystem, config.ThemeDark, config.ThemeLight}
 
+var credentialSourceOrder = []string{
+	config.CredentialSourceVault,
+	config.CredentialSourceVaultThenHelper,
+	config.CredentialSourceHelper,
+}
+
 type View struct {
 	dlg *widget.Dialog
 
@@ -39,6 +45,11 @@ type View struct {
 	shallowDepth          *widget.NumericUpDown
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
+
+	credentialSource              *widget.Dropdown
+	credentialSourceStorePath     *widget.Label
+	credentialSourceKeyProtection *widget.Label
+	credentialSourceHelpers       *widget.Label
 
 	credentialsTable     *widget.DataGridWidget
 	credentialResource   *widget.TextInput
@@ -156,6 +167,18 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.cancelBtn, ok = named["cancel"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: cancel", ErrWidgetMissing)
 	}
+	if v.credentialSource, ok = named["credentialSource"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: credentialSource", ErrWidgetMissing)
+	}
+	if v.credentialSourceStorePath, ok = named["credentialSourceStorePath"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialSourceStorePath", ErrWidgetMissing)
+	}
+	if v.credentialSourceKeyProtection, ok = named["credentialSourceKeyProtection"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialSourceKeyProtection", ErrWidgetMissing)
+	}
+	if v.credentialSourceHelpers, ok = named["credentialSourceHelpers"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialSourceHelpers", ErrWidgetMissing)
+	}
 	return v.bindSecrets(named)
 }
 
@@ -190,6 +213,7 @@ func (v *View) apply(m Model) {
 	v.defaultRemote.SetText(m.DefaultRemote)
 	v.pruneOnFetch.SetChecked(m.PruneOnFetch)
 	v.shallowDepth.SetValue(float64(m.ShallowDepth))
+	v.credentialSource.SetSelected(credentialSourceIndex(m.CredentialSource))
 }
 
 func (v *View) setLanguageSelection(code string) {
@@ -217,6 +241,22 @@ func themeAt(idx int) string {
 	return themeOrder[idx]
 }
 
+func credentialSourceIndex(source string) int {
+	for i, s := range credentialSourceOrder {
+		if s == source {
+			return i
+		}
+	}
+	return 0
+}
+
+func credentialSourceAt(idx int) string {
+	if idx < 0 || idx >= len(credentialSourceOrder) {
+		return config.CredentialSourceVault
+	}
+	return credentialSourceOrder[idx]
+}
+
 func (v *View) request() Model {
 	code := ""
 	if idx := v.language.Selected(); idx >= 0 && idx < len(v.languages) {
@@ -237,6 +277,7 @@ func (v *View) request() Model {
 		DefaultRemote:         v.defaultRemote.GetText(),
 		PruneOnFetch:          v.pruneOnFetch.IsChecked(),
 		ShallowDepth:          int(v.shallowDepth.Value()),
+		CredentialSource:      credentialSourceAt(v.credentialSource.Selected()),
 	}.Normalized()
 }
 

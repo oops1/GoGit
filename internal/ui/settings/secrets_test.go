@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
+
+	"github.com/oops1/gogit/internal/i18n"
 )
 
 func TestBuildSecretsColumnsCreatesExpectedColumnCounts(t *testing.T) {
@@ -346,6 +348,34 @@ func TestBrowseKeyFileClickedInvokesCallback(t *testing.T) {
 	v.onBrowseKeyFileClicked()
 	if !called {
 		t.Fatal("OnBrowseKeyFile must be called")
+	}
+}
+
+func TestSetCredentialSourceInfoFillsTheInfoLabels(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetCredentialSourceInfo("C:\\Users\\alice\\.gogit\\vault.bin", "Master password", []CredentialHelperEntry{
+		{Name: "manager-core", Supported: true},
+		{Name: "!some-shell-script", Supported: false},
+	})
+
+	if v.credentialSourceStorePath.Text() != "C:\\Users\\alice\\.gogit\\vault.bin" {
+		t.Fatalf("storePath = %q", v.credentialSourceStorePath.Text())
+	}
+	if v.credentialSourceKeyProtection.Text() != "Master password" {
+		t.Fatalf("keyProtection = %q", v.credentialSourceKeyProtection.Text())
+	}
+	want := "manager-core, " + i18n.Tf("Dialog.Settings.Secrets.HelperUnsupported", "!some-shell-script")
+	if v.credentialSourceHelpers.Text() != want {
+		t.Fatalf("helpers = %q, want %q", v.credentialSourceHelpers.Text(), want)
+	}
+}
+
+func TestSetCredentialSourceInfoWithNoHelpersShowsNone(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetCredentialSourceInfo("", "", nil)
+
+	if v.credentialSourceHelpers.Text() != i18n.T("Dialog.Settings.Secrets.HelpersNone") {
+		t.Fatalf("helpers = %q, want the empty-list placeholder", v.credentialSourceHelpers.Text())
 	}
 }
 

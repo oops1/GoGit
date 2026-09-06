@@ -2,6 +2,7 @@ package credentials
 
 import (
 	"errors"
+	"image/color"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/engine"
@@ -42,6 +43,7 @@ func fullWidgetSet() map[string]widget.Widget {
 		"username": widget.NewTextInput(""),
 		"secret":   widget.NewPasswordInput(""),
 		"remember": widget.NewCheckBox(""),
+		"saveTo":   widget.NewWin10Label(""),
 		"hint":     widget.NewWin10Label(""),
 		"ok":       widget.NewButton(""),
 		"cancel":   widget.NewButton(""),
@@ -80,7 +82,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	for _, key := range []string{"resource", "username", "secret", "remember", "hint", "ok", "cancel"} {
+	for _, key := range []string{"resource", "username", "secret", "remember", "saveTo", "hint", "ok", "cancel"} {
 		named := fullWidgetSet()
 		delete(named, key)
 		v := &View{}
@@ -96,7 +98,7 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 			t.Fatalf("mistyped %q: expected error", key)
 		}
 	}
-	for _, key := range []string{"resource", "hint"} {
+	for _, key := range []string{"resource", "saveTo", "hint"} {
 		named := fullWidgetSet()
 		named[key] = widget.NewButton("wrong-type")
 		v := &View{}
@@ -130,6 +132,34 @@ func TestNewViewSetsInitialState(t *testing.T) {
 	}
 	if v.hintLabel.Text() != i18n.T("Dialog.Credentials.Error.Empty") {
 		t.Fatalf("hint text = %q", v.hintLabel.Text())
+	}
+}
+
+func TestNewViewShowsWhereRememberWillSave(t *testing.T) {
+	const target = "the Go.Git store"
+	v := newTestView(t, Request{RememberTarget: target})
+	if !v.saveToLabel.IsVisible() {
+		t.Fatal("saveTo must be visible when RememberTarget is set")
+	}
+	want := i18n.Tf("Dialog.Credentials.SaveTo", target)
+	if v.saveToLabel.Text() != want {
+		t.Fatalf("saveTo text = %q, want %q", v.saveToLabel.Text(), want)
+	}
+}
+
+func TestNewViewWithoutARememberTargetHidesSaveTo(t *testing.T) {
+	v := newTestView(t, Request{})
+	if v.saveToLabel.IsVisible() {
+		t.Fatal("saveTo must stay hidden without a RememberTarget")
+	}
+}
+
+func TestSetErrorColorChangesTheHintColor(t *testing.T) {
+	v := newTestView(t, Request{})
+	want := color.RGBA{R: 220, G: 80, B: 80, A: 255}
+	v.SetErrorColor(want)
+	if v.hintLabel.TextColor != want {
+		t.Fatalf("hint color = %+v, want %+v", v.hintLabel.TextColor, want)
 	}
 }
 

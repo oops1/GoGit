@@ -52,6 +52,11 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
 
+		"credentialSource":              widget.NewDropdown(),
+		"credentialSourceStorePath":     widget.NewWin10Label(""),
+		"credentialSourceKeyProtection": widget.NewWin10Label(""),
+		"credentialSourceHelpers":       widget.NewWin10Label(""),
+
 		"credentialsTable":         widget.NewDataGridWidget(),
 		"credentialResource":       widget.NewTextInput(""),
 		"credentialUsername":       widget.NewTextInput(""),
@@ -110,6 +115,7 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 		"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
 		"shallowDepth", "ok", "cancel",
+		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
 		"credentialsTable", "credentialResource", "credentialUsername", "credentialSecret", "credentialAdd",
 		"credentialRemove", "credentialMasterPassword", "credentialsStatus", "credentialsUnlock",
 		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshAdd", "sshRemove", "sshStatus", "sshUnlock",
@@ -122,7 +128,10 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 			t.Fatalf("missing %q: expected error", key)
 		}
 	}
-	labelKeys := map[string]bool{"credentialsStatus": true, "sshStatus": true}
+	labelKeys := map[string]bool{
+		"credentialSourceStorePath": true, "credentialSourceKeyProtection": true, "credentialSourceHelpers": true,
+		"credentialsStatus": true, "sshStatus": true,
+	}
 	for _, key := range keys {
 		if labelKeys[key] {
 			continue
@@ -166,6 +175,7 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		DefaultRemote:         "upstream",
 		PruneOnFetch:          true,
 		ShallowDepth:          15,
+		CredentialSource:      config.CredentialSourceHelper,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -207,6 +217,9 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 	}
 	if v.shallowDepth.Value() != 15 {
 		t.Fatalf("shallowDepth = %v", v.shallowDepth.Value())
+	}
+	if v.credentialSource.Selected() != credentialSourceIndex(config.CredentialSourceHelper) {
+		t.Fatalf("credentialSource selection = %d", v.credentialSource.Selected())
 	}
 }
 
@@ -251,6 +264,32 @@ func TestThemeAtFallsBackToSystemForOutOfRangeIndex(t *testing.T) {
 	}
 }
 
+func TestCredentialSourceIndexAndAtRoundTripKnownValues(t *testing.T) {
+	for i, source := range credentialSourceOrder {
+		if credentialSourceIndex(source) != i {
+			t.Fatalf("credentialSourceIndex(%q) = %d, want %d", source, credentialSourceIndex(source), i)
+		}
+		if credentialSourceAt(i) != source {
+			t.Fatalf("credentialSourceAt(%d) = %q, want %q", i, credentialSourceAt(i), source)
+		}
+	}
+}
+
+func TestCredentialSourceIndexFallsBackToZeroForUnknownValue(t *testing.T) {
+	if credentialSourceIndex("bogus") != 0 {
+		t.Fatal("unknown credential source must map to index 0")
+	}
+}
+
+func TestCredentialSourceAtFallsBackToVaultForOutOfRangeIndex(t *testing.T) {
+	if credentialSourceAt(-1) != config.CredentialSourceVault {
+		t.Fatal("negative index must fall back to vault")
+	}
+	if credentialSourceAt(len(credentialSourceOrder)) != config.CredentialSourceVault {
+		t.Fatal("index past the end must fall back to vault")
+	}
+}
+
 func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	initial := Model{
 		Language:              "en",
@@ -266,6 +305,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		DefaultRemote:         "origin",
 		PruneOnFetch:          false,
 		ShallowDepth:          0,
+		CredentialSource:      config.CredentialSourceVault,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 	v.language.SetSelected(1)
@@ -280,6 +320,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	v.pullStrategy.SetText(config.PullStrategyRebase)
 	v.defaultRemote.SetText("upstream")
 	v.shallowDepth.SetValue(15)
+	v.credentialSource.SetSelected(credentialSourceIndex(config.CredentialSourceHelper))
 
 	got := v.request()
 	want := Model{
@@ -296,6 +337,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		DefaultRemote:         "upstream",
 		PruneOnFetch:          true,
 		ShallowDepth:          15,
+		CredentialSource:      config.CredentialSourceHelper,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Width="480" Height="450">
+      Width="480" Height="540">
 
     <Grid.RowDefinitions>
-        <RowDefinition Height="390"/>
+        <RowDefinition Height="480"/>
         <RowDefinition Height="50"/>
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
@@ -14,9 +14,9 @@
     </Grid.ColumnDefinitions>
 
     <TabControl x:Name="tabs" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-                Width="480" Height="390" SelectedIndex="0">
+                Width="480" Height="480" SelectedIndex="0">
         <TabItem Header="{Loc Dialog.Settings.Tab.General}">
-            <Grid Width="480" Height="358">
+            <Grid Width="480" Height="448">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -52,7 +52,7 @@
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.Git}">
-            <Grid Width="480" Height="358">
+            <Grid Width="480" Height="448">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -101,8 +101,12 @@
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.Credentials}">
-            <Grid Width="480" Height="358">
+            <Grid Width="480" Height="448">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="20"/>
+                    <RowDefinition Height="20"/>
+                    <RowDefinition Height="20"/>
                     <RowDefinition Height="180"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -117,22 +121,41 @@
                     <ColumnDefinition Width="110"/>
                 </Grid.ColumnDefinitions>
 
-                <DataGrid x:Name="credentialsTable" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{Loc Dialog.Settings.CredentialSource}"/>
+                <ComboBox x:Name="credentialSource" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2">
+                    <ComboBoxItem Content="{Loc Dialog.Settings.CredentialSource.Vault}"/>
+                    <ComboBoxItem Content="{Loc Dialog.Settings.CredentialSource.VaultThenHelper}"/>
+                    <ComboBoxItem Content="{Loc Dialog.Settings.CredentialSource.Helper}"/>
+                </ComboBox>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.Secrets.StorePath}"/>
+                <TextBlock x:Name="credentialSourceStorePath" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="" FontSize="11"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.Secrets.KeyProtection}"/>
+                <TextBlock x:Name="credentialSourceKeyProtection" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="" FontSize="11"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.Secrets.Helpers}"/>
+                <TextBlock x:Name="credentialSourceHelpers" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                           Text="" FontSize="11"/>
+
+                <DataGrid x:Name="credentialsTable" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
                           Width="480" Height="180"
                           IsReadOnly="True" AutoGenerateColumns="False"
                           CanUserSortColumns="False" SelectionMode="Single"/>
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Resource}"/>
-                <TextBox x:Name="credentialResource" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"/>
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Resource}"/>
+                <TextBox x:Name="credentialResource" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"/>
 
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.User}"/>
-                <TextBox x:Name="credentialUsername" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"/>
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.User}"/>
+                <TextBox x:Name="credentialUsername" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2"/>
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Secret}"/>
-                <PasswordBox x:Name="credentialSecret" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Secret}"/>
+                <PasswordBox x:Name="credentialSecret" Grid.Row="7" Grid.Column="1" Grid.ColumnSpan="2"
                              Placeholder="{Loc Dialog.Settings.Credentials.Secret}"/>
 
-                <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Width="480" Height="30">
+                <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" Width="480" Height="30">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="85"/>
                         <ColumnDefinition Width="85"/>
@@ -149,12 +172,12 @@
                             Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
                 </Grid>
 
-                <TextBlock x:Name="credentialsStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                <TextBlock x:Name="credentialsStatus" Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
                            Text="" FontSize="11"/>
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.SSH}">
-            <Grid Width="480" Height="358">
+            <Grid Width="480" Height="448">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="180"/>
                     <RowDefinition Height="30"/>

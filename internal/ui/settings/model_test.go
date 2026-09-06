@@ -21,6 +21,7 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 	cfg.Git.DefaultRemote = "upstream"
 	cfg.Git.PruneOnFetch = true
 	cfg.Git.ShallowDepth = 20
+	cfg.Git.CredentialSource = config.CredentialSourceHelper
 
 	m := FromConfig(cfg)
 
@@ -39,6 +40,7 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 		DefaultRemote:         "upstream",
 		PruneOnFetch:          true,
 		ShallowDepth:          20,
+		CredentialSource:      config.CredentialSourceHelper,
 	}
 	if m != want {
 		t.Fatalf("model = %+v, want %+v", m, want)
@@ -55,6 +57,7 @@ func TestFromConfigNormalizesOutOfRangeStoredValues(t *testing.T) {
 	cfg.Git.PullStrategy = "bogus"
 	cfg.Git.DefaultRemote = ""
 	cfg.Git.ShallowDepth = MaxShallowDepth + 1
+	cfg.Git.CredentialSource = "bogus"
 
 	m := FromConfig(cfg)
 
@@ -81,6 +84,27 @@ func TestFromConfigNormalizesOutOfRangeStoredValues(t *testing.T) {
 	}
 	if m.ShallowDepth != MaxShallowDepth {
 		t.Fatalf("shallowDepth = %d, want %d", m.ShallowDepth, MaxShallowDepth)
+	}
+	if m.CredentialSource != config.CredentialSourceVault {
+		t.Fatalf("credentialSource = %q, want %q", m.CredentialSource, config.CredentialSourceVault)
+	}
+}
+
+func TestNormalizedKeepsValidCredentialSources(t *testing.T) {
+	for _, source := range []string{config.CredentialSourceVault, config.CredentialSourceVaultThenHelper, config.CredentialSourceHelper} {
+		m := Model{CredentialSource: source}.Normalized()
+		if m.CredentialSource != source {
+			t.Fatalf("credentialSource = %q, want %q", m.CredentialSource, source)
+		}
+	}
+}
+
+func TestNormalizedFallsBackToVaultForUnknownCredentialSource(t *testing.T) {
+	for _, source := range []string{"", "bogus", "Vault"} {
+		m := Model{CredentialSource: source}.Normalized()
+		if m.CredentialSource != config.CredentialSourceVault {
+			t.Fatalf("credentialSource(%q) = %q, want %q", source, m.CredentialSource, config.CredentialSourceVault)
+		}
 	}
 }
 
@@ -229,6 +253,7 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 		DefaultRemote:         "",
 		PruneOnFetch:          true,
 		ShallowDepth:          -3,
+		CredentialSource:      "bogus",
 	}
 	m.ApplyTo(cfg)
 
@@ -268,6 +293,9 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 	if cfg.Git.ShallowDepth != MinShallowDepth {
 		t.Fatalf("shallowDepth = %d, want %d", cfg.Git.ShallowDepth, MinShallowDepth)
 	}
+	if cfg.Git.CredentialSource != config.CredentialSourceVault {
+		t.Fatalf("credentialSource = %q, want %q", cfg.Git.CredentialSource, config.CredentialSourceVault)
+	}
 	if len(cfg.Repositories) != 1 || cfg.Repositories[0].ID != "r1" {
 		t.Fatal("ApplyTo must not touch unrelated config fields")
 	}
@@ -288,6 +316,7 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	src.Git.DefaultRemote = "upstream"
 	src.Git.PruneOnFetch = true
 	src.Git.ShallowDepth = 30
+	src.Git.CredentialSource = config.CredentialSourceVaultThenHelper
 
 	m := FromConfig(src)
 
@@ -310,6 +339,9 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	if dst.Git.PullStrategy != src.Git.PullStrategy || dst.Git.DefaultRemote != src.Git.DefaultRemote ||
 		dst.Git.PruneOnFetch != src.Git.PruneOnFetch || dst.Git.ShallowDepth != src.Git.ShallowDepth {
 		t.Fatalf("git network mismatch: %+v vs %+v", dst.Git, src.Git)
+	}
+	if dst.Git.CredentialSource != src.Git.CredentialSource {
+		t.Fatalf("credentialSource mismatch: %q vs %q", dst.Git.CredentialSource, src.Git.CredentialSource)
 	}
 }
 

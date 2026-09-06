@@ -91,6 +91,34 @@ shallow_depth = -3
 	}
 }
 
+func TestDefaultCredentialSourceIsVault(t *testing.T) {
+	if got := Default().Git.CredentialSource; got != CredentialSourceVault {
+		t.Fatalf("CredentialSource = %q, want %q", got, CredentialSourceVault)
+	}
+}
+
+func TestNormalizeUnknownCredentialSourceFallsBackToVault(t *testing.T) {
+	for _, value := range []string{"", "bogus", "Vault", "VAULT+HELPER"} {
+		cfg := Default()
+		cfg.Git.CredentialSource = value
+		cfg.Normalize()
+		if cfg.Git.CredentialSource != CredentialSourceVault {
+			t.Fatalf("CredentialSource(%q) = %q, want %q", value, cfg.Git.CredentialSource, CredentialSourceVault)
+		}
+	}
+}
+
+func TestNormalizeKeepsValidCredentialSources(t *testing.T) {
+	for _, value := range []string{CredentialSourceVault, CredentialSourceVaultThenHelper, CredentialSourceHelper} {
+		cfg := Default()
+		cfg.Git.CredentialSource = value
+		cfg.Normalize()
+		if cfg.Git.CredentialSource != value {
+			t.Fatalf("CredentialSource(%q) = %q, want unchanged", value, cfg.Git.CredentialSource)
+		}
+	}
+}
+
 func TestDefaultWorkTreeDepthIsUnlimited(t *testing.T) {
 	if got := Default().Git.WorkTreeDepth; got != 0 {
 		t.Fatalf("WorkTreeDepth = %d, want 0 (unlimited)", got)

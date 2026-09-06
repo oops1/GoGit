@@ -31,6 +31,7 @@ type Model struct {
 	DefaultRemote         string
 	PruneOnFetch          bool
 	ShallowDepth          int
+	CredentialSource      string
 }
 
 func FromConfig(cfg *config.Config) Model {
@@ -49,6 +50,7 @@ func FromConfig(cfg *config.Config) Model {
 		DefaultRemote:         cfg.Git.DefaultRemote,
 		PruneOnFetch:          cfg.Git.PruneOnFetch,
 		ShallowDepth:          cfg.Git.ShallowDepth,
+		CredentialSource:      cfg.Git.CredentialSource,
 	}
 	return m.Normalized()
 }
@@ -74,6 +76,11 @@ func (m Model) Normalized() Model {
 		m.DefaultRemote = "origin"
 	}
 	m.ShallowDepth = clamp(m.ShallowDepth, MinShallowDepth, MaxShallowDepth)
+	switch m.CredentialSource {
+	case config.CredentialSourceVaultThenHelper, config.CredentialSourceHelper:
+	default:
+		m.CredentialSource = config.CredentialSourceVault
+	}
 	return m
 }
 
@@ -93,6 +100,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.DefaultRemote = n.DefaultRemote
 	cfg.Git.PruneOnFetch = n.PruneOnFetch
 	cfg.Git.ShallowDepth = n.ShallowDepth
+	cfg.Git.CredentialSource = n.CredentialSource
 }
 
 func clamp(v, min, max int) int {

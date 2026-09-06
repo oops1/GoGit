@@ -21,6 +21,11 @@ type KeyEntry struct {
 	Path string
 }
 
+type CredentialHelperEntry struct {
+	Name      string
+	Supported bool
+}
+
 const (
 	columnHeaderResource   = "Dialog.Settings.Credentials.Resource"
 	columnHeaderUsername   = "Dialog.Settings.Credentials.User"
@@ -170,6 +175,27 @@ func (v *View) SetKeyPath(path string) {
 	v.sshPathInput.SetText(path)
 }
 
+func (v *View) SetCredentialSourceInfo(storePath, keyProtection string, helpers []CredentialHelperEntry) {
+	v.credentialSourceStorePath.SetText(storePath)
+	v.credentialSourceKeyProtection.SetText(keyProtection)
+	v.credentialSourceHelpers.SetText(formatCredentialHelpers(helpers))
+}
+
+func formatCredentialHelpers(helpers []CredentialHelperEntry) string {
+	if len(helpers) == 0 {
+		return i18n.T("Dialog.Settings.Secrets.HelpersNone")
+	}
+	labels := make([]string, len(helpers))
+	for i, h := range helpers {
+		if h.Supported {
+			labels[i] = h.Name
+			continue
+		}
+		labels[i] = i18n.Tf("Dialog.Settings.Secrets.HelperUnsupported", h.Name)
+	}
+	return strings.Join(labels, ", ")
+}
+
 func (v *View) onCredentialSelectionChanged(ev datagrid.SelectionChangedEvent) {
 	entry, ok := ev.SelectedItem.(SecretEntry)
 	if !ok {
@@ -207,12 +233,11 @@ func (v *View) updateKeySelection(host string, has bool) {
 func (v *View) onAddCredentialClicked() {
 	resource := strings.TrimSpace(v.credentialResource.GetText())
 	username := strings.TrimSpace(v.credentialUsername.GetText())
-	text := v.credentialSecret.GetText()
-	if resource == "" || text == "" {
+	secret := v.credentialSecret.TakeSecret()
+	if resource == "" || len(secret) == 0 {
+		clear(secret)
 		return
 	}
-	secret := []byte(text)
-	v.credentialSecret.SetText("")
 	if v.OnAddCredential != nil {
 		v.OnAddCredential(resource, username, secret)
 	}
@@ -243,12 +268,10 @@ func (v *View) onUnlockSecretsClicked() {
 func (v *View) onAddKeyClicked() {
 	host := strings.TrimSpace(v.sshHostInput.GetText())
 	path := strings.TrimSpace(v.sshPathInput.GetText())
-	text := v.sshPassphraseInput.GetText()
 	if host == "" || path == "" {
 		return
 	}
-	passphrase := []byte(text)
-	v.sshPassphraseInput.SetText("")
+	passphrase := v.sshPassphraseInput.TakeSecret()
 	if v.OnAddKey != nil {
 		v.OnAddKey(host, path, passphrase)
 	}

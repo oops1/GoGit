@@ -1,17 +1,90 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io/fs"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/config"
+	gitconfig "github.com/oops1/gogit/internal/gitcore/config"
+	"github.com/oops1/gogit/internal/gitcore/credential"
+	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/transport"
+	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/credentials"
 	"github.com/oops1/gogit/internal/ui/unlock"
 	"github.com/oops1/gogit/internal/vault"
 )
+
+func loadRawConfig(t *testing.T, content string) *gitconfig.Config {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", "")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := gitconfig.Load(gitconfig.Options{GitDir: dir, NoSystem: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+type fakeCredentialHelper struct {
+	name      string
+	answer    credential.Answer
+	hasAnswer bool
+	getErr    error
+	stored    []credential.Answer
+	storeErr  error
+	erased    int
+	eraseErr  error
+}
+
+func (f *fakeCredentialHelper) Name() string { return f.name }
+
+func (f *fakeCredentialHelper) Get(context.Context, credential.Query) (credential.Answer, bool, error) {
+	if f.getErr != nil {
+		return credential.Answer{}, false, f.getErr
+	}
+	if !f.hasAnswer {
+		return credential.Answer{}, false, nil
+	}
+	return credential.Answer{
+		Username: f.answer.Username,
+		Password: append([]byte(nil), f.answer.Password...),
+	}, true, nil
+}
+
+func (f *fakeCredentialHelper) Store(_ context.Context, _ credential.Query, a credential.Answer) error {
+	f.stored = append(f.stored, credential.Answer{Username: a.Username, Password: append([]byte(nil), a.Password...)})
+	return f.storeErr
+}
+
+func (f *fakeCredentialHelper) Erase(context.Context, credential.Query) error {
+	f.erased++
+	return f.eraseErr
+}
+
+func stubCredentialChain(t *testing.T, helpers ...*fakeCredentialHelper) {
+	t.Helper()
+	prev := buildCredentialChain
+	chain := make(credential.Chain, len(helpers))
+	for i, h := range helpers {
+		chain[i] = h
+	}
+	buildCredentialChain = func(*App, string) (credential.Chain, credential.Query) {
+		return chain, credential.Query{Host: "example.com"}
+	}
+	t.Cleanup(func() { buildCredentialChain = prev })
+}
 
 const testVaultPassword = "correct horse battery staple"
 
@@ -407,5 +480,366 @@ func TestVaultIfOpenReportsUnexpectedErrors(t *testing.T) {
 	}
 	if v := a.vaultIfOpen(); v != nil {
 		t.Fatal("a corrupted vault file must not open")
+	}
+}
+
+func TestCredentialsSourceHelperModeReturnsTheChainAnswerWithoutADialog(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceHelper
+	failIfCredentialsDialogOpens(t)
+	helper := &fakeCredentialHelper{name: "manager", hasAnswer: true, answer: credential.Answer{Username: "alice", Password: []byte("token")}}
+	stubCredentialChain(t, helper)
+
+	got, err := a.credentialSource().Credentials(context.Background(), "example.com", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Username != "alice" || string(got.Password) != "token" {
+		t.Fatalf("credentials = %+v", got)
+	}
+	if len(helper.stored) != 0 {
+		t.Fatal("a credential returned by the helper must not be stored back into it")
+	}
+}
+
+func TestCredentialsSourceHelperModeIgnoresTheVaultEntirely(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceHelper
+	v := createTestVault(t, a.paths.VaultFile())
+	a.vaultInst = v
+	if err := v.SetCredential(vault.Credential{Resource: "example.com", Username: "vault-user", Secret: []byte("vault-secret")}); err != nil {
+		t.Fatal(err)
+	}
+	helper := &fakeCredentialHelper{name: "manager"}
+	stubCredentialChain(t, helper)
+	stubCredentialsDialog(t, a, func(credentials.Request) (credentials.Result, bool) {
+		return credentials.Result{Username: "bob", Secret: []byte("hunter2")}, true
+	})
+
+	got, err := a.credentialSource().Credentials(context.Background(), "example.com", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Username != "bob" || string(got.Password) != "hunter2" {
+		t.Fatalf("credentials = %+v, want the dialog's answer, not the vault's", got)
+	}
+}
+
+func TestCredentialsSourceHelperModeRetryErasesTheChainAnswerAndPrefillsTheUsername(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceHelper
+	helper := &fakeCredentialHelper{name: "manager", hasAnswer: true, answer: credential.Answer{Username: "alice", Password: []byte("stale")}}
+	stubCredentialChain(t, helper)
+	var seenUsername string
+	var seenRetry bool
+	stubCredentialsDialog(t, a, func(req credentials.Request) (credentials.Result, bool) {
+		seenUsername = req.Username
+		seenRetry = req.Retry
+		return credentials.Result{Username: "alice", Secret: []byte("fresh")}, true
+	})
+
+	got, err := a.credentialSource().Credentials(context.Background(), "example.com", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !seenRetry {
+		t.Fatal("dialog must be told this is a retry")
+	}
+	if seenUsername != "alice" {
+		t.Fatalf("dialog username = %q, want the stale helper answer's username", seenUsername)
+	}
+	if helper.erased != 1 {
+		t.Fatalf("erased = %d, want 1", helper.erased)
+	}
+	if string(got.Password) != "fresh" {
+		t.Fatalf("password = %q, want the freshly entered one", got.Password)
+	}
+}
+
+func TestCredentialsSourceHelperModeRememberStoresToTheChainNotTheVault(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceHelper
+	helper := &fakeCredentialHelper{name: "manager"}
+	stubCredentialChain(t, helper)
+	stubCredentialsDialog(t, a, func(credentials.Request) (credentials.Result, bool) {
+		return credentials.Result{Username: "bob", Secret: []byte("hunter2"), Remember: true}, true
+	})
+
+	if _, err := a.credentialSource().Credentials(context.Background(), "example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(helper.stored) != 1 || helper.stored[0].Username != "bob" || string(helper.stored[0].Password) != "hunter2" {
+		t.Fatalf("stored = %+v", helper.stored)
+	}
+	if _, err := os.Stat(a.paths.VaultFile()); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("helper mode must not create a secret store")
+	}
+}
+
+func TestCredentialsSourceVaultThenHelperModeFallsBackToTheChainBeforeTheDialog(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceVaultThenHelper
+	failIfCredentialsDialogOpens(t)
+	helper := &fakeCredentialHelper{name: "manager", hasAnswer: true, answer: credential.Answer{Username: "alice", Password: []byte("token")}}
+	stubCredentialChain(t, helper)
+
+	got, err := a.credentialSource().Credentials(context.Background(), "example.com", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Username != "alice" || string(got.Password) != "token" {
+		t.Fatalf("credentials = %+v", got)
+	}
+}
+
+func TestCredentialsSourceVaultThenHelperModePrefersTheVaultOverTheChain(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceVaultThenHelper
+	failIfCredentialsDialogOpens(t)
+	v := createTestVault(t, a.paths.VaultFile())
+	a.vaultInst = v
+	if err := v.SetCredential(vault.Credential{Resource: "example.com", Username: "vault-user", Secret: []byte("vault-secret")}); err != nil {
+		t.Fatal(err)
+	}
+	helper := &fakeCredentialHelper{name: "manager", hasAnswer: true, answer: credential.Answer{Username: "helper-user", Password: []byte("helper-secret")}}
+	stubCredentialChain(t, helper)
+
+	got, err := a.credentialSource().Credentials(context.Background(), "example.com", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Username != "vault-user" || string(got.Password) != "vault-secret" {
+		t.Fatalf("credentials = %+v, want the vault's entry to take priority", got)
+	}
+}
+
+func TestCredentialsSourceVaultThenHelperModeRememberStillSavesToTheVault(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceVaultThenHelper
+	v := createTestVault(t, a.paths.VaultFile())
+	a.vaultInst = v
+	helper := &fakeCredentialHelper{name: "manager"}
+	stubCredentialChain(t, helper)
+	stubCredentialsDialog(t, a, func(credentials.Request) (credentials.Result, bool) {
+		return credentials.Result{Username: "bob", Secret: []byte("hunter2"), Remember: true}, true
+	})
+
+	if _, err := a.credentialSource().Credentials(context.Background(), "example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	saved, ok := v.Credential("example.com")
+	if !ok || saved.Username != "bob" || string(saved.Secret) != "hunter2" {
+		t.Fatalf("saved = %+v, ok=%v", saved, ok)
+	}
+	if len(helper.stored) != 0 {
+		t.Fatal("vault+helper mode must not also store the remembered credential into the helper chain")
+	}
+}
+
+func TestCredentialsSourceHelperModeRetryLogsWarnWhenEraseFails(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceHelper
+	var buf bytes.Buffer
+	a.log = slog.New(slog.NewTextHandler(&buf, nil))
+	helper := &fakeCredentialHelper{name: "manager", eraseErr: errors.New("boom")}
+	stubCredentialChain(t, helper)
+	stubCredentialsDialog(t, a, func(credentials.Request) (credentials.Result, bool) {
+		return credentials.Result{}, false
+	})
+
+	_, _ = a.credentialSource().Credentials(context.Background(), "example.com", true)
+
+	if helper.erased != 1 {
+		t.Fatalf("erased = %d, want 1", helper.erased)
+	}
+	if buf.Len() == 0 {
+		t.Fatal("an erase failure must be logged")
+	}
+}
+
+func TestCredentialsSourceHelperModeRememberLogsWarnWhenStoreFails(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceHelper
+	var buf bytes.Buffer
+	a.log = slog.New(slog.NewTextHandler(&buf, nil))
+	helper := &fakeCredentialHelper{name: "manager", storeErr: errors.New("boom")}
+	stubCredentialChain(t, helper)
+	stubCredentialsDialog(t, a, func(credentials.Request) (credentials.Result, bool) {
+		return credentials.Result{Username: "bob", Secret: []byte("hunter2"), Remember: true}, true
+	})
+
+	if _, err := a.credentialSource().Credentials(context.Background(), "example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(helper.stored) != 1 {
+		t.Fatalf("stored = %+v, want 1 attempt", helper.stored)
+	}
+	if buf.Len() == 0 {
+		t.Fatal("a store failure must be logged")
+	}
+}
+
+func TestCredentialsSourceVaultThenHelperModeRetryErasesFromTheChain(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Git.CredentialSource = config.CredentialSourceVaultThenHelper
+	v := createTestVault(t, a.paths.VaultFile())
+	a.vaultInst = v
+	helper := &fakeCredentialHelper{name: "manager", hasAnswer: true, answer: credential.Answer{Username: "alice", Password: []byte("stale")}}
+	stubCredentialChain(t, helper)
+	stubCredentialsDialog(t, a, func(credentials.Request) (credentials.Result, bool) {
+		return credentials.Result{Username: "alice", Secret: []byte("fresh")}, true
+	})
+
+	if _, err := a.credentialSource().Credentials(context.Background(), "example.com", true); err != nil {
+		t.Fatal(err)
+	}
+	if helper.erased != 1 {
+		t.Fatalf("erased = %d, want 1", helper.erased)
+	}
+}
+
+func TestCredentialQueryForUsesUseHTTPPathFromConfig(t *testing.T) {
+	cfg := loadRawConfig(t, "[credential]\n\tusehttppath = true\n")
+	q := credentialQueryFor(cfg, "https://example.com/org/repo.git")
+	if q.Host != "example.com" {
+		t.Fatalf("host = %q", q.Host)
+	}
+	if q.Path != "org/repo.git" {
+		t.Fatalf("path = %q, want the URL path since usehttppath is set", q.Path)
+	}
+}
+
+func TestCredentialQueryForIgnoresPathWithoutUseHTTPPath(t *testing.T) {
+	cfg := loadRawConfig(t, "")
+	q := credentialQueryFor(cfg, "https://example.com/org/repo.git")
+	if q.Path != "" {
+		t.Fatalf("path = %q, want empty without usehttppath", q.Path)
+	}
+}
+
+func TestCredentialQueryForFallsBackToTheConfiguredUsername(t *testing.T) {
+	cfg := loadRawConfig(t, "[credential]\n\tusername = bob\n")
+	q := credentialQueryFor(cfg, "https://example.com/repo.git")
+	if q.Username != "bob" {
+		t.Fatalf("username = %q, want bob", q.Username)
+	}
+}
+
+func TestCredentialQueryForKeepsTheUsernameFromTheURL(t *testing.T) {
+	cfg := loadRawConfig(t, "[credential]\n\tusername = bob\n")
+	q := credentialQueryFor(cfg, "https://alice@example.com/repo.git")
+	if q.Username != "alice" {
+		t.Fatalf("username = %q, want the URL's own username", q.Username)
+	}
+}
+
+func TestCredentialQueryForReturnsZeroValueOnAnInvalidURL(t *testing.T) {
+	cfg := loadRawConfig(t, "")
+	got := credentialQueryFor(cfg, "https://")
+	if got != (credential.Query{}) {
+		t.Fatalf("query = %+v, want the zero value", got)
+	}
+}
+
+func TestRepositoryConfigForCredentialsWithoutAnOpenRepositoryReturnsAnEmptyConfig(t *testing.T) {
+	a := newTestApp(t)
+	cfg := a.repositoryConfigForCredentials()
+	if cfg == nil {
+		t.Fatal("config must not be nil")
+	}
+	if _, ok := cfg.Get("credential.helper"); ok {
+		t.Fatal("an empty config must not report any configured value")
+	}
+}
+
+func TestRepositoryConfigForCredentialsWhenTheRepositoryCannotBeReopenedReturnsAnEmptyConfig(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "repo")
+	initTestRepoWithBranch(t, target, "main")
+	a := newTestApp(t)
+	a.setOpened(openTestRepository(t, target))
+
+	prev := openGitRepository
+	openGitRepository = func(string, gitrepo.OpenOptions) (*gitrepo.Repository, error) {
+		return nil, errors.New("boom")
+	}
+	t.Cleanup(func() { openGitRepository = prev })
+
+	cfg := a.repositoryConfigForCredentials()
+	if cfg == nil {
+		t.Fatal("config must not be nil")
+	}
+}
+
+func TestRepositoryConfigForCredentialsReadsTheOpenRepositoryConfig(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	target := filepath.Join(dir, "repo")
+	initTestRepoWithBranch(t, target, "main")
+	appendGitConfig(t, target, "[credential]\n\thelper = store\n")
+
+	a := newTestApp(t)
+	a.setOpened(openTestRepository(t, target))
+
+	cfg := a.repositoryConfigForCredentials()
+	if v, ok := cfg.Get("credential.helper"); !ok || v != "store" {
+		t.Fatalf("credential.helper = %q, ok=%v, want store", v, ok)
+	}
+}
+
+func TestDefaultCredentialChainAndQueryUsesTheOpenRepositoryConfig(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	target := filepath.Join(dir, "repo")
+	initTestRepoWithBranch(t, target, "main")
+	appendGitConfig(t, target, "[credential]\n\thelper = store\n")
+
+	a := newTestApp(t)
+	a.setOpened(openTestRepository(t, target))
+
+	chain, q := defaultCredentialChainAndQuery(a, "example.com/org/repo")
+	if len(chain) != 1 {
+		t.Fatalf("chain = %+v, want 1 helper", chain)
+	}
+	if q.Host != "example.com" {
+		t.Fatalf("host = %q, want example.com", q.Host)
+	}
+}
+
+func TestDefaultCredentialChainAndQueryReturnsNoChainOnAnInvalidURL(t *testing.T) {
+	a := newTestApp(t)
+	chain, q := defaultCredentialChainAndQuery(a, "")
+	if chain != nil {
+		t.Fatalf("chain = %+v, want nil", chain)
+	}
+	if q != (credential.Query{}) {
+		t.Fatalf("query = %+v, want the zero value", q)
+	}
+}
+
+func TestRememberTargetLabelMatchesTheConfiguredCredentialSource(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		key  string
+	}{
+		{config.CredentialSourceVault, "Dialog.Credentials.Target.Vault"},
+		{config.CredentialSourceVaultThenHelper, "Dialog.Credentials.Target.Vault"},
+		{config.CredentialSourceHelper, "Dialog.Credentials.Target.Helper"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			a := newTestApp(t)
+			a.cfg.Git.CredentialSource = tc.mode
+			var seenTarget string
+			stubCredentialsDialog(t, a, func(req credentials.Request) (credentials.Result, bool) {
+				seenTarget = req.RememberTarget
+				return credentials.Result{}, false
+			})
+			stubCredentialChain(t, &fakeCredentialHelper{name: "manager"})
+
+			_, _ = a.credentialSource().Credentials(context.Background(), "example.com", false)
+			if want := i18n.T(tc.key); seenTarget != want {
+				t.Fatalf("mode %q: RememberTarget = %q, want %q", tc.mode, seenTarget, want)
+			}
+		})
 	}
 }
