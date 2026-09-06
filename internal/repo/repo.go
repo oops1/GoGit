@@ -60,6 +60,7 @@ func normalizePath(p string) (string, error) {
 
 type Registry struct {
 	cfg      *config.Config
+	treeMu   sync.RWMutex
 	roots    []*Node
 	byID     map[string]*Node
 	activeMu sync.RWMutex
@@ -73,12 +74,21 @@ func New(cfg *config.Config) *Registry {
 }
 
 func (r *Registry) Rebuild() {
-	r.roots, r.byID = buildTree(r.cfg)
+	roots, byID := buildTree(r.cfg)
+	r.treeMu.Lock()
+	r.roots, r.byID = roots, byID
+	r.treeMu.Unlock()
 }
 
-func (r *Registry) Roots() []*Node { return r.roots }
+func (r *Registry) Roots() []*Node {
+	r.treeMu.RLock()
+	defer r.treeMu.RUnlock()
+	return r.roots
+}
 
 func (r *Registry) Find(id string) (*Node, bool) {
+	r.treeMu.RLock()
+	defer r.treeMu.RUnlock()
 	n, ok := r.byID[id]
 	return n, ok
 }
@@ -88,6 +98,8 @@ func (r *Registry) FindByPath(path string) (*Node, bool) {
 	if err != nil {
 		return nil, false
 	}
+	r.treeMu.RLock()
+	defer r.treeMu.RUnlock()
 	for _, n := range r.byID {
 		if n.Kind != KindGroup && n.Path == norm {
 			return n, true
@@ -97,6 +109,7 @@ func (r *Registry) FindByPath(path string) (*Node, bool) {
 }
 
 func (r *Registry) Walk() iter.Seq[*Node] {
+	roots := r.Roots()
 	return func(yield func(*Node) bool) {
 		var walk func([]*Node) bool
 		walk = func(nodes []*Node) bool {
@@ -110,12 +123,12 @@ func (r *Registry) Walk() iter.Seq[*Node] {
 			}
 			return true
 		}
-		walk(r.roots)
+		walk(roots)
 	}
 }
 
 func (r *Registry) SetActive(id string) error {
-	if _, ok := r.byID[id]; !ok {
+	if _, ok := r.Find(id); !ok {
 		return ErrNotFound
 	}
 	r.activeMu.Lock()
@@ -131,8 +144,7 @@ func (r *Registry) Active() (*Node, bool) {
 	if id == "" {
 		return nil, false
 	}
-	n, ok := r.byID[id]
-	return n, ok
+	return r.Find(id)
 }
 
 func (r *Registry) ClearActive() {
