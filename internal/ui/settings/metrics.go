@@ -5,7 +5,7 @@ const (
 	dialogMinHeight = 520
 
 	dialogDefaultWidth  = 900
-	dialogDefaultHeight = 620
+	dialogDefaultHeight = 700
 
 	previewCanvasWidth  = dialogDefaultWidth + 40
 	previewCanvasHeight = dialogDefaultHeight + 70
