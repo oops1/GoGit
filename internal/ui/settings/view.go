@@ -38,9 +38,10 @@ type View struct {
 	sectionCredentials *widget.Grid
 	sectionSSH         *widget.Grid
 
-	nav     *navTree
-	section string
-	initial Model
+	nav           *navTree
+	navBackground *navBackdrop
+	section       string
+	initial       Model
 
 	unsavedDialog *widget.Dialog
 
@@ -172,6 +173,12 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.navHost, ok = named["navHost"].(*widget.Grid); !ok {
 		return fmt.Errorf("%w: navHost", ErrWidgetMissing)
 	}
+	panel, ok := named["navBackground"].(*widget.Panel)
+	if !ok {
+		return fmt.Errorf("%w: navBackground", ErrWidgetMissing)
+	}
+	v.navBackground = &navBackdrop{Panel: panel}
+	v.navBackground.Background = widget.CurrentTheme().PanelBG
 	if v.search, ok = named["search"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: search", ErrWidgetMissing)
 	}

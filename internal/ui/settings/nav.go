@@ -44,6 +44,15 @@ func isKnownSection(id string) bool {
 	return false
 }
 
+type navBackdrop struct {
+	*widget.Panel
+}
+
+func (b *navBackdrop) ApplyTheme(t *widget.Theme) {
+	b.Panel.ApplyTheme(t)
+	b.Background = t.PanelBG
+}
+
 type navTree struct {
 	*widget.TreeViewWidget
 
