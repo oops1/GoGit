@@ -23,8 +23,6 @@ func TestCredentialsWipeOnZeroValue(t *testing.T) {
 
 func TestDialReturnsUnsupportedSchemeForEveryScheme(t *testing.T) {
 	tests := []string{
-		"ssh://git@github.com/user/repo.git",
-		"git@github.com:user/repo.git",
 		"/home/user/repo.git",
 		`C:\repo`,
 	}
@@ -70,10 +68,25 @@ func TestDialPropagatesURLParseError(t *testing.T) {
 	}
 }
 
-func TestDialWipesThePasswordForUnsupportedSchemes(t *testing.T) {
-	_, err := Dial(t.Context(), "ssh://user:secret@github.com/repo.git", UploadPack, Options{})
-	if !errors.Is(err, ErrUnsupportedScheme) {
-		t.Fatalf("Dial returned %v, want ErrUnsupportedScheme", err)
+func TestDialSupportsSSHSchemeAndSCPLikeForm(t *testing.T) {
+	tests := []string{
+		"ssh://user:secret@github.com/repo.git",
+		"git@github.com:user/repo.git",
+	}
+	for _, raw := range tests {
+		t.Run(raw, func(t *testing.T) {
+			session, err := Dial(t.Context(), raw, UploadPack, Options{})
+			if err != nil {
+				t.Fatalf("Dial(%q) returned error %v", raw, err)
+			}
+			ssh, ok := session.(*sshSession)
+			if !ok {
+				t.Fatalf("Dial(%q) returned a %T, want *sshSession", raw, session)
+			}
+			if err := ssh.Close(); err != nil {
+				t.Fatalf("Close returned error %v", err)
+			}
+		})
 	}
 }
 

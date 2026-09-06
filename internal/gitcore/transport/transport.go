@@ -158,6 +158,9 @@ func Dial(ctx context.Context, rawURL string, service Service, opts Options) (Se
 	case SchemeGit:
 		password.Wipe()
 		return newGitSession(endpoint, service, opts), nil
+	case SchemeSSH:
+		password.Wipe()
+		return newSSHSession(endpoint, service, opts), nil
 	default:
 		password.Wipe()
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedScheme, endpoint.Scheme)
