@@ -57,6 +57,13 @@ linters:
         linters:
           - gosec
         text: "G704"
+      - path: internal/gitcore/credential/exec\.go
+        linters:
+          - gosec
+        text: "G204"
+      - path: internal/gitcore/credential/.*_test\.go
+        linters:
+          - gosec
 formatters:
   enable:
     - gofmt
