@@ -23,7 +23,7 @@ import (
 const fetchHeadFile = "FETCH_HEAD"
 
 var (
-	dial     = transport.Dial
+	dial     = dialAny
 	odbOpen  = odb.Open
 	refsOpen = refs.Open
 )
