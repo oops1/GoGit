@@ -38,6 +38,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"root":               widget.NewGrid(),
 		"navHost":            widget.NewGrid(),
 		"navBackground":      widget.NewPanel(color.RGBA{}),
+		"close":              widget.NewButton("x"),
 		"search":             widget.NewTextInput(""),
 		"sectionTitle":       widget.NewWin10Label(""),
 		"sectionGeneral":     widget.NewGrid(),
@@ -135,7 +136,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	keys := []string{
-		"root", "navHost", "navBackground", "search", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
+		"root", "navHost", "navBackground", "close", "search", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
 		"language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
 		"shallowDepth", "gitAdvancedStack", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",

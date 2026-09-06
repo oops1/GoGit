@@ -41,17 +41,9 @@ func (v *View) resolveUnsavedChanges(result widget.MessageBoxResult) {
 	case widget.MBResultNo:
 		v.doCancel()
 	case widget.MBResultCancel:
-		v.reopenAfterAbortedClose()
 	}
 }
 
 func (v *View) abortUnsavedChanges() {
 	clearUnsavedChangesAliases()
-	v.reopenAfterAbortedClose()
-}
-
-func (v *View) reopenAfterAbortedClose() {
-	if !v.dlg.IsModal() {
-		v.eng.ShowModal(v.dlg)
-	}
 }

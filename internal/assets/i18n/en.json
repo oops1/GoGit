@@ -81,6 +81,7 @@
   "Dialog.Settings.AutoFetch": "Auto-fetch",
   "Dialog.Settings.AutoFetch.Hint": "Periodically fetch changes from the remote repository",
   "Dialog.Settings.Cancel": "Cancel",
+  "Dialog.Settings.Close": "✕",
   "Dialog.Settings.CredentialSource": "Password source",
   "Dialog.Settings.CredentialSource.Helper": "System git (credential.helper)",
   "Dialog.Settings.CredentialSource.Vault": "Own store",

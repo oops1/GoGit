@@ -81,6 +81,7 @@
   "Dialog.Settings.AutoFetch": "Автополучение",
   "Dialog.Settings.AutoFetch.Hint": "Периодически получать изменения из внешнего репозитория",
   "Dialog.Settings.Cancel": "Отмена",
+  "Dialog.Settings.Close": "✕",
   "Dialog.Settings.CredentialSource": "Источник паролей",
   "Dialog.Settings.CredentialSource.Helper": "Системный git (credential.helper)",
   "Dialog.Settings.CredentialSource.Vault": "Собственное хранилище",

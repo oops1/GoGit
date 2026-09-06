@@ -21,6 +21,7 @@ const (
 	navItemGap            = 2
 	navSelectionRadius    = 6
 	navSelectionSideInset = 8
+	headerHeight          = 46
 	navSelectionAlpha     = 28
 	navHoverAlpha         = 14
 

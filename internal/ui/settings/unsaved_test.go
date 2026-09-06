@@ -106,20 +106,29 @@ func TestResolveUnsavedChangesCancelCallsNeitherCallback(t *testing.T) {
 	}
 }
 
-func TestAbortingUnsavedChangesReopensTheDialogTheEngineForceClosed(t *testing.T) {
+func TestClosingWithUnsavedChangesIsStoppedUntilTheQuestionIsAnswered(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
 	t.Cleanup(widget.ClearStringAliases)
 
 	v.eng.ShowModal(v.dlg)
-	v.eng.CloseModal(v.dlg)
-	if v.dlg.IsModal() {
-		t.Fatal("test setup: dialog must be closed before aborting")
+	v.showToolbar.SetChecked(!v.showToolbar.IsChecked())
+	if !v.Modified() {
+		t.Fatal("test setup: the model must look modified")
 	}
 
-	v.abortUnsavedChanges()
-
+	if v.dlg.OnClosing() {
+		t.Fatal("closing must be stopped while the question is on screen")
+	}
 	if !v.dlg.IsModal() {
-		t.Fatal("aborting must reopen a dialog the engine force-closed on Escape or the close button")
+		t.Fatal("the settings dialog must stay in the modal stack")
+	}
+}
+
+func TestClosingWithoutChangesIsAllowed(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{})
+	v.eng.ShowModal(v.dlg)
+	if !v.dlg.OnClosing() {
+		t.Fatal("closing must be allowed when nothing was changed")
 	}
 }
 
@@ -147,8 +156,9 @@ func TestEscapeOnTheSettingsDialogWithUnsavedChangesEndsUpAskingAndCanBeAborted(
 
 	v.eng.ShowModal(v.dlg)
 
-	v.dlg.OnCancel()
-	v.eng.CloseModal(v.dlg)
+	if v.dlg.OnClosing() {
+		t.Fatal("Escape must not close the dialog while changes are unsaved")
+	}
 
 	if okCalled != 0 || cancelCalled != 0 {
 		t.Fatal("Escape must not decide anything on its own while changes are unsaved")
@@ -160,7 +170,7 @@ func TestEscapeOnTheSettingsDialogWithUnsavedChangesEndsUpAskingAndCanBeAborted(
 	v.unsavedDialog.CancelAction()
 
 	if !v.dlg.IsModal() {
-		t.Fatal("aborting the confirmation must bring the settings dialog back")
+		t.Fatal("aborting the confirmation must leave the settings dialog on screen")
 	}
 }
 

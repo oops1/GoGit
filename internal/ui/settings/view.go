@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"image"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -31,6 +32,7 @@ type View struct {
 	root         *widget.Grid
 	navHost      *widget.Grid
 	search       *widget.TextInput
+	close        *widget.Button
 	sectionTitle *widget.Label
 
 	sectionGeneral     *widget.Grid
@@ -179,6 +181,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	v.navBackground = &navBackdrop{Panel: panel}
 	v.navBackground.Background = widget.CurrentTheme().PanelBG
+	if v.close, ok = named["close"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: close", ErrWidgetMissing)
+	}
 	if v.search, ok = named["search"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: search", ErrWidgetMissing)
 	}
@@ -274,6 +279,9 @@ func (v *View) attachContent() {
 	v.dlg.SetContent(v.root)
 	v.dlg.SetResizable(true)
 	v.dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
+	v.dlg.SetChromeless(true)
+	v.dlg.AddDragArea(image.Rect(0, 0, navWidth, headerHeight))
+	v.close.OnClick = v.dlg.RequestClose
 }
 
 func (v *View) populateLanguages() {
@@ -379,7 +387,16 @@ func (v *View) wire() {
 	v.okBtn.OnClick = v.confirm
 	v.cancelBtn.OnClick = v.cancel
 	v.dlg.DefaultAction = v.confirm
-	v.dlg.CancelAction = v.cancel
+	v.dlg.CancelAction = v.doCancel
+	v.dlg.OnClosing = v.allowClose
+}
+
+func (v *View) allowClose() bool {
+	if !v.Modified() {
+		return true
+	}
+	v.confirmUnsavedChanges()
+	return false
 }
 
 func (v *View) confirm() {
