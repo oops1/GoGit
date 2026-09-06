@@ -10,7 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const gitAdvancedStackRow = 14
+const gitAdvancedStackRow = 15
 
 type searchField struct {
 	section    string
@@ -58,52 +58,52 @@ func (v *View) shallowDepthText() string  { return strconv.Itoa(int(v.shallowDep
 
 func (v *View) buildSearchIndex() {
 	v.searchFields = []searchField{
-		{section: "general", grid: v.sectionGeneral, rows: []int{2},
+		{section: "general", grid: v.sectionGeneral, rows: []int{3, 4},
 			labelKey: "Dialog.Settings.Language", hintKey: "Dialog.Settings.Language.Hint",
 			groupKey: "Dialog.Settings.Group.LanguageAppearance", value: v.language.SelectedText},
-		{section: "general", grid: v.sectionGeneral, rows: []int{4},
+		{section: "general", grid: v.sectionGeneral, rows: []int{5, 6},
 			labelKey: "Dialog.Settings.Theme", hintKey: "Dialog.Settings.Theme.Hint",
 			groupKey: "Dialog.Settings.Group.LanguageAppearance", value: v.theme.SelectedText},
-		{section: "general", grid: v.sectionGeneral, rows: []int{10, 11},
+		{section: "general", grid: v.sectionGeneral, rows: []int{12, 13, 14},
 			labelKey: "Dialog.Settings.ShowToolbar", hintKey: "Dialog.Settings.ShowToolbar.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
-		{section: "general", grid: v.sectionGeneral, rows: []int{13, 14},
+		{section: "general", grid: v.sectionGeneral, rows: []int{15, 16, 17},
 			labelKey: "Dialog.Settings.ShowStatusBar", hintKey: "Dialog.Settings.ShowStatusBar.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
-		{section: "general", grid: v.sectionGeneral, rows: []int{16, 17},
+		{section: "general", grid: v.sectionGeneral, rows: []int{18, 19, 20},
 			labelKey: "Dialog.Settings.ToolbarCaptions", hintKey: "Dialog.Settings.ToolbarCaptions.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
-		{section: "general", grid: v.sectionGeneral, rows: []int{19, 20},
+		{section: "general", grid: v.sectionGeneral, rows: []int{21, 22},
 			labelKey: "Dialog.Settings.JournalFullAuthorName", hintKey: "Dialog.Settings.JournalFullAuthorName.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
 
-		{section: "git", grid: v.sectionGit, rows: []int{2},
+		{section: "git", grid: v.sectionGit, rows: []int{3, 4},
 			labelKey: "Dialog.Settings.LogMaxCount", hintKey: "Dialog.Settings.LogMaxCount.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync", value: v.logMaxCountText},
-		{section: "git", grid: v.sectionGit, rows: []int{4, 5},
+		{section: "git", grid: v.sectionGit, rows: []int{5, 6, 7},
 			labelKey: "Dialog.Settings.AutoFetch", hintKey: "Dialog.Settings.AutoFetch.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync"},
-		{section: "git", grid: v.sectionGit, rows: []int{7},
+		{section: "git", grid: v.sectionGit, rows: []int{8, 9},
 			labelKey: "Dialog.Settings.FetchInterval", hintKey: "Dialog.Settings.FetchInterval.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync", value: v.fetchIntervalText},
-		{section: "git", grid: v.sectionGit, rows: []int{9},
+		{section: "git", grid: v.sectionGit, rows: []int{10, 11},
 			labelKey: "Dialog.Settings.DefaultRemote", hintKey: "Dialog.Settings.DefaultRemote.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync", value: v.defaultRemote.GetText},
-		{section: "git", grid: v.sectionGit, rows: []int{11, 12},
+		{section: "git", grid: v.sectionGit, rows: []int{12, 13, 14},
 			labelKey: "Dialog.Settings.PruneOnFetch", hintKey: "Dialog.Settings.PruneOnFetch.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync"},
 
-		{section: "git", grid: v.gitAdvancedContent, rows: []int{0},
+		{section: "git", grid: v.gitAdvancedContent, rows: []int{0, 1},
 			labelKey: "Dialog.Settings.WorkTreeDepth", hintKey: "Dialog.Settings.WorkTreeDepth.Hint",
 			groupKey: "Dialog.Settings.Group.Advanced", value: v.workTreeDepthText, isAdvanced: true},
-		{section: "git", grid: v.gitAdvancedContent, rows: []int{2},
+		{section: "git", grid: v.gitAdvancedContent, rows: []int{2, 3},
 			labelKey: "Dialog.Settings.PullStrategy", hintKey: "Dialog.Settings.PullStrategy.Hint",
 			groupKey: "Dialog.Settings.Group.Advanced", value: v.pullStrategy.GetText, isAdvanced: true},
-		{section: "git", grid: v.gitAdvancedContent, rows: []int{4},
+		{section: "git", grid: v.gitAdvancedContent, rows: []int{4, 5},
 			labelKey: "Dialog.Settings.ShallowDepth", hintKey: "Dialog.Settings.ShallowDepth.Hint",
 			groupKey: "Dialog.Settings.Group.Advanced", value: v.shallowDepthText, isAdvanced: true},
 
-		{section: "credentials", grid: v.sectionCredentials, rows: []int{0},
+		{section: "credentials", grid: v.sectionCredentials, rows: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
 			labelKey: "Dialog.Settings.CredentialSource", value: v.credentialSource.SelectedText},
 	}
 
@@ -112,11 +112,11 @@ func (v *View) buildSearchIndex() {
 		rows map[string][]int
 	}{
 		{v.sectionGeneral, map[string][]int{
-			"Dialog.Settings.Group.LanguageAppearance": {0, 6},
-			"Dialog.Settings.Group.Interface":          {8},
+			"Dialog.Settings.Group.LanguageAppearance": {0, 1, 2, 6, 7, 8},
+			"Dialog.Settings.Group.Interface":          {9, 10, 11},
 		}},
 		{v.sectionGit, map[string][]int{
-			"Dialog.Settings.Group.FetchSync": {0},
+			"Dialog.Settings.Group.FetchSync": {0, 1, 2},
 		}},
 	}
 

@@ -221,35 +221,37 @@
 
                 <Grid x:Name="sectionCredentials">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="22"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="30"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="18"/>
-                        <RowDefinition Height="22"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="8"/>
-                        <RowDefinition Height="120"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="20"/>
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="30"/>
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="30"/>
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="30"/>
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="30"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="20"/>
-                        <RowDefinition Height="10"/>
-                        <RowDefinition Height="20"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                            <RowDefinition Height="22"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="30"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="22"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="8"/>
+                            <RowDefinition Height="120"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="20"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="30"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="30"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="30"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="30"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="20"/>
+                            <RowDefinition Height="10"/>
+                            <RowDefinition Height="20"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="130"/>
                     </Grid.ColumnDefinitions>
@@ -267,57 +269,57 @@
 
                     <TextBlock x:Name="credentialSourceStorePath" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
                                Text="" FontSize="10"/>
-                    <TextBlock x:Name="credentialSourceKeyProtection" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                    <TextBlock x:Name="credentialSourceKeyProtection" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
                                Text="" FontSize="10"/>
-                    <TextBlock x:Name="credentialSourceHelpers" Grid.Row="6" Grid.Column="2"
+                    <TextBlock x:Name="credentialSourceHelpers" Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3"
                                Text="" FontSize="10"/>
 
-                    <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3"
+                    <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
                                Text="{Loc Dialog.Settings.Group.SavedCredentials}"
                                FontSize="13" FontWeight="Bold"/>
 
-                    <DataGrid x:Name="credentialsTable" Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2"
+                    <DataGrid x:Name="credentialsTable" Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="2"
                               IsReadOnly="True" AutoGenerateColumns="False"
                               CanUserSortColumns="False" SelectionMode="Single"/>
 
-                    <StackPanel Grid.Row="10" Grid.Column="2" Orientation="Vertical" Spacing="8" Margin="10,0,0,0">
+                    <StackPanel Grid.Row="12" Grid.Column="2" Orientation="Vertical" Spacing="8" Margin="10,0,0,0">
                         <Button x:Name="credentialAdd" Height="30" Tag="accent" Content="{Loc Dialog.Settings.Credentials.Add}"/>
                         <Button x:Name="credentialEdit" Height="30" Content="{Loc Dialog.Settings.Credentials.Edit}"/>
                         <Button x:Name="credentialRemove" Height="30" Content="{Loc Dialog.Settings.Credentials.Remove}"/>
                     </StackPanel>
 
-                    <TextBlock Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3"
+                    <TextBlock Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="3"
                                Text="{Loc Dialog.Settings.Group.AddCredential}"
                                FontSize="13" FontWeight="Bold"/>
 
-                    <TextBlock Grid.Row="14" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Resource}"
+                    <TextBlock Grid.Row="16" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Resource}"
                                Height="18" VerticalAlignment="Center"/>
-                    <TextBox x:Name="credentialResource" Grid.Row="14" Grid.Column="1" Grid.ColumnSpan="2"
+                    <TextBox x:Name="credentialResource" Grid.Row="16" Grid.Column="1" Grid.ColumnSpan="2"
                              Placeholder="{Loc Dialog.Settings.Credentials.Resource.Placeholder}"/>
 
-                    <TextBlock Grid.Row="16" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.User}"
+                    <TextBlock Grid.Row="18" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.User}"
                                Height="18" VerticalAlignment="Center"/>
-                    <TextBox x:Name="credentialUsername" Grid.Row="16" Grid.Column="1" Grid.ColumnSpan="2"
+                    <TextBox x:Name="credentialUsername" Grid.Row="18" Grid.Column="1" Grid.ColumnSpan="2"
                              Placeholder="{Loc Dialog.Settings.Credentials.User.Placeholder}"/>
 
-                    <TextBlock Grid.Row="18" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.AuthType}"
+                    <TextBlock Grid.Row="20" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.AuthType}"
                                Height="18" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="credentialType" Grid.Row="18" Grid.Column="1"
+                    <ComboBox x:Name="credentialType" Grid.Row="20" Grid.Column="1"
                               Height="30" VerticalAlignment="Center">
                         <ComboBoxItem Content="{Loc Dialog.Settings.Credentials.Type.Password}"/>
                         <ComboBoxItem Content="{Loc Dialog.Settings.Credentials.Type.Token}"/>
                     </ComboBox>
-                    <Button x:Name="credentialTestConnection" Grid.Row="18" Grid.Column="2" Height="30" Margin="10,0,0,0"
+                    <Button x:Name="credentialTestConnection" Grid.Row="20" Grid.Column="2" Height="30" Margin="10,0,0,0"
                             Content="{Loc Dialog.Settings.Credentials.TestConnection}"/>
 
-                    <TextBlock Grid.Row="20" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Secret}"
+                    <TextBlock Grid.Row="22" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Secret}"
                                Height="18" VerticalAlignment="Center"/>
-                    <PasswordBox x:Name="credentialSecret" Grid.Row="20" Grid.Column="1"
+                    <PasswordBox x:Name="credentialSecret" Grid.Row="22" Grid.Column="1"
                                  Placeholder="{Loc Dialog.Settings.Credentials.Secret.Placeholder}"/>
-                    <Button x:Name="credentialMasterPassword" Grid.Row="22" Grid.Column="2" Height="30" Margin="10,0,0,0"
+                    <Button x:Name="credentialMasterPassword" Grid.Row="24" Grid.Column="2" Height="30" Margin="10,0,0,0"
                             Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
 
-                    <Grid Grid.Row="22" Grid.Column="0" Grid.ColumnSpan="2">
+                    <Grid Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="22"/>
                             <ColumnDefinition Width="*"/>
@@ -327,9 +329,9 @@
                                    Text="{Loc Dialog.Settings.Secrets.SecureStorage}" FontSize="11"/>
                     </Grid>
 
-                    <TextBlock x:Name="credentialsStatus" Grid.Row="24" Grid.Column="0" Grid.ColumnSpan="2" Text="" FontSize="11"
+                    <TextBlock x:Name="credentialsStatus" Grid.Row="26" Grid.Column="0" Grid.ColumnSpan="2" Text="" FontSize="11"
                                Height="18" VerticalAlignment="Center"/>
-                    <Button x:Name="credentialsUnlock" Grid.Row="20" Grid.Column="2" Height="30" Margin="10,0,0,0"
+                    <Button x:Name="credentialsUnlock" Grid.Row="22" Grid.Column="2" Height="30" Margin="10,0,0,0"
                             Content="{Loc Dialog.Settings.Secrets.Unlock}" Visibility="Collapsed"/>
                 </Grid>
 
@@ -354,7 +356,7 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="200"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="130"/>
                     </Grid.ColumnDefinitions>

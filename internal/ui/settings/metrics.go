@@ -40,7 +40,7 @@ const (
 
 	tableRowHeight            = 28
 	tableHeaderHeight         = 30
-	tableStatusColumnMinWidth = 110
+	tableStatusColumnMinWidth = 140
 	tableSideButtonsWidth     = 110
 	tableSideButtonHeight     = 30
 	tableSideButtonGap        = 8

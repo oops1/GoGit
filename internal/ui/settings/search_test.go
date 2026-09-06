@@ -33,13 +33,13 @@ func TestSearchMatchesByFieldLabel(t *testing.T) {
 
 	v.applySearch("journal")
 
-	if v.sectionGeneral.RowDefs[19].Value == 0 {
+	if v.sectionGeneral.RowDefs[21].Value == 0 {
 		t.Fatal("journalFullAuthorName row must stay visible: its label matches")
 	}
-	if v.sectionGeneral.RowDefs[2].Value != 0 {
+	if v.sectionGeneral.RowDefs[3].Value != 0 {
 		t.Fatal("language row must collapse: nothing about it matches")
 	}
-	if v.sectionGeneral.RowDefs[4].Value != 0 {
+	if v.sectionGeneral.RowDefs[5].Value != 0 {
 		t.Fatal("theme row must collapse: nothing about it matches")
 	}
 }
@@ -50,10 +50,10 @@ func TestSearchMatchesByFieldHint(t *testing.T) {
 
 	v.applySearch("periodically")
 
-	if v.sectionGit.RowDefs[4].Value == 0 {
+	if v.sectionGit.RowDefs[5].Value == 0 {
 		t.Fatal("autoFetch row must stay visible: its hint matches")
 	}
-	if v.sectionGit.RowDefs[2].Value != 0 {
+	if v.sectionGit.RowDefs[3].Value != 0 {
 		t.Fatal("logMaxCount row must collapse: nothing about it matches")
 	}
 }
@@ -64,7 +64,7 @@ func TestSearchMatchesByGroupName(t *testing.T) {
 
 	v.applySearch("sync")
 
-	fetchSyncFieldRows := [][]int{{2}, {4, 5}, {7}, {9}, {11, 12}}
+	fetchSyncFieldRows := [][]int{{3, 4}, {5, 6, 7}, {8, 9}, {10, 11}, {12, 13, 14}}
 	for _, rows := range fetchSyncFieldRows {
 		for _, r := range rows {
 			if v.sectionGit.RowDefs[r].Value == 0 {
@@ -87,10 +87,10 @@ func TestSearchMatchesByFieldValue(t *testing.T) {
 
 	v.applySearch("mirror")
 
-	if v.sectionGit.RowDefs[9].Value == 0 {
+	if v.sectionGit.RowDefs[10].Value == 0 {
 		t.Fatal("defaultRemote row must stay visible: its current value matches")
 	}
-	if v.sectionGit.RowDefs[2].Value != 0 {
+	if v.sectionGit.RowDefs[3].Value != 0 {
 		t.Fatal("logMaxCount row must collapse: nothing about it matches")
 	}
 }
@@ -102,10 +102,10 @@ func TestSearchMatchesByNumericFieldValue(t *testing.T) {
 
 	v.applySearch("4242")
 
-	if v.sectionGit.RowDefs[2].Value == 0 {
+	if v.sectionGit.RowDefs[3].Value == 0 {
 		t.Fatal("logMaxCount row must stay visible: its current value matches")
 	}
-	if v.sectionGit.RowDefs[4].Value != 0 {
+	if v.sectionGit.RowDefs[5].Value != 0 {
 		t.Fatal("autoFetch row must collapse: nothing about it matches")
 	}
 }
@@ -115,7 +115,7 @@ func TestSearchIsCaseInsensitive(t *testing.T) {
 
 	v.applySearch("JOURNAL")
 
-	if v.sectionGeneral.RowDefs[19].Value == 0 {
+	if v.sectionGeneral.RowDefs[21].Value == 0 {
 		t.Fatal("uppercase query must still match the lowercase label text")
 	}
 }
