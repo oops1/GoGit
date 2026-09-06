@@ -10,7 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const gitAdvancedStackRow = 15
+const gitAdvancedRow = 15
 
 type searchField struct {
 	section    string
@@ -237,7 +237,7 @@ func (v *View) applySearch(text string) {
 			}
 		}
 		if advancedMatches == 0 {
-			hide(v.sectionGit, []int{gitAdvancedStackRow})
+			hide(v.sectionGit, []int{gitAdvancedRow})
 		}
 		v.gitAdvanced.SetExpanded(advancedMatches > 0)
 	} else {
@@ -371,9 +371,9 @@ func (v *View) updateNavMatchCounts(counts map[string]int, searching bool) {
 		base := i18n.T(navKeyFor(id))
 		if searching && counts[id] > 0 {
 			v.nav.SetCaption(i, i18n.Tf("Dialog.Settings.Nav.MatchCount", base, counts[id]))
-		} else {
-			v.nav.SetCaption(i, base)
+			continue
 		}
+		v.nav.SetCaption(i, base)
 	}
 }
 

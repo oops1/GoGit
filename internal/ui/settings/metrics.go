@@ -1,16 +1,16 @@
 package settings
 
 const (
-	dialogMinWidth  = 720
+	dialogMinWidth  = 860
 	dialogMinHeight = 520
 
 	dialogDefaultWidth  = 900
 	dialogDefaultHeight = 700
 
-	previewCanvasWidth  = dialogDefaultWidth + 40
-	previewCanvasHeight = dialogDefaultHeight + 70
+	previewCanvasMargin = 70
 
 	navWidth              = 180
+	navCollapsedWidth     = 46
 	navTitleFontSize      = 15
 	navTitleTopMargin     = 20
 	navTitleLeftMargin    = 16
@@ -36,7 +36,10 @@ const (
 	hintTopGapUnderCheckbox = 4
 	hintLineHeight          = 17
 	hintFieldRowSpan        = 2
-	checkboxTextIndent      = 22
+
+	advancedRowCollapsed = 34
+	advancedRowExpanded  = 172
+	checkboxTextIndent   = 22
 
 	tableRowHeight            = 28
 	tableHeaderHeight         = 30

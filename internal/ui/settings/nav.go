@@ -56,7 +56,8 @@ func (b *navBackdrop) ApplyTheme(t *widget.Theme) {
 type navTree struct {
 	*widget.TreeViewWidget
 
-	items []*treeview.TreeViewItem
+	items     []*treeview.TreeViewItem
+	collapsed bool
 }
 
 func newNavTree() *navTree {
@@ -99,7 +100,26 @@ func (n *navTree) SetCaption(index int, text string) {
 	if index < 0 || index >= len(n.items) {
 		return
 	}
+	n.captions(index, text)
+}
+
+func (n *navTree) captions(index int, text string) {
+	if n.collapsed {
+		n.items[index].Header = ""
+		n.items[index].Text = ""
+		return
+	}
 	n.items[index].Header = text
+	n.items[index].Text = text
+}
+
+func (n *navTree) SetCollapsed(collapsed bool, captions []string) {
+	n.collapsed = collapsed
+	for i := range n.items {
+		if i < len(captions) {
+			n.captions(i, captions[i])
+		}
+	}
 }
 
 func (n *navTree) Caption(index int) string {

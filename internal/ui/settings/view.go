@@ -42,6 +42,9 @@ type View struct {
 
 	nav           *navTree
 	navBackground *navBackdrop
+	navTitle      *widget.Label
+	navToggle     *widget.Button
+	navCollapsed  bool
 	section       string
 	initial       Model
 
@@ -64,7 +67,6 @@ type View struct {
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
 
-	gitAdvancedStack   *widget.StackPanel
 	gitAdvanced        *widget.Expander
 	gitAdvancedContent *widget.Grid
 
@@ -154,6 +156,7 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	v.buildSecretNotes()
 	v.SetSecretsLocked(false)
 	v.buildNav()
+	v.applyNavCollapsed()
 	v.search.LeadingIcon = buildSearchIcon(widget.CurrentTheme().InputPlaceholder)
 	v.wireModifiedTracking()
 	v.refreshSaveEnabled()
@@ -189,6 +192,12 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.sectionTitle, ok = named["sectionTitle"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: sectionTitle", ErrWidgetMissing)
+	}
+	if v.navTitle, ok = named["navTitle"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: navTitle", ErrWidgetMissing)
+	}
+	if v.navToggle, ok = named["navToggle"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: navToggle", ErrWidgetMissing)
 	}
 	if v.sectionGeneral, ok = named["sectionGeneral"].(*widget.Grid); !ok {
 		return fmt.Errorf("%w: sectionGeneral", ErrWidgetMissing)
@@ -244,9 +253,6 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.shallowDepth, ok = named["shallowDepth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: shallowDepth", ErrWidgetMissing)
 	}
-	if v.gitAdvancedStack, ok = named["gitAdvancedStack"].(*widget.StackPanel); !ok {
-		return fmt.Errorf("%w: gitAdvancedStack", ErrWidgetMissing)
-	}
 	if v.gitAdvanced, ok = named["gitAdvanced"].(*widget.Expander); !ok {
 		return fmt.Errorf("%w: gitAdvanced", ErrWidgetMissing)
 	}
@@ -280,8 +286,38 @@ func (v *View) attachContent() {
 	v.dlg.SetResizable(true)
 	v.dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
 	v.dlg.SetChromeless(true)
-	v.dlg.AddDragArea(image.Rect(0, 0, navWidth, headerHeight))
 	v.close.OnClick = v.dlg.RequestClose
+	v.navToggle.OnClick = v.toggleNav
+	v.dlg.AddDragArea(image.Rect(0, 0, navWidth, headerHeight))
+}
+
+func (v *View) toggleNav() {
+	v.navCollapsed = !v.navCollapsed
+	v.applyNavCollapsed()
+}
+
+func (v *View) applyNavCollapsed() {
+	width := navWidth
+	glyph := "Dialog.Settings.Nav.Collapse"
+	if v.navCollapsed {
+		width = navCollapsedWidth
+		glyph = "Dialog.Settings.Nav.Expand"
+	}
+	v.root.ColDefs[0].Value = float64(width)
+	v.navTitle.SetVisible(!v.navCollapsed)
+	v.navToggle.SetText(i18n.T(glyph))
+	v.nav.SetCollapsed(v.navCollapsed, navCaptions())
+	v.root.SetBounds(v.root.Bounds())
+	v.dlg.ClearDragAreas()
+	v.dlg.AddDragArea(image.Rect(0, 0, width, headerHeight))
+}
+
+func navCaptions() []string {
+	captions := make([]string, len(sectionOrder))
+	for i, s := range sectionOrder {
+		captions[i] = i18n.T(s.navKey)
+	}
+	return captions
 }
 
 func (v *View) populateLanguages() {

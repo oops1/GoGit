@@ -75,7 +75,7 @@ func TestSearchMatchesByGroupName(t *testing.T) {
 	if v.sectionGit.RowDefs[0].Value == 0 {
 		t.Fatal("the Fetch & sync group header must stay visible")
 	}
-	if v.sectionGit.RowDefs[gitAdvancedStackRow].Value != 0 {
+	if v.sectionGit.RowDefs[gitAdvancedRow].Value != 0 {
 		t.Fatal("the advanced group must collapse: the query does not reach it")
 	}
 }

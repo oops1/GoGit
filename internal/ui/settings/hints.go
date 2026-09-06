@@ -1,8 +1,6 @@
 package settings
 
 import (
-	"image"
-
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
@@ -84,26 +82,25 @@ func (v *View) buildHints() {
 	v.sectionSSH.SetBounds(v.sectionSSH.Bounds())
 }
 
-func (v *View) syncAdvancedWidth() {
-	want := v.gitAdvancedStack.Bounds().Dx()
-	b := v.gitAdvanced.Bounds()
-	if b.Dx() == want {
-		return
+func (v *View) advancedRowHeight() float64 {
+	if v.gitAdvanced.IsExpanded {
+		return advancedRowExpanded
 	}
-	v.gitAdvanced.SetBounds(image.Rect(b.Min.X, b.Min.Y, b.Min.X+want, b.Max.Y))
+	return advancedRowCollapsed
+}
+
+func (v *View) applyAdvancedRow() {
+	height := v.advancedRowHeight()
+	v.sectionGit.RowDefs[gitAdvancedRow].Value = height
+	for _, s := range v.searchSections {
+		if s.grid == v.sectionGit {
+			s.originalRows[gitAdvancedRow].Value = height
+		}
+	}
+	v.sectionGit.SetBounds(v.sectionGit.Bounds())
 }
 
 func (v *View) wireAdvanced() {
-	v.syncAdvancedWidth()
-	v.gitAdvanced.OnExpandedChanged = func(bool) {
-		before := v.gitAdvanced.Bounds().Dy()
-		v.syncAdvancedWidth()
-		v.gitAdvancedStack.Relayout()
-		v.syncAdvancedWidth()
-		after := v.gitAdvanced.Bounds().Dy()
-		if delta := after - before; delta != 0 {
-			b := v.dlg.Bounds()
-			v.dlg.Resize(b.Dx(), b.Dy()+delta)
-		}
-	}
+	v.applyAdvancedRow()
+	v.gitAdvanced.OnExpandedChanged = func(bool) { v.applyAdvancedRow() }
 }
