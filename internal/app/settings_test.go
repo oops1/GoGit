@@ -41,6 +41,10 @@ func TestOpenSettingsPassesConfigDerivedModelToShowSettings(t *testing.T) {
 	cfg.Git.AutoFetch = true
 	cfg.Git.FetchInterval = 45
 	cfg.Git.WorkTreeDepth = 3
+	cfg.Git.PullStrategy = config.PullStrategyRebase
+	cfg.Git.DefaultRemote = "upstream"
+	cfg.Git.PruneOnFetch = true
+	cfg.Git.ShallowDepth = 10
 	a := newTestAppWithConfig(t, cfg)
 
 	var got settings.Model
@@ -72,6 +76,10 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 		AutoFetch:     true,
 		FetchInterval: 120,
 		WorkTreeDepth: 5,
+		PullStrategy:  config.PullStrategyMerge,
+		DefaultRemote: "upstream",
+		PruneOnFetch:  true,
+		ShallowDepth:  25,
 	}
 	stubShowSettings(a, newModel, true)
 
@@ -85,6 +93,12 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	}
 	if a.Config().Git.WorkTreeDepth != 5 {
 		t.Fatalf("git worktree depth not updated: %+v", a.Config().Git)
+	}
+	if a.Config().Git.PullStrategy != config.PullStrategyMerge || a.Config().Git.DefaultRemote != "upstream" {
+		t.Fatalf("git network settings not updated: %+v", a.Config().Git)
+	}
+	if !a.Config().Git.PruneOnFetch || a.Config().Git.ShallowDepth != 25 {
+		t.Fatalf("git network settings not updated: %+v", a.Config().Git)
 	}
 	if a.Config().UI.ShowToolbar || a.Config().UI.ShowStatusBar {
 		t.Fatal("ui visibility flags not updated")
@@ -108,6 +122,10 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	}
 	if saved.Language != "ru" || saved.Theme != config.ThemeLight || saved.Git.LogMaxCount != 12345 || saved.Git.WorkTreeDepth != 5 {
 		t.Fatalf("saved config = %+v", saved)
+	}
+	if saved.Git.PullStrategy != config.PullStrategyMerge || saved.Git.DefaultRemote != "upstream" ||
+		!saved.Git.PruneOnFetch || saved.Git.ShallowDepth != 25 {
+		t.Fatalf("saved git network settings = %+v", saved.Git)
 	}
 }
 

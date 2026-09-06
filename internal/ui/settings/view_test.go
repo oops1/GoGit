@@ -45,6 +45,10 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"autoFetch":             widget.NewCheckBox(""),
 		"fetchInterval":         widget.NewNumericUpDown(),
 		"workTreeDepth":         widget.NewNumericUpDown(),
+		"pullStrategy":          widget.NewTextInput(""),
+		"defaultRemote":         widget.NewTextInput(""),
+		"pruneOnFetch":          widget.NewCheckBox(""),
+		"shallowDepth":          widget.NewNumericUpDown(),
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
 	}
@@ -82,7 +86,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "ok", "cancel"}
+	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch", "shallowDepth", "ok", "cancel"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -119,6 +123,10 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		AutoFetch:             true,
 		FetchInterval:         90,
 		WorkTreeDepth:         6,
+		PullStrategy:          config.PullStrategyMerge,
+		DefaultRemote:         "upstream",
+		PruneOnFetch:          true,
+		ShallowDepth:          15,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -148,6 +156,18 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 	}
 	if v.workTreeDepth.Value() != 6 {
 		t.Fatalf("workTreeDepth = %v", v.workTreeDepth.Value())
+	}
+	if v.pullStrategy.GetText() != config.PullStrategyMerge {
+		t.Fatalf("pullStrategy = %q", v.pullStrategy.GetText())
+	}
+	if v.defaultRemote.GetText() != "upstream" {
+		t.Fatalf("defaultRemote = %q", v.defaultRemote.GetText())
+	}
+	if !v.pruneOnFetch.IsChecked() {
+		t.Fatal("pruneOnFetch must be checked")
+	}
+	if v.shallowDepth.Value() != 15 {
+		t.Fatalf("shallowDepth = %v", v.shallowDepth.Value())
 	}
 }
 
@@ -203,6 +223,10 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		AutoFetch:             false,
 		FetchInterval:         300,
 		WorkTreeDepth:         0,
+		PullStrategy:          config.PullStrategyFF,
+		DefaultRemote:         "origin",
+		PruneOnFetch:          false,
+		ShallowDepth:          0,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 	v.language.SetSelected(1)
@@ -210,9 +234,13 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	clickCheckBox(v.showToolbar)
 	clickCheckBox(v.autoFetch)
 	clickCheckBox(v.journalFullAuthorName)
+	clickCheckBox(v.pruneOnFetch)
 	v.logMaxCount.SetValue(1234)
 	v.fetchInterval.SetValue(456)
 	v.workTreeDepth.SetValue(8)
+	v.pullStrategy.SetText(config.PullStrategyRebase)
+	v.defaultRemote.SetText("upstream")
+	v.shallowDepth.SetValue(15)
 
 	got := v.request()
 	want := Model{
@@ -225,6 +253,10 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		AutoFetch:             true,
 		FetchInterval:         456,
 		WorkTreeDepth:         8,
+		PullStrategy:          config.PullStrategyRebase,
+		DefaultRemote:         "upstream",
+		PruneOnFetch:          true,
+		ShallowDepth:          15,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)

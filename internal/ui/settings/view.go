@@ -33,6 +33,10 @@ type View struct {
 	autoFetch             *widget.CheckBox
 	fetchInterval         *widget.NumericUpDown
 	workTreeDepth         *widget.NumericUpDown
+	pullStrategy          *widget.TextInput
+	defaultRemote         *widget.TextInput
+	pruneOnFetch          *widget.CheckBox
+	shallowDepth          *widget.NumericUpDown
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
 
@@ -95,6 +99,18 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.workTreeDepth, ok = named["workTreeDepth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: workTreeDepth", ErrWidgetMissing)
 	}
+	if v.pullStrategy, ok = named["pullStrategy"].(*widget.TextInput); !ok {
+		return fmt.Errorf("%w: pullStrategy", ErrWidgetMissing)
+	}
+	if v.defaultRemote, ok = named["defaultRemote"].(*widget.TextInput); !ok {
+		return fmt.Errorf("%w: defaultRemote", ErrWidgetMissing)
+	}
+	if v.pruneOnFetch, ok = named["pruneOnFetch"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: pruneOnFetch", ErrWidgetMissing)
+	}
+	if v.shallowDepth, ok = named["shallowDepth"].(*widget.NumericUpDown); !ok {
+		return fmt.Errorf("%w: shallowDepth", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
@@ -131,6 +147,10 @@ func (v *View) apply(m Model) {
 	v.autoFetch.SetChecked(m.AutoFetch)
 	v.fetchInterval.SetValue(float64(m.FetchInterval))
 	v.workTreeDepth.SetValue(float64(m.WorkTreeDepth))
+	v.pullStrategy.SetText(m.PullStrategy)
+	v.defaultRemote.SetText(m.DefaultRemote)
+	v.pruneOnFetch.SetChecked(m.PruneOnFetch)
+	v.shallowDepth.SetValue(float64(m.ShallowDepth))
 }
 
 func (v *View) setLanguageSelection(code string) {
@@ -174,6 +194,10 @@ func (v *View) request() Model {
 		AutoFetch:             v.autoFetch.IsChecked(),
 		FetchInterval:         int(v.fetchInterval.Value()),
 		WorkTreeDepth:         int(v.workTreeDepth.Value()),
+		PullStrategy:          v.pullStrategy.GetText(),
+		DefaultRemote:         v.defaultRemote.GetText(),
+		PruneOnFetch:          v.pruneOnFetch.IsChecked(),
+		ShallowDepth:          int(v.shallowDepth.Value()),
 	}.Normalized()
 }
 

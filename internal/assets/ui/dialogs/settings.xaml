@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Width="480" Height="330">
+      Width="480" Height="450">
 
     <Grid.RowDefinitions>
-        <RowDefinition Height="270"/>
+        <RowDefinition Height="390"/>
         <RowDefinition Height="50"/>
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
@@ -14,9 +14,9 @@
     </Grid.ColumnDefinitions>
 
     <TabControl x:Name="tabs" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-                Width="480" Height="270" SelectedIndex="0">
+                Width="480" Height="390" SelectedIndex="0">
         <TabItem Header="{Loc Dialog.Settings.Tab.General}">
-            <Grid Width="480" Height="238">
+            <Grid Width="480" Height="358">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -52,8 +52,12 @@
             </Grid>
         </TabItem>
         <TabItem Header="{Loc Dialog.Settings.Tab.Git}">
-            <Grid Width="480" Height="238">
+            <Grid Width="480" Height="358">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
                     <RowDefinition Height="30"/>
@@ -81,6 +85,19 @@
                 <NumericUpDown x:Name="workTreeDepth" Grid.Row="3" Grid.Column="1"
                                 ToolTip="{Loc Dialog.Settings.WorkTreeDepth.Tip}"
                                 Minimum="0" Maximum="100" Increment="1"/>
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="{Loc Dialog.Settings.PullStrategy}"/>
+                <TextBox x:Name="pullStrategy" Grid.Row="4" Grid.Column="1"/>
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="{Loc Dialog.Settings.DefaultRemote}"/>
+                <TextBox x:Name="defaultRemote" Grid.Row="5" Grid.Column="1"/>
+
+                <CheckBox x:Name="pruneOnFetch" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                          Content="{Loc Dialog.Settings.PruneOnFetch}"/>
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="{Loc Dialog.Settings.ShallowDepth}"/>
+                <NumericUpDown x:Name="shallowDepth" Grid.Row="7" Grid.Column="1"
+                                Minimum="0" Maximum="100000" Increment="1"/>
             </Grid>
         </TabItem>
     </TabControl>

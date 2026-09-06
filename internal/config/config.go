@@ -20,6 +20,12 @@ const (
 )
 
 const (
+	PullStrategyFF     = "ff"
+	PullStrategyMerge  = "merge"
+	PullStrategyRebase = "rebase"
+)
+
+const (
 	MinWindowWidth  = 800
 	MinWindowHeight = 600
 )
@@ -50,6 +56,10 @@ type Git struct {
 	AutoFetch     bool   `toml:"auto_fetch"`
 	FetchInterval int    `toml:"fetch_interval_sec"`
 	WorkTreeDepth int    `toml:"worktree_scan_depth"`
+	PullStrategy  string `toml:"pull_strategy"`
+	DefaultRemote string `toml:"default_remote"`
+	PruneOnFetch  bool   `toml:"prune_on_fetch"`
+	ShallowDepth  int    `toml:"shallow_depth"`
 }
 
 type UI struct {
@@ -86,7 +96,7 @@ func Default() *Config {
 		Language: "en",
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
-		Git:      Git{LogMaxCount: 500, FetchInterval: 300},
+		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin"},
 		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
 	}
 }
@@ -136,6 +146,17 @@ func (c *Config) Normalize() {
 	}
 	if c.Git.WorkTreeDepth < 0 {
 		c.Git.WorkTreeDepth = 0
+	}
+	switch c.Git.PullStrategy {
+	case PullStrategyMerge, PullStrategyRebase:
+	default:
+		c.Git.PullStrategy = PullStrategyFF
+	}
+	if c.Git.DefaultRemote == "" {
+		c.Git.DefaultRemote = "origin"
+	}
+	if c.Git.ShallowDepth < 0 {
+		c.Git.ShallowDepth = 0
 	}
 }
 

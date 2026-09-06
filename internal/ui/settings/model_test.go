@@ -17,6 +17,10 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 	cfg.Git.AutoFetch = true
 	cfg.Git.FetchInterval = 120
 	cfg.Git.WorkTreeDepth = 6
+	cfg.Git.PullStrategy = config.PullStrategyRebase
+	cfg.Git.DefaultRemote = "upstream"
+	cfg.Git.PruneOnFetch = true
+	cfg.Git.ShallowDepth = 20
 
 	m := FromConfig(cfg)
 
@@ -31,6 +35,10 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 		AutoFetch:             true,
 		FetchInterval:         120,
 		WorkTreeDepth:         6,
+		PullStrategy:          config.PullStrategyRebase,
+		DefaultRemote:         "upstream",
+		PruneOnFetch:          true,
+		ShallowDepth:          20,
 	}
 	if m != want {
 		t.Fatalf("model = %+v, want %+v", m, want)
@@ -44,6 +52,9 @@ func TestFromConfigNormalizesOutOfRangeStoredValues(t *testing.T) {
 	cfg.Git.LogMaxCount = 1
 	cfg.Git.FetchInterval = 1
 	cfg.Git.WorkTreeDepth = MaxWorkTreeDepth + 1
+	cfg.Git.PullStrategy = "bogus"
+	cfg.Git.DefaultRemote = ""
+	cfg.Git.ShallowDepth = MaxShallowDepth + 1
 
 	m := FromConfig(cfg)
 
@@ -61,6 +72,15 @@ func TestFromConfigNormalizesOutOfRangeStoredValues(t *testing.T) {
 	}
 	if m.WorkTreeDepth != MaxWorkTreeDepth {
 		t.Fatalf("workTreeDepth = %d, want %d", m.WorkTreeDepth, MaxWorkTreeDepth)
+	}
+	if m.PullStrategy != config.PullStrategyFF {
+		t.Fatalf("pullStrategy = %q, want %q", m.PullStrategy, config.PullStrategyFF)
+	}
+	if m.DefaultRemote != "origin" {
+		t.Fatalf("defaultRemote = %q, want origin", m.DefaultRemote)
+	}
+	if m.ShallowDepth != MaxShallowDepth {
+		t.Fatalf("shallowDepth = %d, want %d", m.ShallowDepth, MaxShallowDepth)
 	}
 }
 
@@ -138,6 +158,59 @@ func TestNormalizedClampsFetchInterval(t *testing.T) {
 	}
 }
 
+func TestNormalizedKeepsValidPullStrategies(t *testing.T) {
+	for _, strategy := range []string{config.PullStrategyFF, config.PullStrategyMerge, config.PullStrategyRebase} {
+		m := Model{PullStrategy: strategy}.Normalized()
+		if m.PullStrategy != strategy {
+			t.Fatalf("pullStrategy = %q, want %q", m.PullStrategy, strategy)
+		}
+	}
+}
+
+func TestNormalizedFallsBackToFFForUnknownPullStrategy(t *testing.T) {
+	for _, strategy := range []string{"", "bogus", "FF"} {
+		m := Model{PullStrategy: strategy}.Normalized()
+		if m.PullStrategy != config.PullStrategyFF {
+			t.Fatalf("pullStrategy(%q) = %q, want %q", strategy, m.PullStrategy, config.PullStrategyFF)
+		}
+	}
+}
+
+func TestNormalizedFallsBackToOriginForEmptyDefaultRemote(t *testing.T) {
+	m := Model{DefaultRemote: ""}.Normalized()
+	if m.DefaultRemote != "origin" {
+		t.Fatalf("defaultRemote = %q, want origin", m.DefaultRemote)
+	}
+}
+
+func TestNormalizedKeepsNonEmptyDefaultRemote(t *testing.T) {
+	m := Model{DefaultRemote: "upstream"}.Normalized()
+	if m.DefaultRemote != "upstream" {
+		t.Fatalf("defaultRemote = %q, want upstream", m.DefaultRemote)
+	}
+}
+
+func TestNormalizedClampsShallowDepth(t *testing.T) {
+	cases := map[string]struct {
+		in   int
+		want int
+	}{
+		"below minimum": {in: MinShallowDepth - 1, want: MinShallowDepth},
+		"at minimum":    {in: MinShallowDepth, want: MinShallowDepth},
+		"in range":      {in: 50, want: 50},
+		"at maximum":    {in: MaxShallowDepth, want: MaxShallowDepth},
+		"above maximum": {in: MaxShallowDepth + 1, want: MaxShallowDepth},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := Model{ShallowDepth: tc.in}.Normalized()
+			if m.ShallowDepth != tc.want {
+				t.Fatalf("shallowDepth = %d, want %d", m.ShallowDepth, tc.want)
+			}
+		})
+	}
+}
+
 func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 	cfg := config.Default()
 	cfg.Repositories = []config.Repository{{ID: "r1", Name: "keep", Path: "keep"}}
@@ -152,6 +225,10 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 		AutoFetch:             true,
 		FetchInterval:         MinFetchInterval - 5,
 		WorkTreeDepth:         -7,
+		PullStrategy:          "bogus",
+		DefaultRemote:         "",
+		PruneOnFetch:          true,
+		ShallowDepth:          -3,
 	}
 	m.ApplyTo(cfg)
 
@@ -179,6 +256,18 @@ func TestApplyToWritesNormalizedFieldsIntoConfig(t *testing.T) {
 	if cfg.Git.WorkTreeDepth != MinWorkTreeDepth {
 		t.Fatalf("workTreeDepth = %d, want %d", cfg.Git.WorkTreeDepth, MinWorkTreeDepth)
 	}
+	if cfg.Git.PullStrategy != config.PullStrategyFF {
+		t.Fatalf("pullStrategy = %q, want %q", cfg.Git.PullStrategy, config.PullStrategyFF)
+	}
+	if cfg.Git.DefaultRemote != "origin" {
+		t.Fatalf("defaultRemote = %q, want origin", cfg.Git.DefaultRemote)
+	}
+	if !cfg.Git.PruneOnFetch {
+		t.Fatal("pruneOnFetch must be true")
+	}
+	if cfg.Git.ShallowDepth != MinShallowDepth {
+		t.Fatalf("shallowDepth = %d, want %d", cfg.Git.ShallowDepth, MinShallowDepth)
+	}
 	if len(cfg.Repositories) != 1 || cfg.Repositories[0].ID != "r1" {
 		t.Fatal("ApplyTo must not touch unrelated config fields")
 	}
@@ -195,6 +284,10 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	src.Git.AutoFetch = true
 	src.Git.FetchInterval = 900
 	src.Git.WorkTreeDepth = 8
+	src.Git.PullStrategy = config.PullStrategyMerge
+	src.Git.DefaultRemote = "upstream"
+	src.Git.PruneOnFetch = true
+	src.Git.ShallowDepth = 30
 
 	m := FromConfig(src)
 
@@ -213,6 +306,10 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	if dst.Git.LogMaxCount != src.Git.LogMaxCount || dst.Git.AutoFetch != src.Git.AutoFetch ||
 		dst.Git.FetchInterval != src.Git.FetchInterval || dst.Git.WorkTreeDepth != src.Git.WorkTreeDepth {
 		t.Fatalf("git mismatch: %+v vs %+v", dst.Git, src.Git)
+	}
+	if dst.Git.PullStrategy != src.Git.PullStrategy || dst.Git.DefaultRemote != src.Git.DefaultRemote ||
+		dst.Git.PruneOnFetch != src.Git.PruneOnFetch || dst.Git.ShallowDepth != src.Git.ShallowDepth {
+		t.Fatalf("git network mismatch: %+v vs %+v", dst.Git, src.Git)
 	}
 }
 

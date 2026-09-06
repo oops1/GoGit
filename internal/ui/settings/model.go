@@ -11,6 +11,9 @@ const (
 
 	MinWorkTreeDepth = 0
 	MaxWorkTreeDepth = 100
+
+	MinShallowDepth = 0
+	MaxShallowDepth = 100000
 )
 
 type Model struct {
@@ -24,6 +27,10 @@ type Model struct {
 	AutoFetch             bool
 	FetchInterval         int
 	WorkTreeDepth         int
+	PullStrategy          string
+	DefaultRemote         string
+	PruneOnFetch          bool
+	ShallowDepth          int
 }
 
 func FromConfig(cfg *config.Config) Model {
@@ -38,6 +45,10 @@ func FromConfig(cfg *config.Config) Model {
 		AutoFetch:             cfg.Git.AutoFetch,
 		FetchInterval:         cfg.Git.FetchInterval,
 		WorkTreeDepth:         cfg.Git.WorkTreeDepth,
+		PullStrategy:          cfg.Git.PullStrategy,
+		DefaultRemote:         cfg.Git.DefaultRemote,
+		PruneOnFetch:          cfg.Git.PruneOnFetch,
+		ShallowDepth:          cfg.Git.ShallowDepth,
 	}
 	return m.Normalized()
 }
@@ -54,6 +65,15 @@ func (m Model) Normalized() Model {
 	m.LogMaxCount = clamp(m.LogMaxCount, MinLogMaxCount, MaxLogMaxCount)
 	m.FetchInterval = clamp(m.FetchInterval, MinFetchInterval, MaxFetchInterval)
 	m.WorkTreeDepth = clamp(m.WorkTreeDepth, MinWorkTreeDepth, MaxWorkTreeDepth)
+	switch m.PullStrategy {
+	case config.PullStrategyMerge, config.PullStrategyRebase:
+	default:
+		m.PullStrategy = config.PullStrategyFF
+	}
+	if m.DefaultRemote == "" {
+		m.DefaultRemote = "origin"
+	}
+	m.ShallowDepth = clamp(m.ShallowDepth, MinShallowDepth, MaxShallowDepth)
 	return m
 }
 
@@ -69,6 +89,10 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.AutoFetch = n.AutoFetch
 	cfg.Git.FetchInterval = n.FetchInterval
 	cfg.Git.WorkTreeDepth = n.WorkTreeDepth
+	cfg.Git.PullStrategy = n.PullStrategy
+	cfg.Git.DefaultRemote = n.DefaultRemote
+	cfg.Git.PruneOnFetch = n.PruneOnFetch
+	cfg.Git.ShallowDepth = n.ShallowDepth
 }
 
 func clamp(v, min, max int) int {
