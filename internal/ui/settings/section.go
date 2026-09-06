@@ -1,8 +1,6 @@
 package settings
 
 import (
-	"github.com/oops1/headless-gui/v3/widget/treeview"
-
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
@@ -18,14 +16,14 @@ func (v *View) sectionWidgets() map[string]*widget.Grid {
 }
 
 func (v *View) buildNav() {
-	v.nav = newNavTree()
-	v.nav.Tree.OnSelect = func(item *treeview.TreeViewItem) {
-		if id, ok := item.Tag.(string); ok {
-			v.SetSection(id)
+	v.nav = newNavPanel()
+	v.nav.OnSelect = func(index int) {
+		if index >= 0 && index < len(sectionOrder) {
+			v.SetSection(sectionOrder[index].id)
 		}
 	}
-	v.navHost.AddChild(v.nav)
-	v.navHost.SetBounds(v.navHost.Bounds())
+	v.dlg.SetNavPanel(v.nav)
+	v.dlg.SetNavButton(true)
 	v.SetSection(defaultSectionID)
 }
 
@@ -48,10 +46,11 @@ func (v *View) applySection() {
 	}
 	v.sectionTitle.SetText(i18n.T(sectionTitleKey(v.section)))
 	v.syncNavSelection()
+	v.syncScroll()
 }
 
 func (v *View) syncNavSelection() {
-	v.nav.SetSelected(v.section)
+	v.nav.SetSelectedSection(v.section)
 }
 
 func (v *View) Modified() bool {

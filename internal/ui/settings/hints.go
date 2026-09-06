@@ -81,26 +81,3 @@ func (v *View) buildHints() {
 	addGroupDescription(v.sectionSSH, "Dialog.Settings.SSH.Desc", 1)
 	v.sectionSSH.SetBounds(v.sectionSSH.Bounds())
 }
-
-func (v *View) advancedRowHeight() float64 {
-	if v.gitAdvanced.IsExpanded {
-		return advancedRowExpanded
-	}
-	return advancedRowCollapsed
-}
-
-func (v *View) applyAdvancedRow() {
-	height := v.advancedRowHeight()
-	v.sectionGit.RowDefs[gitAdvancedRow].Value = height
-	for _, s := range v.searchSections {
-		if s.grid == v.sectionGit {
-			s.originalRows[gitAdvancedRow].Value = height
-		}
-	}
-	v.sectionGit.SetBounds(v.sectionGit.Bounds())
-}
-
-func (v *View) wireAdvanced() {
-	v.applyAdvancedRow()
-	v.gitAdvanced.OnExpandedChanged = func(bool) { v.applyAdvancedRow() }
-}

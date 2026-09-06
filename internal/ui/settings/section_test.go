@@ -1,8 +1,6 @@
 package settings
 
 import (
-	"github.com/oops1/headless-gui/v3/widget/treeview"
-
 	"errors"
 	"image/color"
 	"testing"
@@ -60,8 +58,8 @@ func TestSetSectionSwitchesVisibilityTitleAndNavSelection(t *testing.T) {
 	if got := v.sectionTitle.Text(); got != want {
 		t.Fatalf("sectionTitle = %q, want %q", got, want)
 	}
-	if sel := v.nav.Tree.SelectedItem(); sel == nil || sel.Tag != "credentials" {
-		t.Fatal("nav selection must follow SetSection")
+	if got := v.nav.Selected(); got != 2 {
+		t.Fatalf("nav selection = %d, want the credentials item", got)
 	}
 }
 
@@ -98,8 +96,8 @@ func TestSectionStatePersistsAcrossSwitches(t *testing.T) {
 
 func TestClickingNavItemSwitchesSection(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	b := v.nav.Bounds()
-	x, y := b.Min.X+8, b.Min.Y+navItemHeight+navItemHeight/2
+	item := v.nav.ItemRect(1)
+	x, y := item.Min.X+8, item.Min.Y+item.Dy()/2
 	ev := widget.MouseEvent{Button: widget.MouseLeft, X: x, Y: y, Pressed: true}
 	v.nav.OnMouseButton(ev)
 	ev.Pressed = false
@@ -124,8 +122,9 @@ func TestDialogIsResizableWithDeclaredMinimumSize(t *testing.T) {
 func TestDialogContentStretchesOnResize(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
 	before := v.root.Bounds()
+	size := v.dlg.Bounds()
 
-	v.dlg.Resize(before.Dx()+200, before.Dy()+150)
+	v.dlg.Resize(size.Dx()+200, size.Dy()+150)
 
 	after := v.root.Bounds()
 	if after.Dx() <= before.Dx() || after.Dy() <= before.Dy() {
@@ -133,30 +132,6 @@ func TestDialogContentStretchesOnResize(t *testing.T) {
 	}
 	if after != v.dlg.ContentBounds() {
 		t.Fatalf("content bounds = %v, want %v", after, v.dlg.ContentBounds())
-	}
-}
-
-func TestNavApplyThemeSetsAccentSelectionAndText(t *testing.T) {
-	v := newTestView(t, []string{"en"}, Model{})
-	theme := widget.Win11DarkTheme()
-
-	v.nav.ApplyTheme(theme)
-
-	want := premultiplyAlpha(theme.Accent, navSelectionAlpha)
-	if got := v.nav.Tree.Theme.SelectColor; got != want {
-		t.Fatalf("SelectColor = %+v, want %+v", got, want)
-	}
-	if want.R > want.A || want.G > want.A || want.B > want.A {
-		t.Fatalf("SelectColor = %+v is not premultiplied (component exceeds alpha)", want)
-	}
-	selected := treeview.NewItem("x")
-	selected.IsSelected = true
-	fg, bold, ok := v.nav.Tree.ItemStyle(selected)
-	if !ok || bold || fg != theme.Accent {
-		t.Fatalf("ItemStyle(selected) = %v,%v,%v", fg, bold, ok)
-	}
-	if _, _, ok := v.nav.Tree.ItemStyle(treeview.NewItem("y")); ok {
-		t.Fatal("ItemStyle(unselected) must defer to the theme default")
 	}
 }
 

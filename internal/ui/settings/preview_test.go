@@ -80,10 +80,17 @@ func renderPreviewFrames(t *testing.T, dir string, variant previewVariant, secti
 	}
 	view.SetCredentials(goldenSampleCredentials())
 	view.SetKeys(goldenSampleKeys())
+	view.SetCredentialSourceInfo(
+		`C:\Users\valer\AppData\Roaming\GoGit\vault.db`,
+		"Argon2id, AES-256-GCM",
+		[]CredentialHelperEntry{{Name: "manager-core", Supported: true}},
+	)
 	view.SetSection(section)
 	view.gitAdvanced.SetExpanded(variant.advanced)
+	view.credentialForm.SetExpanded(!variant.advanced)
+	view.sshForm.SetExpanded(!variant.advanced)
 	if variant.collapsed {
-		view.toggleNav()
+		view.Dialog().SetNavCollapsed(true)
 	}
 	view.Dialog().Resize(variant.width, variant.height)
 	eng.ShowModal(view.Dialog())

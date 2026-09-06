@@ -9,8 +9,10 @@ const (
 
 	previewCanvasMargin = 70
 
+	scrollbarWidth       = 10
+	sectionBottomPadding = 12
+
 	navWidth              = 180
-	navCollapsedWidth     = 46
 	navTitleFontSize      = 15
 	navTitleTopMargin     = 20
 	navTitleLeftMargin    = 16
@@ -21,9 +23,6 @@ const (
 	navItemGap            = 2
 	navSelectionRadius    = 6
 	navSelectionSideInset = 8
-	headerHeight          = 46
-	navSelectionAlpha     = 28
-	navHoverAlpha         = 14
 
 	searchHeight        = 32
 	searchRadius        = 6
@@ -37,9 +36,11 @@ const (
 	hintLineHeight          = 17
 	hintFieldRowSpan        = 2
 
-	advancedRowCollapsed = 34
-	advancedRowExpanded  = 172
-	checkboxTextIndent   = 22
+	expanderRowCollapsed      = 34
+	advancedRowExpanded       = 172
+	credentialFormRowExpanded = 250
+	sshFormRowExpanded        = 216
+	checkboxTextIndent        = 22
 
 	tableRowHeight            = 28
 	tableHeaderHeight         = 30

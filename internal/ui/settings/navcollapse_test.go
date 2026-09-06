@@ -3,95 +3,94 @@ package settings
 import (
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget"
-
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-func TestNavigationStartsExpanded(t *testing.T) {
+func TestNavigationStartsExpandedWithTheChosenSection(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
 
-	if v.navCollapsed {
+	if v.nav.IsCollapsed() {
 		t.Fatal("navigation must start expanded")
-	}
-	if v.root.ColDefs[0].Value != navWidth {
-		t.Fatalf("nav column = %v, want %d", v.root.ColDefs[0].Value, navWidth)
 	}
 	if got := v.nav.Caption(0); got != i18n.T("Dialog.Settings.Nav.General") {
 		t.Fatalf("nav caption = %q, want the section name", got)
 	}
-	if got := v.navToggle.Text; got != i18n.T("Dialog.Settings.Nav.Collapse") {
-		t.Fatalf("toggle glyph = %q, want the collapse glyph", got)
+	if got := v.nav.Selected(); got != 0 {
+		t.Fatalf("selected item = %d, want the first one", got)
 	}
 }
 
-func TestTogglingNavigationShrinksItToIconsAndBack(t *testing.T) {
+func TestTheTitleBarButtonCollapsesTheNavigationToIcons(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
+	expanded := v.nav.Width()
 
-	v.toggleNav()
+	v.Dialog().SetNavCollapsed(true)
 
-	if v.root.ColDefs[0].Value != navCollapsedWidth {
-		t.Fatalf("collapsed nav column = %v, want %d", v.root.ColDefs[0].Value, navCollapsedWidth)
+	if !v.nav.IsCollapsed() {
+		t.Fatal("the title bar button must collapse the navigation panel")
 	}
-	if got := v.nav.Caption(0); got != "" {
-		t.Fatalf("collapsed nav caption = %q, want it empty", got)
-	}
-	if v.navTitle.IsVisible() {
-		t.Fatal("the window title must hide while the navigation is collapsed")
-	}
-	if got := v.navToggle.Text; got != i18n.T("Dialog.Settings.Nav.Expand") {
-		t.Fatalf("toggle glyph = %q, want the expand glyph", got)
+	if v.nav.Width() >= expanded {
+		t.Fatalf("collapsed width = %d, want less than %d", v.nav.Width(), expanded)
 	}
 
-	v.toggleNav()
+	v.Dialog().SetNavCollapsed(false)
 
-	if v.root.ColDefs[0].Value != navWidth {
-		t.Fatalf("restored nav column = %v, want %d", v.root.ColDefs[0].Value, navWidth)
+	if v.nav.IsCollapsed() {
+		t.Fatal("the button must bring the navigation back")
 	}
-	if got := v.nav.Caption(0); got != i18n.T("Dialog.Settings.Nav.General") {
-		t.Fatalf("restored nav caption = %q, want the section name", got)
-	}
-	if !v.navTitle.IsVisible() {
-		t.Fatal("the window title must come back with the navigation")
+	if got := v.nav.Width(); got != expanded {
+		t.Fatalf("restored width = %d, want %d", got, expanded)
 	}
 }
 
-func TestSearchKeepsTheNavigationCollapsed(t *testing.T) {
+func TestChoosingAnItemInTheNavigationSwitchesTheSection(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.toggleNav()
+
+	v.nav.OnSelect(1)
+
+	if got := v.Section(); got != "git" {
+		t.Fatalf("section = %q, want %q", got, "git")
+	}
+	v.nav.OnSelect(-1)
+	v.nav.OnSelect(len(sectionOrder))
+	if got := v.Section(); got != "git" {
+		t.Fatalf("section = %q, want it unchanged by an index outside the list", got)
+	}
+}
+
+func TestSearchCountsAppearNextToTheSectionName(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{})
 
 	v.applySearch("journal")
 
-	if got := v.nav.Caption(0); got != "" {
-		t.Fatalf("nav caption while searching = %q, want it empty", got)
+	if got := v.nav.Caption(0); got == i18n.T("Dialog.Settings.Nav.General") {
+		t.Fatal("the matching section must show how many settings matched")
 	}
 }
 
-func TestSetCaptionIgnoresIndexesOutsideTheNavigation(t *testing.T) {
+func TestCaptionIgnoresIndexesOutsideTheNavigation(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
 
-	v.nav.SetCollapsed(false, []string{"only one"})
 	v.nav.SetCaption(-1, "x")
 	v.nav.SetCaption(len(sectionOrder), "x")
 
-	if got := v.nav.Caption(0); got != "only one" {
-		t.Fatalf("nav caption = %q, want %q", got, "only one")
-	}
 	if got := v.nav.Caption(-1); got != "" {
 		t.Fatalf("Caption(-1) = %q, want it empty", got)
 	}
 	if got := v.nav.Caption(len(sectionOrder)); got != "" {
 		t.Fatalf("Caption past the end = %q, want it empty", got)
 	}
+	if got := v.nav.Caption(0); got != i18n.T("Dialog.Settings.Nav.General") {
+		t.Fatalf("nav caption = %q, want it untouched", got)
+	}
 }
 
-func TestNavigationBackdropTakesThePanelColourFromTheTheme(t *testing.T) {
+func TestSelectingAnUnknownSectionLeavesTheNavigationAlone(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	theme := widget.Win11DarkTheme()
 
-	v.navBackground.ApplyTheme(theme)
+	v.nav.SetSelectedSection("nothing")
 
-	if v.navBackground.Background != theme.PanelBG {
-		t.Fatalf("backdrop background = %v, want %v", v.navBackground.Background, theme.PanelBG)
+	if got := v.nav.Selected(); got != 0 {
+		t.Fatalf("selected item = %d, want it unchanged", got)
 	}
 }

@@ -3,7 +3,6 @@ package settings
 import (
 	"errors"
 	"fmt"
-	"image"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -30,9 +29,10 @@ type View struct {
 	dlg *widget.Dialog
 
 	root         *widget.Grid
-	navHost      *widget.Grid
+	sectionArea  *widget.Grid
+	sectionHost  *widget.Grid
+	scroll       *sectionScroller
 	search       *widget.TextInput
-	close        *widget.Button
 	sectionTitle *widget.Label
 
 	sectionGeneral     *widget.Grid
@@ -40,13 +40,9 @@ type View struct {
 	sectionCredentials *widget.Grid
 	sectionSSH         *widget.Grid
 
-	nav           *navTree
-	navBackground *navBackdrop
-	navTitle      *widget.Label
-	navToggle     *widget.Button
-	navCollapsed  bool
-	section       string
-	initial       Model
+	nav     *navPanel
+	section string
+	initial Model
 
 	unsavedDialog *widget.Dialog
 
@@ -69,6 +65,11 @@ type View struct {
 
 	gitAdvanced        *widget.Expander
 	gitAdvancedContent *widget.Grid
+
+	credentialForm        *widget.Expander
+	credentialFormContent *widget.Grid
+	sshForm               *widget.Expander
+	sshFormContent        *widget.Grid
 
 	credentialSource              *widget.Dropdown
 	credentialSourceStorePath     *widget.Label
@@ -155,13 +156,13 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	v.wireSecrets()
 	v.buildSecretNotes()
 	v.SetSecretsLocked(false)
+	v.attachScroll()
 	v.buildNav()
-	v.applyNavCollapsed()
 	v.search.LeadingIcon = buildSearchIcon(widget.CurrentTheme().InputPlaceholder)
 	v.wireModifiedTracking()
 	v.refreshSaveEnabled()
 	v.buildHints()
-	v.wireAdvanced()
+	v.wireExpanders()
 	v.buildSearchIndex()
 	v.buildSearchSections()
 	v.search.OnChange = v.applySearch
@@ -175,29 +176,17 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.root, ok = named["root"].(*widget.Grid); !ok {
 		return fmt.Errorf("%w: root", ErrWidgetMissing)
 	}
-	if v.navHost, ok = named["navHost"].(*widget.Grid); !ok {
-		return fmt.Errorf("%w: navHost", ErrWidgetMissing)
-	}
-	panel, ok := named["navBackground"].(*widget.Panel)
-	if !ok {
-		return fmt.Errorf("%w: navBackground", ErrWidgetMissing)
-	}
-	v.navBackground = &navBackdrop{Panel: panel}
-	v.navBackground.Background = widget.CurrentTheme().PanelBG
-	if v.close, ok = named["close"].(*widget.Button); !ok {
-		return fmt.Errorf("%w: close", ErrWidgetMissing)
-	}
 	if v.search, ok = named["search"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: search", ErrWidgetMissing)
 	}
 	if v.sectionTitle, ok = named["sectionTitle"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: sectionTitle", ErrWidgetMissing)
 	}
-	if v.navTitle, ok = named["navTitle"].(*widget.Label); !ok {
-		return fmt.Errorf("%w: navTitle", ErrWidgetMissing)
+	if v.sectionArea, ok = named["sectionArea"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sectionArea", ErrWidgetMissing)
 	}
-	if v.navToggle, ok = named["navToggle"].(*widget.Button); !ok {
-		return fmt.Errorf("%w: navToggle", ErrWidgetMissing)
+	if v.sectionHost, ok = named["sectionHost"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sectionHost", ErrWidgetMissing)
 	}
 	if v.sectionGeneral, ok = named["sectionGeneral"].(*widget.Grid); !ok {
 		return fmt.Errorf("%w: sectionGeneral", ErrWidgetMissing)
@@ -259,6 +248,18 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.gitAdvancedContent, ok = named["gitAdvancedContent"].(*widget.Grid); !ok {
 		return fmt.Errorf("%w: gitAdvancedContent", ErrWidgetMissing)
 	}
+	if v.credentialForm, ok = named["credentialForm"].(*widget.Expander); !ok {
+		return fmt.Errorf("%w: credentialForm", ErrWidgetMissing)
+	}
+	if v.credentialFormContent, ok = named["credentialFormContent"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: credentialFormContent", ErrWidgetMissing)
+	}
+	if v.sshForm, ok = named["sshForm"].(*widget.Expander); !ok {
+		return fmt.Errorf("%w: sshForm", ErrWidgetMissing)
+	}
+	if v.sshFormContent, ok = named["sshFormContent"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sshFormContent", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
@@ -282,42 +283,12 @@ func (v *View) bind(named map[string]widget.Widget) error {
 
 func (v *View) attachContent() {
 	v.dlg.RemoveChild(v.root)
+	v.root.RemoveChild(v.search)
 	v.dlg.SetContent(v.root)
 	v.dlg.SetResizable(true)
 	v.dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
-	v.dlg.SetChromeless(true)
-	v.close.OnClick = v.dlg.RequestClose
-	v.navToggle.OnClick = v.toggleNav
-	v.dlg.AddDragArea(image.Rect(0, 0, navWidth, headerHeight))
-}
-
-func (v *View) toggleNav() {
-	v.navCollapsed = !v.navCollapsed
-	v.applyNavCollapsed()
-}
-
-func (v *View) applyNavCollapsed() {
-	width := navWidth
-	glyph := "Dialog.Settings.Nav.Collapse"
-	if v.navCollapsed {
-		width = navCollapsedWidth
-		glyph = "Dialog.Settings.Nav.Expand"
-	}
-	v.root.ColDefs[0].Value = float64(width)
-	v.navTitle.SetVisible(!v.navCollapsed)
-	v.navToggle.SetText(i18n.T(glyph))
-	v.nav.SetCollapsed(v.navCollapsed, navCaptions())
-	v.root.SetBounds(v.root.Bounds())
-	v.dlg.ClearDragAreas()
-	v.dlg.AddDragArea(image.Rect(0, 0, width, headerHeight))
-}
-
-func navCaptions() []string {
-	captions := make([]string, len(sectionOrder))
-	for i, s := range sectionOrder {
-		captions[i] = i18n.T(s.navKey)
-	}
-	return captions
+	v.dlg.SetTitleBarContent(v.search)
+	v.dlg.SetWindowButtons(true)
 }
 
 func (v *View) populateLanguages() {

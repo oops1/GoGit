@@ -1,10 +1,7 @@
 package settings
 
 import (
-	"image/color"
-
 	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/treeview"
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/icons"
@@ -44,96 +41,48 @@ func isKnownSection(id string) bool {
 	return false
 }
 
-type navBackdrop struct {
-	*widget.Panel
+type navPanel struct {
+	*widget.NavPanel
+
+	items []widget.NavPanelItem
 }
 
-func (b *navBackdrop) ApplyTheme(t *widget.Theme) {
-	b.Panel.ApplyTheme(t)
-	b.Background = t.PanelBG
-}
-
-type navTree struct {
-	*widget.TreeViewWidget
-
-	items     []*treeview.TreeViewItem
-	collapsed bool
-}
-
-func newNavTree() *navTree {
-	n := &navTree{TreeViewWidget: widget.NewTreeViewWidget()}
-	n.Tree.ItemHeight = navItemHeight
-	n.Tree.IconSize = navIconSize
+func newNavPanel() *navPanel {
+	n := &navPanel{NavPanel: widget.NewNavPanel()}
+	n.ExpandedWidth = navWidth
+	n.ItemHeight = navItemHeight
+	n.IconSize = navIconSize
 	for _, s := range sectionOrder {
-		item := treeview.NewItem(i18n.T(s.navKey))
-		item.Tag = s.id
-		item.Icon = icons.ToolbarPlain(s.icon, navIconSize)
-		n.items = append(n.items, item)
-		n.AddRoot(item)
+		n.items = append(n.items, widget.NavPanelItem{
+			Icon: icons.ToolbarPlain(s.icon, navIconSize),
+			Text: i18n.T(s.navKey),
+			Tag:  s.id,
+		})
 	}
+	n.SetItems(n.items)
 	return n
 }
 
-func (n *navTree) ApplyTheme(t *widget.Theme) {
-	n.TreeViewWidget.ApplyTheme(t)
-	accent := t.Accent
-	n.Tree.Theme.SelectColor = premultiplyAlpha(accent, navSelectionAlpha)
-	n.Tree.Theme.HoverColor = premultiplyAlpha(accent, navHoverAlpha)
-	n.Tree.ItemStyle = func(item *treeview.TreeViewItem) (color.RGBA, bool, bool) {
-		if item.IsSelected {
-			return accent, false, true
-		}
-		return color.RGBA{}, false, false
-	}
-}
-
-func (n *navTree) SetSelected(id string) {
-	for _, item := range n.items {
-		if item.Tag == id {
-			n.Tree.SetSelectedItem(item)
+func (n *navPanel) SetSelectedSection(id string) {
+	for i, s := range sectionOrder {
+		if s.id == id {
+			n.SetSelected(i)
 			return
 		}
 	}
 }
 
-func (n *navTree) SetCaption(index int, text string) {
+func (n *navPanel) SetCaption(index int, text string) {
 	if index < 0 || index >= len(n.items) {
 		return
 	}
-	n.captions(index, text)
-}
-
-func (n *navTree) captions(index int, text string) {
-	if n.collapsed {
-		n.items[index].Header = ""
-		n.items[index].Text = ""
-		return
-	}
-	n.items[index].Header = text
 	n.items[index].Text = text
+	n.SetItems(n.items)
 }
 
-func (n *navTree) SetCollapsed(collapsed bool, captions []string) {
-	n.collapsed = collapsed
-	for i := range n.items {
-		if i < len(captions) {
-			n.captions(i, captions[i])
-		}
-	}
-}
-
-func (n *navTree) Caption(index int) string {
+func (n *navPanel) Caption(index int) string {
 	if index < 0 || index >= len(n.items) {
 		return ""
 	}
-	return n.items[index].Header
-}
-
-func premultiplyAlpha(c color.RGBA, alpha uint8) color.RGBA {
-	return color.RGBA{
-		R: uint8(uint32(c.R) * uint32(alpha) / 255),
-		G: uint8(uint32(c.G) * uint32(alpha) / 255),
-		B: uint8(uint32(c.B) * uint32(alpha) / 255),
-		A: alpha,
-	}
+	return n.items[index].Text
 }

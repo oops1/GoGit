@@ -10,7 +10,11 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const gitAdvancedRow = 15
+const (
+	gitAdvancedRow    = 15
+	credentialFormRow = 14
+	sshFormRow        = 5
+)
 
 type searchField struct {
 	section    string
@@ -285,6 +289,7 @@ func (v *View) applySearchSection(s *searchSectionState, hidden map[int]bool, em
 	s.grid.RowDefs = defs
 	s.grid.SetBounds(s.grid.Bounds())
 	s.emptyLabel.SetVisible(empty)
+	v.syncScroll()
 }
 
 func (v *View) applyAdvancedContentRows(hidden map[int]bool) {

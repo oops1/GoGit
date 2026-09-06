@@ -36,10 +36,9 @@ func clickCheckBox(cb *widget.CheckBox) {
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
 		"root":               widget.NewGrid(),
-		"navHost":            widget.NewGrid(),
-		"navBackground":      widget.NewPanel(color.RGBA{}),
-		"close":              widget.NewButton("x"),
 		"search":             widget.NewTextInput(""),
+		"sectionArea":        widget.NewGrid(),
+		"sectionHost":        widget.NewGrid(),
 		"navTitle":           widget.NewLabel("", color.RGBA{}),
 		"navToggle":          widget.NewButton(""),
 		"sectionTitle":       widget.NewWin10Label(""),
@@ -63,6 +62,10 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"pruneOnFetch":          widget.NewCheckBox(""),
 		"shallowDepth":          widget.NewNumericUpDown(),
 		"gitAdvanced":           widget.NewExpander(""),
+		"credentialForm":        widget.NewExpander(""),
+		"credentialFormContent": widget.NewGrid(),
+		"sshForm":               widget.NewExpander(""),
+		"sshFormContent":        widget.NewGrid(),
 		"gitAdvancedContent":    widget.NewGrid(),
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
@@ -137,10 +140,11 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	keys := []string{
-		"root", "navHost", "navBackground", "close", "search", "navTitle", "navToggle", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
+		"root", "search", "sectionArea", "sectionHost", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
 		"language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
-		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
+		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "credentialForm", "credentialFormContent",
+		"sshForm", "sshFormContent", "ok", "cancel",
 		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
 		"credentialsTable", "credentialResource", "credentialUsername", "credentialType", "credentialSecret",
 		"credentialAdd", "credentialEdit", "credentialRemove", "credentialTestConnection", "credentialMasterPassword",
@@ -158,7 +162,7 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	}
 	labelKeys := map[string]bool{
 		"credentialSourceStorePath": true, "credentialSourceKeyProtection": true, "credentialSourceHelpers": true,
-		"credentialsStatus": true, "sshStatus": true, "sectionTitle": true, "navTitle": true,
+		"credentialsStatus": true, "sshStatus": true, "sectionTitle": true,
 		"credentialsSecureNote": true, "sshSecureNote": true,
 	}
 	for _, key := range keys {
