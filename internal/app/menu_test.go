@@ -3,12 +3,17 @@ package app
 import (
 	"bytes"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/journal"
 )
 
 func viewTopItems(t *testing.T, a *App) []widget.MenuItem {
@@ -340,6 +345,162 @@ func TestRemoteMenuAndToolbarShowTranslatedTextNotRawKeys(t *testing.T) {
 				t.Fatalf("lang %q: %s caption shows %q instead of translated text", lang, name, btn.Text)
 			}
 		}
+	}
+}
+
+func TestDockPaneTitlesRetranslateOnLanguageChange(t *testing.T) {
+	a := newTestApp(t)
+	if len(viewPaneKeys) == 0 {
+		t.Fatal("viewPaneKeys must not be empty")
+	}
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		for _, pane := range a.Dock().Panes() {
+			key, ok := viewPaneKeys[pane.ID]
+			if !ok {
+				continue
+			}
+			want := widget.Tr(key)
+			if pane.Title != want {
+				t.Fatalf("lang %q: pane %q title = %q, want %q", lang, pane.ID, pane.Title, want)
+			}
+		}
+	}
+}
+
+func TestDockPaneTitlesIgnoreAPaneWithNoKnownKey(t *testing.T) {
+	a := newTestApp(t)
+	bogus := widget.NewDockPane("bogus-pane", "Bogus", nil)
+	a.Dock().AddPane(bogus, widget.DockLeft)
+	a.SetLanguage("ru")
+	if bogus.Title != "Bogus" {
+		t.Fatalf("pane with no known key must keep its title, got %q", bogus.Title)
+	}
+}
+
+func TestBranchesTreeGroupLabelsRetranslateOnLanguageChange(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+
+	tree := a.Widget("branchesTree").(*widget.TreeViewWidget)
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		roots := tree.Tree.Roots()
+		if len(roots) < 3 {
+			t.Fatalf("lang %q: got %d root groups, want at least 3", lang, len(roots))
+		}
+		wantLocal := i18n.T("Pane.Branches.Local")
+		wantRemotes := i18n.T("Pane.Branches.Remotes")
+		wantTags := i18n.T("Pane.Branches.Tags")
+		if roots[0].DisplayText() != wantLocal {
+			t.Fatalf("lang %q: local group label = %q, want %q", lang, roots[0].DisplayText(), wantLocal)
+		}
+		if roots[1].DisplayText() != wantRemotes {
+			t.Fatalf("lang %q: remotes group label = %q, want %q", lang, roots[1].DisplayText(), wantRemotes)
+		}
+		if roots[2].DisplayText() != wantTags {
+			t.Fatalf("lang %q: tags group label = %q, want %q", lang, roots[2].DisplayText(), wantTags)
+		}
+	}
+}
+
+func TestBranchesTreeAndStatusRetranslateOnLanguageChangeWhenDetached(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	head := oid(t, "aa")
+	detachTestHead(t, target, head)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+
+	shortHead := head.String()[:shortHashLength]
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		want := i18n.T("Pane.Branches.Detached") + " " + shortHead
+		item, ok := a.branchesView.Item(refs.HEAD)
+		if !ok {
+			t.Fatalf("lang %q: detached branch item missing", lang)
+		}
+		if item.DisplayText() != want {
+			t.Fatalf("lang %q: branches tree detached item = %q, want %q", lang, item.DisplayText(), want)
+		}
+		if got := a.statusBranchLabel.Text(); got != want {
+			t.Fatalf("lang %q: status branch label = %q, want %q", lang, got, want)
+		}
+	}
+}
+
+func TestRetranslateRepoTreesLogsAWarningWhenTheBranchSnapshotFailsToLoad(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepo(t, target)
+	a, buf := newChangesTestApp(t, target)
+	a.ActivateRepository("r1")
+	withFailingBranchSnapshotLoad(t)
+
+	a.SetLanguage("ru")
+
+	if !strings.Contains(buf.String(), "retranslate branches failed") {
+		t.Fatalf("expected the branch snapshot error to be logged: %s", buf.String())
+	}
+}
+
+func TestFilesGridStateColumnRetranslatesOnLanguageChange(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 5)
+
+	for _, lang := range []string{"ru", "en", "ru"} {
+		a.SetLanguage(lang)
+		want := i18n.T("Files.State.Modified")
+		deadline := time.Now().Add(testTimeout)
+		for {
+			row := filesRowOnDispatcher(t, a, 2)
+			if row.State == want {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("lang %q: modified file state = %q, want %q", lang, row.State, want)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func TestRetranslateSkipsWorkingRefreshWhileACommitIsSelected(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 1)
+	waitForJournalRows(t, a, 1)
+
+	first := readOnDispatcher(t, a, func() journal.Row {
+		row, _ := a.named["journalGrid"].(*widget.DataGridWidget).Grid.ItemsSource().Get(0).(journal.Row)
+		return row
+	})
+	readOnDispatcher(t, a, func() bool { a.onJournalRowSelected(first); return true })
+	waitForFilesMode(t, a, filesModeCommit, 1)
+	before := filesRowOnDispatcher(t, a, 0)
+
+	a.SetLanguage("ru")
+	a.SetLanguage("en")
+	a.diffWG.Wait()
+
+	if got := filesModeOnDispatcher(a); got != filesModeCommit {
+		t.Fatalf("files grid mode = %v after a language change with a commit selected, want %v", got, filesModeCommit)
+	}
+	if after := filesRowOnDispatcher(t, a, 0); after != before {
+		t.Fatalf("commit diff row changed while a commit was selected: %+v -> %+v", before, after)
 	}
 }
 

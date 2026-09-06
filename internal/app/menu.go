@@ -226,9 +226,49 @@ func (a *App) retranslate() {
 	}
 	a.retranslateGrids()
 	a.retranslateFilesStatusButtons()
+	a.retranslatePaneTitles()
+	a.retranslateRepoTrees()
+	a.retranslateFilesState()
+	a.applyToolbarIcons(nil)
 	a.root.Title = i18n.T("App.Title")
 	a.updateStatusText()
 	a.applyFilesFilter()
+}
+
+func (a *App) retranslateRepoTrees() {
+	a.reposView.Render(a.registry, a.repoTreeState())
+	o := a.opened()
+	if o == nil {
+		return
+	}
+	snap, err := loadBranchSnapshot(o.store)
+	if err != nil {
+		a.log.Warn("retranslate branches failed", "path", o.path, "error", err)
+		return
+	}
+	a.branchesView.Render(snap)
+	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
+}
+
+func (a *App) retranslateFilesState() {
+	if a.opened() == nil || a.commitIsSelected() {
+		return
+	}
+	a.requestWorking()
+}
+
+func (a *App) retranslatePaneTitles() {
+	dock := a.Dock()
+	for _, pane := range dock.Panes() {
+		key, ok := viewPaneKeys[pane.ID]
+		if !ok {
+			continue
+		}
+		pane.Title = i18n.T(key)
+		pane.Invalidate()
+	}
+	dock.SetBounds(dock.Bounds())
+	dock.Invalidate()
 }
 
 func (a *App) applyMenuTexts(idx int) {
