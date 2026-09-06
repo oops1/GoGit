@@ -51,6 +51,26 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"shallowDepth":          widget.NewNumericUpDown(),
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
+
+		"credentialsTable":         widget.NewDataGridWidget(),
+		"credentialResource":       widget.NewTextInput(""),
+		"credentialUsername":       widget.NewTextInput(""),
+		"credentialSecret":         widget.NewPasswordInput(""),
+		"credentialAdd":            widget.NewButton(""),
+		"credentialRemove":         widget.NewButton(""),
+		"credentialMasterPassword": widget.NewButton(""),
+		"credentialsStatus":        widget.NewWin10Label(""),
+		"credentialsUnlock":        widget.NewButton(""),
+
+		"sshTable":      widget.NewDataGridWidget(),
+		"sshHost":       widget.NewTextInput(""),
+		"sshPath":       widget.NewTextInput(""),
+		"sshBrowse":     widget.NewButton(""),
+		"sshPassphrase": widget.NewPasswordInput(""),
+		"sshAdd":        widget.NewButton(""),
+		"sshRemove":     widget.NewButton(""),
+		"sshStatus":     widget.NewWin10Label(""),
+		"sshUnlock":     widget.NewButton(""),
 	}
 }
 
@@ -86,7 +106,14 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName", "logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch", "shallowDepth", "ok", "cancel"}
+	keys := []string{
+		"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
+		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
+		"shallowDepth", "ok", "cancel",
+		"credentialsTable", "credentialResource", "credentialUsername", "credentialSecret", "credentialAdd",
+		"credentialRemove", "credentialMasterPassword", "credentialsStatus", "credentialsUnlock",
+		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshAdd", "sshRemove", "sshStatus", "sshUnlock",
+	}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -95,9 +122,21 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 			t.Fatalf("missing %q: expected error", key)
 		}
 	}
+	labelKeys := map[string]bool{"credentialsStatus": true, "sshStatus": true}
 	for _, key := range keys {
+		if labelKeys[key] {
+			continue
+		}
 		named := fullNamedWidgets()
 		named[key] = widget.NewWin10Label("wrong-type")
+		v := &View{}
+		if err := v.bind(named); err == nil {
+			t.Fatalf("mistyped %q: expected error", key)
+		}
+	}
+	for key := range labelKeys {
+		named := fullNamedWidgets()
+		named[key] = widget.NewButton("wrong-type")
 		v := &View{}
 		if err := v.bind(named); err == nil {
 			t.Fatalf("mistyped %q: expected error", key)

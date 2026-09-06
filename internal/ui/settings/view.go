@@ -40,11 +40,47 @@ type View struct {
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
 
+	credentialsTable     *widget.DataGridWidget
+	credentialResource   *widget.TextInput
+	credentialUsername   *widget.TextInput
+	credentialSecret     *widget.TextInput
+	credentialAddBtn     *widget.Button
+	credentialRemoveBtn  *widget.Button
+	masterPasswordBtn    *widget.Button
+	credentialsStatus    *widget.Label
+	credentialsUnlockBtn *widget.Button
+
+	sshTable           *widget.DataGridWidget
+	sshHostInput       *widget.TextInput
+	sshPathInput       *widget.TextInput
+	sshPassphraseInput *widget.TextInput
+	sshAddBtn          *widget.Button
+	sshBrowseBtn       *widget.Button
+	sshRemoveBtn       *widget.Button
+	sshStatus          *widget.Label
+	sshUnlockBtn       *widget.Button
+
+	credentials      []SecretEntry
+	keys             []KeyEntry
+	selectedResource string
+	hasCredSelection bool
+	selectedHost     string
+	hasKeySelection  bool
+	secretsLocked    bool
+
 	eng       widget.ModalShower
 	languages []string
 
 	OnOK     func(Model)
 	OnCancel func()
+
+	OnAddCredential     func(resource, username string, secret []byte)
+	OnRemoveCredential  func(resource string)
+	OnAddKey            func(host, path string, passphrase []byte)
+	OnRemoveKey         func(host string)
+	OnSetMasterPassword func()
+	OnUnlockSecrets     func()
+	OnBrowseKeyFile     func()
 }
 
 func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, error) {
@@ -59,6 +95,9 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	v.populateLanguages()
 	v.apply(initial.Normalized())
 	v.wire()
+	v.buildSecretsColumns()
+	v.wireSecrets()
+	v.SetSecretsLocked(false)
 	return v, nil
 }
 
@@ -117,7 +156,7 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.cancelBtn, ok = named["cancel"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: cancel", ErrWidgetMissing)
 	}
-	return nil
+	return v.bindSecrets(named)
 }
 
 func (v *View) populateLanguages() {

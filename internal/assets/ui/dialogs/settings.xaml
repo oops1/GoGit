@@ -100,6 +100,96 @@
                                 Minimum="0" Maximum="100000" Increment="1"/>
             </Grid>
         </TabItem>
+        <TabItem Header="{Loc Dialog.Settings.Tab.Credentials}">
+            <Grid Width="480" Height="358">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="180"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="24"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="110"/>
+                </Grid.ColumnDefinitions>
+
+                <DataGrid x:Name="credentialsTable" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                          Width="480" Height="180"
+                          IsReadOnly="True" AutoGenerateColumns="False"
+                          CanUserSortColumns="False" SelectionMode="Single"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Resource}"/>
+                <TextBox x:Name="credentialResource" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.User}"/>
+                <TextBox x:Name="credentialUsername" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.Credentials.Secret}"/>
+                <PasswordBox x:Name="credentialSecret" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                             Placeholder="{Loc Dialog.Settings.Credentials.Secret}"/>
+
+                <Button x:Name="credentialAdd" Grid.Row="4" Grid.Column="0" Margin="0,0,6,0"
+                        Content="{Loc Dialog.Settings.Credentials.Add}"/>
+                <Button x:Name="credentialRemove" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+                        Content="{Loc Dialog.Settings.Credentials.Remove}"/>
+                <Button x:Name="credentialMasterPassword" Grid.Row="4" Grid.Column="2"
+                        Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
+
+                <TextBlock x:Name="credentialsStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+                           Text="" FontSize="11" Foreground="#CC4444"/>
+                <Button x:Name="credentialsUnlock" Grid.Row="5" Grid.Column="2"
+                        Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+            </Grid>
+        </TabItem>
+        <TabItem Header="{Loc Dialog.Settings.Tab.SSH}">
+            <Grid Width="480" Height="358">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="180"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="24"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="110"/>
+                </Grid.ColumnDefinitions>
+
+                <DataGrid x:Name="sshTable" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+                          Width="480" Height="180"
+                          IsReadOnly="True" AutoGenerateColumns="False"
+                          CanUserSortColumns="False" SelectionMode="Single"/>
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{Loc Dialog.Settings.SSH.Host}"/>
+                <TextBox x:Name="sshHost" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{Loc Dialog.Settings.SSH.KeyFile}"/>
+                <TextBox x:Name="sshPath" Grid.Row="2" Grid.Column="1"/>
+                <Button x:Name="sshBrowse" Grid.Row="2" Grid.Column="2"
+                        Content="{Loc Dialog.Settings.SSH.Browse}"/>
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="{Loc Dialog.Settings.SSH.Passphrase}"/>
+                <PasswordBox x:Name="sshPassphrase" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2"
+                             Placeholder="{Loc Dialog.Settings.SSH.Passphrase}"/>
+
+                <Button x:Name="sshAdd" Grid.Row="4" Grid.Column="0" Margin="0,0,6,0"
+                        Content="{Loc Dialog.Settings.SSH.Add}"/>
+                <Button x:Name="sshRemove" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+                        Content="{Loc Dialog.Settings.SSH.Remove}"/>
+
+                <TextBlock x:Name="sshStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2"
+                           Text="" FontSize="11" Foreground="#CC4444"/>
+                <Button x:Name="sshUnlock" Grid.Row="5" Grid.Column="2"
+                        Content="{Loc Dialog.Settings.Secrets.Unlock}"/>
+            </Grid>
+        </TabItem>
     </TabControl>
 
     <Button x:Name="ok" Grid.Row="1" Grid.Column="1" Margin="0,0,6,0"
