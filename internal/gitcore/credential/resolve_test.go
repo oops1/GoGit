@@ -110,6 +110,8 @@ func TestResolveHelperCacheIsUnsupported(t *testing.T) {
 }
 
 func TestResolveHelperNameResolvesViaPath(t *testing.T) {
+	stubLookPath(t, nil)
+	stubStatHelperCandidate(t, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
 	h, err := resolveHelper("manager")
 	if err != nil {
 		t.Fatalf("resolveHelper returned %v", err)
