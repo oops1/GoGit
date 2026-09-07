@@ -90,8 +90,6 @@ func renderPreviewFrames(t *testing.T, dir string, variant previewVariant, secti
 	)
 	view.SetSection(section)
 	view.gitAdvanced.SetExpanded(variant.advanced)
-	view.credentialForm.SetExpanded(!variant.advanced)
-	view.sshForm.SetExpanded(!variant.advanced)
 	if variant.collapsed {
 		view.Dialog().SetNavCollapsed(true)
 	}
@@ -106,4 +104,51 @@ func renderPreviewFrames(t *testing.T, dir string, variant previewVariant, secti
 	eng.Start()
 	time.Sleep(700 * time.Millisecond)
 	eng.Stop()
+}
+
+func TestPreviewSecretEditors(t *testing.T) {
+	dir := os.Getenv("GOGIT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("GOGIT_PREVIEW_DIR not set")
+	}
+	for _, lang := range []string{"ru", "en"} {
+		widget.ClearStrings()
+		if _, err := i18n.Install(""); err != nil {
+			t.Fatal(err)
+		}
+		i18n.Apply(lang)
+
+		theme := widget.Win11LightTheme()
+		eng := engine.New(560, 340, 30)
+		eng.SetTheme(theme)
+		root := widget.NewPanel(theme.WindowBG)
+		root.SetBounds(image.Rect(0, 0, 560, 340))
+		eng.SetRoot(root)
+
+		view, err := NewView(eng, []string{"en", "ru"}, Model{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		view.openCredentialEditor(SecretEntry{}, false)
+		eng.SaveFrames(dir + "/editor-credential-" + lang)
+		eng.Start()
+		time.Sleep(400 * time.Millisecond)
+		eng.Stop()
+
+		eng2 := engine.New(560, 340, 30)
+		eng2.SetTheme(theme)
+		root2 := widget.NewPanel(theme.WindowBG)
+		root2.SetBounds(image.Rect(0, 0, 560, 340))
+		eng2.SetRoot(root2)
+		view2, err := NewView(eng2, []string{"en", "ru"}, Model{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		view2.openKeyEditor(KeyEntry{}, false)
+		eng2.SaveFrames(dir + "/editor-key-" + lang)
+		eng2.Start()
+		time.Sleep(400 * time.Millisecond)
+		eng2.Stop()
+		widget.ClearStrings()
+	}
 }

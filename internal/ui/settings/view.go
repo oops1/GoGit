@@ -67,10 +67,15 @@ type View struct {
 	gitAdvanced        *widget.Expander
 	gitAdvancedContent *widget.Grid
 
-	credentialForm        *widget.Expander
-	credentialFormContent *widget.Grid
-	sshForm               *widget.Expander
-	sshFormContent        *widget.Grid
+	credentialEditor     *widget.Dialog
+	credentialEditStatus *widget.Label
+	credentialEditOK     *widget.Button
+	credentialEditCancel *widget.Button
+
+	keyEditor     *widget.Dialog
+	sshEditStatus *widget.Label
+	keyEditOK     *widget.Button
+	keyEditCancel *widget.Button
 
 	credentialSource              *widget.Dropdown
 	credentialSourceStorePath     *widget.Label
@@ -83,7 +88,6 @@ type View struct {
 	credentialType        *widget.Dropdown
 	credentialSecret      *widget.TextInput
 	credentialAddBtn      *widget.Button
-	credentialSaveBtn     *widget.Button
 	credentialEditBtn     *widget.Button
 	credentialRemoveBtn   *widget.Button
 	credentialTestBtn     *widget.Button
@@ -100,7 +104,6 @@ type View struct {
 	sshPassphraseInput    *widget.TextInput
 	sshUseDefaultCheckBox *widget.CheckBox
 	sshAddBtn             *widget.Button
-	sshSaveBtn            *widget.Button
 	sshEditBtn            *widget.Button
 	sshBrowseBtn          *widget.Button
 	sshRemoveBtn          *widget.Button
@@ -148,7 +151,16 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	if err != nil {
 		return nil, err
 	}
-	v := &View{dlg: dlg, eng: eng, languages: languages}
+	credentialEditor, credentialNamed, err := loadDialog(credentialEditorName, i18n.T("Dialog.Settings.Group.AddCredential"))
+	if err != nil {
+		return nil, err
+	}
+	keyEditor, keyNamed, err := loadDialog(keyEditorName, i18n.T("Dialog.Settings.Group.AddHost"))
+	if err != nil {
+		return nil, err
+	}
+	v := &View{dlg: dlg, eng: eng, languages: languages, credentialEditor: credentialEditor, keyEditor: keyEditor}
+	mergeNamed(named, credentialNamed, keyNamed)
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
@@ -169,6 +181,7 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	v.refreshSaveEnabled()
 	v.buildHints()
 	v.wireExpanders()
+	v.wireEditors()
 	v.buildSearchIndex()
 	v.buildSearchSections()
 	v.search.OnChange = v.applySearch
@@ -253,18 +266,6 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.gitAdvancedContent, ok = named["gitAdvancedContent"].(*widget.Grid); !ok {
 		return fmt.Errorf("%w: gitAdvancedContent", ErrWidgetMissing)
-	}
-	if v.credentialForm, ok = named["credentialForm"].(*widget.Expander); !ok {
-		return fmt.Errorf("%w: credentialForm", ErrWidgetMissing)
-	}
-	if v.credentialFormContent, ok = named["credentialFormContent"].(*widget.Grid); !ok {
-		return fmt.Errorf("%w: credentialFormContent", ErrWidgetMissing)
-	}
-	if v.sshForm, ok = named["sshForm"].(*widget.Expander); !ok {
-		return fmt.Errorf("%w: sshForm", ErrWidgetMissing)
-	}
-	if v.sshFormContent, ok = named["sshFormContent"].(*widget.Grid); !ok {
-		return fmt.Errorf("%w: sshFormContent", ErrWidgetMissing)
 	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
@@ -429,5 +430,13 @@ func (v *View) cancel() {
 func (v *View) doCancel() {
 	if v.OnCancel != nil {
 		v.OnCancel()
+	}
+}
+
+func mergeNamed(into map[string]widget.Widget, extra ...map[string]widget.Widget) {
+	for _, source := range extra {
+		for name, w := range source {
+			into[name] = w
+		}
 	}
 }

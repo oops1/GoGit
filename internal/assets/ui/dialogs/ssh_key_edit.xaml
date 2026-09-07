@@ -56,6 +56,6 @@
         <Button x:Name="sshEditCancel" Grid.Column="1" Height="30" Margin="0,0,8,0" VerticalAlignment="Center"
                 Content="{Loc Dialog.Settings.Cancel}"/>
         <Button x:Name="sshEditOK" Grid.Column="2" Tag="accent" Height="30" VerticalAlignment="Center"
-                Content="{Loc Dialog.Settings.SSH.Save}"/>
+                Content="{Loc Dialog.Settings.Save}"/>
     </Grid>
 </Grid>

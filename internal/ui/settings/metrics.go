@@ -37,11 +37,9 @@ const (
 	hintLineHeight          = 17
 	hintFieldRowSpan        = 2
 
-	expanderRowCollapsed      = 34
-	advancedRowExpanded       = 172
-	credentialFormRowExpanded = 264
-	sshFormRowExpanded        = 260
-	checkboxTextIndent        = 22
+	expanderRowCollapsed = 34
+	advancedRowExpanded  = 172
+	checkboxTextIndent   = 22
 
 	tableRowHeight            = 28
 	tableHeaderHeight         = 30

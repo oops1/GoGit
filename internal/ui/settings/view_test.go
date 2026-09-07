@@ -62,10 +62,6 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"pruneOnFetch":          widget.NewCheckBox(""),
 		"shallowDepth":          widget.NewNumericUpDown(),
 		"gitAdvanced":           widget.NewExpander(""),
-		"credentialForm":        widget.NewExpander(""),
-		"credentialFormContent": widget.NewGrid(),
-		"sshForm":               widget.NewExpander(""),
-		"sshFormContent":        widget.NewGrid(),
 		"gitAdvancedContent":    widget.NewGrid(),
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
@@ -83,6 +79,12 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"credentialSave":           widget.NewButton(""),
 		"sshSave":                  widget.NewButton(""),
 		"credentialAdd":            widget.NewButton(""),
+		"credentialEditStatus":     widget.NewWin10Label(""),
+		"credentialEditOK":         widget.NewButton(""),
+		"credentialEditCancel":     widget.NewButton(""),
+		"sshEditStatus":            widget.NewWin10Label(""),
+		"sshEditOK":                widget.NewButton(""),
+		"sshEditCancel":            widget.NewButton(""),
 		"credentialEdit":           widget.NewButton(""),
 		"credentialRemove":         widget.NewButton(""),
 		"credentialTestConnection": widget.NewButton(""),
@@ -145,11 +147,11 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 		"root", "search", "sectionArea", "sectionHost", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
 		"language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
-		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "credentialForm", "credentialFormContent",
-		"sshForm", "sshFormContent", "ok", "cancel",
+		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
 		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
 		"credentialsTable", "credentialResource", "credentialUsername", "credentialType", "credentialSecret",
-		"credentialAdd", "credentialSave", "sshSave", "credentialEdit", "credentialRemove", "credentialTestConnection", "credentialMasterPassword",
+		"credentialAdd", "credentialEditStatus", "credentialEditOK", "credentialEditCancel",
+		"sshEditStatus", "sshEditOK", "sshEditCancel", "credentialEdit", "credentialRemove", "credentialTestConnection", "credentialMasterPassword",
 		"credentialsStatus", "credentialsUnlock", "credentialsLockIcon", "credentialsSecureRow",
 		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshUseDefault", "sshAdd", "sshEdit",
 		"sshRemove", "sshTestConnection", "sshStatus", "sshUnlock", "sshLockIcon", "sshSecureRow",
@@ -165,6 +167,7 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	labelKeys := map[string]bool{
 		"credentialSourceStorePath": true, "credentialSourceKeyProtection": true, "credentialSourceHelpers": true,
 		"credentialsStatus": true, "sshStatus": true, "sectionTitle": true,
+		"credentialEditStatus": true, "sshEditStatus": true,
 	}
 	for _, key := range keys {
 		if labelKeys[key] {
@@ -476,5 +479,28 @@ func TestCheckboxTogglesWhenTheLabelBesideItIsClicked(t *testing.T) {
 	box.OnMouseButton(widget.MouseEvent{X: x, Y: y, Button: widget.MouseLeft})
 	if box.IsChecked() == before {
 		t.Fatal("checkbox did not toggle from a click over the area its label occupies")
+	}
+}
+
+func TestNewViewPropagatesAFailureLoadingTheEditors(t *testing.T) {
+	for _, failing := range []string{credentialEditorName, keyEditorName} {
+		widget.ClearStrings()
+		prev := loadDialog
+		wantErr := errors.New("boom")
+		loadDialog = func(name, title string) (*widget.Dialog, map[string]widget.Widget, error) {
+			if name == failing {
+				return nil, nil, wantErr
+			}
+			return prev(name, title)
+		}
+
+		eng := engine.New(800, 600, 30)
+		_, err := NewView(eng, nil, Model{})
+		loadDialog = prev
+		widget.ClearStrings()
+
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("loading %q: err = %v, want %v", failing, err, wantErr)
+		}
 	}
 }

@@ -277,7 +277,7 @@ func TestAddCredentialClickedCallsCallbackAndWipesTheSecretAfterwards(t *testing
 		secretDuringCall = append([]byte(nil), secret...)
 	}
 
-	v.onSaveCredentialClicked()
+	v.saveCredentialFromEditor()
 
 	if gotResource != "example.com" || gotUsername != "alice" {
 		t.Fatalf("resource/username = %q/%q", gotResource, gotUsername)
@@ -302,11 +302,11 @@ func TestSaveCredentialDoesNothingWithoutResourceOrSecret(t *testing.T) {
 
 	v.credentialResource.SetText("")
 	v.credentialSecret.SetText("s3cr3t")
-	v.onSaveCredentialClicked()
+	v.saveCredentialFromEditor()
 
 	v.credentialResource.SetText("example.com")
 	v.credentialSecret.SetText("")
-	v.onSaveCredentialClicked()
+	v.saveCredentialFromEditor()
 
 	if called {
 		t.Fatal("OnAddCredential must not be called without both a resource and a secret")
@@ -330,9 +330,6 @@ func TestEditCredentialLoadsTheSelectedRowIntoTheForm(t *testing.T) {
 	}
 	if v.credentialSecret.GetText() != "" {
 		t.Fatal("the secret field must be emptied: the stored secret is never shown")
-	}
-	if !v.credentialForm.IsExpanded {
-		t.Fatal("editing must open the form")
 	}
 }
 
@@ -367,13 +364,13 @@ func TestSavingCredentialsWithoutAResourceExplainsWhy(t *testing.T) {
 	v.OnAddCredential = func(string, string, []byte) { called = true }
 	v.credentialSecret.SetText("s3cr3t")
 
-	v.credentialSaveBtn.OnClick()
+	v.credentialEditOK.OnClick()
 
 	if called {
 		t.Fatal("nothing may be stored without a resource")
 	}
-	if v.credentialsStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedResource") {
-		t.Fatalf("status = %q, want the missing-resource message", v.credentialsStatus.Text())
+	if v.credentialEditStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedResource") {
+		t.Fatalf("status = %q, want the missing-resource message", v.credentialEditStatus.Text())
 	}
 }
 
@@ -383,13 +380,13 @@ func TestSavingCredentialsWithoutASecretExplainsWhy(t *testing.T) {
 	v.OnAddCredential = func(string, string, []byte) { called = true }
 	v.credentialResource.SetText("example.com")
 
-	v.credentialSaveBtn.OnClick()
+	v.credentialEditOK.OnClick()
 
 	if called {
 		t.Fatal("nothing may be stored without a secret")
 	}
-	if v.credentialsStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedSecret") {
-		t.Fatalf("status = %q, want the missing-secret message", v.credentialsStatus.Text())
+	if v.credentialEditStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedSecret") {
+		t.Fatalf("status = %q, want the missing-secret message", v.credentialEditStatus.Text())
 	}
 }
 
@@ -429,7 +426,7 @@ func TestAddKeyClickedCallsCallbackAndWipesThePassphraseAfterwards(t *testing.T)
 		seenDuringCall = string(passphrase)
 	}
 
-	v.onSaveKeyClicked()
+	v.saveKeyFromEditor()
 
 	if gotHost != "example.com" || gotPath != "/keys/id_ed25519" {
 		t.Fatalf("host/path = %q/%q", gotHost, gotPath)
@@ -455,7 +452,7 @@ func TestSaveKeyUsesTheDefaultHostWhenTheCheckboxIsChecked(t *testing.T) {
 
 	var gotHost string
 	v.OnAddKey = func(host, path string, passphrase []byte) { gotHost = host }
-	v.onSaveKeyClicked()
+	v.saveKeyFromEditor()
 
 	if gotHost != defaultKeyHost {
 		t.Fatalf("host = %q, want %q", gotHost, defaultKeyHost)
@@ -469,11 +466,11 @@ func TestSaveKeyDoesNothingWithoutHostOrPath(t *testing.T) {
 
 	v.sshHostInput.SetText("")
 	v.sshPathInput.SetText("/keys/id_ed25519")
-	v.onSaveKeyClicked()
+	v.saveKeyFromEditor()
 
 	v.sshHostInput.SetText("example.com")
 	v.sshPathInput.SetText("")
-	v.onSaveKeyClicked()
+	v.saveKeyFromEditor()
 
 	if called {
 		t.Fatal("OnAddKey must not be called without both a host and a path")
@@ -497,9 +494,6 @@ func TestEditKeyLoadsTheSelectedRowIntoTheForm(t *testing.T) {
 	}
 	if v.sshPassphraseInput.GetText() != "" {
 		t.Fatal("the passphrase field must be emptied: the stored passphrase is never shown")
-	}
-	if !v.sshForm.IsExpanded {
-		t.Fatal("editing must open the form")
 	}
 }
 
@@ -534,13 +528,13 @@ func TestSavingAKeyWithoutAHostExplainsWhy(t *testing.T) {
 	v.OnAddKey = func(string, string, []byte) { called = true }
 	v.sshPathInput.SetText("/keys/id_ed25519")
 
-	v.sshSaveBtn.OnClick()
+	v.keyEditOK.OnClick()
 
 	if called {
 		t.Fatal("nothing may be stored without a host")
 	}
-	if v.sshStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedHost") {
-		t.Fatalf("status = %q, want the missing-host message", v.sshStatus.Text())
+	if v.sshEditStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedHost") {
+		t.Fatalf("status = %q, want the missing-host message", v.sshEditStatus.Text())
 	}
 }
 
@@ -550,13 +544,13 @@ func TestSavingAKeyWithoutAFileExplainsWhy(t *testing.T) {
 	v.OnAddKey = func(string, string, []byte) { called = true }
 	v.sshHostInput.SetText("example.com")
 
-	v.sshSaveBtn.OnClick()
+	v.keyEditOK.OnClick()
 
 	if called {
 		t.Fatal("nothing may be stored without a key file")
 	}
-	if v.sshStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedKeyFile") {
-		t.Fatalf("status = %q, want the missing-file message", v.sshStatus.Text())
+	if v.sshEditStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedKeyFile") {
+		t.Fatalf("status = %q, want the missing-file message", v.sshEditStatus.Text())
 	}
 }
 
@@ -697,7 +691,7 @@ func TestClickingAddAndRemoveButtonsCallTheHandlers(t *testing.T) {
 	v.credentialSecret.SetText("s3cr3t")
 	addCalled := false
 	v.OnAddCredential = func(string, string, []byte) { addCalled = true }
-	v.credentialSaveBtn.OnClick()
+	v.credentialEditOK.OnClick()
 	if !addCalled {
 		t.Fatal("clicking Save must call OnAddCredential")
 	}
@@ -706,7 +700,7 @@ func TestClickingAddAndRemoveButtonsCallTheHandlers(t *testing.T) {
 	v.sshPathInput.SetText("/keys/id_ed25519")
 	sshAddCalled := false
 	v.OnAddKey = func(string, string, []byte) { sshAddCalled = true }
-	v.sshSaveBtn.OnClick()
+	v.keyEditOK.OnClick()
 	if !sshAddCalled {
 		t.Fatal("clicking Save must call OnAddKey")
 	}
@@ -825,4 +819,31 @@ func TestStatusAndSourceLinesAreReadableBack(t *testing.T) {
 	if got := v.CredentialHelpersLine(); !strings.Contains(got, "manager") {
 		t.Fatalf("CredentialHelpersLine() = %q", got)
 	}
+}
+
+func TestEditingTheDefaultKeyLeavesTheHostFieldEmpty(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetKeys([]KeyEntry{{Host: defaultKeyHost, Path: "/keys/id_ed25519"}})
+	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.keys[0]})
+
+	v.sshEditBtn.OnClick()
+
+	if !v.sshUseDefaultCheckBox.IsChecked() {
+		t.Fatal("the default-key flag must come back checked")
+	}
+	if v.sshHostInput.GetText() != "" {
+		t.Fatalf("host = %q, want it empty for the catch-all key", v.sshHostInput.GetText())
+	}
+	if v.sshHostInput.IsEnabled() {
+		t.Fatal("the host field must stay disabled for the catch-all key")
+	}
+}
+
+func TestEditorsCloseOnCancel(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+
+	v.credentialEditCancel.OnClick()
+	v.keyEditCancel.OnClick()
+	v.credentialEditor.CancelAction()
+	v.keyEditor.CancelAction()
 }

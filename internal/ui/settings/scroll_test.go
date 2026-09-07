@@ -25,7 +25,7 @@ func TestShortSectionFillsTheViewportWithoutScrolling(t *testing.T) {
 
 func TestLongSectionScrollsAndLeavesRoomForTheScrollbar(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.Dialog().Resize(dialogDefaultWidth, dialogDefaultHeight)
+	v.Dialog().Resize(dialogDefaultWidth, 400)
 	v.SetSection("credentials")
 
 	view := v.scroll.Bounds()
@@ -40,39 +40,29 @@ func TestLongSectionScrollsAndLeavesRoomForTheScrollbar(t *testing.T) {
 	}
 }
 
-func TestCollapsingTheCredentialFormRemovesTheScrolling(t *testing.T) {
+func TestCollapsingTheAdvancedGroupRemovesTheScrolling(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.Dialog().Resize(dialogDefaultWidth, dialogDefaultHeight)
-	v.SetSection("credentials")
+	v.Dialog().Resize(dialogMinWidth, 420)
+	v.SetSection("git")
+	v.gitAdvanced.SetExpanded(true)
 	scrolled := v.scroll.ContentHeight
 
-	v.credentialForm.SetExpanded(false)
+	v.gitAdvanced.SetExpanded(false)
 
 	if v.scroll.ContentHeight >= scrolled {
-		t.Fatalf("content height = %d, want less than %d after collapsing the form", v.scroll.ContentHeight, scrolled)
+		t.Fatalf("content height = %d, want less than %d after collapsing the group", v.scroll.ContentHeight, scrolled)
 	}
-	if v.scroll.ContentHeight > v.scroll.Bounds().Dy() {
-		t.Fatal("the collapsed section must fit in the viewport")
-	}
-}
-
-func TestCollapsingTheSSHFormShrinksTheSection(t *testing.T) {
-	v := newTestView(t, []string{"en"}, Model{})
-	v.SetSection("ssh")
-	expanded := v.scroll.ContentHeight
-
-	v.sshForm.SetExpanded(false)
-
-	if want := expanded - (sshFormRowExpanded - expanderRowCollapsed); v.scroll.ContentHeight != want {
+	if want := scrolled - (advancedRowExpanded - expanderRowCollapsed); v.scroll.ContentHeight != want {
 		t.Fatalf("content height = %d, want %d", v.scroll.ContentHeight, want)
 	}
 }
 
 func TestResizingTheDialogRelaysOutTheScrolledSection(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
+	v.Dialog().Resize(dialogDefaultWidth, 400)
 	v.SetSection("credentials")
 
-	v.Dialog().Resize(dialogDefaultWidth+200, dialogDefaultHeight)
+	v.Dialog().Resize(dialogDefaultWidth+200, 400)
 
 	if got, want := v.sectionHost.Bounds().Dx(), v.scroll.Bounds().Dx()-scrollbarWidth; got != want {
 		t.Fatalf("host width after resize = %d, want %d", got, want)
@@ -102,21 +92,23 @@ func TestGridPixelHeightCountsOnlyFixedRows(t *testing.T) {
 
 func TestScrollerKeepsTheOffsetInsideTheContent(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.Dialog().Resize(dialogDefaultWidth, dialogDefaultHeight)
+	v.Dialog().Resize(dialogDefaultWidth, 400)
 	v.SetSection("credentials")
 	v.scroll.SetScrollY(v.scroll.ContentHeight)
-	scrolled := v.scroll.ScrollY()
+	if v.scroll.ScrollY() == 0 {
+		t.Fatal("the section must scroll while the window is short")
+	}
 
-	v.credentialForm.SetExpanded(false)
+	v.Dialog().Resize(dialogDefaultWidth, dialogDefaultHeight)
 
-	if v.scroll.ScrollY() >= scrolled {
-		t.Fatalf("scroll offset = %d, want it clamped below %d once the content shrank", v.scroll.ScrollY(), scrolled)
+	if v.scroll.ScrollY() != 0 {
+		t.Fatalf("scroll offset = %d, want it clamped to the top once the content fits", v.scroll.ScrollY())
 	}
 }
 
 func TestScrollerLaysOutTheHostOnEveryBoundsChange(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.Dialog().Resize(dialogDefaultWidth, dialogDefaultHeight)
+	v.Dialog().Resize(dialogDefaultWidth, 400)
 	v.SetSection("credentials")
 	b := v.scroll.Bounds()
 

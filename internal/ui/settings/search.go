@@ -10,11 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const (
-	gitAdvancedRow    = 15
-	credentialFormRow = 16
-	sshFormRow        = 7
-)
+const gitAdvancedRow = 15
 
 type searchField struct {
 	section    string

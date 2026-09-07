@@ -14,8 +14,6 @@ type expanderRow struct {
 func (v *View) expanderRows() []expanderRow {
 	return []expanderRow{
 		{v.sectionGit, gitAdvancedRow, v.gitAdvanced, advancedRowExpanded},
-		{v.sectionCredentials, credentialFormRow, v.credentialForm, credentialFormRowExpanded},
-		{v.sectionSSH, sshFormRow, v.sshForm, sshFormRowExpanded},
 	}
 }
 
