@@ -18,7 +18,7 @@ github.com/oops1/headless-gui/v3 v3.16.7 h1:kKvjXQgGA2yTnpawvtGOgrjWEZmVAYbMHrVG
 github.com/oops1/headless-gui/v3 v3.16.7/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
 github.com/oops1/headless-gui/v3 v3.16.8 h1:2cFghoX00M7xnZZle3/3CJgmUFlb5og0A7O17EQlbP4=
 github.com/oops1/headless-gui/v3 v3.16.8/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
-github.com/oops1/headless-gui/v3 v3.16.9 h1:ZuO35BfUKxszZteynK83hQDN2oTw5Mtq60Tw1yb/neY=
+github.com/oops1/headless-gui/v3 v3.16.9 h1:5HGW1h8TcjGzov7zFGCyQzM8jpugJ21lpYo58mz5VP0=
 github.com/oops1/headless-gui/v3 v3.16.9/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
 golang.org/x/crypto v0.56.0 h1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=
 golang.org/x/crypto v0.56.0/go.mod h1:OMW5y6CY9l38uPLmxU6l6pwcXp1obtLo3e6gT7gQR2I=
