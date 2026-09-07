@@ -173,7 +173,7 @@ func TestDispatch(t *testing.T) {
 	if !a.Dispatch(CmdAddOrCreate) || called != 1 {
 		t.Fatal("handler not called")
 	}
-	if a.Dispatch(CmdSearch) {
+	if a.Dispatch(CommandID("test.unregistered")) {
 		t.Fatal("no handler registered")
 	}
 	a.SetHandler(CmdPull, func() { called++ })

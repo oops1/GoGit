@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="620" Height="420">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="44"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="150"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="130"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="rootLabel" Grid.Row="0" Grid.Column="0"
+               Text="{Loc Dialog.Search.Root}" VerticalAlignment="Center"/>
+    <TextBox x:Name="root" Grid.Row="0" Grid.Column="1"/>
+    <Button x:Name="browse" Grid.Row="0" Grid.Column="2" Width="130" Height="30" Margin="10,0,0,0"
+            Content="{Loc Dialog.Search.Browse}"/>
+
+    <CheckBox x:Name="includeBare" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+              FontSize="10" Content="{Loc Dialog.Search.IncludeBare}"/>
+
+    <Button x:Name="scan" Grid.Row="4" Grid.Column="2" Height="30" Tag="accent"
+            Content="{Loc Dialog.Search.Scan}"/>
+    <TextBlock x:Name="status" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+               Text="" FontSize="11" VerticalAlignment="Center"/>
+
+    <DataGrid x:Name="results" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
+              IsReadOnly="True" AutoGenerateColumns="False"
+              CanUserSortColumns="False" SelectionMode="Extended"/>
+
+    <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="110"/>
+            <ColumnDefinition Width="110"/>
+        </Grid.ColumnDefinitions>
+        <Button x:Name="cancel" Grid.Column="1" Height="30" Margin="0,0,8,0"
+                Content="{Loc Dialog.Search.Cancel}"/>
+        <Button x:Name="add" Grid.Column="2" Height="30" Tag="accent"
+                Content="{Loc Dialog.Search.Add}"/>
+    </Grid>
+</Grid>

@@ -351,6 +351,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdCloseRepository] = a.CloseRepository
 	a.handlers[CmdAddGroup] = a.addGroup
 	a.handlers[CmdAddOrCreate] = a.addOrCreateRepository
+	a.handlers[CmdSearch] = a.openSearch
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
 	a.handlers[CmdSettings] = a.openSettings
