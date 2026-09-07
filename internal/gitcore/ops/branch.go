@@ -41,9 +41,6 @@ func CreateBranch(ctx context.Context, r *repo.Repository, name string, startPoi
 		return err
 	}
 	defer func() { _ = rc.close() }()
-	if err := rc.requireIdentity(); err != nil {
-		return err
-	}
 
 	ref := refs.BranchName(name)
 	tx := rc.refs.Begin()
@@ -144,9 +141,6 @@ func RenameBranch(ctx context.Context, r *repo.Repository, from, to string, forc
 		return err
 	}
 	defer func() { _ = rc.close() }()
-	if err := rc.requireIdentity(); err != nil {
-		return err
-	}
 
 	target, err := rc.refs.Lookup(fromRef)
 	if errors.Is(err, refs.ErrNotFound) {
