@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/engine"
@@ -14,6 +15,8 @@ import (
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
 )
+
+const goldenFrameOS = "windows"
 
 var updateGolden = flag.Bool("update", false, "rewrite golden frames in testdata/golden")
 
@@ -86,6 +89,9 @@ func renderSettingsFrame(t *testing.T, theme *widget.Theme, section string) *ima
 }
 
 func TestSettingsGolden(t *testing.T) {
+	if runtime.GOOS != goldenFrameOS && !*updateGolden {
+		t.Skipf("golden frames are recorded on %s: text and window chrome rasterise differently elsewhere", goldenFrameOS)
+	}
 	themes := []struct {
 		name  string
 		theme *widget.Theme
