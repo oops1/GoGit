@@ -17,10 +17,10 @@ import (
 const dialogName = "about"
 
 const (
-	logoSize       = 80
+	logoSize       = 106
 	githubIconName = "github"
-	githubIconSize = 20
-	contentPadding = 24
+	githubIconSize = 24
+	okTintPercent  = 14
 	gitEngineName  = "Go"
 	guiEngineName  = "headless-gui/v3"
 	copyrightYear  = 2026
@@ -67,7 +67,6 @@ func NewView(info Info) (*View, error) {
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
-	dlg.SetContentPadding(contentPadding)
 	v.apply(info)
 	v.wire()
 	return v, nil
@@ -128,9 +127,6 @@ func (v *View) apply(info Info) {
 		v.logo.SetImage(img)
 	}
 	v.githubIcon.Stretch = widget.ImageStretchUniform
-	if mark := icons.ToolbarPlain(githubIconName, githubIconSize); mark != nil {
-		v.githubIcon.SetImage(mark)
-	}
 	v.version.SetText(i18n.Tf("Dialog.About.Version", displayVersion(info.Version)))
 	v.platform.SetText(i18n.T("Platform.supported"))
 	v.architecture.SetText(architectureLabel(info.Architecture))
@@ -145,14 +141,26 @@ func displayVersion(version string) string {
 }
 
 func (v *View) Restyle(t *widget.Theme) {
+	if mark := icons.Toolbar(githubIconName, githubIconSize, t.LabelText); mark != nil {
+		v.githubIcon.SetImage(mark)
+	}
 	v.tagline.TextColor = t.SecondaryText
 	v.copyright.TextColor = t.SecondaryText
 	v.summaryFirst.TextColor = t.LabelText
 	v.summarySecond.TextColor = t.LabelText
 	styleAsLink(v.githubBtn, t.Accent)
 	styleAsLink(v.licenseBtn, t.SecondaryText)
+	v.okBtn.Background = tint(t.BtnBG, t.Accent, okTintPercent)
+	v.okBtn.HoverBG = tint(t.BtnBG, t.Accent, 2*okTintPercent)
 	v.okBtn.BorderColor = t.Accent
 	v.okBtn.TextColor = t.LabelText
+}
+
+func tint(base, accent color.RGBA, percent int) color.RGBA {
+	mix := func(b, a uint8) uint8 {
+		return uint8((int(b)*(100-percent) + int(a)*percent) / 100)
+	}
+	return color.RGBA{R: mix(base.R, accent.R), G: mix(base.G, accent.G), B: mix(base.B, accent.B), A: 0xFF}
 }
 
 func styleAsLink(btn *widget.Button, text color.RGBA) {

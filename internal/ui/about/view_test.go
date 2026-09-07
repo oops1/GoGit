@@ -2,6 +2,7 @@ package about
 
 import (
 	"errors"
+	"image"
 	"runtime"
 	"testing"
 
@@ -197,4 +198,52 @@ func TestLinksAreDrawnFlatInTheAccentColour(t *testing.T) {
 	if v.licenseBtn.TextColor != theme.SecondaryText {
 		t.Fatalf("license colour = %v, want the secondary text", v.licenseBtn.TextColor)
 	}
+}
+
+func TestTheOkButtonIsFilledWithAFaintAccentTint(t *testing.T) {
+	v := newTestView(t, Info{Version: "v1.1.0"})
+	theme := widget.Win11LightTheme()
+
+	v.Restyle(theme)
+
+	if v.okBtn.BorderColor != theme.Accent {
+		t.Fatalf("border = %v, want the accent", v.okBtn.BorderColor)
+	}
+	if v.okBtn.Background == theme.BtnBG || v.okBtn.Background == theme.Accent {
+		t.Fatalf("background = %v, want a tint between the button and the accent", v.okBtn.Background)
+	}
+	if v.okBtn.HoverBG == v.okBtn.Background {
+		t.Fatal("hovering must deepen the tint")
+	}
+}
+
+func TestTheGitHubMarkFollowsTheThemeText(t *testing.T) {
+	v := newTestView(t, Info{Version: "v1.1.0"})
+
+	v.Restyle(widget.Win11LightTheme())
+	light := v.githubIcon.Image()
+	v.Restyle(widget.Win11DarkTheme())
+	dark := v.githubIcon.Image()
+
+	if light == nil || dark == nil {
+		t.Fatal("the mark must be rendered for both themes")
+	}
+	if !differ(light, dark) {
+		t.Fatal("the mark must be recoloured with the theme text")
+	}
+}
+
+func differ(a, b image.Image) bool {
+	bounds := a.Bounds()
+	if bounds != b.Bounds() {
+		return true
+	}
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			if a.At(x, y) != b.At(x, y) {
+				return true
+			}
+		}
+	}
+	return false
 }

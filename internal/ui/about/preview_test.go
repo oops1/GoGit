@@ -33,10 +33,10 @@ func TestPreviewAboutDialog(t *testing.T) {
 		}
 		i18n.Apply(variant.lang)
 
-		eng := engine.New(560, 440, 30)
+		eng := engine.New(700, 540, 30)
 		eng.SetTheme(variant.theme)
 		root := widget.NewPanel(variant.theme.WindowBG)
-		root.SetBounds(image.Rect(0, 0, 560, 440))
+		root.SetBounds(image.Rect(0, 0, 700, 540))
 		eng.SetRoot(root)
 
 		view, err := NewView(Info{Version: "v1.1.0", Architecture: "amd64"})
