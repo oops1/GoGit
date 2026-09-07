@@ -38,12 +38,14 @@ var repositoryMenuTree = buildRepositoryMenuTree()
 var editMenuTree = buildEditMenuTree()
 var remoteMenuTree = buildRemoteMenuTree()
 var viewMenuTree = buildViewMenuTree()
+var helpMenuTree = buildHelpMenuTree()
 
 var menuBarDefs = []menuDef{
 	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Edit", Tree: editMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Remote", Tree: remoteMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
+	{TitleKey: "Menu.Help", Tree: helpMenuTree, LeafText: plainLeafText},
 }
 
 func buildRepositoryMenuTree() []menuTreeEntry {
@@ -109,6 +111,12 @@ func buildViewMenuTree() []menuTreeEntry {
 		{Group: &language},
 		{Separator: true},
 		{Leaf: &menuLeafEntry{Key: "Menu.View.Refresh", Command: CmdRefresh}},
+	}
+}
+
+func buildHelpMenuTree() []menuTreeEntry {
+	return []menuTreeEntry{
+		{Leaf: &menuLeafEntry{Key: "Menu.Help.About", Command: CmdAbout}},
 	}
 }
 

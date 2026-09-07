@@ -33,6 +33,7 @@ const (
 	CmdCommit          CommandID = "local.commit"
 	CmdResetLayout     CommandID = "view.reset-layout"
 	CmdRefresh         CommandID = "view.refresh"
+	CmdAbout           CommandID = "help.about"
 )
 
 const (

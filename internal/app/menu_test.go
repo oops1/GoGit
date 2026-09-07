@@ -52,8 +52,8 @@ func leafIndex(t *testing.T, group *menuGroupEntry, cmd CommandID) int {
 func TestViewMenuTreeStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 4 {
-		t.Fatalf("top menus = %d", len(items))
+	if len(items) != len(menuBarDefs) {
+		t.Fatalf("top menus = %d, want %d", len(items), len(menuBarDefs))
 	}
 	if items[viewMenuIndex].Text != widget.Tr("Menu.View") {
 		t.Fatalf("view menu text = %q", items[viewMenuIndex].Text)

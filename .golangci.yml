@@ -64,6 +64,13 @@ linters:
       - path: internal/gitcore/credential/.*_test\.go
         linters:
           - gosec
+      - path: internal/app/openurl_(windows|linux)\.go
+        linters:
+          - gosec
+        text: "G204"
+      - path: internal/app/about_test\.go
+        linters:
+          - gosec
 formatters:
   enable:
     - gofmt
