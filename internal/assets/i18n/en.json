@@ -236,6 +236,7 @@
   "Diff.Binary": "Binary files differ",
   "Diff.NoNewline": "No newline at end of file",
   "Diff.Truncated": "Diff truncated, showing a partial result",
+  "Files.BackToWorkingCopy": "Working copy",
   "Files.Column.Extension": "Extension",
   "Files.Column.IndexState": "Index State",
   "Files.Column.Modified": "Modified",
