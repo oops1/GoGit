@@ -20,12 +20,15 @@ const (
 	latestReleaseAPIURL  = "https://api.github.com/repos/oops1/gogit/releases/latest"
 	latestReleasePageURL = "https://github.com/oops1/gogit/releases/latest"
 	updateCheckTimeout   = 15 * time.Second
+	updateCheckInterval  = 72 * time.Hour
 	updateBodyLimit      = 1 << 20
 )
 
 var ErrReleaseUnavailable = errors.New("app: the release feed answered with an error")
 
 var updateWG sync.WaitGroup
+
+var timeNow = time.Now
 
 var (
 	releaseFeedURL = latestReleaseAPIURL
@@ -38,24 +41,54 @@ type releaseInfo struct {
 }
 
 func (a *App) checkForUpdates() {
+	a.startUpdateCheck(true)
+}
+
+func (a *App) scheduleUpdateCheck() {
+	if !updateCheckDue(a.cfg.Updates.LastCheck, timeNow()) {
+		return
+	}
+	a.startUpdateCheck(false)
+}
+
+func updateCheckDue(last, now time.Time) bool {
+	if last.IsZero() || now.Before(last) {
+		return true
+	}
+	return !now.Before(last.Add(updateCheckInterval))
+}
+
+func (a *App) startUpdateCheck(announce bool) {
 	current := version.String()
 	updateWG.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
 		defer cancel()
 		latest, err := fetchRelease(ctx, releaseFeedURL)
-		a.Post(func() { a.reportUpdate(current, latest, err) })
+		a.Post(func() { a.reportUpdate(current, latest, err, announce) })
 	})
 }
 
-func (a *App) reportUpdate(current string, latest releaseInfo, err error) {
+func (a *App) rememberUpdateCheck() {
+	a.cfg.Updates.LastCheck = timeNow()
+	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
+		a.log.Warn("save config failed", "error", err)
+	}
+}
+
+func (a *App) reportUpdate(current string, latest releaseInfo, err error, announce bool) {
 	title := i18n.T("Dialog.Update.Title")
 	if err != nil {
 		a.log.Warn("check for updates failed", "error", err)
-		a.showError(title, i18n.Tf("Dialog.Update.Failed", err.Error()))
+		if announce {
+			a.showError(title, i18n.Tf("Dialog.Update.Failed", err.Error()))
+		}
 		return
 	}
+	a.rememberUpdateCheck()
 	if !isNewerRelease(current, latest.Tag) {
-		a.showInfo(title, i18n.Tf("Dialog.Update.UpToDate", current))
+		if announce {
+			a.showInfo(title, i18n.Tf("Dialog.Update.UpToDate", current))
+		}
 		return
 	}
 	page := latest.Page

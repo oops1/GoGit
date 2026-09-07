@@ -1,12 +1,21 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/oops1/headless-gui/v3/widget"
+
+	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
 )
 
@@ -39,7 +48,7 @@ func TestCheckForUpdatesSaysTheBuildIsCurrent(t *testing.T) {
 	a := newTestApp(t)
 	info, failure, _ := captureMessages(t, a)
 
-	a.reportUpdate("v1.1.0", releaseInfo{Tag: "v1.1.0"}, nil)
+	a.reportUpdate("v1.1.0", releaseInfo{Tag: "v1.1.0"}, nil, true)
 
 	if failure.message != "" {
 		t.Fatalf("unexpected error message %q", failure.message)
@@ -213,4 +222,130 @@ func TestUpdateCommandIsHandled(t *testing.T) {
 	}
 	updateWG.Wait()
 	waitForPostQueueDrain(t, a)
+}
+
+func stubClock(t *testing.T, now time.Time) {
+	t.Helper()
+	prev := timeNow
+	timeNow = func() time.Time { return now }
+	t.Cleanup(func() { timeNow = prev })
+}
+
+func TestAScheduledCheckRunsOnceEveryThreeDays(t *testing.T) {
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+
+	if !updateCheckDue(time.Time{}, now) {
+		t.Fatal("a build that has never checked must check")
+	}
+	if updateCheckDue(now.Add(-updateCheckInterval+time.Minute), now) {
+		t.Fatal("a check younger than the interval must wait")
+	}
+	if !updateCheckDue(now.Add(-updateCheckInterval), now) {
+		t.Fatal("a check as old as the interval must run")
+	}
+	if !updateCheckDue(now.Add(time.Hour), now) {
+		t.Fatal("a timestamp from the future means the clock moved: check again")
+	}
+}
+
+func TestAScheduledCheckStaysQuietWhenTheBuildIsCurrent(t *testing.T) {
+	a := newTestApp(t)
+	info, failure, _ := captureMessages(t, a)
+	stubClock(t, time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC))
+
+	a.reportUpdate("v1.1.0", releaseInfo{Tag: "v1.1.0"}, nil, false)
+
+	if info.message != "" || failure.message != "" {
+		t.Fatalf("a background check must say nothing: info=%q error=%q", info.message, failure.message)
+	}
+	if !a.cfg.Updates.LastCheck.Equal(timeNow()) {
+		t.Fatalf("last check = %v, want it recorded", a.cfg.Updates.LastCheck)
+	}
+}
+
+func TestAFailedCheckIsNotRecordedSoTheNextStartRetries(t *testing.T) {
+	a := newTestApp(t)
+	_, failure, _ := captureMessages(t, a)
+
+	a.reportUpdate("v1.1.0", releaseInfo{}, errors.New("no network"), false)
+
+	if failure.message != "" {
+		t.Fatal("a background check must not interrupt with an error box")
+	}
+	if !a.cfg.Updates.LastCheck.IsZero() {
+		t.Fatal("a failed check must leave the timestamp alone")
+	}
+	if !updateCheckDue(a.cfg.Updates.LastCheck, time.Now()) {
+		t.Fatal("the next start must try again")
+	}
+}
+
+func TestASuccessfulCheckIsWrittenToTheConfigFile(t *testing.T) {
+	a := newTestApp(t)
+	captureMessages(t, a)
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	stubClock(t, now)
+
+	a.reportUpdate("v1.1.0", releaseInfo{Tag: "v1.1.0"}, nil, false)
+
+	saved, err := config.Load(a.paths.ConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.Updates.LastCheck.Equal(now) {
+		t.Fatalf("saved last check = %v, want %v", saved.Updates.LastCheck, now)
+	}
+}
+
+func TestScheduledCheckSkipsAFreshTimestamp(t *testing.T) {
+	a := newTestApp(t)
+	captureMessages(t, a)
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	stubClock(t, now)
+	a.cfg.Updates.LastCheck = now.Add(-time.Hour)
+	calls := 0
+	prev := fetchRelease
+	fetchRelease = func(context.Context, string) (releaseInfo, error) {
+		calls++
+		return releaseInfo{}, nil
+	}
+	t.Cleanup(func() { fetchRelease = prev })
+
+	a.scheduleUpdateCheck()
+	updateWG.Wait()
+
+	if calls != 0 {
+		t.Fatalf("release feed asked %d times, want none", calls)
+	}
+
+	a.cfg.Updates.LastCheck = now.Add(-4 * 24 * time.Hour)
+	a.scheduleUpdateCheck()
+	updateWG.Wait()
+	waitForPostQueueDrain(t, a)
+
+	if calls != 1 {
+		t.Fatalf("release feed asked %d times, want one", calls)
+	}
+}
+
+func TestRememberingACheckLogsAConfigItCannotSave(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "config.toml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	a, err := New(config.Default(), config.Paths{Dir: dir}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(a.Close)
+
+	a.rememberUpdateCheck()
+
+	if !strings.Contains(buf.String(), "save config failed") {
+		t.Fatalf("expected the save failure to be logged: %s", buf.String())
+	}
 }

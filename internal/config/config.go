@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -43,6 +44,7 @@ type Config struct {
 	Window           Window       `toml:"window"`
 	Git              Git          `toml:"git"`
 	UI               UI           `toml:"ui"`
+	Updates          Updates      `toml:"updates"`
 	Groups           []Group      `toml:"groups"`
 	Repositories     []Repository `toml:"repositories"`
 	ActiveRepository string       `toml:"active_repository"`
@@ -78,6 +80,10 @@ type UI struct {
 	FilesStatusFilter     []string `toml:"files_status_filter"`
 	FilesSubdirectories   bool     `toml:"files_subdirectories"`
 	JournalFullAuthorName bool     `toml:"journal_full_author_name"`
+}
+
+type Updates struct {
+	LastCheck time.Time `toml:"last_check"`
 }
 
 type Group struct {

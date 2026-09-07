@@ -798,6 +798,7 @@ func (a *App) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go a.FollowSystemTheme(ctx)
+	a.scheduleUpdateCheck()
 	go a.runWatchdog(ctx, a.watches())
 	win := window.New(a.eng, a.root.Title)
 	a.applyWindowIcon(win)
