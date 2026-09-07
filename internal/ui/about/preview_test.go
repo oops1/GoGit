@@ -39,11 +39,12 @@ func TestPreviewAboutDialog(t *testing.T) {
 		root.SetBounds(image.Rect(0, 0, 560, 380))
 		eng.SetRoot(root)
 
-		view, err := NewView(Info{Version: "v1.1.0", OS: "windows", Architecture: "amd64"})
+		view, err := NewView(Info{Version: "v1.1.0", Architecture: "amd64"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		eng.ShowModal(view.Dialog())
+		view.Restyle(variant.theme)
 
 		eng.SaveFrames(dir + "/about-" + variant.name)
 		eng.Start()

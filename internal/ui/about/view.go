@@ -3,7 +3,9 @@ package about
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"runtime"
+	"strings"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -15,10 +17,12 @@ import (
 const dialogName = "about"
 
 const (
-	logoSize      = 64
-	gitEngineName = "Go"
-	guiEngineName = "headless-gui/v3"
-	copyrightYear = 2026
+	logoSize       = 72
+	githubIconName = "github"
+	githubIconSize = 18
+	gitEngineName  = "Go"
+	guiEngineName  = "headless-gui/v3"
+	copyrightYear  = 2026
 )
 
 var ErrWidgetMissing = errors.New("about: named widget missing")
@@ -27,24 +31,26 @@ var loadDialog = dialogs.Load
 
 type Info struct {
 	Version      string
-	OS           string
 	Architecture string
 }
 
 type View struct {
 	dlg *widget.Dialog
 
-	logo         *widget.ImageWidget
-	tagline      *widget.Label
-	version      *widget.Label
-	platform     *widget.Label
-	architecture *widget.Label
-	gitEngine    *widget.Label
-	guiEngine    *widget.Label
-	copyright    *widget.Label
-	githubBtn    *widget.Button
-	licenseBtn   *widget.Button
-	okBtn        *widget.Button
+	logo          *widget.ImageWidget
+	githubIcon    *widget.ImageWidget
+	tagline       *widget.Label
+	version       *widget.Label
+	platform      *widget.Label
+	architecture  *widget.Label
+	gitEngine     *widget.Label
+	guiEngine     *widget.Label
+	summaryFirst  *widget.Label
+	summarySecond *widget.Label
+	copyright     *widget.Label
+	githubBtn     *widget.Button
+	licenseBtn    *widget.Button
+	okBtn         *widget.Button
 
 	OnClose   func()
 	OnGitHub  func()
@@ -72,8 +78,17 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.logo, ok = named["logo"].(*widget.ImageWidget); !ok {
 		return fmt.Errorf("%w: logo", ErrWidgetMissing)
 	}
+	if v.githubIcon, ok = named["githubIcon"].(*widget.ImageWidget); !ok {
+		return fmt.Errorf("%w: githubIcon", ErrWidgetMissing)
+	}
 	if v.tagline, ok = named["tagline"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: tagline", ErrWidgetMissing)
+	}
+	if v.summaryFirst, ok = named["summaryFirst"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: summaryFirst", ErrWidgetMissing)
+	}
+	if v.summarySecond, ok = named["summarySecond"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: summarySecond", ErrWidgetMissing)
 	}
 	if v.version, ok = named["version"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: version", ErrWidgetMissing)
@@ -110,14 +125,37 @@ func (v *View) apply(info Info) {
 	if img := icons.ToolbarPlain("app", logoSize); img != nil {
 		v.logo.SetImage(img)
 	}
-	v.version.SetText(info.Version)
-	v.platform.SetText(platformLabel(info.OS))
+	v.githubIcon.Stretch = widget.ImageStretchUniform
+	if mark := icons.ToolbarPlain(githubIconName, githubIconSize); mark != nil {
+		v.githubIcon.SetImage(mark)
+	}
+	v.version.SetText(i18n.Tf("Dialog.About.Version", displayVersion(info.Version)))
+	v.platform.SetText(i18n.T("Platform.supported"))
 	v.architecture.SetText(architectureLabel(info.Architecture))
 	v.gitEngine.SetText(gitEngineName)
 	v.guiEngine.SetText(guiEngineName)
 	v.copyright.SetText(i18n.Tf("Dialog.About.Copyright", copyrightYear))
-	v.tagline.TextColor = widget.CurrentTheme().SecondaryText
-	v.copyright.TextColor = widget.CurrentTheme().SecondaryText
+	v.Restyle(widget.CurrentTheme())
+}
+
+func displayVersion(version string) string {
+	return strings.TrimPrefix(version, "v")
+}
+
+func (v *View) Restyle(t *widget.Theme) {
+	v.tagline.TextColor = t.SecondaryText
+	v.copyright.TextColor = t.SecondaryText
+	v.summaryFirst.TextColor = t.LabelText
+	v.summarySecond.TextColor = t.LabelText
+	styleAsLink(v.githubBtn, t.Accent)
+	styleAsLink(v.licenseBtn, t.SecondaryText)
+}
+
+func styleAsLink(btn *widget.Button, text color.RGBA) {
+	btn.TextColor = text
+	btn.Background = color.RGBA{}
+	btn.BorderColor = color.RGBA{}
+	btn.PressedBG = color.RGBA{}
 }
 
 func (v *View) wire() {
@@ -137,15 +175,7 @@ func call(fn func()) {
 }
 
 func CurrentInfo(version string) Info {
-	return Info{Version: version, OS: runtime.GOOS, Architecture: runtime.GOARCH}
-}
-
-func platformLabel(goos string) string {
-	key := "Platform." + goos
-	if label := i18n.T(key); label != key {
-		return label
-	}
-	return goos
+	return Info{Version: version, Architecture: runtime.GOARCH}
 }
 
 func architectureLabel(goarch string) string {
