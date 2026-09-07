@@ -754,6 +754,7 @@ func (a *App) applyTheme() {
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
+	a.applyWorkingCopyButtonVisuals(theme)
 	a.applyRepoTreeTheme(theme)
 	a.applyPaneTitleColors(theme)
 }

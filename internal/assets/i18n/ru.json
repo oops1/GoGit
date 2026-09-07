@@ -237,6 +237,7 @@
   "Diff.NoNewline": "Нет символа новой строки в конце файла",
   "Diff.Truncated": "Diff обрезан, показана часть результата",
   "Files.BackToWorkingCopy": "Рабочая копия",
+  "Files.BackToWorkingCopy.Tip": "Показать рабочую копию вместо выбранного коммита",
   "Files.Column.Extension": "Расширение",
   "Files.Column.IndexState": "Состояние индекса",
   "Files.Column.Modified": "Изменён",

@@ -237,6 +237,7 @@
   "Diff.NoNewline": "No newline at end of file",
   "Diff.Truncated": "Diff truncated, showing a partial result",
   "Files.BackToWorkingCopy": "Working copy",
+  "Files.BackToWorkingCopy.Tip": "Show the working copy instead of the selected commit",
   "Files.Column.Extension": "Extension",
   "Files.Column.IndexState": "Index State",
   "Files.Column.Modified": "Modified",
