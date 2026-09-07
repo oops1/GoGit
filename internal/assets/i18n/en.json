@@ -9,7 +9,7 @@
   "Dialog.About.OK": "OK",
   "Dialog.About.Platform": "Platform",
   "Dialog.About.Summary.First": "A graphical interface for working",
-  "Dialog.About.Summary.Second": "with git repositories",
+  "Dialog.About.Summary.Second": "with git repositories.",
   "Dialog.About.Tagline": "Graphical Git client",
   "Dialog.About.Title": "About %s",
   "Dialog.About.Version": "Version %s",

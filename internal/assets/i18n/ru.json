@@ -9,7 +9,7 @@
   "Dialog.About.OK": "OK",
   "Dialog.About.Platform": "Платформа",
   "Dialog.About.Summary.First": "Графический интерфейс",
-  "Dialog.About.Summary.Second": "для работы с Git-репозиториями",
+  "Dialog.About.Summary.Second": "для работы с Git-репозиториями.",
   "Dialog.About.Tagline": "Графический клиент Git",
   "Dialog.About.Title": "О программе %s",
   "Dialog.About.Version": "Версия %s",

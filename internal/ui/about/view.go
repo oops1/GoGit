@@ -17,9 +17,10 @@ import (
 const dialogName = "about"
 
 const (
-	logoSize       = 72
+	logoSize       = 80
 	githubIconName = "github"
-	githubIconSize = 18
+	githubIconSize = 20
+	contentPadding = 24
 	gitEngineName  = "Go"
 	guiEngineName  = "headless-gui/v3"
 	copyrightYear  = 2026
@@ -66,6 +67,7 @@ func NewView(info Info) (*View, error) {
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
+	dlg.SetContentPadding(contentPadding)
 	v.apply(info)
 	v.wire()
 	return v, nil
@@ -149,6 +151,8 @@ func (v *View) Restyle(t *widget.Theme) {
 	v.summarySecond.TextColor = t.LabelText
 	styleAsLink(v.githubBtn, t.Accent)
 	styleAsLink(v.licenseBtn, t.SecondaryText)
+	v.okBtn.BorderColor = t.Accent
+	v.okBtn.TextColor = t.LabelText
 }
 
 func styleAsLink(btn *widget.Button, text color.RGBA) {
