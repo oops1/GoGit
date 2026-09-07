@@ -63,6 +63,11 @@
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.View.Refresh}"/>
             </MenuItem>
+            <MenuItem Header="{Loc Menu.Help}">
+                <MenuItem Header="{Loc Menu.Help.CheckUpdates}"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Help.About}"/>
+            </MenuItem>
         </Menu>
 
         <Grid>

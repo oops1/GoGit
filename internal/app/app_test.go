@@ -58,8 +58,8 @@ func TestNewLoadsMainWindow(t *testing.T) {
 func TestMenuStructure(t *testing.T) {
 	a := newTestApp(t)
 	items := a.menu.Items()
-	if len(items) != 4 {
-		t.Fatalf("top menus = %d", len(items))
+	if len(items) != len(menuBarDefs) {
+		t.Fatalf("top menus = %d, want %d", len(items), len(menuBarDefs))
 	}
 	if len(items[0].Items) != len(repositoryMenuTree) {
 		t.Fatalf("sub items = %d, want %d", len(items[0].Items), len(repositoryMenuTree))

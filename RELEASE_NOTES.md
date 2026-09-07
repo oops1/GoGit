@@ -1,70 +1,66 @@
-# Go.Git 1.1.0 — Network and secrets
+# Go.Git 1.2.0 — The settings window
 
-Go.Git can now clone, fetch, pull and push. As before, it never runs the system
-git: the whole protocol stack is written in Go, and the binary needs nothing
-installed next to it.
+The settings live in one window now, built the way a desktop application is
+built: a navigation column down the left side, the section on the right, and
+the window's own title bar carrying the search field and the window buttons.
 
-## Talking to remotes
+## One window instead of four
 
-- Git protocol versions 1 and 2 over Smart HTTP/HTTPS, `git://`, SSH and plain
-  paths on disk, with pkt-line framing, side-band progress and capability
-  negotiation.
-- Local repositories are read directly, so cloning from a folder next to yours
-  works with no network and no helper programs.
-- Real multi-round `have` negotiation instead of a single step, so an
-  incremental fetch transfers only what is missing.
-- Packfiles are written with delta compression and received as a stream, with
-  thin packs completed from the local object database.
-- `clone` (full, bare, single branch, by branch, shallow), `fetch`, `pull`
-  (fast-forward only), `push`, `prune`, and remote management.
-- `FETCH_HEAD` and the `shallow` file are written in git's own format, so the
-  system git reads the result without a complaint.
-- `--force-with-lease` refuses to overwrite a remote branch that moved since
-  you last saw it.
+- A navigation column with an icon per section runs the full height of the
+  window. The «≡» button in the title bar folds it into a strip of icons and
+  gives the freed width to the content.
+- The search field sits in the title bar. It searches parameter names, their
+  explanations, group titles, current values, credential resources and SSH
+  hosts; each section shows how many settings matched, and an empty result says
+  so instead of showing a blank page.
+- Every section is laid out on one grid: labels, fields and the grey
+  explanations line up, and the rarely touched git parameters are folded into
+  «Advanced settings».
+- A long section scrolls instead of stretching the window.
+- «Save» stays disabled until something is changed, and closing with unsaved
+  changes asks what to do with them.
+- The window resizes: tables stretch, long values are cut with an ellipsis, and
+  nothing overlaps at the smallest size.
 
 ## Credentials and keys
 
-- An encrypted store, `vault.bin`: XChaCha20-Poly1305 content key wrapped by
-  key slots — DPAPI on Windows, Secret Service on Linux, an Argon2id master
-  password, or a key file. Slots can be added and removed like LUKS.
-- Credentials are matched by the longest URL prefix, the way `git credential`
-  does it.
-- SSH keys come from your key directory, from the store, or from ssh-agent —
-  through a socket on Unix and through the named pipe on Windows.
-- `known_hosts` is honoured: an unknown host key is shown with its SHA256
-  fingerprint and stored only after you accept it; a changed key is refused
-  outright.
-- Secrets live in byte slices, are wiped right after use and never reach the log.
-- You choose where passwords come from and go: the built-in store, the system git
-  credential helper, or the store first and the helper as a fallback. The settings
-  page shows the store path, how its key is protected, and which helpers the open
-  repository actually uses.
+- Saved credentials and SSH hosts are tables with a status dot on every row —
+  stored, authorisation required, error — and Add, Edit and Remove beside them.
+- Adding and editing happen in their own window rather than in a form under the
+  table.
+- «Test connection» really connects: it asks the remote for its refs over the
+  same transport that fetch uses, and reports how many refs answered or why the
+  connection failed. «Check key» reads and parses the key file, with its
+  passphrase when the key is encrypted.
+- The chosen password source is visible at once: the built-in store shows its
+  path and how its key is protected, the system git shows which helpers the open
+  repository would use.
 
-## In the window
+## Fixed
 
-- A clone dialog that checks the address and offers the branches the server
-  advertises.
-- Pull, Sync and Push on the toolbar and the new Remote menu now do the work,
-  showing progress and a log while it runs, cancellable at any point.
-- Dialogs for credentials, for confirming a host key and for unlocking the store.
-- Settings pages listing stored credentials and SSH keys, with adding, removing
-  and setting a master password.
-- Optional auto-fetch on a timer, with the distance to the upstream branch shown
-  in the repository tree and the status bar.
-- New settings: pull strategy, default remote, pruning gone branches on fetch,
-  clone depth, and the password source.
-- The window now carries its own icon on Linux as well, not only on Windows.
+- The system git credential helper is found even when it is not on PATH: next to
+  the git binary itself (`mingw64/bin`, `libexec/git-core`) and in the usual
+  install locations. On Windows the call used to fail and Go.Git asked for the
+  password itself, while git from the console was answered silently by the
+  helper.
 
-## Not here yet
+## Also
 
-Merge, rebase, cherry-pick, revert, reset, worktrees, conflict resolution and
-line-level staging. Next up is a rebuilt settings window — one window with a side
-navigation, a search box and tables instead of stacked fields — followed by
-worktrees and then the merge machinery.
+- An About window with the version, platform, architecture, git engine and GUI,
+  and links to the project and its licence.
+- Update checking: an entry in the Help menu, and an automatic check on start
+  once every three days. A failed check is not recorded, so the next start tries
+  again.
+- Tags in the branches panel fold into a tree by version number, with the three
+  newest left in plain sight.
 
-## Downloads
+## Install
 
-- `gogit-v1.1.0-windows-amd64.zip` — Windows 10/11, no installer required.
-- `gogit-v1.1.0-linux-amd64.tar.gz`, `gogit-v1.1.0-linux-arm64.tar.gz` — Linux.
+Download the archive for your system, unpack it and run the binary. Nothing else
+has to be installed: the git implementation is inside.
 
-Verify the archives against `SHA256SUMS`.
+- `gogit-v1.2.0-windows-amd64.zip`
+- `gogit-v1.2.0-linux-amd64.tar.gz`
+- `gogit-v1.2.0-linux-arm64.tar.gz`
+
+`SHA256SUMS` next to the archives carries their checksums.

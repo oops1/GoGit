@@ -75,6 +75,25 @@ func TestIcons(t *testing.T) {
 	}
 }
 
+func TestSettingsIcons(t *testing.T) {
+	names := IconNames()
+	for _, want := range []string{"settings_general", "settings_git", "settings_credentials", "settings_ssh"} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("icon %q missing in %v", want, names)
+		}
+		data, err := Icon(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(strings.TrimSpace(string(data)), "<svg") {
+			t.Fatalf("icon %q is not svg", want)
+		}
+		if !strings.Contains(string(data), `viewBox="0 0 24 24"`) {
+			t.Fatalf("icon %q does not use the shared 24x24 viewBox", want)
+		}
+	}
+}
+
 func TestIconNamesExcludesSubdirectories(t *testing.T) {
 	names := IconNames()
 	if slices.Contains(names, "status") || slices.Contains(names, "tree") {

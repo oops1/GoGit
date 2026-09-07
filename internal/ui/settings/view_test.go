@@ -2,6 +2,7 @@ package settings
 
 import (
 	"errors"
+	"image/color"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/engine"
@@ -34,7 +35,18 @@ func clickCheckBox(cb *widget.CheckBox) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"tabs":                  widget.NewTabControl(),
+		"root":               widget.NewGrid(),
+		"search":             widget.NewTextInput(""),
+		"sectionArea":        widget.NewGrid(),
+		"sectionHost":        widget.NewGrid(),
+		"navTitle":           widget.NewLabel("", color.RGBA{}),
+		"navToggle":          widget.NewButton(""),
+		"sectionTitle":       widget.NewWin10Label(""),
+		"sectionGeneral":     widget.NewGrid(),
+		"sectionGit":         widget.NewGrid(),
+		"sectionCredentials": widget.NewGrid(),
+		"sectionSSH":         widget.NewGrid(),
+
 		"language":              widget.NewDropdown(),
 		"theme":                 widget.NewDropdown(),
 		"showToolbar":           widget.NewCheckBox(""),
@@ -49,6 +61,8 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"defaultRemote":         widget.NewTextInput(""),
 		"pruneOnFetch":          widget.NewCheckBox(""),
 		"shallowDepth":          widget.NewNumericUpDown(),
+		"gitAdvanced":           widget.NewExpander(""),
+		"gitAdvancedContent":    widget.NewGrid(),
 		"ok":                    widget.NewButton(""),
 		"cancel":                widget.NewButton(""),
 
@@ -60,22 +74,40 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"credentialsTable":         widget.NewDataGridWidget(),
 		"credentialResource":       widget.NewTextInput(""),
 		"credentialUsername":       widget.NewTextInput(""),
+		"credentialType":           widget.NewDropdown(),
 		"credentialSecret":         widget.NewPasswordInput(""),
+		"credentialSave":           widget.NewButton(""),
+		"sshSave":                  widget.NewButton(""),
 		"credentialAdd":            widget.NewButton(""),
+		"credentialEditStatus":     widget.NewWin10Label(""),
+		"credentialEditOK":         widget.NewButton(""),
+		"credentialEditCancel":     widget.NewButton(""),
+		"sshEditStatus":            widget.NewWin10Label(""),
+		"sshEditOK":                widget.NewButton(""),
+		"sshEditCancel":            widget.NewButton(""),
+		"credentialEdit":           widget.NewButton(""),
 		"credentialRemove":         widget.NewButton(""),
+		"credentialTestConnection": widget.NewButton(""),
 		"credentialMasterPassword": widget.NewButton(""),
 		"credentialsStatus":        widget.NewWin10Label(""),
 		"credentialsUnlock":        widget.NewButton(""),
+		"credentialsLockIcon":      widget.NewImageWidget(),
+		"credentialsSecureRow":     widget.NewGrid(),
 
-		"sshTable":      widget.NewDataGridWidget(),
-		"sshHost":       widget.NewTextInput(""),
-		"sshPath":       widget.NewTextInput(""),
-		"sshBrowse":     widget.NewButton(""),
-		"sshPassphrase": widget.NewPasswordInput(""),
-		"sshAdd":        widget.NewButton(""),
-		"sshRemove":     widget.NewButton(""),
-		"sshStatus":     widget.NewWin10Label(""),
-		"sshUnlock":     widget.NewButton(""),
+		"sshTable":          widget.NewDataGridWidget(),
+		"sshHost":           widget.NewTextInput(""),
+		"sshPath":           widget.NewTextInput(""),
+		"sshBrowse":         widget.NewButton(""),
+		"sshPassphrase":     widget.NewPasswordInput(""),
+		"sshUseDefault":     widget.NewCheckBox(""),
+		"sshAdd":            widget.NewButton(""),
+		"sshEdit":           widget.NewButton(""),
+		"sshRemove":         widget.NewButton(""),
+		"sshTestConnection": widget.NewButton(""),
+		"sshStatus":         widget.NewWin10Label(""),
+		"sshUnlock":         widget.NewButton(""),
+		"sshLockIcon":       widget.NewImageWidget(),
+		"sshSecureRow":      widget.NewGrid(),
 	}
 }
 
@@ -112,13 +144,17 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	keys := []string{
-		"tabs", "language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
+		"root", "search", "sectionArea", "sectionHost", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
+		"language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
-		"shallowDepth", "ok", "cancel",
+		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
 		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
-		"credentialsTable", "credentialResource", "credentialUsername", "credentialSecret", "credentialAdd",
-		"credentialRemove", "credentialMasterPassword", "credentialsStatus", "credentialsUnlock",
-		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshAdd", "sshRemove", "sshStatus", "sshUnlock",
+		"credentialsTable", "credentialResource", "credentialUsername", "credentialType", "credentialSecret",
+		"credentialAdd", "credentialEditStatus", "credentialEditOK", "credentialEditCancel",
+		"sshEditStatus", "sshEditOK", "sshEditCancel", "credentialEdit", "credentialRemove", "credentialTestConnection", "credentialMasterPassword",
+		"credentialsStatus", "credentialsUnlock", "credentialsLockIcon", "credentialsSecureRow",
+		"sshTable", "sshHost", "sshPath", "sshBrowse", "sshPassphrase", "sshUseDefault", "sshAdd", "sshEdit",
+		"sshRemove", "sshTestConnection", "sshStatus", "sshUnlock", "sshLockIcon", "sshSecureRow",
 	}
 	for _, key := range keys {
 		named := fullNamedWidgets()
@@ -130,7 +166,8 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	}
 	labelKeys := map[string]bool{
 		"credentialSourceStorePath": true, "credentialSourceKeyProtection": true, "credentialSourceHelpers": true,
-		"credentialsStatus": true, "sshStatus": true,
+		"credentialsStatus": true, "sshStatus": true, "sectionTitle": true,
+		"credentialEditStatus": true, "sshEditStatus": true,
 	}
 	for _, key := range keys {
 		if labelKeys[key] {
@@ -428,5 +465,42 @@ func TestOKAndCancelButtonsInvokeConfirmAndCancel(t *testing.T) {
 	v.cancelBtn.OnClick()
 	if cancelCalled != 1 {
 		t.Fatal("cancel button must invoke cancel")
+	}
+}
+
+func TestCheckboxTogglesWhenTheLabelBesideItIsClicked(t *testing.T) {
+	v := newTestView(t, []string{"en", "ru"}, Model{Language: "en"})
+	box := v.showToolbar
+	before := box.IsChecked()
+	b := box.Bounds()
+	x := b.Min.X + b.Dx()/2
+	y := b.Min.Y + b.Dy()/2
+	box.OnMouseButton(widget.MouseEvent{X: x, Y: y, Button: widget.MouseLeft, Pressed: true})
+	box.OnMouseButton(widget.MouseEvent{X: x, Y: y, Button: widget.MouseLeft})
+	if box.IsChecked() == before {
+		t.Fatal("checkbox did not toggle from a click over the area its label occupies")
+	}
+}
+
+func TestNewViewPropagatesAFailureLoadingTheEditors(t *testing.T) {
+	for _, failing := range []string{credentialEditorName, keyEditorName} {
+		widget.ClearStrings()
+		prev := loadDialog
+		wantErr := errors.New("boom")
+		loadDialog = func(name, title string) (*widget.Dialog, map[string]widget.Widget, error) {
+			if name == failing {
+				return nil, nil, wantErr
+			}
+			return prev(name, title)
+		}
+
+		eng := engine.New(800, 600, 30)
+		_, err := NewView(eng, nil, Model{})
+		loadDialog = prev
+		widget.ClearStrings()
+
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("loading %q: err = %v, want %v", failing, err, wantErr)
+		}
 	}
 }

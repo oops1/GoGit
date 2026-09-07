@@ -14,11 +14,15 @@ import (
 type SecretEntry struct {
 	Resource string
 	Username string
+	Type     string
+	Status   SecretStatus
 }
 
 type KeyEntry struct {
-	Host string
-	Path string
+	Host   string
+	Path   string
+	Type   string
+	Status SecretStatus
 }
 
 type CredentialHelperEntry struct {
@@ -26,12 +30,44 @@ type CredentialHelperEntry struct {
 	Supported bool
 }
 
+const defaultKeyHost = "*"
+
+const authTypeColumnMinWidth = 130
+
+const userColumnMinWidth = 110
+
 const (
 	columnHeaderResource   = "Dialog.Settings.Credentials.Resource"
 	columnHeaderUsername   = "Dialog.Settings.Credentials.User"
+	columnHeaderAuthType   = "Dialog.Settings.Credentials.Type"
+	columnHeaderAuthStatus = "Dialog.Settings.Credentials.Status"
 	columnHeaderSSHHost    = "Dialog.Settings.SSH.Host"
 	columnHeaderSSHKeyFile = "Dialog.Settings.SSH.KeyFile"
+	columnHeaderSSHType    = "Dialog.Settings.SSH.Type"
+	columnHeaderSSHStatus  = "Dialog.Settings.SSH.Status"
+
+	columnHeaderStorePath     = "Dialog.Settings.Secrets.StorePath"
+	columnHeaderKeyProtection = "Dialog.Settings.Secrets.KeyProtection"
+	columnHeaderHelpers       = "Dialog.Settings.Secrets.Helpers"
 )
+
+var credentialAuthTypeOrder = []string{"password", "token"}
+
+func credentialAuthTypeIndex(value string) int {
+	for i, t := range credentialAuthTypeOrder {
+		if t == value {
+			return i
+		}
+	}
+	return 0
+}
+
+func credentialAuthTypeAt(idx int) string {
+	if idx < 0 || idx >= len(credentialAuthTypeOrder) {
+		return credentialAuthTypeOrder[0]
+	}
+	return credentialAuthTypeOrder[idx]
+}
 
 func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	var ok bool
@@ -44,14 +80,32 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	if v.credentialUsername, ok = named["credentialUsername"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: credentialUsername", ErrWidgetMissing)
 	}
+	if v.credentialType, ok = named["credentialType"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: credentialType", ErrWidgetMissing)
+	}
 	if v.credentialSecret, ok = named["credentialSecret"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: credentialSecret", ErrWidgetMissing)
 	}
 	if v.credentialAddBtn, ok = named["credentialAdd"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: credentialAdd", ErrWidgetMissing)
 	}
+	if v.credentialEditStatus, ok = named["credentialEditStatus"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: credentialEditStatus", ErrWidgetMissing)
+	}
+	if v.credentialEditOK, ok = named["credentialEditOK"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: credentialEditOK", ErrWidgetMissing)
+	}
+	if v.credentialEditCancel, ok = named["credentialEditCancel"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: credentialEditCancel", ErrWidgetMissing)
+	}
+	if v.credentialEditBtn, ok = named["credentialEdit"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: credentialEdit", ErrWidgetMissing)
+	}
 	if v.credentialRemoveBtn, ok = named["credentialRemove"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: credentialRemove", ErrWidgetMissing)
+	}
+	if v.credentialTestBtn, ok = named["credentialTestConnection"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: credentialTestConnection", ErrWidgetMissing)
 	}
 	if v.masterPasswordBtn, ok = named["credentialMasterPassword"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: credentialMasterPassword", ErrWidgetMissing)
@@ -61,6 +115,12 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	}
 	if v.credentialsUnlockBtn, ok = named["credentialsUnlock"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: credentialsUnlock", ErrWidgetMissing)
+	}
+	if v.credentialsLockIcon, ok = named["credentialsLockIcon"].(*widget.ImageWidget); !ok {
+		return fmt.Errorf("%w: credentialsLockIcon", ErrWidgetMissing)
+	}
+	if v.credentialsSecureRow, ok = named["credentialsSecureRow"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: credentialsSecureRow", ErrWidgetMissing)
 	}
 	if v.sshTable, ok = named["sshTable"].(*widget.DataGridWidget); !ok {
 		return fmt.Errorf("%w: sshTable", ErrWidgetMissing)
@@ -77,11 +137,29 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	if v.sshPassphraseInput, ok = named["sshPassphrase"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: sshPassphrase", ErrWidgetMissing)
 	}
+	if v.sshUseDefaultCheckBox, ok = named["sshUseDefault"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: sshUseDefault", ErrWidgetMissing)
+	}
 	if v.sshAddBtn, ok = named["sshAdd"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: sshAdd", ErrWidgetMissing)
 	}
+	if v.sshEditStatus, ok = named["sshEditStatus"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: sshEditStatus", ErrWidgetMissing)
+	}
+	if v.keyEditOK, ok = named["sshEditOK"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: sshEditOK", ErrWidgetMissing)
+	}
+	if v.keyEditCancel, ok = named["sshEditCancel"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: sshEditCancel", ErrWidgetMissing)
+	}
+	if v.sshEditBtn, ok = named["sshEdit"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: sshEdit", ErrWidgetMissing)
+	}
 	if v.sshRemoveBtn, ok = named["sshRemove"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: sshRemove", ErrWidgetMissing)
+	}
+	if v.sshTestBtn, ok = named["sshTestConnection"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: sshTestConnection", ErrWidgetMissing)
 	}
 	if v.sshStatus, ok = named["sshStatus"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: sshStatus", ErrWidgetMissing)
@@ -89,35 +167,76 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	if v.sshUnlockBtn, ok = named["sshUnlock"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: sshUnlock", ErrWidgetMissing)
 	}
+	if v.sshLockIcon, ok = named["sshLockIcon"].(*widget.ImageWidget); !ok {
+		return fmt.Errorf("%w: sshLockIcon", ErrWidgetMissing)
+	}
+	if v.sshSecureRow, ok = named["sshSecureRow"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: sshSecureRow", ErrWidgetMissing)
+	}
 	return nil
 }
 
 func (v *View) buildSecretsColumns() {
+	emptyColor := widget.CurrentTheme().SecondaryText
+
 	resourceCol := datagrid.NewTextColumn(i18n.T(columnHeaderResource), "Resource")
-	resourceCol.SetWidth(datagrid.StarWidth(1))
+	resourceCol.SetWidth(datagrid.StarWidth(2))
 	userCol := datagrid.NewTextColumn(i18n.T(columnHeaderUsername), "Username")
 	userCol.SetWidth(datagrid.StarWidth(1))
-	v.credentialsTable.Grid.SetColumns([]datagrid.Column{resourceCol, userCol})
+	userCol.SetMinWidth(userColumnMinWidth)
+	credentialTypeCol := datagrid.NewTextColumn(i18n.T(columnHeaderAuthType), "Type")
+	credentialTypeCol.SetWidth(datagrid.StarWidth(1))
+	credentialTypeCol.SetMinWidth(authTypeColumnMinWidth)
+	credentialStatusCol := datagrid.NewTemplateColumn(i18n.T(columnHeaderAuthStatus), drawSecretStatusCell)
+	credentialStatusCol.SetWidth(datagrid.StarWidth(1))
+	credentialStatusCol.SetMinWidth(tableStatusColumnMinWidth)
+	v.credentialsTable.Grid.SetColumns([]datagrid.Column{resourceCol, userCol, credentialTypeCol, credentialStatusCol})
+	v.credentialsTable.Grid.EmptyStateText = i18n.T("Dialog.Settings.Credentials.Table.Empty")
+	v.credentialsTable.Grid.EmptyStateColor = emptyColor
 
 	hostCol := datagrid.NewTextColumn(i18n.T(columnHeaderSSHHost), "Host")
-	hostCol.SetWidth(datagrid.StarWidth(1))
+	hostCol.SetWidth(datagrid.StarWidth(2))
 	pathCol := datagrid.NewTextColumn(i18n.T(columnHeaderSSHKeyFile), "Path")
 	pathCol.SetWidth(datagrid.StarWidth(2))
-	v.sshTable.Grid.SetColumns([]datagrid.Column{hostCol, pathCol})
+	sshTypeCol := datagrid.NewTextColumn(i18n.T(columnHeaderSSHType), "Type")
+	sshTypeCol.SetWidth(datagrid.StarWidth(1))
+	sshStatusCol := datagrid.NewTemplateColumn(i18n.T(columnHeaderSSHStatus), drawSecretStatusCell)
+	sshStatusCol.SetWidth(datagrid.StarWidth(1))
+	sshStatusCol.SetMinWidth(tableStatusColumnMinWidth)
+	v.sshTable.Grid.SetColumns([]datagrid.Column{hostCol, pathCol, sshTypeCol, sshStatusCol})
+	v.sshTable.Grid.EmptyStateText = i18n.T("Dialog.Settings.SSH.Table.Empty")
+	v.sshTable.Grid.EmptyStateColor = emptyColor
+}
+
+func (v *View) buildSecretNotes() {
+	v.credentialsSecureNote = newSecureNote(v.credentialsLockIcon)
+	v.credentialsSecureNote.SetGridProps(0, 1, 1, 1)
+	v.credentialsSecureRow.AddChild(v.credentialsSecureNote)
+	v.credentialsSecureRow.SetBounds(v.credentialsSecureRow.Bounds())
+
+	v.sshSecureNote = newSecureNote(v.sshLockIcon)
+	v.sshSecureNote.SetGridProps(0, 1, 1, 1)
+	v.sshSecureRow.AddChild(v.sshSecureNote)
+	v.sshSecureRow.SetBounds(v.sshSecureRow.Bounds())
 }
 
 func (v *View) wireSecrets() {
 	v.credentialsTable.Grid.OnSelectionChanged = v.onCredentialSelectionChanged
-	v.credentialAddBtn.OnClick = v.onAddCredentialClicked
+	v.credentialAddBtn.OnClick = v.onNewCredentialClicked
+	v.credentialEditBtn.OnClick = v.onEditCredentialClicked
 	v.credentialRemoveBtn.OnClick = v.onRemoveCredentialClicked
+	v.credentialTestBtn.OnClick = v.onTestCredentialConnectionClicked
 	v.masterPasswordBtn.OnClick = v.onSetMasterPasswordClicked
 	v.credentialsUnlockBtn.OnClick = v.onUnlockSecretsClicked
 
 	v.sshTable.Grid.OnSelectionChanged = v.onKeySelectionChanged
-	v.sshAddBtn.OnClick = v.onAddKeyClicked
+	v.sshAddBtn.OnClick = v.onNewKeyClicked
+	v.sshEditBtn.OnClick = v.onEditKeyClicked
 	v.sshRemoveBtn.OnClick = v.onRemoveKeyClicked
+	v.sshTestBtn.OnClick = v.onTestKeyConnectionClicked
 	v.sshBrowseBtn.OnClick = v.onBrowseKeyFileClicked
 	v.sshUnlockBtn.OnClick = v.onUnlockSecretsClicked
+	v.sshUseDefaultCheckBox.OnChange = v.onSSHUseDefaultChanged
 
 	v.updateCredentialSelection("", false)
 	v.updateKeySelection("", false)
@@ -157,18 +276,52 @@ func (v *View) SetSecretsLocked(locked bool) {
 	v.credentialsTable.SetEnabled(enabled)
 	v.credentialResource.SetEnabled(enabled)
 	v.credentialUsername.SetEnabled(enabled)
+	v.credentialType.SetEnabled(enabled)
 	v.credentialSecret.SetEnabled(enabled)
 	v.credentialAddBtn.SetEnabled(enabled)
+	v.credentialTestBtn.SetEnabled(enabled)
 	v.masterPasswordBtn.SetEnabled(enabled)
 	v.credentialRemoveBtn.SetEnabled(enabled && v.hasCredSelection)
+	v.credentialEditBtn.SetEnabled(enabled && v.hasCredSelection)
 
 	v.sshTable.SetEnabled(enabled)
-	v.sshHostInput.SetEnabled(enabled)
+	v.sshHostInput.SetEnabled(enabled && !v.sshUseDefaultCheckBox.IsChecked())
 	v.sshPathInput.SetEnabled(enabled)
 	v.sshPassphraseInput.SetEnabled(enabled)
+	v.sshUseDefaultCheckBox.SetEnabled(enabled)
 	v.sshAddBtn.SetEnabled(enabled)
+	v.sshTestBtn.SetEnabled(enabled)
 	v.sshBrowseBtn.SetEnabled(enabled)
 	v.sshRemoveBtn.SetEnabled(enabled && v.hasKeySelection)
+	v.sshEditBtn.SetEnabled(enabled && v.hasKeySelection)
+}
+
+func (v *View) CredentialResource() string {
+	return strings.TrimSpace(v.credentialResource.GetText())
+}
+
+func (v *View) SetCredentialResource(resource string) {
+	v.credentialResource.SetText(resource)
+}
+
+func (v *View) SecretsStatus() string {
+	return v.credentialsStatus.Text()
+}
+
+func (v *View) CredentialStoreLine() string {
+	return v.credentialSourceStorePath.Text()
+}
+
+func (v *View) CredentialHelpersLine() string {
+	return v.credentialSourceHelpers.Text()
+}
+
+func (v *View) KeyPath() string {
+	return strings.TrimSpace(v.sshPathInput.GetText())
+}
+
+func (v *View) TakeKeyPassphrase() []byte {
+	return v.sshPassphraseInput.TakeSecret()
 }
 
 func (v *View) SetKeyPath(path string) {
@@ -176,9 +329,23 @@ func (v *View) SetKeyPath(path string) {
 }
 
 func (v *View) SetCredentialSourceInfo(storePath, keyProtection string, helpers []CredentialHelperEntry) {
-	v.credentialSourceStorePath.SetText(storePath)
-	v.credentialSourceKeyProtection.SetText(keyProtection)
-	v.credentialSourceHelpers.SetText(formatCredentialHelpers(helpers))
+	v.credentialSourceStorePath.SetText(labeledInfoLine(columnHeaderStorePath, storePath))
+	v.credentialSourceKeyProtection.SetText(labeledInfoLine(columnHeaderKeyProtection, keyProtection))
+	v.credentialSourceHelpers.SetText(labeledInfoLine(columnHeaderHelpers, helperSummary(helpers)))
+}
+
+func labeledInfoLine(labelKey, value string) string {
+	if value == "" {
+		return ""
+	}
+	return i18n.T(labelKey) + " " + value
+}
+
+func helperSummary(helpers []CredentialHelperEntry) string {
+	if helpers == nil {
+		return ""
+	}
+	return formatCredentialHelpers(helpers)
 }
 
 func formatCredentialHelpers(helpers []CredentialHelperEntry) string {
@@ -204,6 +371,7 @@ func (v *View) onCredentialSelectionChanged(ev datagrid.SelectionChangedEvent) {
 	}
 	v.credentialResource.SetText(entry.Resource)
 	v.credentialUsername.SetText(entry.Username)
+	v.credentialType.SetSelected(credentialAuthTypeIndex(entry.Type))
 	v.updateCredentialSelection(entry.Resource, true)
 }
 
@@ -211,6 +379,7 @@ func (v *View) updateCredentialSelection(resource string, has bool) {
 	v.selectedResource = resource
 	v.hasCredSelection = has
 	v.credentialRemoveBtn.SetEnabled(has && !v.secretsLocked)
+	v.credentialEditBtn.SetEnabled(has && !v.secretsLocked)
 }
 
 func (v *View) onKeySelectionChanged(ev datagrid.SelectionChangedEvent) {
@@ -219,6 +388,9 @@ func (v *View) onKeySelectionChanged(ev datagrid.SelectionChangedEvent) {
 		v.updateKeySelection("", false)
 		return
 	}
+	isDefault := entry.Host == defaultKeyHost
+	v.sshUseDefaultCheckBox.SetChecked(isDefault)
+	v.sshHostInput.SetEnabled(!isDefault && !v.secretsLocked)
 	v.sshHostInput.SetText(entry.Host)
 	v.sshPathInput.SetText(entry.Path)
 	v.updateKeySelection(entry.Host, true)
@@ -228,20 +400,31 @@ func (v *View) updateKeySelection(host string, has bool) {
 	v.selectedHost = host
 	v.hasKeySelection = has
 	v.sshRemoveBtn.SetEnabled(has && !v.secretsLocked)
+	v.sshEditBtn.SetEnabled(has && !v.secretsLocked)
 }
 
-func (v *View) onAddCredentialClicked() {
-	resource := strings.TrimSpace(v.credentialResource.GetText())
-	username := strings.TrimSpace(v.credentialUsername.GetText())
-	secret := v.credentialSecret.TakeSecret()
-	if resource == "" || len(secret) == 0 {
-		clear(secret)
+func (v *View) onNewCredentialClicked() {
+	v.credentialsTable.Grid.SetSelectedIndex(-1)
+	v.updateCredentialSelection("", false)
+	v.openCredentialEditor(SecretEntry{}, false)
+}
+
+func (v *View) onEditCredentialClicked() {
+	entry, ok := v.credentialByResource(v.selectedResource)
+	if !ok {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.PickCredential")
 		return
 	}
-	if v.OnAddCredential != nil {
-		v.OnAddCredential(resource, username, secret)
+	v.openCredentialEditor(entry, true)
+}
+
+func (v *View) credentialByResource(resource string) (SecretEntry, bool) {
+	for _, e := range v.credentials {
+		if e.Resource == resource {
+			return e, true
+		}
 	}
-	clear(secret)
+	return SecretEntry{}, false
 }
 
 func (v *View) onRemoveCredentialClicked() {
@@ -265,17 +448,44 @@ func (v *View) onUnlockSecretsClicked() {
 	}
 }
 
-func (v *View) onAddKeyClicked() {
-	host := strings.TrimSpace(v.sshHostInput.GetText())
-	path := strings.TrimSpace(v.sshPathInput.GetText())
-	if host == "" || path == "" {
+func (v *View) onTestCredentialConnectionClicked() {
+	if v.OnTestConnection != nil {
+		v.OnTestConnection("credentials")
+	}
+}
+
+func (v *View) onTestKeyConnectionClicked() {
+	if v.OnTestConnection != nil {
+		v.OnTestConnection("ssh")
+	}
+}
+
+func (v *View) onSSHUseDefaultChanged(checked bool) {
+	v.sshHostInput.SetEnabled(!checked && !v.secretsLocked)
+}
+
+func (v *View) onNewKeyClicked() {
+	v.sshTable.Grid.SetSelectedIndex(-1)
+	v.updateKeySelection("", false)
+	v.openKeyEditor(KeyEntry{}, false)
+}
+
+func (v *View) onEditKeyClicked() {
+	entry, ok := v.keyByHost(v.selectedHost)
+	if !ok {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.PickKey")
 		return
 	}
-	passphrase := v.sshPassphraseInput.TakeSecret()
-	if v.OnAddKey != nil {
-		v.OnAddKey(host, path, passphrase)
+	v.openKeyEditor(entry, true)
+}
+
+func (v *View) keyByHost(host string) (KeyEntry, bool) {
+	for _, e := range v.keys {
+		if e.Host == host {
+			return e, true
+		}
 	}
-	clear(passphrase)
+	return KeyEntry{}, false
 }
 
 func (v *View) onRemoveKeyClicked() {
@@ -291,4 +501,8 @@ func (v *View) onBrowseKeyFileClicked() {
 	if v.OnBrowseKeyFile != nil {
 		v.OnBrowseKeyFile()
 	}
+}
+
+func (v *View) reportSecretsProblem(key string) {
+	v.SetSecretsStatus(i18n.T(key), StatusError.DotColor(widget.CurrentTheme()))
 }

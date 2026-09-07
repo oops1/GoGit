@@ -1,6 +1,7 @@
 package branches
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
@@ -493,5 +494,33 @@ func TestStashItemIsTrackedForSelection(t *testing.T) {
 	tw.Tree.OnItemInvoked(treeview.ItemInvokedEvent{Item: item})
 	if got != stashRefName {
 		t.Fatalf("OnActivate ref = %q, want refs/stash", got)
+	}
+}
+
+func TestManyFlatTagsCollapseIntoFoldersWithTheNewestOnTop(t *testing.T) {
+	v, tw := bound(t)
+	tags := make([]Tag, 0, 25)
+	for i := range 25 {
+		tags = append(tags, Tag{Name: refs.TagName(fmt.Sprintf("v3.%d.%d", 10+i/3, i%3))})
+	}
+	v.Render(Snapshot{Tags: tags})
+
+	_, _, tagsRoot := roots(t, tw)
+	if len(tagsRoot.Children) <= tagRecentCount {
+		t.Fatalf("tags children = %v", childTexts(tagsRoot))
+	}
+	for _, item := range tagsRoot.Children[:tagRecentCount] {
+		if item.HasChildren() {
+			t.Fatalf("newest tag %q must stay a leaf", item.DisplayText())
+		}
+	}
+	folders := 0
+	for _, item := range tagsRoot.Children[tagRecentCount:] {
+		if item.HasChildren() {
+			folders++
+		}
+	}
+	if folders == 0 {
+		t.Fatalf("the rest of the tags must collapse into folders, got %v", childTexts(tagsRoot))
 	}
 }

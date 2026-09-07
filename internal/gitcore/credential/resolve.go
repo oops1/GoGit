@@ -40,7 +40,11 @@ func execName(name string) string {
 	if filepath.IsAbs(name) {
 		return name
 	}
-	return "git-credential-" + name
+	exe := "git-credential-" + name
+	if path, ok := findHelperExecutable(exe); ok {
+		return path
+	}
+	return exe
 }
 
 func newStoreHelper(raw string, args []string) (Helper, error) {

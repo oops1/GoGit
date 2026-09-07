@@ -226,6 +226,13 @@ func TestTreeTintedDiffersFromThePlainTreeIcon(t *testing.T) {
 	}
 }
 
+func absDiff(a, b uint8) int {
+	if a > b {
+		return int(a - b)
+	}
+	return int(b - a)
+}
+
 func sameImage(a, b image.Image) bool {
 	ba, bb := a.Bounds(), b.Bounds()
 	if ba != bb {
@@ -310,6 +317,53 @@ func TestToolbarPlainRendersTheIconWithItsOwnColours(t *testing.T) {
 	}
 	if ToolbarPlain("nope", 24) != nil {
 		t.Fatal("an unknown toolbar icon must not render")
+	}
+}
+
+func TestSettingsIconsRenderAtNavSizes(t *testing.T) {
+	resetForTest()
+	for _, name := range []string{"settings_general", "settings_git", "settings_credentials", "settings_ssh"} {
+		for _, size := range []int{16, 24} {
+			plain := ToolbarPlain(name, size)
+			if plain == nil {
+				t.Fatalf("ToolbarPlain(%s, %d) = nil", name, size)
+			}
+			if b := plain.Bounds(); b.Dx() != size || b.Dy() != size {
+				t.Fatalf("ToolbarPlain(%s, %d) bounds = %v, want %dx%d", name, size, b, size, size)
+			}
+		}
+	}
+}
+
+func TestSettingsIconsTintConsistentlyInBothThemes(t *testing.T) {
+	resetForTest()
+	lightAccent := color.RGBA{R: 9, G: 105, B: 218, A: 255}
+	darkAccent := color.RGBA{R: 47, G: 129, B: 247, A: 255}
+	for _, name := range []string{"settings_general", "settings_git", "settings_credentials", "settings_ssh"} {
+		light := Toolbar(name, 20, lightAccent)
+		dark := Toolbar(name, 20, darkAccent)
+		if light == nil || dark == nil {
+			t.Fatalf("expected non-nil renders for %s", name)
+		}
+		if sameImage(light, dark) {
+			t.Fatalf("expected %s to differ when tinted for light vs dark theme accents", name)
+		}
+		var offAccent int
+		b := light.Bounds()
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				r, g, bl, a := light.At(x, y).RGBA()
+				if a>>8 != 255 {
+					continue
+				}
+				if absDiff(uint8(r>>8), lightAccent.R) > 1 || absDiff(uint8(g>>8), lightAccent.G) > 1 || absDiff(uint8(bl>>8), lightAccent.B) > 1 {
+					offAccent++
+				}
+			}
+		}
+		if offAccent != 0 {
+			t.Fatalf("%s: %d opaque pixels did not take the requested theme accent", name, offAccent)
+		}
 	}
 }
 
