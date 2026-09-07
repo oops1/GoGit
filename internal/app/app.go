@@ -493,6 +493,7 @@ func (a *App) ActivateRepository(id string) {
 	_ = a.registry.SetActive(id)
 	a.cfg.ActiveRepository = id
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
+	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
 	a.refreshDivergence(opened)
