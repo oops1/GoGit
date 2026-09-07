@@ -116,6 +116,8 @@ func buildViewMenuTree() []menuTreeEntry {
 
 func buildHelpMenuTree() []menuTreeEntry {
 	return []menuTreeEntry{
+		{Leaf: &menuLeafEntry{Key: "Menu.Help.CheckUpdates", Command: CmdCheckUpdates}},
+		{Separator: true},
 		{Leaf: &menuLeafEntry{Key: "Menu.Help.About", Command: CmdAbout}},
 	}
 }

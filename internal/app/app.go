@@ -85,6 +85,7 @@ type App struct {
 	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
 	showCommit        func(initial commit.Model, cb func(commit.Model, bool))
 	showError         func(title, message string)
+	showInfo          func(title, message string)
 
 	open                  *openedRepository
 	divergence            repo.Divergence
@@ -300,6 +301,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.showError = func(title, message string) {
 		widget.NewMessageBox(a.eng).ShowError(title, message)
 	}
+	a.showInfo = func(title, message string) {
+		widget.NewMessageBox(a.eng).ShowInfo(title, message)
+	}
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
@@ -347,6 +351,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdRefresh] = a.RefreshRepository
 	a.handlers[CmdSettings] = a.openSettings
 	a.handlers[CmdAbout] = a.openAbout
+	a.handlers[CmdCheckUpdates] = a.checkForUpdates
 	a.handlers[CmdStage] = a.stageSelected
 	a.handlers[CmdUnstage] = a.unstageSelected
 	a.handlers[CmdDiscard] = a.discardSelected
