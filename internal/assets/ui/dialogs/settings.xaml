@@ -197,8 +197,10 @@
                         <RowDefinition Height="16"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="120"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="250"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="20"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="264"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
@@ -239,9 +241,12 @@
                         <Button x:Name="credentialRemove" Height="30" Content="{Loc Dialog.Settings.Credentials.Remove}"/>
                     </StackPanel>
 
-                    <Expander x:Name="credentialForm" Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="3"
+                    <TextBlock x:Name="credentialsStatus" Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="3" Text="" FontSize="11"
+                               Height="18" VerticalAlignment="Center"/>
+
+                    <Expander x:Name="credentialForm" Grid.Row="16" Grid.Column="0" Grid.ColumnSpan="3"
                               IsExpanded="True" Header="{Loc Dialog.Settings.Group.AddCredential}">
-                        <Grid x:Name="credentialFormContent" Height="216">
+                        <Grid x:Name="credentialFormContent" Height="230">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="30"/>
                                 <RowDefinition Height="10"/>
@@ -252,8 +257,8 @@
                                 <RowDefinition Height="30"/>
                                 <RowDefinition Height="16"/>
                                 <RowDefinition Height="20"/>
-                                <RowDefinition Height="10"/>
-                                <RowDefinition Height="20"/>
+                                <RowDefinition Height="12"/>
+                                <RowDefinition Height="32"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="200"/>
@@ -298,8 +303,8 @@
                             <Button x:Name="credentialMasterPassword" Grid.Row="8" Grid.Column="2" Height="30" Margin="10,0,0,0"
                                     Content="{Loc Dialog.Settings.Credentials.MasterPassword}"/>
 
-                            <TextBlock x:Name="credentialsStatus" Grid.Row="10" Grid.Column="0" Grid.ColumnSpan="2" Text="" FontSize="11"
-                                       Height="18" VerticalAlignment="Center"/>
+                            <Button x:Name="credentialSave" Grid.Row="10" Grid.Column="2" Tag="accent" Height="32" Margin="10,0,0,0"
+                                    Content="{Loc Dialog.Settings.Credentials.Save}"/>
                         </Grid>
                     </Expander>
                 </Grid>
@@ -310,8 +315,10 @@
                         <RowDefinition Height="16"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="132"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="216"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="20"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="260"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
@@ -334,9 +341,12 @@
                         <Button x:Name="sshRemove" Height="30" Content="{Loc Dialog.Settings.SSH.Remove}"/>
                     </StackPanel>
 
-                    <Expander x:Name="sshForm" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                    <TextBlock x:Name="sshStatus" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3" Text="" FontSize="11"
+                               Height="18" VerticalAlignment="Center"/>
+
+                    <Expander x:Name="sshForm" Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3"
                               IsExpanded="True" Header="{Loc Dialog.Settings.Group.AddHost}">
-                        <Grid x:Name="sshFormContent" Height="182">
+                        <Grid x:Name="sshFormContent" Height="226">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="30"/>
                                 <RowDefinition Height="10"/>
@@ -347,6 +357,8 @@
                                 <RowDefinition Height="26"/>
                                 <RowDefinition Height="16"/>
                                 <RowDefinition Height="20"/>
+                                <RowDefinition Height="12"/>
+                                <RowDefinition Height="32"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="200"/>
@@ -386,8 +398,8 @@
                                 <Image x:Name="sshLockIcon" Grid.Column="0"/>
                             </Grid>
 
-                            <TextBlock x:Name="sshStatus" Grid.Row="8" Grid.Column="2" Text="" FontSize="11"
-                                       Height="18" VerticalAlignment="Center"/>
+                            <Button x:Name="sshSave" Grid.Row="10" Grid.Column="2" Tag="accent" Height="32" Margin="10,0,0,0"
+                                    Content="{Loc Dialog.Settings.SSH.Save}"/>
                         </Grid>
                     </Expander>
                 </Grid>

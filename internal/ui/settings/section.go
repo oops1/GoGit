@@ -82,5 +82,10 @@ func (v *View) wireModifiedTracking() {
 	v.defaultRemote.OnChange = func(string) { onAny() }
 	v.pruneOnFetch.OnChange = func(bool) { onAny() }
 	v.shallowDepth.OnChange = func(float64) { onAny() }
-	v.credentialSource.OnChange = func(int, string) { onAny() }
+	v.credentialSource.OnChange = func(index int, _ string) {
+		onAny()
+		if v.OnCredentialSource != nil {
+			v.OnCredentialSource(credentialSourceAt(index))
+		}
+	}
 }

@@ -83,6 +83,7 @@ type View struct {
 	credentialType        *widget.Dropdown
 	credentialSecret      *widget.TextInput
 	credentialAddBtn      *widget.Button
+	credentialSaveBtn     *widget.Button
 	credentialEditBtn     *widget.Button
 	credentialRemoveBtn   *widget.Button
 	credentialTestBtn     *widget.Button
@@ -99,6 +100,7 @@ type View struct {
 	sshPassphraseInput    *widget.TextInput
 	sshUseDefaultCheckBox *widget.CheckBox
 	sshAddBtn             *widget.Button
+	sshSaveBtn            *widget.Button
 	sshEditBtn            *widget.Button
 	sshBrowseBtn          *widget.Button
 	sshRemoveBtn          *widget.Button
@@ -138,6 +140,7 @@ type View struct {
 	OnUnlockSecrets     func()
 	OnBrowseKeyFile     func()
 	OnTestConnection    func(section string)
+	OnCredentialSource  func(source string)
 }
 
 func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, error) {

@@ -2,10 +2,12 @@ package settings
 
 import (
 	"image/color"
+	"strings"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
+	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
 )
 
@@ -275,7 +277,7 @@ func TestAddCredentialClickedCallsCallbackAndWipesTheSecretAfterwards(t *testing
 		secretDuringCall = append([]byte(nil), secret...)
 	}
 
-	v.onAddCredentialClicked()
+	v.onSaveCredentialClicked()
 
 	if gotResource != "example.com" || gotUsername != "alice" {
 		t.Fatalf("resource/username = %q/%q", gotResource, gotUsername)
@@ -293,38 +295,101 @@ func TestAddCredentialClickedCallsCallbackAndWipesTheSecretAfterwards(t *testing
 	}
 }
 
-func TestAddCredentialClickedDoesNothingWithoutResourceOrSecret(t *testing.T) {
+func TestSaveCredentialDoesNothingWithoutResourceOrSecret(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	called := false
 	v.OnAddCredential = func(string, string, []byte) { called = true }
 
 	v.credentialResource.SetText("")
 	v.credentialSecret.SetText("s3cr3t")
-	v.onAddCredentialClicked()
+	v.onSaveCredentialClicked()
 
 	v.credentialResource.SetText("example.com")
 	v.credentialSecret.SetText("")
-	v.onAddCredentialClicked()
+	v.onSaveCredentialClicked()
 
 	if called {
 		t.Fatal("OnAddCredential must not be called without both a resource and a secret")
 	}
 }
 
-func TestEditCredentialButtonUsesTheSameUpsertAsAdd(t *testing.T) {
+func TestEditCredentialLoadsTheSelectedRowIntoTheForm(t *testing.T) {
 	v := newTestView(t, nil, Model{})
-	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice"}})
+	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice", Type: "token"}})
 	v.onCredentialSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.credentials[0]})
-	v.credentialUsername.SetText("alice2")
-	v.credentialSecret.SetText("newsecret")
-
-	var gotUsername string
-	v.OnAddCredential = func(resource, username string, secret []byte) { gotUsername = username }
+	v.credentialResource.SetText("typed over")
+	v.credentialSecret.SetText("stale")
 
 	v.credentialEditBtn.OnClick()
 
-	if gotUsername != "alice2" {
-		t.Fatalf("username = %q, want alice2", gotUsername)
+	if v.credentialResource.GetText() != "example.com" {
+		t.Fatalf("resource = %q, want the selected row", v.credentialResource.GetText())
+	}
+	if v.credentialUsername.GetText() != "alice" {
+		t.Fatalf("username = %q, want alice", v.credentialUsername.GetText())
+	}
+	if v.credentialSecret.GetText() != "" {
+		t.Fatal("the secret field must be emptied: the stored secret is never shown")
+	}
+	if !v.credentialForm.IsExpanded {
+		t.Fatal("editing must open the form")
+	}
+}
+
+func TestEditCredentialAsksForASelectionWhenThereIsNone(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+
+	v.credentialEditBtn.OnClick()
+
+	if v.credentialsStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.PickCredential") {
+		t.Fatalf("status = %q, want the pick-a-row message", v.credentialsStatus.Text())
+	}
+}
+
+func TestAddCredentialClearsTheFormForANewEntry(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetCredentials([]SecretEntry{{Resource: "example.com", Username: "alice"}})
+	v.onCredentialSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.credentials[0]})
+
+	v.credentialAddBtn.OnClick()
+
+	if v.credentialResource.GetText() != "" || v.credentialUsername.GetText() != "" {
+		t.Fatal("adding must start from an empty form")
+	}
+	if v.credentialRemoveBtn.IsEnabled() {
+		t.Fatal("the selection must be dropped when a new entry is started")
+	}
+}
+
+func TestSavingCredentialsWithoutAResourceExplainsWhy(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	called := false
+	v.OnAddCredential = func(string, string, []byte) { called = true }
+	v.credentialSecret.SetText("s3cr3t")
+
+	v.credentialSaveBtn.OnClick()
+
+	if called {
+		t.Fatal("nothing may be stored without a resource")
+	}
+	if v.credentialsStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedResource") {
+		t.Fatalf("status = %q, want the missing-resource message", v.credentialsStatus.Text())
+	}
+}
+
+func TestSavingCredentialsWithoutASecretExplainsWhy(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	called := false
+	v.OnAddCredential = func(string, string, []byte) { called = true }
+	v.credentialResource.SetText("example.com")
+
+	v.credentialSaveBtn.OnClick()
+
+	if called {
+		t.Fatal("nothing may be stored without a secret")
+	}
+	if v.credentialsStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedSecret") {
+		t.Fatalf("status = %q, want the missing-secret message", v.credentialsStatus.Text())
 	}
 }
 
@@ -364,7 +429,7 @@ func TestAddKeyClickedCallsCallbackAndWipesThePassphraseAfterwards(t *testing.T)
 		seenDuringCall = string(passphrase)
 	}
 
-	v.onAddKeyClicked()
+	v.onSaveKeyClicked()
 
 	if gotHost != "example.com" || gotPath != "/keys/id_ed25519" {
 		t.Fatalf("host/path = %q/%q", gotHost, gotPath)
@@ -382,7 +447,7 @@ func TestAddKeyClickedCallsCallbackAndWipesThePassphraseAfterwards(t *testing.T)
 	}
 }
 
-func TestAddKeyClickedUsesTheDefaultHostWhenTheCheckboxIsChecked(t *testing.T) {
+func TestSaveKeyUsesTheDefaultHostWhenTheCheckboxIsChecked(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.sshHostInput.SetText("ignored.example.com")
 	v.sshUseDefaultCheckBox.SetChecked(true)
@@ -390,44 +455,108 @@ func TestAddKeyClickedUsesTheDefaultHostWhenTheCheckboxIsChecked(t *testing.T) {
 
 	var gotHost string
 	v.OnAddKey = func(host, path string, passphrase []byte) { gotHost = host }
-	v.onAddKeyClicked()
+	v.onSaveKeyClicked()
 
 	if gotHost != defaultKeyHost {
 		t.Fatalf("host = %q, want %q", gotHost, defaultKeyHost)
 	}
 }
 
-func TestAddKeyClickedDoesNothingWithoutHostOrPath(t *testing.T) {
+func TestSaveKeyDoesNothingWithoutHostOrPath(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	called := false
 	v.OnAddKey = func(string, string, []byte) { called = true }
 
 	v.sshHostInput.SetText("")
 	v.sshPathInput.SetText("/keys/id_ed25519")
-	v.onAddKeyClicked()
+	v.onSaveKeyClicked()
 
 	v.sshHostInput.SetText("example.com")
 	v.sshPathInput.SetText("")
-	v.onAddKeyClicked()
+	v.onSaveKeyClicked()
 
 	if called {
 		t.Fatal("OnAddKey must not be called without both a host and a path")
 	}
 }
 
-func TestEditKeyButtonUsesTheSameUpsertAsAdd(t *testing.T) {
+func TestEditKeyLoadsTheSelectedRowIntoTheForm(t *testing.T) {
 	v := newTestView(t, nil, Model{})
 	v.SetKeys([]KeyEntry{{Host: "example.com", Path: "/keys/id_ed25519"}})
 	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.keys[0]})
-	v.sshPathInput.SetText("/keys/id_ed25519_new")
-	v.sshPassphraseInput.SetText("p4ss")
+	v.sshPathInput.SetText("typed over")
+	v.sshPassphraseInput.SetText("stale")
 
-	var gotPath string
-	v.OnAddKey = func(host, path string, passphrase []byte) { gotPath = path }
 	v.sshEditBtn.OnClick()
 
-	if gotPath != "/keys/id_ed25519_new" {
-		t.Fatalf("path = %q, want /keys/id_ed25519_new", gotPath)
+	if v.sshHostInput.GetText() != "example.com" {
+		t.Fatalf("host = %q, want the selected row", v.sshHostInput.GetText())
+	}
+	if v.sshPathInput.GetText() != "/keys/id_ed25519" {
+		t.Fatalf("path = %q, want the selected row", v.sshPathInput.GetText())
+	}
+	if v.sshPassphraseInput.GetText() != "" {
+		t.Fatal("the passphrase field must be emptied: the stored passphrase is never shown")
+	}
+	if !v.sshForm.IsExpanded {
+		t.Fatal("editing must open the form")
+	}
+}
+
+func TestEditKeyAsksForASelectionWhenThereIsNone(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+
+	v.sshEditBtn.OnClick()
+
+	if v.sshStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.PickKey") {
+		t.Fatalf("status = %q, want the pick-a-row message", v.sshStatus.Text())
+	}
+}
+
+func TestAddKeyClearsTheFormForANewEntry(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetKeys([]KeyEntry{{Host: defaultKeyHost, Path: "/keys/id_ed25519"}})
+	v.onKeySelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: v.keys[0]})
+
+	v.sshAddBtn.OnClick()
+
+	if v.sshHostInput.GetText() != "" || v.sshPathInput.GetText() != "" {
+		t.Fatal("adding must start from an empty form")
+	}
+	if v.sshUseDefaultCheckBox.IsChecked() {
+		t.Fatal("a new entry must not inherit the default-host flag")
+	}
+}
+
+func TestSavingAKeyWithoutAHostExplainsWhy(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	called := false
+	v.OnAddKey = func(string, string, []byte) { called = true }
+	v.sshPathInput.SetText("/keys/id_ed25519")
+
+	v.sshSaveBtn.OnClick()
+
+	if called {
+		t.Fatal("nothing may be stored without a host")
+	}
+	if v.sshStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedHost") {
+		t.Fatalf("status = %q, want the missing-host message", v.sshStatus.Text())
+	}
+}
+
+func TestSavingAKeyWithoutAFileExplainsWhy(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	called := false
+	v.OnAddKey = func(string, string, []byte) { called = true }
+	v.sshHostInput.SetText("example.com")
+
+	v.sshSaveBtn.OnClick()
+
+	if called {
+		t.Fatal("nothing may be stored without a key file")
+	}
+	if v.sshStatus.Text() != i18n.T("Dialog.Settings.Secrets.Status.NeedKeyFile") {
+		t.Fatalf("status = %q, want the missing-file message", v.sshStatus.Text())
 	}
 }
 
@@ -546,7 +675,7 @@ func TestSetCredentialSourceInfoFillsTheInfoLabels(t *testing.T) {
 
 func TestSetCredentialSourceInfoWithNoHelpersShowsNone(t *testing.T) {
 	v := newTestView(t, nil, Model{})
-	v.SetCredentialSourceInfo("", "", nil)
+	v.SetCredentialSourceInfo("", "", []CredentialHelperEntry{})
 
 	want := i18n.T("Dialog.Settings.Secrets.Helpers") + " " + i18n.T("Dialog.Settings.Secrets.HelpersNone")
 	if v.credentialSourceHelpers.Text() != want {
@@ -568,18 +697,18 @@ func TestClickingAddAndRemoveButtonsCallTheHandlers(t *testing.T) {
 	v.credentialSecret.SetText("s3cr3t")
 	addCalled := false
 	v.OnAddCredential = func(string, string, []byte) { addCalled = true }
-	v.credentialAddBtn.OnClick()
+	v.credentialSaveBtn.OnClick()
 	if !addCalled {
-		t.Fatal("clicking Add must call OnAddCredential")
+		t.Fatal("clicking Save must call OnAddCredential")
 	}
 
 	v.sshHostInput.SetText("example.com")
 	v.sshPathInput.SetText("/keys/id_ed25519")
 	sshAddCalled := false
 	v.OnAddKey = func(string, string, []byte) { sshAddCalled = true }
-	v.sshAddBtn.OnClick()
+	v.sshSaveBtn.OnClick()
 	if !sshAddCalled {
-		t.Fatal("clicking Add must call OnAddKey")
+		t.Fatal("clicking Save must call OnAddKey")
 	}
 
 	masterCalled := false
@@ -628,5 +757,72 @@ func TestCredentialAuthTypeAtFallsBackToFirstForOutOfRangeIndex(t *testing.T) {
 	}
 	if credentialAuthTypeAt(len(credentialAuthTypeOrder)) != credentialAuthTypeOrder[0] {
 		t.Fatal("index past the end must fall back to the first auth type")
+	}
+}
+
+func TestFormAccessorsReadWhatWasTypedIn(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.credentialResource.SetText("  https://example.com  ")
+	v.sshPathInput.SetText("  /keys/id_ed25519  ")
+	v.sshPassphraseInput.SetText("p4ss")
+
+	if got := v.CredentialResource(); got != "https://example.com" {
+		t.Fatalf("CredentialResource() = %q", got)
+	}
+	if got := v.KeyPath(); got != "/keys/id_ed25519" {
+		t.Fatalf("KeyPath() = %q", got)
+	}
+	passphrase := v.TakeKeyPassphrase()
+	if string(passphrase) != "p4ss" {
+		t.Fatalf("TakeKeyPassphrase() = %q", passphrase)
+	}
+	clear(passphrase)
+	if v.sshPassphraseInput.GetText() != "" {
+		t.Fatal("taking the passphrase must empty the field")
+	}
+}
+
+func TestCredentialSourceInfoHidesTheHelperLineWhenHelpersDoNotApply(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+
+	v.SetCredentialSourceInfo("", "", nil)
+
+	if got := v.credentialSourceHelpers.Text(); got != "" {
+		t.Fatalf("helpers line = %q, want it hidden for a source that uses no helpers", got)
+	}
+	if got := v.credentialSourceStorePath.Text(); got != "" {
+		t.Fatalf("store line = %q, want it hidden when there is no store", got)
+	}
+}
+
+func TestChoosingACredentialSourceReportsIt(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	var got string
+	v.OnCredentialSource = func(source string) { got = source }
+
+	v.credentialSource.OnChange(2, "")
+
+	if got != config.CredentialSourceHelper {
+		t.Fatalf("reported source = %q, want %q", got, config.CredentialSourceHelper)
+	}
+}
+
+func TestStatusAndSourceLinesAreReadableBack(t *testing.T) {
+	v := newTestView(t, nil, Model{})
+	v.SetCredentialResource("https://example.com/repo.git")
+	v.SetCredentialSourceInfo("/vault.db", "password", []CredentialHelperEntry{{Name: "manager", Supported: true}})
+	v.SetSecretsStatus("checking", color.RGBA{A: 255})
+
+	if got := v.CredentialResource(); got != "https://example.com/repo.git" {
+		t.Fatalf("CredentialResource() = %q", got)
+	}
+	if got := v.SecretsStatus(); got != "checking" {
+		t.Fatalf("SecretsStatus() = %q", got)
+	}
+	if got := v.CredentialStoreLine(); !strings.Contains(got, "/vault.db") {
+		t.Fatalf("CredentialStoreLine() = %q", got)
+	}
+	if got := v.CredentialHelpersLine(); !strings.Contains(got, "manager") {
+		t.Fatalf("CredentialHelpersLine() = %q", got)
 	}
 }

@@ -12,8 +12,8 @@ import (
 
 const (
 	gitAdvancedRow    = 15
-	credentialFormRow = 14
-	sshFormRow        = 5
+	credentialFormRow = 16
+	sshFormRow        = 7
 )
 
 type searchField struct {

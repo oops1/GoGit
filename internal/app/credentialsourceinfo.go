@@ -3,6 +3,8 @@ package app
 import (
 	"strings"
 
+	"github.com/oops1/gogit/internal/config"
+
 	gitconfig "github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/credential"
 	"github.com/oops1/gogit/internal/i18n"
@@ -13,7 +15,26 @@ import (
 const gitHelperProbeRawURL = "https://git.invalid"
 
 func (a *App) refreshCredentialSourceInfo(view *settings.View) {
-	view.SetCredentialSourceInfo(a.paths.VaultFile(), a.vaultKeyProtectionLabel(), a.openRepositoryHelperEntries())
+	a.refreshCredentialSourceInfoFor(view, a.cfg.Git.CredentialSource)
+}
+
+func (a *App) refreshCredentialSourceInfoFor(view *settings.View, source string) {
+	var (
+		storePath  string
+		protection string
+		helpers    []settings.CredentialHelperEntry
+	)
+	if source != config.CredentialSourceHelper {
+		storePath = a.paths.VaultFile()
+		protection = a.vaultKeyProtectionLabel()
+	}
+	if source != config.CredentialSourceVault {
+		helpers = a.openRepositoryHelperEntries()
+		if helpers == nil {
+			helpers = []settings.CredentialHelperEntry{}
+		}
+	}
+	view.SetCredentialSourceInfo(storePath, protection, helpers)
 }
 
 func (a *App) vaultKeyProtectionLabel() string {

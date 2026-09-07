@@ -89,6 +89,9 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	if v.credentialAddBtn, ok = named["credentialAdd"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: credentialAdd", ErrWidgetMissing)
 	}
+	if v.credentialSaveBtn, ok = named["credentialSave"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: credentialSave", ErrWidgetMissing)
+	}
 	if v.credentialEditBtn, ok = named["credentialEdit"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: credentialEdit", ErrWidgetMissing)
 	}
@@ -133,6 +136,9 @@ func (v *View) bindSecrets(named map[string]widget.Widget) error {
 	}
 	if v.sshAddBtn, ok = named["sshAdd"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: sshAdd", ErrWidgetMissing)
+	}
+	if v.sshSaveBtn, ok = named["sshSave"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: sshSave", ErrWidgetMissing)
 	}
 	if v.sshEditBtn, ok = named["sshEdit"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: sshEdit", ErrWidgetMissing)
@@ -204,16 +210,18 @@ func (v *View) buildSecretNotes() {
 
 func (v *View) wireSecrets() {
 	v.credentialsTable.Grid.OnSelectionChanged = v.onCredentialSelectionChanged
-	v.credentialAddBtn.OnClick = v.onAddCredentialClicked
-	v.credentialEditBtn.OnClick = v.onAddCredentialClicked
+	v.credentialAddBtn.OnClick = v.onNewCredentialClicked
+	v.credentialEditBtn.OnClick = v.onEditCredentialClicked
+	v.credentialSaveBtn.OnClick = v.onSaveCredentialClicked
 	v.credentialRemoveBtn.OnClick = v.onRemoveCredentialClicked
 	v.credentialTestBtn.OnClick = v.onTestCredentialConnectionClicked
 	v.masterPasswordBtn.OnClick = v.onSetMasterPasswordClicked
 	v.credentialsUnlockBtn.OnClick = v.onUnlockSecretsClicked
 
 	v.sshTable.Grid.OnSelectionChanged = v.onKeySelectionChanged
-	v.sshAddBtn.OnClick = v.onAddKeyClicked
-	v.sshEditBtn.OnClick = v.onAddKeyClicked
+	v.sshAddBtn.OnClick = v.onNewKeyClicked
+	v.sshEditBtn.OnClick = v.onEditKeyClicked
+	v.sshSaveBtn.OnClick = v.onSaveKeyClicked
 	v.sshRemoveBtn.OnClick = v.onRemoveKeyClicked
 	v.sshTestBtn.OnClick = v.onTestKeyConnectionClicked
 	v.sshBrowseBtn.OnClick = v.onBrowseKeyFileClicked
@@ -261,6 +269,7 @@ func (v *View) SetSecretsLocked(locked bool) {
 	v.credentialType.SetEnabled(enabled)
 	v.credentialSecret.SetEnabled(enabled)
 	v.credentialAddBtn.SetEnabled(enabled)
+	v.credentialSaveBtn.SetEnabled(enabled)
 	v.credentialTestBtn.SetEnabled(enabled)
 	v.masterPasswordBtn.SetEnabled(enabled)
 	v.credentialRemoveBtn.SetEnabled(enabled && v.hasCredSelection)
@@ -272,10 +281,39 @@ func (v *View) SetSecretsLocked(locked bool) {
 	v.sshPassphraseInput.SetEnabled(enabled)
 	v.sshUseDefaultCheckBox.SetEnabled(enabled)
 	v.sshAddBtn.SetEnabled(enabled)
+	v.sshSaveBtn.SetEnabled(enabled)
 	v.sshTestBtn.SetEnabled(enabled)
 	v.sshBrowseBtn.SetEnabled(enabled)
 	v.sshRemoveBtn.SetEnabled(enabled && v.hasKeySelection)
 	v.sshEditBtn.SetEnabled(enabled && v.hasKeySelection)
+}
+
+func (v *View) CredentialResource() string {
+	return strings.TrimSpace(v.credentialResource.GetText())
+}
+
+func (v *View) SetCredentialResource(resource string) {
+	v.credentialResource.SetText(resource)
+}
+
+func (v *View) SecretsStatus() string {
+	return v.credentialsStatus.Text()
+}
+
+func (v *View) CredentialStoreLine() string {
+	return v.credentialSourceStorePath.Text()
+}
+
+func (v *View) CredentialHelpersLine() string {
+	return v.credentialSourceHelpers.Text()
+}
+
+func (v *View) KeyPath() string {
+	return strings.TrimSpace(v.sshPathInput.GetText())
+}
+
+func (v *View) TakeKeyPassphrase() []byte {
+	return v.sshPassphraseInput.TakeSecret()
 }
 
 func (v *View) SetKeyPath(path string) {
@@ -285,11 +323,21 @@ func (v *View) SetKeyPath(path string) {
 func (v *View) SetCredentialSourceInfo(storePath, keyProtection string, helpers []CredentialHelperEntry) {
 	v.credentialSourceStorePath.SetText(labeledInfoLine(columnHeaderStorePath, storePath))
 	v.credentialSourceKeyProtection.SetText(labeledInfoLine(columnHeaderKeyProtection, keyProtection))
-	v.credentialSourceHelpers.SetText(labeledInfoLine(columnHeaderHelpers, formatCredentialHelpers(helpers)))
+	v.credentialSourceHelpers.SetText(labeledInfoLine(columnHeaderHelpers, helperSummary(helpers)))
 }
 
 func labeledInfoLine(labelKey, value string) string {
+	if value == "" {
+		return ""
+	}
 	return i18n.T(labelKey) + " " + value
+}
+
+func helperSummary(helpers []CredentialHelperEntry) string {
+	if helpers == nil {
+		return ""
+	}
+	return formatCredentialHelpers(helpers)
 }
 
 func formatCredentialHelpers(helpers []CredentialHelperEntry) string {
@@ -347,18 +395,56 @@ func (v *View) updateKeySelection(host string, has bool) {
 	v.sshEditBtn.SetEnabled(has && !v.secretsLocked)
 }
 
-func (v *View) onAddCredentialClicked() {
+func (v *View) onNewCredentialClicked() {
+	v.credentialsTable.Grid.SetSelectedIndex(-1)
+	v.credentialResource.SetText("")
+	v.credentialUsername.SetText("")
+	v.credentialSecret.SetText("")
+	v.credentialType.SetSelected(0)
+	v.updateCredentialSelection("", false)
+	v.credentialForm.SetExpanded(true)
+	v.reportSecretsHint("Dialog.Settings.Secrets.Status.NewCredential")
+}
+
+func (v *View) onEditCredentialClicked() {
+	entry, ok := v.credentialByResource(v.selectedResource)
+	if !ok {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.PickCredential")
+		return
+	}
+	v.credentialResource.SetText(entry.Resource)
+	v.credentialUsername.SetText(entry.Username)
+	v.credentialType.SetSelected(credentialAuthTypeIndex(entry.Type))
+	v.credentialSecret.SetText("")
+	v.credentialForm.SetExpanded(true)
+	v.reportSecretsHint("Dialog.Settings.Secrets.Status.EditCredential")
+}
+
+func (v *View) credentialByResource(resource string) (SecretEntry, bool) {
+	for _, e := range v.credentials {
+		if e.Resource == resource {
+			return e, true
+		}
+	}
+	return SecretEntry{}, false
+}
+
+func (v *View) onSaveCredentialClicked() {
 	resource := strings.TrimSpace(v.credentialResource.GetText())
 	username := strings.TrimSpace(v.credentialUsername.GetText())
 	secret := v.credentialSecret.TakeSecret()
-	if resource == "" || len(secret) == 0 {
-		clear(secret)
+	defer clear(secret)
+	if resource == "" {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.NeedResource")
+		return
+	}
+	if len(secret) == 0 {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.NeedSecret")
 		return
 	}
 	if v.OnAddCredential != nil {
 		v.OnAddCredential(resource, username, secret)
 	}
-	clear(secret)
 }
 
 func (v *View) onRemoveCredentialClicked() {
@@ -398,20 +484,62 @@ func (v *View) onSSHUseDefaultChanged(checked bool) {
 	v.sshHostInput.SetEnabled(!checked && !v.secretsLocked)
 }
 
-func (v *View) onAddKeyClicked() {
+func (v *View) onNewKeyClicked() {
+	v.sshTable.Grid.SetSelectedIndex(-1)
+	v.sshUseDefaultCheckBox.SetChecked(false)
+	v.sshHostInput.SetEnabled(!v.secretsLocked)
+	v.sshHostInput.SetText("")
+	v.sshPathInput.SetText("")
+	v.sshPassphraseInput.SetText("")
+	v.updateKeySelection("", false)
+	v.sshForm.SetExpanded(true)
+	v.reportSecretsHint("Dialog.Settings.Secrets.Status.NewKey")
+}
+
+func (v *View) onEditKeyClicked() {
+	entry, ok := v.keyByHost(v.selectedHost)
+	if !ok {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.PickKey")
+		return
+	}
+	isDefault := entry.Host == defaultKeyHost
+	v.sshUseDefaultCheckBox.SetChecked(isDefault)
+	v.sshHostInput.SetEnabled(!isDefault && !v.secretsLocked)
+	v.sshHostInput.SetText(entry.Host)
+	v.sshPathInput.SetText(entry.Path)
+	v.sshPassphraseInput.SetText("")
+	v.sshForm.SetExpanded(true)
+	v.reportSecretsHint("Dialog.Settings.Secrets.Status.EditKey")
+}
+
+func (v *View) keyByHost(host string) (KeyEntry, bool) {
+	for _, e := range v.keys {
+		if e.Host == host {
+			return e, true
+		}
+	}
+	return KeyEntry{}, false
+}
+
+func (v *View) onSaveKeyClicked() {
 	host := defaultKeyHost
 	if !v.sshUseDefaultCheckBox.IsChecked() {
 		host = strings.TrimSpace(v.sshHostInput.GetText())
 	}
 	path := strings.TrimSpace(v.sshPathInput.GetText())
-	if host == "" || path == "" {
+	passphrase := v.sshPassphraseInput.TakeSecret()
+	defer clear(passphrase)
+	if host == "" {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.NeedHost")
 		return
 	}
-	passphrase := v.sshPassphraseInput.TakeSecret()
+	if path == "" {
+		v.reportSecretsProblem("Dialog.Settings.Secrets.Status.NeedKeyFile")
+		return
+	}
 	if v.OnAddKey != nil {
 		v.OnAddKey(host, path, passphrase)
 	}
-	clear(passphrase)
 }
 
 func (v *View) onRemoveKeyClicked() {
@@ -427,4 +555,12 @@ func (v *View) onBrowseKeyFileClicked() {
 	if v.OnBrowseKeyFile != nil {
 		v.OnBrowseKeyFile()
 	}
+}
+
+func (v *View) reportSecretsProblem(key string) {
+	v.SetSecretsStatus(i18n.T(key), StatusError.DotColor(widget.CurrentTheme()))
+}
+
+func (v *View) reportSecretsHint(key string) {
+	v.SetSecretsStatus(i18n.T(key), widget.CurrentTheme().SecondaryText)
 }

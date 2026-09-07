@@ -82,6 +82,12 @@ func (a *App) wireSecretsView(view *settings.View) {
 	view.OnBrowseKeyFile = func() {
 		a.browseKeyFile(view)
 	}
+	view.OnTestConnection = func(section string) {
+		a.testSecretsConnection(view, section)
+	}
+	view.OnCredentialSource = func(source string) {
+		a.refreshCredentialSourceInfoFor(view, source)
+	}
 	secretsWG.Go(func() { a.runSecretsAction(view, false, false, nil) })
 }
 

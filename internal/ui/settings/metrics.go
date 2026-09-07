@@ -39,8 +39,8 @@ const (
 
 	expanderRowCollapsed      = 34
 	advancedRowExpanded       = 172
-	credentialFormRowExpanded = 250
-	sshFormRowExpanded        = 216
+	credentialFormRowExpanded = 264
+	sshFormRowExpanded        = 260
 	checkboxTextIndent        = 22
 
 	tableRowHeight            = 28
