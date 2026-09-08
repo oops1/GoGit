@@ -48,7 +48,7 @@ func TestPagerNextReturnsRowsInPages(t *testing.T) {
 	source, ids := buildChainRepo(t, 7)
 	want := reversed(ids)
 
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	t.Cleanup(pager.Cancel)
 
 	first, done, err := pager.Next(3)
@@ -117,7 +117,7 @@ func TestPagerIsLazyAndOnlyReadsRequestedObjects(t *testing.T) {
 	counting := &countingObjects{inner: db}
 	source := revision.Context{Objects: counting, Refs: store}
 
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	t.Cleanup(pager.Cancel)
 
 	rows, done, err := pager.Next(1)
@@ -137,7 +137,7 @@ func TestPagerIsLazyAndOnlyReadsRequestedObjects(t *testing.T) {
 
 func TestPagerNextWithNonPositiveCountReturnsNothing(t *testing.T) {
 	source, _ := buildChainRepo(t, 2)
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	t.Cleanup(pager.Cancel)
 
 	rows, done, err := pager.Next(0)
@@ -152,7 +152,7 @@ func TestPagerNextReportsDoneOnEmptyHistory(t *testing.T) {
 	store := openTestStore(t, r, db)
 	source := revision.Context{Objects: db, Refs: store}
 
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	t.Cleanup(pager.Cancel)
 
 	rows, done, err := pager.Next(3)
@@ -178,7 +178,7 @@ func TestPagerNextPropagatesWalkErrors(t *testing.T) {
 	failure := errors.New("boom")
 	source := revision.Context{Objects: failingObjects{inner: db, fail: a, err: failure}, Refs: store}
 
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	t.Cleanup(pager.Cancel)
 
 	rows, done, err := pager.Next(5)
@@ -195,7 +195,7 @@ func TestPagerNextPropagatesWalkErrors(t *testing.T) {
 
 func TestPagerCancelStopsFurtherIteration(t *testing.T) {
 	source, _ := buildChainRepo(t, 5)
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 
 	rows, done, err := pager.Next(1)
 	if err != nil || done || len(rows) != 1 {
@@ -218,7 +218,7 @@ func TestPagerCancelStopsFurtherIteration(t *testing.T) {
 
 func TestPagerCancelIsSafeToCallTwice(t *testing.T) {
 	source, _ := buildChainRepo(t, 2)
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	pager.Cancel()
 	pager.Cancel()
 }
@@ -227,7 +227,7 @@ func TestNewPagerDefersIterationUntilTheFirstNext(t *testing.T) {
 	source, ids := buildChainRepo(t, 3)
 	counted := &countingObjects{inner: source.Objects}
 	source.Objects = counted
-	pager := NewPager(t.Context(), source, revision.Options{})
+	pager := NewPager(t.Context(), source, Options{})
 	t.Cleanup(pager.Cancel)
 	if counted.gets != 0 {
 		t.Fatalf("NewPager read %d objects before the first Next", counted.gets)
@@ -247,7 +247,7 @@ func TestPagerNextWorksWhenNewPagerRanOnAThreadLockedGoroutine(t *testing.T) {
 	go func() {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
-		created <- NewPager(t.Context(), source, revision.Options{})
+		created <- NewPager(t.Context(), source, Options{})
 	}()
 	pager := <-created
 	done := make(chan error, 1)

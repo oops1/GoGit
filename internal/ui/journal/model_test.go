@@ -54,7 +54,7 @@ func buildLinearRepo(t *testing.T) (*repo.Repository, revision.Context, hash.Obj
 func TestLoadWalksHistoryFromHeadNewestFirst(t *testing.T) {
 	_, source, a, b, c := buildLinearRepo(t)
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -78,7 +78,7 @@ func TestLoadFormatsRowFieldsFromTheCommit(t *testing.T) {
 	setRef(t, store, refs.BranchName("main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -119,7 +119,7 @@ func TestLoadWalksACommitWithFileContent(t *testing.T) {
 	setRef(t, store, refs.BranchName("main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -140,7 +140,7 @@ func TestLoadDecoratesCommitsWithBranchesTagsAndRemotes(t *testing.T) {
 	setRef(t, store, refs.RemoteBranchName("origin", "main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -167,7 +167,7 @@ func TestLoadDecoratesAnnotatedTagsByPeeledTarget(t *testing.T) {
 	setRef(t, store, refs.TagName("v1"), tag)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -189,7 +189,7 @@ func TestLoadExcludesNonBranchTagRemoteRefsFromDecorations(t *testing.T) {
 	setRef(t, store, refs.Name("refs/stash"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -217,7 +217,7 @@ func TestLoadSkipsDanglingSymbolicBranchesInDecorations(t *testing.T) {
 	}
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -238,7 +238,7 @@ func TestLoadKeepsOnlyTheFirstLineOfAMessageWithoutATrailingNewline(t *testing.T
 	setRef(t, store, refs.BranchName("main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -256,7 +256,7 @@ func TestLoadReturnsEmptyForUnbornHead(t *testing.T) {
 	store := openTestStore(t, r, db)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -274,7 +274,7 @@ func TestLoadTreatsMissingHeadFileAsUnbornRatherThanError(t *testing.T) {
 	}
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v, want nil", err)
 	}
@@ -290,7 +290,7 @@ func TestLoadPropagatesNonNotFoundHeadResolutionErrors(t *testing.T) {
 	failure := errors.New("head is unreadable")
 	source := revision.Context{Objects: db, Refs: headErrorRefs{inner: store, err: failure}}
 
-	_, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	_, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if !errors.Is(err, failure) {
 		t.Fatalf("Load returned %v, want %v", err, failure)
 	}
@@ -312,7 +312,7 @@ func TestLoadPropagatesDecorationIterationError(t *testing.T) {
 	}
 	source := revision.Context{Objects: db, Refs: store}
 
-	_, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	_, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if !errors.Is(err, refs.ErrMalformedRef) {
 		t.Fatalf("Load returned %v, want ErrMalformedRef", err)
 	}
@@ -329,7 +329,7 @@ func TestLoadPropagatesObjectReadErrors(t *testing.T) {
 	failure := errors.New("boom")
 	source := revision.Context{Objects: failingObjects{inner: db, fail: a, err: failure}, Refs: store}
 
-	_, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	_, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if !errors.Is(err, revision.ErrNotFound) {
 		t.Fatalf("Load returned %v, want revision.ErrNotFound", err)
 	}
@@ -338,7 +338,7 @@ func TestLoadPropagatesObjectReadErrors(t *testing.T) {
 func TestLoadAppliesWalkOptionsLikeMaxCount(t *testing.T) {
 	_, source, _, b, c := buildLinearRepo(t)
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{MaxCount: 2}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{Walk: revision.Options{MaxCount: 2}}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -357,7 +357,7 @@ func TestLoadStopsOnContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := collectRows(t, Load(ctx, source, revision.Options{}))
+	_, err := collectRows(t, Load(ctx, source, Options{}))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Load returned %v, want context.Canceled", err)
 	}
@@ -386,7 +386,7 @@ func TestLoadIsLazyAndStopsReadingWhenTheConsumerStops(t *testing.T) {
 	source := revision.Context{Objects: counting, Refs: store}
 
 	seen := 0
-	for row, err := range Load(t.Context(), source, revision.Options{}) {
+	for row, err := range Load(t.Context(), source, Options{}) {
 		if err != nil {
 			t.Fatalf("Load returned error %v", err)
 		}
@@ -430,7 +430,7 @@ func TestTheGraphOfACrissCrossHistoryStaysNarrow(t *testing.T) {
 	setRef(t, store, refs.BranchName("develop"), develop)
 	setRef(t, store, refs.HEAD, main)
 
-	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(100)))
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(100, true)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +468,7 @@ func TestCommitsBeyondTheRemoteBranchAreMarkedAsLocal(t *testing.T) {
 	setRef(t, store, refs.HEAD, local)
 	setRef(t, store, refs.RemoteBranchName("origin", "main"), pushed)
 
-	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10)))
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +484,7 @@ func TestCommitsBeyondTheRemoteBranchAreMarkedAsLocal(t *testing.T) {
 	}
 }
 
-func TestWithoutARemoteNothingIsMarkedAsLocal(t *testing.T) {
+func TestWithoutARemoteConfiguredNothingIsMarkedAsLocal(t *testing.T) {
 	r := initTestRepo(t, "main")
 	db := openTestDB(t, r)
 	store := openTestStore(t, r, db)
@@ -493,13 +493,38 @@ func TestWithoutARemoteNothingIsMarkedAsLocal(t *testing.T) {
 	setRef(t, store, refs.BranchName("main"), id)
 	setRef(t, store, refs.HEAD, id)
 
-	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10)))
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, false)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if len(rows) != 1 || rows[0].Unpushed {
 		t.Fatalf("rows = %+v, want nothing marked without a remote", rows)
+	}
+}
+
+func TestARepositoryThatWasNeverPushedIsLocalAllTheWayDown(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	first := putCommit(t, db, tree, timeAt(1700000000), "ann", "first")
+	second := putCommit(t, db, tree, timeAt(1700000060), "ann", "second", first)
+	setRef(t, store, refs.BranchName("main"), second)
+	setRef(t, store, refs.HEAD, second)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want both commits", len(rows))
+	}
+	for _, row := range rows {
+		if !row.Unpushed {
+			t.Fatalf("row %q is not marked, want every commit of a repository the remote never saw", row.Message)
+		}
 	}
 }
 
@@ -514,7 +539,7 @@ func TestARemoteListThatCannotBeReadStopsTheJournal(t *testing.T) {
 	failure := errors.New("no remotes for you")
 
 	source := revision.Context{Objects: db, Refs: prefixErrorRefs{inner: store, prefix: refs.RemotesPrefix, err: failure}}
-	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
 
 	if !errors.Is(err, failure) {
 		t.Fatalf("err = %v, want %v", err, failure)
@@ -531,7 +556,7 @@ func TestAHeadThatHasNoNameLeavesEveryBranchPlain(t *testing.T) {
 	setRef(t, store, refs.HEAD, id)
 
 	source := revision.Context{Objects: db, Refs: nameErrorRefs{inner: store, err: errors.New("detached")}}
-	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +576,7 @@ func TestRefsOfTheSameKindAreOrderedByName(t *testing.T) {
 	setRef(t, store, refs.BranchName("alpha"), id)
 	setRef(t, store, refs.HEAD, id)
 
-	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10)))
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,7 +586,7 @@ func TestRefsOfTheSameKindAreOrderedByName(t *testing.T) {
 	}
 }
 
-func TestARemoteRefWithoutATargetIsIgnored(t *testing.T) {
+func TestARemoteRefWithoutATargetHoldsNothingBack(t *testing.T) {
 	r := initTestRepo(t, "main")
 	db := openTestDB(t, r)
 	store := openTestStore(t, r, db)
@@ -574,13 +599,13 @@ func TestARemoteRefWithoutATargetIsIgnored(t *testing.T) {
 		Objects: db,
 		Refs:    fixedRefs{inner: store, list: []refs.Ref{{Name: refs.RemoteBranchName("origin", "main")}}},
 	}
-	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(rows) != 1 || rows[0].Unpushed {
-		t.Fatalf("rows = %+v, want a remote without a target to change nothing", rows)
+	if len(rows) != 1 || !rows[0].Unpushed {
+		t.Fatalf("rows = %+v, want a remote without a target to hold nothing back", rows)
 	}
 }
 
@@ -597,7 +622,7 @@ func TestAHistoryThatCannotBeReadWhileLookingForLocalCommitsIsReported(t *testin
 	failure := errors.New("object gone")
 
 	source := revision.Context{Objects: failingObjects{inner: db, fail: pushed, err: failure}, Refs: store}
-	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
 
 	if !errors.Is(err, failure) {
 		t.Fatalf("err = %v, want %v", err, failure)

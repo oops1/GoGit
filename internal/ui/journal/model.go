@@ -12,11 +12,19 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/revision"
 )
 
-func WalkOptions(maxCount int) revision.Options {
-	return revision.Options{MaxCount: maxCount, Order: revision.DateOrder}
+type Options struct {
+	Walk       revision.Options
+	HasRemotes bool
 }
 
-func Load(ctx context.Context, source revision.Context, opts revision.Options) iter.Seq2[Row, error] {
+func WalkOptions(maxCount int, hasRemotes bool) Options {
+	return Options{
+		Walk:       revision.Options{MaxCount: maxCount, Order: revision.DateOrder},
+		HasRemotes: hasRemotes,
+	}
+}
+
+func Load(ctx context.Context, source revision.Context, opts Options) iter.Seq2[Row, error] {
 	return func(yield func(Row, error) bool) {
 		head, err := resolveHead(source)
 		if err != nil {
@@ -36,7 +44,7 @@ func Load(ctx context.Context, source revision.Context, opts revision.Options) i
 			yield(Row{}, err)
 			return
 		}
-		walkOpts := opts
+		walkOpts := opts.Walk
 		walkOpts.Context = source
 		walkOpts.Include = []hash.ObjectID{head}
 		for commit, err := range revision.Walk(ctx, walkOpts) {
@@ -92,16 +100,16 @@ func loadDecorations(source revision.Context) (map[hash.ObjectID][]Ref, error) {
 	return decorations, nil
 }
 
-func loadUnpushed(ctx context.Context, source revision.Context, head hash.ObjectID, opts revision.Options) (map[hash.ObjectID]struct{}, error) {
+func loadUnpushed(ctx context.Context, source revision.Context, head hash.ObjectID, opts Options) (map[hash.ObjectID]struct{}, error) {
+	local := make(map[hash.ObjectID]struct{})
+	if !opts.HasRemotes {
+		return local, nil
+	}
 	remotes, err := remoteTips(source)
 	if err != nil {
 		return nil, err
 	}
-	local := make(map[hash.ObjectID]struct{})
-	if len(remotes) == 0 {
-		return local, nil
-	}
-	walk := opts
+	walk := opts.Walk
 	walk.Context = source
 	walk.Include = []hash.ObjectID{head}
 	walk.Exclude = remotes
@@ -168,7 +176,7 @@ type Pager struct {
 	stop   func()
 }
 
-func NewPager(ctx context.Context, source revision.Context, opts revision.Options) *Pager {
+func NewPager(ctx context.Context, source revision.Context, opts Options) *Pager {
 	walkCtx, cancel := context.WithCancel(ctx)
 	return &Pager{seq: Load(walkCtx, source, opts), cancel: cancel}
 }

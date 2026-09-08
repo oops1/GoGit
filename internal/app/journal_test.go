@@ -418,7 +418,7 @@ func (f *fakeJournalPager) Cancel() { f.cancelled.Store(true) }
 func withFakeJournalPager(t *testing.T, fake *fakeJournalPager) {
 	t.Helper()
 	prev := newJournalPager
-	newJournalPager = func(context.Context, revision.Context, revision.Options) journalPager { return fake }
+	newJournalPager = func(context.Context, revision.Context, journal.Options) journalPager { return fake }
 	t.Cleanup(func() { newJournalPager = prev })
 }
 
