@@ -353,7 +353,6 @@
   "Files.State.Untracked": "Untracked",
   "Journal.Column.Author": "Author",
   "Journal.Column.Date": "Date",
-  "Journal.Column.Graph": "Graph",
   "Journal.Column.Hash": "Commit",
   "Journal.Column.Message": "Message",
   "Language.en": "English",

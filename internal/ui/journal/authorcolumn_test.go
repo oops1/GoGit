@@ -22,11 +22,17 @@ type recordingDrawCtx struct {
 	}
 }
 
-func (c *recordingDrawCtx) FillRect(x, y, w, h int, col color.RGBA)          {}
-func (c *recordingDrawCtx) FillRectAlpha(x, y, w, h int, col color.RGBA)     {}
-func (c *recordingDrawCtx) FillEllipseAA(cx, cy, rx, ry int, col color.RGBA) {}
-func (c *recordingDrawCtx) FillRoundRect(x, y, w, h, r int, col color.RGBA)  {}
-func (c *recordingDrawCtx) DrawBorder(x, y, w, h int, col color.RGBA)        {}
+func (c *recordingDrawCtx) FillRect(x, y, w, h int, col color.RGBA)                          {}
+func (c *recordingDrawCtx) FillRectAlpha(x, y, w, h int, col color.RGBA)                     {}
+func (c *recordingDrawCtx) FillEllipseAA(cx, cy, rx, ry int, col color.RGBA)                 {}
+func (c *recordingDrawCtx) FillRoundRect(x, y, w, h, r int, col color.RGBA)                  {}
+func (c *recordingDrawCtx) DrawLineAA(x1, y1, x2, y2 int, thickness float64, col color.RGBA) {}
+func (c *recordingDrawCtx) StrokePolylineAA(pts []image.Point, thickness float64, closed bool, col color.RGBA) {
+}
+func (c *recordingDrawCtx) StrokeEllipseAA(cx, cy, rx, ry int, thickness float64, col color.RGBA) {}
+func (c *recordingDrawCtx) FillPolygonAA(pts []image.Point, col color.RGBA)                       {}
+
+func (c *recordingDrawCtx) DrawBorder(x, y, w, h int, col color.RGBA) {}
 func (c *recordingDrawCtx) DrawText(text string, x, y int, col color.RGBA) {
 	c.DrawTextSize(text, x, y, 12, col)
 }

@@ -13,7 +13,7 @@ import (
 )
 
 func menuItem(key string, action func()) widget.MenuItem {
-	return widget.MenuItem{Text: i18n.T(key), OnClick: action}
+	return widget.MenuItem{Text: i18n.T(key), Icon: menuKeyIcon(key), OnClick: action}
 }
 
 func menuSeparator() widget.MenuItem {

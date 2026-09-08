@@ -41,7 +41,6 @@ func sampleRows(n int) []Row {
 	rows := make([]Row, n)
 	for i := range n {
 		rows[i] = Row{
-			Graph:     "*",
 			Message:   "commit",
 			Author:    "ann",
 			Date:      "2026-09-03 12:00",

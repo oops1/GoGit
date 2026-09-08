@@ -99,7 +99,7 @@ var dockSideSizes = map[widget.DockSide]int{
 }
 
 var gridColumnKeys = map[string][]string{
-	"journalGrid": {"Journal.Column.Graph", "Journal.Column.Message", "Journal.Column.Author", "Journal.Column.Date", "Journal.Column.Hash"},
+	"journalGrid": {"", "Journal.Column.Message", "Journal.Column.Author", "Journal.Column.Date", "Journal.Column.Hash"},
 }
 
 var toolbarButtons = map[CommandID]string{

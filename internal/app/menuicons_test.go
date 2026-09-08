@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/oops1/gogit/internal/assets"
+	"github.com/oops1/gogit/internal/ui/repos"
 )
 
 func everyMenuCommand() []CommandID {
@@ -89,6 +90,38 @@ func TestEveryDrawnMenuPictureIsUsed(t *testing.T) {
 	for _, name := range []string{"commit", "pull", "push", "sync"} {
 		if !used[name] {
 			t.Fatalf("the toolbar icon %q must serve its menu item too", name)
+		}
+	}
+}
+
+func TestThePicturesReachTheMenuBar(t *testing.T) {
+	a := newTestApp(t)
+
+	items := a.menu.Items()
+	if len(items) == 0 {
+		t.Fatal("the menu bar must have menus")
+	}
+	for i, def := range menuBarDefs {
+		for at, entry := range def.Tree {
+			if entry.Leaf == nil || at >= len(items[i].Items) {
+				continue
+			}
+			if items[i].Items[at].Icon == nil {
+				t.Fatalf("menu %q item %q has no picture", def.TitleKey, entry.Leaf.Key)
+			}
+		}
+	}
+}
+
+func TestThePicturesReachTheContextMenus(t *testing.T) {
+	a, _, _ := newWorktreeTestApp(t)
+
+	for _, item := range a.treeMenu(repos.MenuTarget{ID: "r1"}) {
+		if item.Separator {
+			continue
+		}
+		if item.Icon == nil {
+			t.Fatalf("context item %q has no picture", item.Text)
 		}
 	}
 }

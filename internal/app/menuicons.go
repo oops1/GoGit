@@ -2,6 +2,7 @@ package app
 
 import (
 	"image"
+	"image/color"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -57,18 +58,74 @@ func commandIcon(id CommandID) image.Image {
 	return menuIcon(commandIcons[id])
 }
 
+func commandIconFor(id CommandID, enabled bool) image.Image {
+	if enabled {
+		return commandIcon(id)
+	}
+	return mutedIcon(commandIcons[id])
+}
+
 func menuKeyIcon(key string) image.Image {
 	if name, ok := contextIcons[key]; ok {
 		return menuIcon(name)
 	}
-	return menuIcon(menuGroupIcons[key])
+	if name, ok := menuGroupIcons[key]; ok {
+		return menuIcon(name)
+	}
+	if id, ok := commandOfKey(key); ok {
+		return commandIcon(id)
+	}
+	return nil
+}
+
+func commandOfKey(key string) (CommandID, bool) {
+	for _, def := range menuBarDefs {
+		for _, entry := range def.Tree {
+			if entry.Leaf != nil && entry.Leaf.Key == key {
+				return entry.Leaf.Command, true
+			}
+		}
+	}
+	return "", false
+}
+
+func (a *App) applyMenuIcons() {
+	state := a.State()
+	items := a.menu.Items()
+	for i, def := range menuBarDefs {
+		if i >= len(items) {
+			continue
+		}
+		applyTreeIcons(items[i].Items, def.Tree, state)
+	}
+}
+
+func applyTreeIcons(subs []widget.MenuItem, tree []menuTreeEntry, state State) {
+	for i, entry := range tree {
+		if i >= len(subs) {
+			continue
+		}
+		switch {
+		case entry.Leaf != nil:
+			subs[i].Icon = commandIconFor(entry.Leaf.Command, state.Enabled(entry.Leaf.Command))
+		case entry.Group != nil:
+			subs[i].Icon = menuKeyIcon(entry.Group.Key)
+		}
+	}
+}
+
+func mutedIcon(name string) image.Image {
+	return tintedIcon(name, widget.CurrentTheme().Disabled)
 }
 
 func menuIcon(name string) image.Image {
+	return tintedIcon(name, widget.CurrentTheme().LabelText)
+}
+
+func tintedIcon(name string, tint color.RGBA) image.Image {
 	if name == "" {
 		return nil
 	}
-	tint := widget.CurrentTheme().LabelText
 	if drawn := icons.Menu(name, menuIconSize, tint); drawn != nil {
 		return drawn
 	}

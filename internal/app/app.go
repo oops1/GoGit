@@ -765,6 +765,7 @@ func (a *App) applyTheme() {
 	a.applyWorkingCopyButtonVisuals(theme)
 	a.applyRepoTreeTheme(theme)
 	a.applyPaneTitleColors(theme)
+	a.applyMenuIcons()
 }
 
 func (a *App) applyPaneTitleColors(t *widget.Theme) {

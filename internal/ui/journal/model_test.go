@@ -83,8 +83,8 @@ func TestLoadFormatsRowFieldsFromTheCommit(t *testing.T) {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
 	row := rows[0]
-	if row.Graph != "*" {
-		t.Errorf("Graph = %q, want *", row.Graph)
+	if len(row.Parents) != 0 {
+		t.Errorf("Parents = %v, want none for a root commit", row.Parents)
 	}
 	if row.Message != "subject line" {
 		t.Errorf("Message = %q, want %q", row.Message, "subject line")
