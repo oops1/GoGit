@@ -1,56 +1,34 @@
-# Go.Git 1.3.1 — The commit graph
+# Go.Git 1.3.2 — Two fixes
 
-The journal draws the history now: lanes, dots, ref labels, and the commits that
-exist only on this machine. Menus got their icons at the same time.
+A patch release: the repository you had open comes back open, and the diff pane
+shows the file you picked.
 
-## The graph
+## Fixes
 
-- The graph column draws a lane per line of history: a filled dot for a commit,
-  a ring for a merge, a rounded curve where a line moves from one lane to
-  another. A lane keeps its colour for as long as it lives.
-- The main line stays in the leftmost lane. When two lines meet, the left one
-  survives and the one that closes is led into it — the graph no longer drifts
-  to the right with every merge, leaving a trail of empty lanes behind.
-- The column is exactly as wide as the lanes on screen, and it is recounted
-  while scrolling. No space is reserved for a branch that is not in view.
-- The history is walked the way git walks it when it draws a graph: no parent
-  is shown before all of its children. Walking strictly by date opened a lane
-  for every merge commit — merges are made later than the branch they merge —
-  and those lanes stayed empty to the bottom of the page.
-- The lines between rows are gone: they cut the lanes.
-- The lane layout survives paging, so the lines do not break where the next
-  page begins. Beyond sixteen lanes the rest collapse into the last one.
+- The repository that was active when the app closed is opened again at startup.
+  Until now it was only highlighted in the tree — the path appeared in the status
+  bar and the folders expanded, but branches, journal and working copy stayed
+  empty until it was double-clicked.
+- The diff pane shows the selected file, not the one that happens to sit at that
+  row number. With the file list filtered — by text or by status — grid rows were
+  still read as indexes into the unfiltered list, so a different file's diff was
+  shown, usually an unchanged one with nothing to display. Files are now matched
+  by path.
 
-## Labels and colour
+## Under the hood
 
-- Refs are drawn as rounded labels before the message: the current branch
-  filled with the accent, other local branches with a quieter fill, remote
-  branches grey, tags amber. They are ordered current branch, local, remote,
-  tags.
-- Commits the server does not have are drawn amber — the dot and the lines. A
-  repository with a remote that was never pushed is local all the way down; a
-  repository without a remote is not coloured at all, or the colour would mean
-  nothing.
-
-## Icons in the menus
-
-- Every menu — Repository, Edit, Remote, View, Help — and every context menu
-  now carries an icon per item: 28 drawn for this release plus the toolbar
-  icons for the commands both places share. A disabled item dims its icon along
-  with its label.
-
-## Engine
-
-- Raised to v3.16.10: an icon in a menu item (GG-53) and the lines, polylines
-  and outlines of `AAShapes` in the table cell drawing context (GG-54).
+- `gitcore/merge` merges one file three ways in the merge, diff3 and zdiff3
+  styles, byte for byte with `git merge-file`, conflicts three lines apart or
+  less joined the way git joins them. It is the ground floor of the merges in
+  1.4.0 and is not reachable from the interface yet.
 
 ## Install
 
 Download the archive for your system, unpack it and run the binary. Nothing else
 has to be installed: the git implementation is inside.
 
-- `gogit-v1.3.1-windows-amd64.zip`
-- `gogit-v1.3.1-linux-amd64.tar.gz`
-- `gogit-v1.3.1-linux-arm64.tar.gz`
+- `gogit-v1.3.2-windows-amd64.zip`
+- `gogit-v1.3.2-linux-amd64.tar.gz`
+- `gogit-v1.3.2-linux-arm64.tar.gz`
 
 `SHA256SUMS` next to the archives carries their checksums.
