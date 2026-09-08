@@ -3,6 +3,7 @@ package repos
 import (
 	"image"
 	"image/color"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -859,4 +860,114 @@ func visibleRows(tw *widget.TreeViewWidget) []*treeview.TreeViewItem {
 	}
 	walk(tw.Tree.Roots())
 	return rows
+}
+
+func TestTheNodeMenuNamesWhatWasClicked(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	var asked MenuTarget
+	v.OnMenu = func(target MenuTarget) []widget.MenuItem {
+		asked = target
+		return []widget.MenuItem{{Text: "item"}}
+	}
+
+	main := nodeItem(t, v, reg, "Main")
+	if items := tw.NodeContextMenu(main); len(items) != 1 {
+		t.Fatalf("menu = %v, want the one item the app gave", items)
+	}
+	mainID, _ := v.Item(asked.ID)
+	if mainID != main {
+		t.Fatalf("target = %+v, want the repository node", asked)
+	}
+
+	tw.NodeContextMenu(nil)
+	if asked.ID != "" || asked.Directory != "" {
+		t.Fatalf("target = %+v, want empty space", asked)
+	}
+
+	tw.NodeContextMenu(newStub())
+	if asked.ID != "" || asked.Directory != "" {
+		t.Fatalf("target = %+v, want empty space for a placeholder row", asked)
+	}
+}
+
+func TestTheNodeMenuOfADirectoryRowNamesTheDirectory(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	main, ok := repositoryNode(reg, "Main")
+	if !ok {
+		t.Fatal("the repository is not in the registry")
+	}
+	if err := reg.SetActive(main.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(main.Path, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	v.Render(reg, nil)
+	var asked MenuTarget
+	v.OnMenu = func(target MenuTarget) []widget.MenuItem {
+		asked = target
+		return nil
+	}
+
+	item, ok := v.Item(main.ID)
+	if !ok {
+		t.Fatal("the repository must be in the tree")
+	}
+	tw.Tree.ExpandItem(item)
+	if len(item.Children) == 0 {
+		t.Fatal("an expanded repository must show its directories")
+	}
+	tw.NodeContextMenu(item.Children[len(item.Children)-1])
+
+	if asked.RepoID != main.ID || asked.Directory != filepath.Join(main.Path, "src") {
+		t.Fatalf("target = %+v, want the directory row", asked)
+	}
+}
+
+func TestWithoutAMenuBuilderTheTreeOffersNothing(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+
+	if items := tw.NodeContextMenu(nodeItem(t, v, reg, "Main")); items != nil {
+		t.Fatalf("menu = %v, want none", items)
+	}
+}
+
+func repositoryNode(reg *repo.Registry, name string) (*repo.Node, bool) {
+	for node := range reg.Walk() {
+		if node.Kind == repo.KindRepository && node.Name == name {
+			return node, true
+		}
+	}
+	return nil, false
+}
+
+func TestTheEngineOpensTheMenuOverARow(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	tw.Tree.ItemHeight = 20
+	tw.SetBounds(image.Rect(0, 0, 240, 400))
+	v.Render(reg, nil)
+	v.OnMenu = func(MenuTarget) []widget.MenuItem {
+		return []widget.MenuItem{{Text: "Copy path"}}
+	}
+
+	main := nodeItem(t, v, reg, "Main")
+	row := -1
+	for i, item := range visibleRows(tw) {
+		if item == main {
+			row = i
+		}
+	}
+	if row < 0 {
+		t.Fatal("the repository must be on screen")
+	}
+
+	if menu := tw.ContextMenuAt(60, row*20+10); menu == nil {
+		t.Fatal("right-clicking a row must open the menu")
+	}
 }

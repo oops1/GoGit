@@ -68,6 +68,10 @@ linters:
         linters:
           - gosec
         text: "G204"
+      - path: internal/app/reveal_(windows|linux)\.go
+        linters:
+          - gosec
+        text: "G204"
       - path: internal/app/about_test\.go
         linters:
           - gosec

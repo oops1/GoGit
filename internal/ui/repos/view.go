@@ -72,12 +72,14 @@ func newStub() *treeview.TreeViewItem {
 	return item
 }
 
-func isStubOnly(item *treeview.TreeViewItem) bool {
-	if len(item.Children) != 1 {
-		return false
+func dropStub(item *treeview.TreeViewItem) bool {
+	for _, child := range item.Children {
+		if _, ok := child.Tag.(stubMarker); ok {
+			item.RemoveChild(child)
+			return true
+		}
 	}
-	_, ok := item.Children[0].Tag.(stubMarker)
-	return ok
+	return false
 }
 
 type View struct {
@@ -94,6 +96,7 @@ type View struct {
 	OnSelect          func(id string)
 	OnSelectDirectory func(repoID, relPath string)
 	OnMove            func(id, targetID string, inside bool)
+	OnMenu            func(target MenuTarget) []widget.MenuItem
 	OnGroupToggled    func(id string, expanded bool)
 }
 
@@ -145,6 +148,7 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 	tree.Tree.OnCollapsed = func(e treeview.CollapsedEvent) {
 		v.reportToggle(e.Item, false)
 	}
+	tree.NodeContextMenu = v.nodeMenu
 	tree.Tree.CanUserDragNodes = true
 	tree.Tree.CanDropNode = v.canDrop
 	tree.Tree.OnNodeDrop = v.handleDrop
@@ -156,6 +160,35 @@ func (v *View) SetCollapsedGroups(ids []string) {
 	for _, id := range ids {
 		v.expanded[id] = false
 	}
+}
+
+type MenuTarget struct {
+	ID        string
+	RepoID    string
+	Directory string
+}
+
+func (v *View) nodeMenu(item *treeview.TreeViewItem) []widget.MenuItem {
+	if v.OnMenu == nil {
+		return nil
+	}
+	return v.OnMenu(v.menuTarget(item))
+}
+
+func (v *View) menuTarget(item *treeview.TreeViewItem) MenuTarget {
+	if item == nil {
+		return MenuTarget{}
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if id, ok := v.idByItem[item]; ok {
+		return MenuTarget{ID: id}
+	}
+	entry, ok := item.Tag.(dirEntry)
+	if !ok {
+		return MenuTarget{}
+	}
+	return MenuTarget{RepoID: entry.repoID, Directory: filepath.Join(entry.root, entry.rel)}
 }
 
 func (v *View) canDrop(dragged, target *treeview.TreeViewItem, pos treeview.DropPosition) bool {
@@ -355,10 +388,9 @@ func (v *View) handleExpanded(item *treeview.TreeViewItem) {
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if !isStubOnly(item) {
+	if !dropStub(item) {
 		return
 	}
-	item.ClearChildren()
 	v.appendDirChildrenLocked(item, entry.repoID, entry.root, entry.rel)
 }
 

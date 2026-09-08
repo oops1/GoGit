@@ -343,6 +343,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.applyTheme()
 	a.updateStatusText()
 
+	a.wireContextMenus()
 	a.wireMenuBar()
 	a.wireToolbar()
 	a.retranslateGrids()
