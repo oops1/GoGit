@@ -614,8 +614,14 @@ func (a *App) restoreActiveRepository() {
 	if !ok || node.Kind == repo.KindGroup {
 		return
 	}
-	_ = a.registry.SetActive(a.cfg.ActiveRepository)
-	a.SetActiveRepository(a.cfg.ActiveRepository, node.Kind == repo.KindWorktree)
+	a.ActivateRepository(node.ID)
+	if a.opened() != nil {
+		return
+	}
+	a.cfg.ActiveRepository = node.ID
+	_ = a.registry.SetActive(node.ID)
+	a.SetActiveRepository(node.ID, node.Kind == repo.KindWorktree)
+	a.reposView.Render(a.registry, a.repoTreeState())
 }
 
 func (a *App) updateStatusText() {
