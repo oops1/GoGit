@@ -10,6 +10,10 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/revision"
 )
 
+func WalkOptions(maxCount int) revision.Options {
+	return revision.Options{MaxCount: maxCount, Order: revision.DateOrder}
+}
+
 func Load(ctx context.Context, source revision.Context, opts revision.Options) iter.Seq2[Row, error] {
 	return func(yield func(Row, error) bool) {
 		head, err := resolveHead(source)

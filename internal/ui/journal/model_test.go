@@ -3,11 +3,14 @@ package journal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/oops1/gogit/internal/ui/journal/graph"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -398,4 +401,49 @@ func TestLoadIsLazyAndStopsReadingWhenTheConsumerStops(t *testing.T) {
 	if counting.gets > 4 {
 		t.Errorf("Load read %d objects before the first row, want a lazy traversal", counting.gets)
 	}
+}
+
+func TestTheGraphOfACrissCrossHistoryStaysNarrow(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+
+	minute := 0
+	at := func() time.Time {
+		minute++
+		return timeAt(int64(1700000000 + minute*60))
+	}
+	root := putCommit(t, db, tree, at(), "ann", "root")
+	main, develop := root, root
+	for round := range 4 {
+		for step := range 3 {
+			develop = putCommit(t, db, tree, at(), "ann", fmt.Sprintf("develop %d.%d", round, step), develop)
+		}
+		main = putCommit(t, db, tree, at(), "ann", fmt.Sprintf("main %d", round), main)
+		merged := putCommit(t, db, tree, laterThan(at()), "ann", fmt.Sprintf("merge %d", round), main, develop)
+		back := putCommit(t, db, tree, laterThan(at()), "ann", fmt.Sprintf("back %d", round), develop, merged)
+		main, develop = merged, back
+	}
+	setRef(t, store, refs.BranchName("main"), main)
+	setRef(t, store, refs.BranchName("develop"), develop)
+	setRef(t, store, refs.HEAD, main)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(100)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	layout := graph.New()
+	widest := 0
+	for _, row := range rows {
+		widest = max(widest, layout.Add(graph.Commit{ID: row.ID, Parents: row.Parents}).Lanes)
+	}
+	if widest > 3 {
+		t.Fatalf("the graph takes %d lanes, want a branch and its main line side by side", widest)
+	}
+}
+
+func laterThan(when time.Time) time.Time {
+	return when.Add(time.Hour)
 }
