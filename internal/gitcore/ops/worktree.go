@@ -47,6 +47,7 @@ var (
 	worktreeRepoOpen  = repo.Open
 	worktreeRefsOpen  = refs.Open
 	worktreeOpen      = worktree.Open
+	worktreeResolve   = filepath.EvalSymlinks
 )
 
 type Worktree struct {
@@ -193,7 +194,18 @@ func cleanWorktreePath(path string) string {
 }
 
 func samePath(a, b string) bool {
-	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	if strings.EqualFold(filepath.Clean(a), filepath.Clean(b)) {
+		return true
+	}
+	return strings.EqualFold(resolvedPath(a), resolvedPath(b))
+}
+
+func resolvedPath(path string) string {
+	resolved, err := worktreeResolve(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	return filepath.Clean(resolved)
 }
 
 func adminDir(r *repo.Repository, id string) string {

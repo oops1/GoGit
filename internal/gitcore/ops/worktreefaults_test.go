@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -571,5 +572,36 @@ func TestAnIgnoredFileDoesNotMakeAWorktreeDirty(t *testing.T) {
 	}
 	if dirty {
 		t.Fatal("an ignored file must not count as a local change")
+	}
+}
+
+func swapWorktreeResolve(t testing.TB, replacement func(string) (string, error)) {
+	t.Helper()
+	original := worktreeResolve
+	worktreeResolve = replacement
+	t.Cleanup(func() { worktreeResolve = original })
+}
+
+func TestTwoNamesOfTheSameDirectoryAreOneWorktree(t *testing.T) {
+	swapWorktreeResolve(t, func(path string) (string, error) {
+		if short, ok := strings.CutPrefix(path, `C:\SHORT~1`); ok {
+			return `C:\short name` + short, nil
+		}
+		return path, nil
+	})
+
+	if !samePath(`C:\SHORT~1\feature`, `C:\short name\feature`) {
+		t.Fatal("the short and the long name of one directory must compare equal")
+	}
+}
+
+func TestAPathThatCannotBeResolvedIsComparedAsItIs(t *testing.T) {
+	swapWorktreeResolve(t, func(string) (string, error) { return "", errors.New("gone") })
+
+	if samePath("a", "b") {
+		t.Fatal("different paths must stay different when they cannot be resolved")
+	}
+	if !samePath("a", "a") {
+		t.Fatal("one path must equal itself when it cannot be resolved")
 	}
 }
