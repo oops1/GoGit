@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -23,6 +26,8 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/ui/changes"
 )
+
+const newlineText = "\n"
 
 func openTestRepository(t *testing.T, target string) *openedRepository {
 	t.Helper()
@@ -209,5 +214,94 @@ func TestBuildDiffFileMarksBinaryContentWithoutComputingHunks(t *testing.T) {
 
 	if !file.Binary || len(file.Hunks) != 0 {
 		t.Fatalf("file = %+v, want Binary=true and no hunks", file)
+	}
+}
+
+func waitForDiffOf(t *testing.T, a *App, name string) {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		document := diffDocumentOnDispatcher(t, a)
+		if document.NewName == name || document.OldName == name {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the diff shows %+v, want the one of %q", document, name)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestPickingAModifiedFileShowsItsDiff(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 5)
+
+	selectFilesRow(t, a, 2)
+
+	waitForDiffOf(t, a, "modified.txt")
+}
+
+func TestPickingAFileTheFilterKeptShowsThatFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 5)
+
+	a.filesFilterInput.SetText("modified")
+	a.onFilesFilterChanged("modified")
+	waitForWorkingRows(t, a, 1)
+
+	selectFilesRow(t, a, 0)
+
+	waitForDiffOf(t, a, "modified.txt")
+}
+
+func TestPickingACommitFileTheFilterKeptShowsThatFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepoWithBranch(t, target, "main")
+	db, store := withJournalRepo(t, target)
+	base := putChangesTree(t, db, map[string]string{"a.txt": "one" + newlineText, "b.txt": "two" + newlineText})
+	baseCommit := putChangesCommit(t, db, base)
+	changed := putChangesTree(t, db, map[string]string{"a.txt": "ONE" + newlineText, "b.txt": "TWO" + newlineText})
+	tip := putChangesCommit(t, db, changed, baseCommit)
+	setRef(t, store, refs.BranchName("main"), tip)
+
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	a.ActivateRepository("r1")
+	waitForJournalRows(t, a, 2)
+	selectJournalRow(t, a, 0)
+	waitForFilesRows(t, a, 2)
+
+	a.filesFilterInput.SetText("b.txt")
+	a.onFilesFilterChanged("b.txt")
+	waitForFilesRows(t, a, 1)
+
+	selectFilesRow(t, a, 0)
+
+	if document := diffDocumentOnDispatcher(t, a); document.NewName != "b.txt" {
+		t.Fatalf("the diff shows %q, want the file that was picked", document.NewName)
+	}
+}
+
+func TestARowThatBelongsToNoFileLeavesTheDiffAlone(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	a := activatedWorkingApp(t, target)
+	waitForWorkingRows(t, a, 5)
+	selectFilesRow(t, a, 2)
+	waitForDiffOf(t, a, "modified.txt")
+
+	a.onFilesRowSelected(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: changes.Row{Name: "gone"}})
+
+	if document := diffDocumentOnDispatcher(t, a); document.NewName != "modified.txt" {
+		t.Fatalf("the diff shows %q, want the one that was there", document.NewName)
 	}
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
@@ -45,16 +47,32 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	a.filesMu.Unlock()
 	a.setFilesSelected(mode == filesModeWorking && row.RelPath != "")
 	if mode == filesModeCommit {
-		if e.SelectedIndex >= len(files) {
-			return
+		if file, ok := fileOf(files, row); ok {
+			a.diffView.SetDocument(changes.FromFile(file))
 		}
-		a.diffView.SetDocument(changes.FromFile(files[e.SelectedIndex]))
 		return
 	}
-	if e.SelectedIndex >= len(entries) {
-		return
+	if entry, ok := entryOf(entries, row); ok {
+		a.showWorkingDiff(entry)
 	}
-	a.showWorkingDiff(entries[e.SelectedIndex])
+}
+
+func fileOf(files []diff.File, row changes.Row) (diff.File, bool) {
+	for _, file := range files {
+		if cmp.Or(file.NewPath, file.OldPath) == row.RelPath {
+			return file, true
+		}
+	}
+	return diff.File{}, false
+}
+
+func entryOf(entries []worktree.Entry, row changes.Row) (worktree.Entry, bool) {
+	for _, entry := range entries {
+		if entry.Path == row.RelPath {
+			return entry, true
+		}
+	}
+	return worktree.Entry{}, false
 }
 
 func (a *App) startDiff(id hash.ObjectID) {
