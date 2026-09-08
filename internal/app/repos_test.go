@@ -321,6 +321,24 @@ func TestRestoreActiveRepositoryFromConfigOnStartup(t *testing.T) {
 	}
 }
 
+func TestTheRememberedRepositoryIsOpenRightAfterStartup(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "main")
+	buildCleanTrackedRepoFixture(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	cfg.ActiveRepository = "r1"
+
+	a := newTestAppWithConfig(t, cfg)
+
+	if a.opened() == nil {
+		t.Fatal("the repository remembered in the config must be open without a click")
+	}
+	if !branchItemExistsOnDispatcher(t, a, refs.BranchName("main")) {
+		t.Fatal("the branches of the restored repository must be listed")
+	}
+	waitForWorkingRows(t, a, 1)
+}
+
 func TestRestoreActiveRepositoryIgnoresUnknownID(t *testing.T) {
 	cfg := config.Default()
 	cfg.ActiveRepository = "missing"
