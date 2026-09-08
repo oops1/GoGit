@@ -104,7 +104,7 @@ func (a *App) runFetchBody(ctx context.Context, o *openedRepository, prog progre
 		return err
 	}
 	defer func() { _ = r.Close() }()
-	result, err := ops.Fetch(ctx, r, a.cfg.Git.DefaultRemote, remote.FetchOptions{
+	result, err := ops.Fetch(ctx, r, a.effectiveDefaultRemote(r), remote.FetchOptions{
 		Prune:     prune,
 		Progress:  prog,
 		Transport: a.transportOptions(prog),
@@ -195,7 +195,7 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		return err
 	}
 	defer func() { _ = r.Close() }()
-	result, err := ops.Push(ctx, r, a.cfg.Git.DefaultRemote, remote.PushOptions{
+	result, err := ops.Push(ctx, r, a.effectiveDefaultRemote(r), remote.PushOptions{
 		Refspecs:  []refspec.RefSpec{spec},
 		Progress:  prog,
 		Transport: a.transportOptions(prog),

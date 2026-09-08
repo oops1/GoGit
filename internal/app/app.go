@@ -358,6 +358,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdSearch] = a.openSearch
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
 	a.handlers[CmdSettings] = a.openSettings
 	a.handlers[CmdAbout] = a.openAbout
 	a.handlers[CmdCheckUpdates] = a.checkForUpdates

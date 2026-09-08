@@ -47,10 +47,12 @@ func (a *App) repositoryMenu(node *repo.Node) []widget.MenuItem {
 		menuSeparator(),
 	}
 	items = append(items, a.pathMenu(node.Path)...)
+	items = append(items, menuSeparator(),
+		menuItem("Menu.Repository.RepoSettings", func() { a.openRepoSettings(node.ID) }))
 	if a.State().ActiveRepository != node.ID {
 		return items
 	}
-	return append(items, menuSeparator(), menuItem("Menu.Repository.CloseRepository", a.CloseRepository))
+	return append(items, menuItem("Menu.Repository.CloseRepository", a.CloseRepository))
 }
 
 func (a *App) pathMenu(path string) []widget.MenuItem {

@@ -19,6 +19,7 @@ var commandIcons = map[CommandID]string{
 	CmdAddWorktree:     "worktree_add",
 	CmdRemoveWorktree:  "worktree_remove",
 	CmdPruneWorktrees:  "worktree_prune",
+	CmdRepoSettings:    "repo_settings",
 	CmdSettings:        "settings",
 	CmdClose:           "exit",
 	CmdStage:           "stage",

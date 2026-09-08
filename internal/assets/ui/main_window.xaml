@@ -22,6 +22,7 @@
                 <MenuItem Header="{Loc Menu.Repository.RemoveWorktree}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Repository.PruneWorktrees}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Repository.RepoSettings}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Repository.Settings}"/>
                 <MenuItem Header="{Loc Menu.Repository.Close}"/>
             </MenuItem>

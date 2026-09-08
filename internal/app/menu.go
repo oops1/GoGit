@@ -64,6 +64,7 @@ func buildRepositoryMenuTree() []menuTreeEntry {
 		leaf("Menu.Repository.RemoveWorktree", CmdRemoveWorktree),
 		leaf("Menu.Repository.PruneWorktrees", CmdPruneWorktrees),
 		separator,
+		leaf("Menu.Repository.RepoSettings", CmdRepoSettings),
 		leaf("Menu.Repository.Settings", CmdSettings),
 		leaf("Menu.Repository.Close", CmdClose),
 	}
