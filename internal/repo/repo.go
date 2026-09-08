@@ -93,6 +93,17 @@ func (r *Registry) Find(id string) (*Node, bool) {
 	return n, ok
 }
 
+func (r *Registry) ParentOf(id string) (*Node, bool) {
+	for node := range r.Walk() {
+		for _, child := range node.Children {
+			if child.ID == id {
+				return node, true
+			}
+		}
+	}
+	return nil, false
+}
+
 func (r *Registry) FindByPath(path string) (*Node, bool) {
 	norm, err := normalizePath(path)
 	if err != nil {
