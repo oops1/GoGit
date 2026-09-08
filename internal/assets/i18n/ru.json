@@ -353,7 +353,6 @@
   "Files.State.Untracked": "Не отслеживается",
   "Journal.Column.Author": "Автор",
   "Journal.Column.Date": "Дата",
-  "Journal.Column.Graph": "Граф",
   "Journal.Column.Hash": "Коммит",
   "Journal.Column.Message": "Сообщение",
   "Language.en": "English",

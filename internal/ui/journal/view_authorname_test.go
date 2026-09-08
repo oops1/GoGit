@@ -8,7 +8,7 @@ import (
 
 func journalColumns() []datagrid.Column {
 	return []datagrid.Column{
-		datagrid.NewTextColumn("Graph", "Graph"),
+		datagrid.NewTextColumn("", "ShortHash"),
 		datagrid.NewTextColumn("Message", "Message"),
 		NewView().newAuthorColumn("Author", false),
 		datagrid.NewTextColumn("Date", "Date"),

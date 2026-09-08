@@ -41,7 +41,6 @@ func sampleRows(n int) []Row {
 	rows := make([]Row, n)
 	for i := range n {
 		rows[i] = Row{
-			Graph:     "*",
 			Message:   "commit",
 			Author:    "ann",
 			Date:      "2026-09-03 12:00",
@@ -234,4 +233,69 @@ func TestClearSelectionDropsTheHighlightedRow(t *testing.T) {
 
 func TestClearSelectionWithoutAGridIsANoOp(t *testing.T) {
 	NewView().ClearSelection()
+}
+
+func TestTheJournalDrawsNoLinesBetweenRows(t *testing.T) {
+	v, grid := bound(t)
+
+	if grid.Grid.GridLineColor.A != 0 {
+		t.Fatalf("grid line = %v, want it invisible so the graph runs unbroken", grid.Grid.GridLineColor)
+	}
+
+	grid.ApplyTheme(widget.Win11LightTheme())
+	v.Restyle(widget.Win11LightTheme())
+
+	if grid.Grid.GridLineColor.A != 0 {
+		t.Fatal("a theme change must not bring the lines back")
+	}
+}
+
+func TestRestylingWithoutAGridIsHarmless(t *testing.T) {
+	NewView().Restyle(widget.Win11LightTheme())
+}
+
+func TestTheGraphColumnFollowsWhatIsOnScreen(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	grid.Grid.RowHeight = 20
+	v.installGraphColumn()
+
+	v.Append([]Row{
+		{ID: idFor(1), Parents: []hash.ObjectID{idFor(2), idFor(3)}},
+		{ID: idFor(2), Parents: []hash.ObjectID{idFor(4)}},
+		{ID: idFor(3), Parents: []hash.ObjectID{idFor(4)}},
+		{ID: idFor(4)},
+	})
+	wide := grid.Grid.Columns()[graphColumnIndex].Width().Value
+
+	v.Reset()
+	v.Append([]Row{{ID: idFor(5), Parents: []hash.ObjectID{idFor(6)}}, {ID: idFor(6)}})
+
+	if grid.Grid.Columns()[graphColumnIndex].Width().Value >= wide {
+		t.Fatal("a history without branches must give the width back")
+	}
+}
+
+func TestScrollingRecountsTheLanesOnScreen(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	v.installGraphColumn()
+
+	if grid.Grid.OnScroll == nil {
+		t.Fatal("the column must follow the scrolling")
+	}
+	grid.Grid.OnScroll(0, 10)
+}
+
+func TestARowOfAnotherKindIsSkippedWhenTheLanesAreCounted(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	v.installGraphColumn()
+
+	v.items.Add("not a commit")
+	v.resizeGraphColumn()
+
+	if grid.Grid.Columns()[graphColumnIndex].Width().Value != float64(graphColumnWidth(0)) {
+		t.Fatal("a row that is not a commit must not widen the graph")
+	}
 }

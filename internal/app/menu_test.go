@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -461,17 +460,9 @@ func TestFilesGridStateColumnRetranslatesOnLanguageChange(t *testing.T) {
 
 	for _, lang := range []string{"ru", "en", "ru"} {
 		a.SetLanguage(lang)
-		want := i18n.T("Files.State.Modified")
-		deadline := time.Now().Add(testTimeout)
-		for {
-			row := filesRowOnDispatcher(t, a, 2)
-			if row.State == want {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("lang %q: modified file state = %q, want %q", lang, row.State, want)
-			}
-			time.Sleep(10 * time.Millisecond)
+		waitForWorkingIdle(t, a)
+		if row := filesRowOnDispatcher(t, a, 2); row.State != i18n.T("Files.State.Modified") {
+			t.Fatalf("lang %q: modified file state = %q, want %q", lang, row.State, i18n.T("Files.State.Modified"))
 		}
 	}
 }

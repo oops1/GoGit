@@ -4,13 +4,27 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"slices"
+	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 )
 
-func Load(ctx context.Context, source revision.Context, opts revision.Options) iter.Seq2[Row, error] {
+type Options struct {
+	Walk       revision.Options
+	HasRemotes bool
+}
+
+func WalkOptions(maxCount int, hasRemotes bool) Options {
+	return Options{
+		Walk:       revision.Options{MaxCount: maxCount, Order: revision.DateOrder},
+		HasRemotes: hasRemotes,
+	}
+}
+
+func Load(ctx context.Context, source revision.Context, opts Options) iter.Seq2[Row, error] {
 	return func(yield func(Row, error) bool) {
 		head, err := resolveHead(source)
 		if err != nil {
@@ -25,7 +39,12 @@ func Load(ctx context.Context, source revision.Context, opts revision.Options) i
 			yield(Row{}, err)
 			return
 		}
-		walkOpts := opts
+		unpushed, err := loadUnpushed(ctx, source, head, opts)
+		if err != nil {
+			yield(Row{}, err)
+			return
+		}
+		walkOpts := opts.Walk
 		walkOpts.Context = source
 		walkOpts.Include = []hash.ObjectID{head}
 		for commit, err := range revision.Walk(ctx, walkOpts) {
@@ -33,7 +52,7 @@ func Load(ctx context.Context, source revision.Context, opts revision.Options) i
 				yield(Row{}, err)
 				return
 			}
-			if !yield(newRow(commit, decorations), nil) {
+			if !yield(newRow(commit, decorations, unpushed), nil) {
 				return
 			}
 		}
@@ -51,13 +70,15 @@ func resolveHead(source revision.Context) (hash.ObjectID, error) {
 	return ref.Target, nil
 }
 
-func loadDecorations(source revision.Context) (map[hash.ObjectID][]string, error) {
-	decorations := make(map[hash.ObjectID][]string)
+func loadDecorations(source revision.Context) (map[hash.ObjectID][]Ref, error) {
+	head := headBranch(source)
+	decorations := make(map[hash.ObjectID][]Ref)
 	for ref, err := range source.Refs.Prefix(refs.RefsPrefix) {
 		if err != nil {
 			return nil, err
 		}
-		if !ref.Name.IsBranch() && !ref.Name.IsTag() && !ref.Name.IsRemote() {
+		kind, ok := kindOf(ref.Name)
+		if !ok {
 			continue
 		}
 		id := ref.Target
@@ -67,9 +88,85 @@ func loadDecorations(source revision.Context) (map[hash.ObjectID][]string, error
 		if id.IsZero() {
 			continue
 		}
-		decorations[id] = append(decorations[id], ref.Name.Short())
+		decorations[id] = append(decorations[id], Ref{
+			Name: ref.Name.Short(),
+			Kind: kind,
+			Head: kind == RefBranch && ref.Name == head,
+		})
+	}
+	for id := range decorations {
+		slices.SortStableFunc(decorations[id], byRefImportance)
 	}
 	return decorations, nil
+}
+
+func loadUnpushed(ctx context.Context, source revision.Context, head hash.ObjectID, opts Options) (map[hash.ObjectID]struct{}, error) {
+	local := make(map[hash.ObjectID]struct{})
+	if !opts.HasRemotes {
+		return local, nil
+	}
+	remotes, err := remoteTips(source)
+	if err != nil {
+		return nil, err
+	}
+	walk := opts.Walk
+	walk.Context = source
+	walk.Include = []hash.ObjectID{head}
+	walk.Exclude = remotes
+	for commit, err := range revision.Walk(ctx, walk) {
+		if err != nil {
+			return nil, err
+		}
+		local[commit.ID] = struct{}{}
+	}
+	return local, nil
+}
+
+func remoteTips(source revision.Context) ([]hash.ObjectID, error) {
+	var tips []hash.ObjectID
+	for ref, err := range source.Refs.Prefix(refs.RemotesPrefix) {
+		if err != nil {
+			return nil, err
+		}
+		if ref.Target.IsZero() {
+			continue
+		}
+		tips = append(tips, ref.Target)
+	}
+	return tips, nil
+}
+
+func kindOf(name refs.Name) (RefKind, bool) {
+	switch {
+	case name.IsBranch():
+		return RefBranch, true
+	case name.IsRemote():
+		return RefRemote, true
+	case name.IsTag():
+		return RefTag, true
+	}
+	return 0, false
+}
+
+func byRefImportance(a, b Ref) int {
+	if a.Head != b.Head {
+		if a.Head {
+			return -1
+		}
+		return 1
+	}
+	if a.Kind != b.Kind {
+		return int(a.Kind) - int(b.Kind)
+	}
+	return strings.Compare(a.Name, b.Name)
+}
+
+func headBranch(source revision.Context) refs.Name {
+	name, err := source.Refs.ResolveName(refs.HEAD)
+	if err != nil {
+		return ""
+	}
+	return name
 }
 
 type Pager struct {
@@ -79,7 +176,7 @@ type Pager struct {
 	stop   func()
 }
 
-func NewPager(ctx context.Context, source revision.Context, opts revision.Options) *Pager {
+func NewPager(ctx context.Context, source revision.Context, opts Options) *Pager {
 	walkCtx, cancel := context.WithCancel(ctx)
 	return &Pager{seq: Load(walkCtx, source, opts), cancel: cancel}
 }

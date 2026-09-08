@@ -4,7 +4,10 @@ import (
 	"image"
 	"testing"
 
+	"github.com/oops1/headless-gui/v3/widget"
+
 	"github.com/oops1/gogit/internal/assets"
+	"github.com/oops1/gogit/internal/ui/repos"
 )
 
 func everyMenuCommand() []CommandID {
@@ -90,5 +93,48 @@ func TestEveryDrawnMenuPictureIsUsed(t *testing.T) {
 		if !used[name] {
 			t.Fatalf("the toolbar icon %q must serve its menu item too", name)
 		}
+	}
+}
+
+func TestThePicturesReachTheMenuBar(t *testing.T) {
+	a := newTestApp(t)
+
+	items := a.menu.Items()
+	if len(items) == 0 {
+		t.Fatal("the menu bar must have menus")
+	}
+	for i, def := range menuBarDefs {
+		for at, entry := range def.Tree {
+			if entry.Leaf == nil || at >= len(items[i].Items) {
+				continue
+			}
+			if items[i].Items[at].Icon == nil {
+				t.Fatalf("menu %q item %q has no picture", def.TitleKey, entry.Leaf.Key)
+			}
+		}
+	}
+}
+
+func TestThePicturesReachTheContextMenus(t *testing.T) {
+	a, _, _ := newWorktreeTestApp(t)
+
+	for _, item := range a.treeMenu(repos.MenuTarget{ID: "r1"}) {
+		if item.Separator {
+			continue
+		}
+		if item.Icon == nil {
+			t.Fatalf("context item %q has no picture", item.Text)
+		}
+	}
+}
+
+func TestMenuIconsSkipItemsTheMenuDoesNotHave(t *testing.T) {
+	applyTreeIcons(nil, repositoryMenuTree, State{})
+
+	subs := []widget.MenuItem{{Text: "one"}}
+	applyTreeIcons(subs, []menuTreeEntry{{Separator: true}}, State{})
+
+	if subs[0].Icon != nil {
+		t.Fatal("a separator has no picture")
 	}
 }

@@ -20,9 +20,16 @@ type recordingKindDrawCtx struct {
 	}
 }
 
-func (c *recordingKindDrawCtx) FillRect(x, y, w, h int, col color.RGBA)         {}
-func (c *recordingKindDrawCtx) FillRectAlpha(x, y, w, h int, col color.RGBA)    {}
-func (c *recordingKindDrawCtx) FillRoundRect(x, y, w, h, r int, col color.RGBA) {}
+func (c *recordingKindDrawCtx) FillRect(x, y, w, h int, col color.RGBA)                          {}
+func (c *recordingKindDrawCtx) FillRectAlpha(x, y, w, h int, col color.RGBA)                     {}
+func (c *recordingKindDrawCtx) FillRoundRect(x, y, w, h, r int, col color.RGBA)                  {}
+func (c *recordingKindDrawCtx) DrawLineAA(x1, y1, x2, y2 int, thickness float64, col color.RGBA) {}
+func (c *recordingKindDrawCtx) StrokePolylineAA(pts []image.Point, thickness float64, closed bool, col color.RGBA) {
+}
+func (c *recordingKindDrawCtx) StrokeEllipseAA(cx, cy, rx, ry int, thickness float64, col color.RGBA) {
+}
+func (c *recordingKindDrawCtx) FillPolygonAA(pts []image.Point, col color.RGBA) {}
+
 func (c *recordingKindDrawCtx) FillEllipseAA(cx, cy, rx, ry int, col color.RGBA) {
 }
 func (c *recordingKindDrawCtx) DrawBorder(x, y, w, h int, col color.RGBA) {}

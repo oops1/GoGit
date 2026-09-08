@@ -566,3 +566,26 @@ func TestSaveFilesColumnsLogsWarningWhenConfigSaveFails(t *testing.T) {
 		t.Fatalf("expected save failure to be logged: %s", buf.String())
 	}
 }
+
+func waitForWorkingIdle(t *testing.T, a *App) {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		a.workingFlagMu.Lock()
+		idle := !a.workingBusy && !a.workingAgain
+		a.workingFlagMu.Unlock()
+		if idle {
+			drainPostQueue(t, a)
+			a.workingFlagMu.Lock()
+			idle = !a.workingBusy && !a.workingAgain
+			a.workingFlagMu.Unlock()
+			if idle {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the working copy scan did not settle in time")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

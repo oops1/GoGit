@@ -222,6 +222,7 @@ func (a *App) refreshCommands() {
 	for id, name := range toolbarButtons {
 		a.named[name].(*widget.Button).SetEnabled(state.Enabled(id))
 	}
+	a.applyMenuIcons()
 }
 
 func applyTreeEnabled(subs []widget.MenuItem, tree []menuTreeEntry, state State) {
@@ -335,9 +336,14 @@ func (a *App) retranslateGrids() {
 	for name, keys := range gridColumnKeys {
 		columns := a.named[name].(*widget.DataGridWidget).Grid.Columns()
 		for i, key := range keys {
-			if i < len(columns) {
-				columns[i].SetHeader(i18n.T(key))
+			if i >= len(columns) {
+				continue
 			}
+			if key == "" {
+				columns[i].SetHeader("")
+				continue
+			}
+			columns[i].SetHeader(i18n.T(key))
 		}
 	}
 	a.filesGrid.Retranslate()

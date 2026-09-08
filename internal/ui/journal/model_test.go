@@ -3,11 +3,14 @@ package journal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/oops1/gogit/internal/ui/journal/graph"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -51,7 +54,7 @@ func buildLinearRepo(t *testing.T) (*repo.Repository, revision.Context, hash.Obj
 func TestLoadWalksHistoryFromHeadNewestFirst(t *testing.T) {
 	_, source, a, b, c := buildLinearRepo(t)
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -75,7 +78,7 @@ func TestLoadFormatsRowFieldsFromTheCommit(t *testing.T) {
 	setRef(t, store, refs.BranchName("main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -83,8 +86,8 @@ func TestLoadFormatsRowFieldsFromTheCommit(t *testing.T) {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
 	row := rows[0]
-	if row.Graph != "*" {
-		t.Errorf("Graph = %q, want *", row.Graph)
+	if len(row.Parents) != 0 {
+		t.Errorf("Parents = %v, want none for a root commit", row.Parents)
 	}
 	if row.Message != "subject line" {
 		t.Errorf("Message = %q, want %q", row.Message, "subject line")
@@ -116,7 +119,7 @@ func TestLoadWalksACommitWithFileContent(t *testing.T) {
 	setRef(t, store, refs.BranchName("main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -137,18 +140,19 @@ func TestLoadDecoratesCommitsWithBranchesTagsAndRemotes(t *testing.T) {
 	setRef(t, store, refs.RemoteBranchName("origin", "main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	want := []string{"feature", "main", "origin/main", "v1"}
-	got := slices.Clone(rows[0].Refs)
-	slices.Sort(got)
-	if !slices.Equal(got, want) {
-		t.Fatalf("Refs = %v, want %v", got, want)
+	want := []string{"main", "feature", "origin/main", "v1"}
+	if got := refNames(rows[0].Refs); !slices.Equal(got, want) {
+		t.Fatalf("Refs = %v, want the head branch, then branches, remotes and tags", got)
+	}
+	if !rows[0].Refs[0].Head || rows[0].Refs[2].Kind != RefRemote || rows[0].Refs[3].Kind != RefTag {
+		t.Fatalf("Refs = %+v, want each ref to carry its kind", rows[0].Refs)
 	}
 }
 
@@ -163,14 +167,14 @@ func TestLoadDecoratesAnnotatedTagsByPeeledTarget(t *testing.T) {
 	setRef(t, store, refs.TagName("v1"), tag)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	if !slices.Contains(rows[0].Refs, "v1") {
+	if !slices.Contains(refNames(rows[0].Refs), "v1") {
 		t.Fatalf("Refs = %v, want it to contain v1", rows[0].Refs)
 	}
 }
@@ -185,14 +189,14 @@ func TestLoadExcludesNonBranchTagRemoteRefsFromDecorations(t *testing.T) {
 	setRef(t, store, refs.Name("refs/stash"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	if !slices.Equal(rows[0].Refs, []string{"main"}) {
+	if !slices.Equal(refNames(rows[0].Refs), []string{"main"}) {
 		t.Fatalf("Refs = %v, want [main]", rows[0].Refs)
 	}
 }
@@ -213,14 +217,14 @@ func TestLoadSkipsDanglingSymbolicBranchesInDecorations(t *testing.T) {
 	}
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	if !slices.Equal(rows[0].Refs, []string{"main"}) {
+	if !slices.Equal(refNames(rows[0].Refs), []string{"main"}) {
 		t.Fatalf("Refs = %v, want [main]", rows[0].Refs)
 	}
 }
@@ -234,7 +238,7 @@ func TestLoadKeepsOnlyTheFirstLineOfAMessageWithoutATrailingNewline(t *testing.T
 	setRef(t, store, refs.BranchName("main"), id)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -252,7 +256,7 @@ func TestLoadReturnsEmptyForUnbornHead(t *testing.T) {
 	store := openTestStore(t, r, db)
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -270,7 +274,7 @@ func TestLoadTreatsMissingHeadFileAsUnbornRatherThanError(t *testing.T) {
 	}
 	source := revision.Context{Objects: db, Refs: store}
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if err != nil {
 		t.Fatalf("Load returned error %v, want nil", err)
 	}
@@ -286,7 +290,7 @@ func TestLoadPropagatesNonNotFoundHeadResolutionErrors(t *testing.T) {
 	failure := errors.New("head is unreadable")
 	source := revision.Context{Objects: db, Refs: headErrorRefs{inner: store, err: failure}}
 
-	_, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	_, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if !errors.Is(err, failure) {
 		t.Fatalf("Load returned %v, want %v", err, failure)
 	}
@@ -308,7 +312,7 @@ func TestLoadPropagatesDecorationIterationError(t *testing.T) {
 	}
 	source := revision.Context{Objects: db, Refs: store}
 
-	_, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	_, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if !errors.Is(err, refs.ErrMalformedRef) {
 		t.Fatalf("Load returned %v, want ErrMalformedRef", err)
 	}
@@ -325,7 +329,7 @@ func TestLoadPropagatesObjectReadErrors(t *testing.T) {
 	failure := errors.New("boom")
 	source := revision.Context{Objects: failingObjects{inner: db, fail: a, err: failure}, Refs: store}
 
-	_, err := collectRows(t, Load(t.Context(), source, revision.Options{}))
+	_, err := collectRows(t, Load(t.Context(), source, Options{}))
 	if !errors.Is(err, revision.ErrNotFound) {
 		t.Fatalf("Load returned %v, want revision.ErrNotFound", err)
 	}
@@ -334,7 +338,7 @@ func TestLoadPropagatesObjectReadErrors(t *testing.T) {
 func TestLoadAppliesWalkOptionsLikeMaxCount(t *testing.T) {
 	_, source, _, b, c := buildLinearRepo(t)
 
-	rows, err := collectRows(t, Load(t.Context(), source, revision.Options{MaxCount: 2}))
+	rows, err := collectRows(t, Load(t.Context(), source, Options{Walk: revision.Options{MaxCount: 2}}))
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
@@ -353,7 +357,7 @@ func TestLoadStopsOnContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := collectRows(t, Load(ctx, source, revision.Options{}))
+	_, err := collectRows(t, Load(ctx, source, Options{}))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Load returned %v, want context.Canceled", err)
 	}
@@ -382,7 +386,7 @@ func TestLoadIsLazyAndStopsReadingWhenTheConsumerStops(t *testing.T) {
 	source := revision.Context{Objects: counting, Refs: store}
 
 	seen := 0
-	for row, err := range Load(t.Context(), source, revision.Options{}) {
+	for row, err := range Load(t.Context(), source, Options{}) {
 		if err != nil {
 			t.Fatalf("Load returned error %v", err)
 		}
@@ -397,5 +401,230 @@ func TestLoadIsLazyAndStopsReadingWhenTheConsumerStops(t *testing.T) {
 	}
 	if counting.gets > 4 {
 		t.Errorf("Load read %d objects before the first row, want a lazy traversal", counting.gets)
+	}
+}
+
+func TestTheGraphOfACrissCrossHistoryStaysNarrow(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+
+	minute := 0
+	at := func() time.Time {
+		minute++
+		return timeAt(int64(1700000000 + minute*60))
+	}
+	root := putCommit(t, db, tree, at(), "ann", "root")
+	main, develop := root, root
+	for round := range 4 {
+		for step := range 3 {
+			develop = putCommit(t, db, tree, at(), "ann", fmt.Sprintf("develop %d.%d", round, step), develop)
+		}
+		main = putCommit(t, db, tree, at(), "ann", fmt.Sprintf("main %d", round), main)
+		merged := putCommit(t, db, tree, laterThan(at()), "ann", fmt.Sprintf("merge %d", round), main, develop)
+		back := putCommit(t, db, tree, laterThan(at()), "ann", fmt.Sprintf("back %d", round), develop, merged)
+		main, develop = merged, back
+	}
+	setRef(t, store, refs.BranchName("main"), main)
+	setRef(t, store, refs.BranchName("develop"), develop)
+	setRef(t, store, refs.HEAD, main)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(100, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	layout := graph.New()
+	widest := 0
+	for _, row := range rows {
+		widest = max(widest, layout.Add(graph.Commit{ID: row.ID, Parents: row.Parents}).Lanes)
+	}
+	if widest > 3 {
+		t.Fatalf("the graph takes %d lanes, want a branch and its main line side by side", widest)
+	}
+}
+
+func laterThan(when time.Time) time.Time {
+	return when.Add(time.Hour)
+}
+
+func refNames(list []Ref) []string {
+	names := make([]string, 0, len(list))
+	for _, ref := range list {
+		names = append(names, ref.Name)
+	}
+	return names
+}
+
+func TestCommitsBeyondTheRemoteBranchAreMarkedAsLocal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	pushed := putCommit(t, db, tree, timeAt(1700000000), "ann", "pushed")
+	local := putCommit(t, db, tree, timeAt(1700000060), "ann", "local", pushed)
+	setRef(t, store, refs.BranchName("main"), local)
+	setRef(t, store, refs.HEAD, local)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), pushed)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want both commits", len(rows))
+	}
+	if !rows[0].Unpushed {
+		t.Fatal("a commit the remote does not have must be marked as local")
+	}
+	if rows[1].Unpushed {
+		t.Fatal("a commit the remote already has must not be marked")
+	}
+}
+
+func TestWithoutARemoteConfiguredNothingIsMarkedAsLocal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "only commit")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, false)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || rows[0].Unpushed {
+		t.Fatalf("rows = %+v, want nothing marked without a remote", rows)
+	}
+}
+
+func TestARepositoryThatWasNeverPushedIsLocalAllTheWayDown(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	first := putCommit(t, db, tree, timeAt(1700000000), "ann", "first")
+	second := putCommit(t, db, tree, timeAt(1700000060), "ann", "second", first)
+	setRef(t, store, refs.BranchName("main"), second)
+	setRef(t, store, refs.HEAD, second)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want both commits", len(rows))
+	}
+	for _, row := range rows {
+		if !row.Unpushed {
+			t.Fatalf("row %q is not marked, want every commit of a repository the remote never saw", row.Message)
+		}
+	}
+}
+
+func TestARemoteListThatCannotBeReadStopsTheJournal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+	failure := errors.New("no remotes for you")
+
+	source := revision.Context{Objects: db, Refs: prefixErrorRefs{inner: store, prefix: refs.RemotesPrefix, err: failure}}
+	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
+
+	if !errors.Is(err, failure) {
+		t.Fatalf("err = %v, want %v", err, failure)
+	}
+}
+
+func TestAHeadThatHasNoNameLeavesEveryBranchPlain(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	source := revision.Context{Objects: db, Refs: nameErrorRefs{inner: store, err: errors.New("detached")}}
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || len(rows[0].Refs) != 1 || rows[0].Refs[0].Head {
+		t.Fatalf("refs = %+v, want the branch without the head mark", rows[0].Refs)
+	}
+}
+
+func TestRefsOfTheSameKindAreOrderedByName(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("zulu"), id)
+	setRef(t, store, refs.BranchName("alpha"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := refNames(rows[0].Refs); !slices.Equal(got, []string{"main", "alpha", "zulu"}) {
+		t.Fatalf("refs = %v, want the head branch first and the rest in alphabetical order", got)
+	}
+}
+
+func TestARemoteRefWithoutATargetHoldsNothingBack(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	source := revision.Context{
+		Objects: db,
+		Refs:    fixedRefs{inner: store, list: []refs.Ref{{Name: refs.RemoteBranchName("origin", "main")}}},
+	}
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || !rows[0].Unpushed {
+		t.Fatalf("rows = %+v, want a remote without a target to hold nothing back", rows)
+	}
+}
+
+func TestAHistoryThatCannotBeReadWhileLookingForLocalCommitsIsReported(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	pushed := putCommit(t, db, tree, timeAt(1700000000), "ann", "pushed")
+	local := putCommit(t, db, tree, timeAt(1700000060), "ann", "local", pushed)
+	setRef(t, store, refs.BranchName("main"), local)
+	setRef(t, store, refs.HEAD, local)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), pushed)
+	failure := errors.New("object gone")
+
+	source := revision.Context{Objects: failingObjects{inner: db, fail: pushed, err: failure}, Refs: store}
+	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
+
+	if !errors.Is(err, failure) {
+		t.Fatalf("err = %v, want %v", err, failure)
 	}
 }

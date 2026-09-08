@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oops1/headless-gui/v3/widget"
+
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
@@ -193,4 +195,24 @@ var previewOperationLog = []string{
 	"Total 96 (delta 41), reused 0 (delta 0), pack-reused 0",
 	"To https://github.com/oops1/GoGit.git",
 	"   bdf851b..4615a56  develop -> develop",
+}
+
+func TestPreviewMenuWithIcons(t *testing.T) {
+	dir := os.Getenv("GOGIT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("GOGIT_PREVIEW_DIR not set")
+	}
+	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
+		a := newTestApp(t)
+		a.SetTheme(theme)
+		bounds := a.menu.Bounds()
+		x := bounds.Min.X + 30
+		y := bounds.Min.Y + bounds.Dy()/2
+		a.menu.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: true, X: x, Y: y})
+		a.menu.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: false, X: x, Y: y})
+		a.Engine().SaveFrames(dir + "/menu-" + theme)
+		a.Engine().Start()
+		time.Sleep(700 * time.Millisecond)
+		a.Engine().Stop()
+	}
 }

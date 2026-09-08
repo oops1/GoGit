@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -176,8 +175,8 @@ func TestActivateRepositoryLoadsJournalRowsNewestFirstWithBranchDecoration(t *te
 	if first.ID != ids[2] {
 		t.Fatalf("first row = %s, want tip %s", first.ID, ids[2])
 	}
-	if !slices.Contains(first.Refs, "main") {
-		t.Fatalf("first row refs = %v, want it to contain main", first.Refs)
+	if len(first.Refs) == 0 || first.Refs[0].Name != "main" {
+		t.Fatalf("first row refs = %+v, want it to contain main", first.Refs)
 	}
 	last := journalRowOnDispatcher(t, a, 2)
 	if last.ID != ids[0] {
@@ -419,7 +418,7 @@ func (f *fakeJournalPager) Cancel() { f.cancelled.Store(true) }
 func withFakeJournalPager(t *testing.T, fake *fakeJournalPager) {
 	t.Helper()
 	prev := newJournalPager
-	newJournalPager = func(context.Context, revision.Context, revision.Options) journalPager { return fake }
+	newJournalPager = func(context.Context, revision.Context, journal.Options) journalPager { return fake }
 	t.Cleanup(func() { newJournalPager = prev })
 }
 

@@ -16,7 +16,7 @@ type journalPager interface {
 	Cancel()
 }
 
-var newJournalPager = func(ctx context.Context, source revision.Context, opts revision.Options) journalPager {
+var newJournalPager = func(ctx context.Context, source revision.Context, opts journal.Options) journalPager {
 	return journal.NewPager(ctx, source, opts)
 }
 
@@ -30,7 +30,7 @@ func (a *App) startJournal() {
 		return
 	}
 	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
-	opts := revision.Options{MaxCount: a.cfg.Git.LogMaxCount}
+	opts := journal.WalkOptions(a.cfg.Git.LogMaxCount, a.hasRemotes())
 	ctx, cancel := context.WithCancel(context.Background())
 	pager := newJournalPager(ctx, source, opts)
 	more := make(chan struct{}, 1)
