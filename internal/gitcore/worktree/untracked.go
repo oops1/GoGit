@@ -89,7 +89,7 @@ func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFil
 	}
 
 	for _, entry := range entries {
-		if entry.Name() == gitDirName && entry.IsDir() {
+		if entry.Name() == gitDirName {
 			continue
 		}
 		item := dirEntry{name: entry.Name(), isDir: entry.IsDir()}

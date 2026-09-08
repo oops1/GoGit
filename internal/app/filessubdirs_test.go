@@ -89,3 +89,28 @@ func TestTogglingSubdirectoriesSurvivesAConfigThatCannotBeSaved(t *testing.T) {
 		t.Fatal("the toggle must still flip when the config cannot be written")
 	}
 }
+
+func TestWorkingCopyButtonVisualsSkipAnAppWithoutTheButton(t *testing.T) {
+	a := newTestApp(t)
+	a.filesWorkingCopyBtn = nil
+
+	a.applyWorkingCopyButtonVisuals(themeFor(a.EffectiveTheme()))
+}
+
+func TestWorkingCopyButtonCarriesAnIconAndTheAccent(t *testing.T) {
+	a := newTestApp(t)
+	theme := themeFor(a.EffectiveTheme())
+
+	a.applyWorkingCopyButtonVisuals(theme)
+
+	btn := a.filesWorkingCopyBtn
+	if btn.Icon == nil {
+		t.Fatal("the button must carry an icon")
+	}
+	if btn.BorderColor != theme.Accent {
+		t.Fatalf("border = %v, want the accent", btn.BorderColor)
+	}
+	if btn.Background.A == 0 {
+		t.Fatal("the button must stand out with a tinted background")
+	}
+}

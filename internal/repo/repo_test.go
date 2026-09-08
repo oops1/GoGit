@@ -883,3 +883,63 @@ func forceRandError(t *testing.T) func() {
 }
 
 var errTestRand = errors.New("repo: forced rand error")
+
+func TestParentOfFindsTheNodeThatHoldsTheChild(t *testing.T) {
+	dir := t.TempDir()
+	reg := New(config.Default())
+	group, err := reg.AddGroup("Work", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := reg.AddRepository("R", namePath(dir, "r1"), group.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := reg.AddWorktree(parent.ID, "feature", namePath(dir, "feature"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, ok := reg.ParentOf(child.ID); !ok || got.ID != parent.ID {
+		t.Fatalf("parent = %+v %v, want the repository", got, ok)
+	}
+	if got, ok := reg.ParentOf(parent.ID); !ok || got.ID != group.ID {
+		t.Fatalf("parent = %+v %v, want the group", got, ok)
+	}
+}
+
+func TestParentOfReportsARootAndAnUnknownNode(t *testing.T) {
+	dir := t.TempDir()
+	reg := New(config.Default())
+	root, err := reg.AddRepository("R", namePath(dir, "r1"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := reg.ParentOf(root.ID); ok {
+		t.Fatal("a root node has no parent")
+	}
+	if _, ok := reg.ParentOf("missing"); ok {
+		t.Fatal("an unknown node has no parent")
+	}
+}
+
+func TestMoveRepositoryRefusesAParentThatIsNotAGroup(t *testing.T) {
+	dir := t.TempDir()
+	reg := New(config.Default())
+	first, err := reg.AddRepository("First", namePath(dir, "first"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := reg.AddRepository("Second", namePath(dir, "second"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := reg.MoveRepository(second.ID, first.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound: a repository holds no repositories", err)
+	}
+	if _, ok := reg.ParentOf(second.ID); ok {
+		t.Fatal("the repository must stay at the root")
+	}
+}

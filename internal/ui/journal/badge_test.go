@@ -3,8 +3,6 @@ package journal
 import (
 	"image/color"
 	"testing"
-
-	"github.com/oops1/gogit/internal/ui/panetitle"
 )
 
 func TestAuthorColorIsDeterministicForTheSameName(t *testing.T) {
@@ -42,10 +40,19 @@ func TestAuthorColorIsAlwaysFromThePalette(t *testing.T) {
 	}
 }
 
-func TestBadgeTextColorIsTheXorOfTheBadgeColour(t *testing.T) {
+func TestBadgeTextIsReadableOnEveryBadgeColour(t *testing.T) {
+	white := color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
+	black := color.RGBA{A: 0xFF}
 	for _, bg := range badgePalette {
-		if got, want := badgeTextColor(bg), panetitle.XOR(bg); got != want {
-			t.Fatalf("badgeTextColor(%v) = %v, want %v", bg, got, want)
+		got := badgeTextColor(bg)
+		if got != white && got != black {
+			t.Fatalf("badgeTextColor(%v) = %v, want black or white", bg, got)
+		}
+		if luminance(bg) > 140 && got != black {
+			t.Fatalf("badgeTextColor(%v) = white on a light badge", bg)
+		}
+		if luminance(bg) <= 140 && got != white {
+			t.Fatalf("badgeTextColor(%v) = black on a dark badge", bg)
 		}
 	}
 }

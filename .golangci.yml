@@ -68,9 +68,17 @@ linters:
         linters:
           - gosec
         text: "G204"
+      - path: internal/app/reveal_(windows|linux)\.go
+        linters:
+          - gosec
+        text: "G204"
       - path: internal/app/about_test\.go
         linters:
           - gosec
+      - path: internal/ui/icons/preview_test\.go
+        linters:
+          - gosec
+        text: "G703"
       - path: internal/ui/settings/editors\.go
         linters:
           - gosec

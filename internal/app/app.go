@@ -79,13 +79,15 @@ type App struct {
 	stateMu           sync.RWMutex
 	selectedNode      string
 	selectedCommit    hash.ObjectID
-	askInput          func(title, prompt string, cb func(text string, ok bool))
-	askConfirm        func(title, message string, cb func(ok bool))
-	showAddRepo       func(initial addrepo.Request, cb func(addrepo.Result, bool))
-	showSettings      func(initial settings.Model, cb func(settings.Model, bool))
-	showCommit        func(initial commit.Model, cb func(commit.Model, bool))
-	showError         func(title, message string)
-	showInfo          func(title, message string)
+
+	filesWorkingCopyBtn *widget.Button
+	askInput            func(title, prompt string, cb func(text string, ok bool))
+	askConfirm          func(title, message string, cb func(ok bool))
+	showAddRepo         func(initial addrepo.Request, cb func(addrepo.Result, bool))
+	showSettings        func(initial settings.Model, cb func(settings.Model, bool))
+	showCommit          func(initial commit.Model, cb func(commit.Model, bool))
+	showError           func(title, message string)
+	showInfo            func(title, message string)
 
 	open                  *openedRepository
 	divergence            repo.Divergence
@@ -313,12 +315,17 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView.OnActivate = a.ActivateRepository
 	a.reposView.OnSelect = a.onRepoTreeSelect
 	a.reposView.OnSelectDirectory = a.onRepoTreeSelectDirectory
+	a.reposView.OnMove = a.moveTreeNode
+	a.reposView.OnGroupToggled = a.rememberGroupState
+	a.reposView.SetCollapsedGroups(cfg.UI.CollapsedGroups)
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
 	a.journalView = journal.NewView()
 	a.journalView.Bind(a.named["journalGrid"].(*widget.DataGridWidget))
 	a.journalView.SetFullAuthorName(cfg.UI.JournalFullAuthorName)
 	a.journalView.OnSelect = a.onJournalRowSelected
+	a.filesWorkingCopyBtn = a.named["filesWorkingCopy"].(*widget.Button)
+	a.filesWorkingCopyBtn.OnClick = a.leaveCommitView
 	a.journalView.OnNearEnd = a.requestMoreJournal
 	a.filesItems = datagrid.NewObservableCollection()
 	a.filesGrid.SetItemsSource(a.filesItems)
@@ -336,6 +343,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.applyTheme()
 	a.updateStatusText()
 
+	a.wireContextMenus()
 	a.wireMenuBar()
 	a.wireToolbar()
 	a.retranslateGrids()
@@ -347,8 +355,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdCloseRepository] = a.CloseRepository
 	a.handlers[CmdAddGroup] = a.addGroup
 	a.handlers[CmdAddOrCreate] = a.addOrCreateRepository
+	a.handlers[CmdSearch] = a.openSearch
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
 	a.handlers[CmdSettings] = a.openSettings
 	a.handlers[CmdAbout] = a.openAbout
 	a.handlers[CmdCheckUpdates] = a.checkForUpdates
@@ -357,6 +367,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdDiscard] = a.discardSelected
 	a.handlers[CmdCommit] = a.openCommit
 	a.registerRemoteHandlers()
+	a.registerWorktreeHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -489,6 +500,7 @@ func (a *App) ActivateRepository(id string) {
 	_ = a.registry.SetActive(id)
 	a.cfg.ActiveRepository = id
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
+	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
 	a.refreshDivergence(opened)
@@ -524,6 +536,9 @@ func (a *App) setCommitSelected(v bool) {
 	a.stateMu.Lock()
 	a.commitSelected = v
 	a.stateMu.Unlock()
+	if a.filesWorkingCopyBtn != nil {
+		a.filesWorkingCopyBtn.SetVisible(v)
+	}
 }
 
 func (a *App) selected() string {
@@ -747,12 +762,13 @@ func (a *App) applyTheme() {
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
+	a.applyWorkingCopyButtonVisuals(theme)
 	a.applyRepoTreeTheme(theme)
-	a.applyPaneTitleColors()
+	a.applyPaneTitleColors(theme)
 }
 
-func (a *App) applyPaneTitleColors() {
-	panetitle.Apply(a.Dock().Panes())
+func (a *App) applyPaneTitleColors(t *widget.Theme) {
+	panetitle.Apply(a.Dock().Panes(), t)
 }
 
 func (a *App) applyRepoTreeTheme(t *widget.Theme) {

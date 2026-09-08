@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="540" Height="290">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="10"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="24"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="30"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="150"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="{Loc Dialog.Worktree.PathLabel}"/>
+    <TextBox x:Name="path" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,6,0"
+             Placeholder="{Loc Dialog.Worktree.PathPlaceholder}"/>
+    <Button x:Name="browse" Grid.Row="1" Grid.Column="2"
+            Content="{Loc Dialog.Worktree.Browse}"/>
+
+    <RadioButton x:Name="modeNew" Grid.Row="3" Grid.Column="0"
+                 GroupName="worktreeMode" Content="{Loc Dialog.Worktree.Mode.New}" IsChecked="True"/>
+    <RadioButton x:Name="modeExisting" Grid.Row="3" Grid.Column="1"
+                 GroupName="worktreeMode" Content="{Loc Dialog.Worktree.Mode.Existing}"/>
+    <RadioButton x:Name="modeDetached" Grid.Row="3" Grid.Column="2"
+                 GroupName="worktreeMode" Content="{Loc Dialog.Worktree.Mode.Detached}"/>
+
+    <TextBlock x:Name="branchLabel" Grid.Row="5" Grid.Column="0"
+               Text="{Loc Dialog.Worktree.BranchLabel}" VerticalAlignment="Center"/>
+    <TextBox x:Name="branchName" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"
+             Placeholder="{Loc Dialog.Worktree.BranchPlaceholder}"/>
+    <ComboBox x:Name="branchList" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2"
+              Visibility="Collapsed"/>
+
+    <TextBlock x:Name="startLabel" Grid.Row="6" Grid.Column="0"
+               Text="{Loc Dialog.Worktree.StartLabel}" VerticalAlignment="Center"/>
+    <TextBox x:Name="startPoint" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2"
+             Placeholder="{Loc Dialog.Worktree.StartPlaceholder}"/>
+
+    <CheckBox x:Name="noCheckout" Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3"
+              Content="{Loc Dialog.Worktree.NoCheckout}"/>
+
+    <TextBlock x:Name="hint" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="" FontSize="11"/>
+
+    <Button x:Name="ok" Grid.Row="10" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Worktree.OK}"/>
+    <Button x:Name="cancel" Grid.Row="10" Grid.Column="2"
+            Content="{Loc Dialog.Worktree.Cancel}"/>
+</Grid>

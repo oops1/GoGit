@@ -79,7 +79,7 @@ func (a *App) openRepositoryHelperEntries() []settings.CredentialHelperEntry {
 	}
 	defer func() { _ = r.Close() }()
 	cfg := r.Config()
-	rawURL := defaultRemoteRawURL(cfg, a.cfg.Git.DefaultRemote)
+	rawURL := defaultRemoteRawURL(cfg, a.effectiveDefaultRemote(r))
 	_, infos, err := credential.FromConfig(cfg, rawURL)
 	if err != nil {
 		a.log.Warn("resolve credential helpers for the settings page failed", "error", err)

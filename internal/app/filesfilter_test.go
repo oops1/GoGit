@@ -212,3 +212,30 @@ func TestReenablingAFilesStatusButtonRestoresItsRows(t *testing.T) {
 		t.Fatalf("counter text = %q, want %q", got, "5 files")
 	}
 }
+
+func TestACommitShowsEveryFileEvenWhenSubdirectoriesAreHiddenInTheWorkingCopy(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.UI.FilesSubdirectories = false
+	rows := []changes.Row{
+		{Name: "Makefile", RelPath: "Makefile", Status: changes.RowModified},
+		{Name: "docs.go", RelDir: "adminapi/docs", RelPath: "adminapi/docs/docs.go", Status: changes.RowModified},
+	}
+
+	a.filesMu.Lock()
+	a.filesMode = filesModeCommit
+	a.filesMu.Unlock()
+	a.setFilesRows(rows)
+
+	if got := a.filesItems.Count(); got != len(rows) {
+		t.Fatalf("commit shows %d of %d files, want all of them", got, len(rows))
+	}
+
+	a.filesMu.Lock()
+	a.filesMode = filesModeWorking
+	a.filesMu.Unlock()
+	a.applyFilesFilter()
+
+	if got := a.filesItems.Count(); got != 1 {
+		t.Fatalf("working copy shows %d files, want only the one at the root", got)
+	}
+}

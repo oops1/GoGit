@@ -1,7 +1,9 @@
 package repos
 
 import (
+	"image"
 	"image/color"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -630,5 +632,342 @@ func TestRenderOmitsTheBadgeForAnInactiveRepositoryEvenWithDivergence(t *testing
 	}
 	if item.DisplayText() != "Main" {
 		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	}
+}
+
+func nodeItem(t *testing.T, v *View, reg *repo.Registry, name string) *treeview.TreeViewItem {
+	t.Helper()
+	for node := range reg.Walk() {
+		if node.Name != name {
+			continue
+		}
+		item, ok := v.Item(node.ID)
+		if !ok {
+			t.Fatalf("node %q has no item", name)
+		}
+		return item
+	}
+	t.Fatalf("node %q is not in the registry", name)
+	return nil
+}
+
+func TestTheTreeLetsTheUserDragNodes(t *testing.T) {
+	_, tw := bound(t)
+
+	if !tw.Tree.CanUserDragNodes {
+		t.Fatal("repositories and groups are arranged by dragging them")
+	}
+}
+
+func TestARepositoryGoesIntoAGroupAndNextToAnotherNode(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	main := nodeItem(t, v, reg, "Main")
+	archive := nodeItem(t, v, reg, "archive")
+	work := nodeItem(t, v, reg, "Work")
+
+	if !tw.Tree.CanDropNode(main, archive, treeview.DropInside) {
+		t.Fatal("a repository must go into a group")
+	}
+	if !tw.Tree.CanDropNode(main, work, treeview.DropAfter) {
+		t.Fatal("a repository must go next to a group")
+	}
+}
+
+func TestAWorktreeAndADirectoryStayWhereTheyAre(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	feature := nodeItem(t, v, reg, "feature")
+	archive := nodeItem(t, v, reg, "archive")
+	main := nodeItem(t, v, reg, "Main")
+
+	if tw.Tree.CanDropNode(feature, archive, treeview.DropInside) {
+		t.Fatal("a worktree belongs to its repository, not to a group")
+	}
+	if tw.Tree.CanDropNode(newStub(), archive, treeview.DropInside) {
+		t.Fatal("only tree nodes are dragged")
+	}
+	if tw.Tree.CanDropNode(main, newStub(), treeview.DropInside) {
+		t.Fatal("only tree nodes are drop targets")
+	}
+	if tw.Tree.CanDropNode(main, main, treeview.DropInside) {
+		t.Fatal("a repository is not a group and holds nothing")
+	}
+	if tw.Tree.CanDropNode(main, feature, treeview.DropAfter) {
+		t.Fatal("a repository cannot stand next to a worktree")
+	}
+}
+
+func TestADroppedNodeIsReportedWithItsTarget(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	main := nodeItem(t, v, reg, "Main")
+	archive := nodeItem(t, v, reg, "archive")
+	var moved [3]string
+
+	v.OnMove = func(id, targetID string, inside bool) {
+		moved[0], moved[1] = id, targetID
+		if inside {
+			moved[2] = "inside"
+		}
+	}
+	if !tw.Tree.OnNodeDrop(main, archive, treeview.DropInside) {
+		t.Fatal("the view arranges the tree from the model, not by moving items")
+	}
+
+	mainID, _ := v.Item(moved[0])
+	if mainID != main || moved[2] != "inside" {
+		t.Fatalf("move = %v, want the repository inside the group", moved)
+	}
+	archiveItem, _ := v.Item(moved[1])
+	if archiveItem != archive {
+		t.Fatalf("target = %q, want the group", moved[1])
+	}
+}
+
+func TestADropWithoutAListenerIsHarmless(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+
+	if !tw.Tree.OnNodeDrop(nodeItem(t, v, reg, "Main"), nodeItem(t, v, reg, "archive"), treeview.DropInside) {
+		t.Fatal("the drop must still be taken as handled")
+	}
+}
+
+func TestACollapsedGroupIsReportedAndKept(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	work := nodeItem(t, v, reg, "Work")
+	var reported []string
+	v.OnGroupToggled = func(id string, expanded bool) {
+		if expanded {
+			reported = append(reported, "open:"+id)
+			return
+		}
+		reported = append(reported, "shut:"+id)
+	}
+
+	tw.Tree.CollapseItem(work)
+	v.Render(reg, nil)
+
+	if len(reported) != 1 || reported[0][:5] != "shut:" {
+		t.Fatalf("reported = %v, want the collapsed group", reported)
+	}
+	if nodeItem(t, v, reg, "Work").Expanded {
+		t.Fatal("a collapsed group must stay collapsed across renders")
+	}
+
+	tw.Tree.ExpandItem(nodeItem(t, v, reg, "Work"))
+	v.Render(reg, nil)
+
+	if len(reported) != 2 || reported[1][:5] != "open:" {
+		t.Fatalf("reported = %v, want the group opened again", reported)
+	}
+	if !nodeItem(t, v, reg, "Work").Expanded {
+		t.Fatal("an expanded group must stay expanded across renders")
+	}
+}
+
+func TestOnlyGroupsAreReportedAsCollapsed(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	reported := 0
+	v.OnGroupToggled = func(string, bool) { reported++ }
+
+	tw.Tree.OnCollapsed(treeview.CollapsedEvent{Item: nodeItem(t, v, reg, "Main")})
+	tw.Tree.OnCollapsed(treeview.CollapsedEvent{Item: newStub()})
+	tw.Tree.OnExpanded(treeview.ExpandedEvent{Item: newStub()})
+
+	if reported != 0 {
+		t.Fatalf("reported = %d, want only groups to be reported", reported)
+	}
+}
+
+func TestGroupsCollapsedInAnEarlierRunStayCollapsed(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, _ := bound(t)
+	work, ok := groupID(reg, "Work")
+	if !ok {
+		t.Fatal("the group is not in the registry")
+	}
+
+	v.SetCollapsedGroups([]string{work})
+	v.Render(reg, nil)
+
+	if nodeItem(t, v, reg, "Work").Expanded {
+		t.Fatal("a group collapsed in an earlier run must open collapsed")
+	}
+}
+
+func groupID(reg *repo.Registry, name string) (string, bool) {
+	for node := range reg.Walk() {
+		if node.Kind == repo.KindGroup && node.Name == name {
+			return node.ID, true
+		}
+	}
+	return "", false
+}
+
+func TestDraggingWithTheMouseMovesARepositoryIntoAGroup(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	tw.Tree.ItemHeight = 20
+	tw.SetBounds(image.Rect(0, 0, 240, 400))
+	v.Render(reg, nil)
+	var movedID, targetID string
+	inside := false
+	v.OnMove = func(id, target string, in bool) { movedID, targetID, inside = id, target, in }
+
+	rowY := func(item *treeview.TreeViewItem) int {
+		for i, row := range visibleRows(tw) {
+			if row == item {
+				return i*20 + 10
+			}
+		}
+		t.Fatalf("item %q is not on screen", item.DisplayText())
+		return 0
+	}
+	main := nodeItem(t, v, reg, "Main")
+	archive := nodeItem(t, v, reg, "archive")
+
+	tw.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: true, X: 60, Y: rowY(main)})
+	tw.OnMouseMove(60, rowY(archive))
+	tw.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: false, X: 60, Y: rowY(archive)})
+
+	mainID, _ := v.Item(movedID)
+	archiveItem, _ := v.Item(targetID)
+	if mainID != main || archiveItem != archive || !inside {
+		t.Fatalf("moved %q onto %q inside=%v, want the repository into the group", movedID, targetID, inside)
+	}
+}
+
+func visibleRows(tw *widget.TreeViewWidget) []*treeview.TreeViewItem {
+	var rows []*treeview.TreeViewItem
+	var walk func(items []*treeview.TreeViewItem)
+	walk = func(items []*treeview.TreeViewItem) {
+		for _, item := range items {
+			rows = append(rows, item)
+			if item.Expanded {
+				walk(item.Children)
+			}
+		}
+	}
+	walk(tw.Tree.Roots())
+	return rows
+}
+
+func TestTheNodeMenuNamesWhatWasClicked(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+	var asked MenuTarget
+	v.OnMenu = func(target MenuTarget) []widget.MenuItem {
+		asked = target
+		return []widget.MenuItem{{Text: "item"}}
+	}
+
+	main := nodeItem(t, v, reg, "Main")
+	if items := tw.NodeContextMenu(main); len(items) != 1 {
+		t.Fatalf("menu = %v, want the one item the app gave", items)
+	}
+	mainID, _ := v.Item(asked.ID)
+	if mainID != main {
+		t.Fatalf("target = %+v, want the repository node", asked)
+	}
+
+	tw.NodeContextMenu(nil)
+	if asked.ID != "" || asked.Directory != "" {
+		t.Fatalf("target = %+v, want empty space", asked)
+	}
+
+	tw.NodeContextMenu(newStub())
+	if asked.ID != "" || asked.Directory != "" {
+		t.Fatalf("target = %+v, want empty space for a placeholder row", asked)
+	}
+}
+
+func TestTheNodeMenuOfADirectoryRowNamesTheDirectory(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	main, ok := repositoryNode(reg, "Main")
+	if !ok {
+		t.Fatal("the repository is not in the registry")
+	}
+	if err := reg.SetActive(main.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(main.Path, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	v.Render(reg, nil)
+	var asked MenuTarget
+	v.OnMenu = func(target MenuTarget) []widget.MenuItem {
+		asked = target
+		return nil
+	}
+
+	item, ok := v.Item(main.ID)
+	if !ok {
+		t.Fatal("the repository must be in the tree")
+	}
+	tw.Tree.ExpandItem(item)
+	if len(item.Children) == 0 {
+		t.Fatal("an expanded repository must show its directories")
+	}
+	tw.NodeContextMenu(item.Children[len(item.Children)-1])
+
+	if asked.RepoID != main.ID || asked.Directory != filepath.Join(main.Path, "src") {
+		t.Fatalf("target = %+v, want the directory row", asked)
+	}
+}
+
+func TestWithoutAMenuBuilderTheTreeOffersNothing(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	v.Render(reg, nil)
+
+	if items := tw.NodeContextMenu(nodeItem(t, v, reg, "Main")); items != nil {
+		t.Fatalf("menu = %v, want none", items)
+	}
+}
+
+func repositoryNode(reg *repo.Registry, name string) (*repo.Node, bool) {
+	for node := range reg.Walk() {
+		if node.Kind == repo.KindRepository && node.Name == name {
+			return node, true
+		}
+	}
+	return nil, false
+}
+
+func TestTheEngineOpensTheMenuOverARow(t *testing.T) {
+	reg, _ := newTestRegistry(t)
+	v, tw := bound(t)
+	tw.Tree.ItemHeight = 20
+	tw.SetBounds(image.Rect(0, 0, 240, 400))
+	v.Render(reg, nil)
+	v.OnMenu = func(MenuTarget) []widget.MenuItem {
+		return []widget.MenuItem{{Text: "Copy path"}}
+	}
+
+	main := nodeItem(t, v, reg, "Main")
+	row := -1
+	for i, item := range visibleRows(tw) {
+		if item == main {
+			row = i
+		}
+	}
+	if row < 0 {
+		t.Fatal("the repository must be on screen")
+	}
+
+	if menu := tw.ContextMenuAt(60, row*20+10); menu == nil {
+		t.Fatal("right-clicking a row must open the menu")
 	}
 }

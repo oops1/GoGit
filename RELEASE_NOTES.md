@@ -1,66 +1,77 @@
-# Go.Git 1.2.0 — The settings window
+# Go.Git 1.3.0 — Worktrees and the repository tree
 
-The settings live in one window now, built the way a desktop application is
-built: a navigation column down the left side, the section on the right, and
-the window's own title bar carrying the search field and the window buttons.
+This release is about getting around your repositories: linked worktrees
+implemented in our own git core, groups arranged by dragging, context menus
+where you expect them, and settings that belong to a single repository.
 
-## One window instead of four
+## Worktrees
 
-- A navigation column with an icon per section runs the full height of the
-  window. The «≡» button in the title bar folds it into a strip of icons and
-  gives the freed width to the content.
-- The search field sits in the title bar. It searches parameter names, their
-  explanations, group titles, current values, credential resources and SSH
-  hosts; each section shows how many settings matched, and an empty result says
-  so instead of showing a blank page.
-- Every section is laid out on one grid: labels, fields and the grey
-  explanations line up, and the rarely touched git parameters are folded into
-  «Advanced settings».
-- A long section scrolls instead of stretching the window.
-- «Save» stays disabled until something is changed, and closing with unsaved
-  changes asks what to do with them.
-- The window resizes: tables stretch, long values are cut with an ellipsis, and
-  nothing overlaps at the smallest size.
+- Add, list, remove, prune, lock and move — written in Go, without running the
+  system git. Git opens the worktrees we create, and we read the ones git
+  created.
+- «Add worktree…» is a window of its own: the directory with a browse button,
+  three modes (a new branch, an existing branch, no branch at all), the start
+  point, and «leave the directory empty». The directory is proposed next to the
+  repository and named after the branch, and stops following the branch as soon
+  as you type a path yourself.
+- The request is checked before anything happens: a directory that is not
+  empty, an invalid branch name, a branch that already exists, a branch another
+  worktree already holds.
+- «Remove worktree» asks first, and asks a second time — about `--force` — when
+  the worktree has uncommitted changes. «Prune obsolete worktrees» shows the
+  list of records it is about to drop before it drops them.
+- Worktrees created outside the application appear in the tree under their
+  repository when it is opened.
 
-## Credentials and keys
+## The repository tree
 
-- Saved credentials and SSH hosts are tables with a status dot on every row —
-  stored, authorisation required, error — and Add, Edit and Remove beside them.
-- Adding and editing happen in their own window rather than in a form under the
-  table.
-- «Test connection» really connects: it asks the remote for its refs over the
-  same transport that fetch uses, and reports how many refs answered or why the
-  connection failed. «Check key» reads and parses the key file, with its
-  passphrase when the key is encrypted.
-- The chosen password source is visible at once: the built-in store shows its
-  path and how its key is protected, the system git shows which helpers the open
-  repository would use.
+- Repositories and groups are rearranged by dragging: into a group, or next to
+  another node. Worktrees stay with their repository — they are not group
+  members.
+- Collapsed groups stay collapsed across restarts.
+- Context menus on the tree and on the tables: open, show in the file manager,
+  open in a terminal, copy the path; the file table adds staging and discard,
+  the journal adds copy hash and copy message.
+- Searching for repositories scans a directory for `.git`, lists what it found
+  and adds the selected ones in one go.
 
-## Fixed
+## Repository settings
 
-- The system git credential helper is found even when it is not on PATH: next to
-  the git binary itself (`mingw64/bin`, `libexec/git-core`) and in the usual
-  install locations. On Windows the call used to fail and Go.Git asked for the
-  password itself, while git from the console was answered silently by the
-  helper.
+- Every repository has its own settings window: the name in the tree,
+  `user.name` and `user.email`, the default remote, the pull strategy and
+  automatic fetch.
+- The settings are written as git's own keys — `user.*`, `remote.pushDefault`,
+  `pull.rebase`, `pull.ff` — so the system git reads the same configuration.
+  «As in the settings» removes the key instead of writing an empty value.
+- The default remote and automatic fetch of a repository win over the global
+  ones, so a noisy repository can be silenced on its own.
 
 ## Also
 
-- An About window with the version, platform, architecture, git engine and GUI,
-  and links to the project and its licence.
-- Update checking: an entry in the Help menu, and an automatic check on start
-  once every three days. A failed check is not recorded, so the next start tries
-  again.
-- Tags in the branches panel fold into a tree by version number, with the three
-  newest left in plain sight.
+- The About window was redrawn to the mockup: sizes, paddings and alignment
+  match it pixel for pixel.
+- Pane title bars are quieter — they no longer pull attention away from the
+  content.
+- A commit view shows every file of the commit, and a button with an icon leads
+  back to the working copy.
+
+## Fixed
+
+- Worktree paths are compared through their resolved names: a Windows short
+  name (`RUNNER~1`) is no longer taken for a different directory.
+- A data race is gone: the diff view read the open worktree while another
+  thread was replacing it.
+- A repository can no longer be nested inside another repository — the registry
+  checks that the new parent really is a group.
+- Expanding a repository that has worktrees shows its directories again.
 
 ## Install
 
 Download the archive for your system, unpack it and run the binary. Nothing else
 has to be installed: the git implementation is inside.
 
-- `gogit-v1.2.0-windows-amd64.zip`
-- `gogit-v1.2.0-linux-amd64.tar.gz`
-- `gogit-v1.2.0-linux-arm64.tar.gz`
+- `gogit-v1.3.0-windows-amd64.zip`
+- `gogit-v1.3.0-linux-amd64.tar.gz`
+- `gogit-v1.3.0-linux-arm64.tar.gz`
 
 `SHA256SUMS` next to the archives carries their checksums.

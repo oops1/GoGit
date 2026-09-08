@@ -47,3 +47,20 @@ func (a *App) applyFilesSubdirsButtonVisuals(t *widget.Theme) {
 }
 
 const filesSubdirsIcon = "subdirs"
+
+const filesWorkingCopyIcon = "workingcopy"
+
+func (a *App) applyWorkingCopyButtonVisuals(t *widget.Theme) {
+	btn := a.filesWorkingCopyBtn
+	if btn == nil {
+		return
+	}
+	btn.Icon = icons.ToolbarPlain(filesWorkingCopyIcon, filesStatusIconSize)
+	btn.IconSize = filesStatusIconSize
+	btn.IconPos = widget.IconLeft
+	btn.Background = translucent(t.Accent, filesStatusEnabledBGAlpha)
+	btn.BorderColor = t.Accent
+	btn.HoverBG = t.BtnHoverBG
+	btn.PressedBG = t.BtnPressedBG
+	btn.SetToolTip(i18n.T("Files.BackToWorkingCopy.Tip"))
+}

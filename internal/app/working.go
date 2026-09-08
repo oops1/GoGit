@@ -187,8 +187,9 @@ func buildWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.E
 }
 
 func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
+	wt := o.currentWorktree()
 	oldPath := cmp.Or(entry.OrigPath, entry.Path)
-	_, oldID, err := o.worktree.HeadBlob(ctx, oldPath)
+	_, oldID, err := wt.HeadBlob(ctx, oldPath)
 	if err != nil {
 		return diff.File{}, err
 	}
@@ -197,7 +198,7 @@ func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (
 		return diff.File{}, err
 	}
 	var newID hash.ObjectID
-	if ie, ok := o.worktree.Index().Get(entry.Path, index.StageMerged); ok {
+	if ie, ok := wt.Index().Get(entry.Path, index.StageMerged); ok {
 		newID = ie.ID
 	}
 	newData, newPresent, err := blobData(o.db, newID)
@@ -209,7 +210,7 @@ func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (
 
 func workTreeDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
 	var oldID hash.ObjectID
-	if ie, ok := o.worktree.Index().Get(entry.Path, index.StageMerged); ok {
+	if ie, ok := o.currentWorktree().Index().Get(entry.Path, index.StageMerged); ok {
 		oldID = ie.ID
 	}
 	return blobVsWorktreeDiff(ctx, o, entry.Path, oldID)
@@ -218,7 +219,7 @@ func workTreeDiff(ctx context.Context, o *openedRepository, entry worktree.Entry
 func conflictDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
 	var oldID hash.ObjectID
 	for _, stage := range []index.Stage{index.StageOurs, index.StageTheirs, index.StageAncestor} {
-		if ie, ok := o.worktree.Index().Get(entry.Path, stage); ok {
+		if ie, ok := o.currentWorktree().Index().Get(entry.Path, stage); ok {
 			oldID = ie.ID
 			break
 		}
@@ -234,7 +235,7 @@ func blobVsWorktreeDiff(ctx context.Context, o *openedRepository, path string, o
 	if err := ctx.Err(); err != nil {
 		return diff.File{}, err
 	}
-	newData, newPresent, err := o.worktree.WorkingFile(path)
+	newData, newPresent, err := o.currentWorktree().WorkingFile(path)
 	if err != nil {
 		return diff.File{}, err
 	}

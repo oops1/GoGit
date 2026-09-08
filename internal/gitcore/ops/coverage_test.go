@@ -203,11 +203,14 @@ func TestCurrentBranchRefFailsWhenHeadIsMalformed(t *testing.T) {
 	}
 }
 
-func TestCreateBranchMissingIdentityReturnsError(t *testing.T) {
+func TestCreateBranchNeedsNoConfiguredIdentity(t *testing.T) {
 	r := newTestRepoNoIdentity(t)
-	err := CreateBranch(t.Context(), r.repo, "feature", hash.Zero, CreateBranchOptions{})
-	if !errors.Is(err, ErrMissingIdentity) {
-		t.Fatalf("err = %v, want ErrMissingIdentity", err)
+	r.writeFile("a.txt", "hello")
+	mustStage(t, r, "a.txt")
+	start := r.commitAll("initial")
+
+	if err := CreateBranch(t.Context(), r.repo, "feature", start, CreateBranchOptions{}); err != nil {
+		t.Fatalf("CreateBranch returned error %v", err)
 	}
 }
 
@@ -285,13 +288,14 @@ func TestRenameBranchInvalidFromNameReturnsError(t *testing.T) {
 	}
 }
 
-func TestRenameBranchMissingIdentityReturnsError(t *testing.T) {
+func TestRenameBranchNeedsNoConfiguredIdentity(t *testing.T) {
 	r := newTestRepoNoIdentity(t)
 	r.writeFile("a.txt", "hello\n")
 	mustStage(t, r, "a.txt")
-	err := RenameBranch(t.Context(), r.repo, "main", "trunk", false)
-	if !errors.Is(err, ErrMissingIdentity) {
-		t.Fatalf("err = %v, want ErrMissingIdentity", err)
+	r.commitAll("initial")
+
+	if err := RenameBranch(t.Context(), r.repo, "main", "trunk", false); err != nil {
+		t.Fatalf("RenameBranch returned error %v", err)
 	}
 }
 

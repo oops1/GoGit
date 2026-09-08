@@ -160,3 +160,28 @@ func TestTreeIconMissing(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestMenuIcons(t *testing.T) {
+	names := MenuIconNames()
+	if len(names) == 0 {
+		t.Fatal("MenuIconNames() is empty")
+	}
+	for _, name := range names {
+		data, err := MenuIcon(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(strings.TrimSpace(string(data)), "<svg") {
+			t.Fatalf("menu icon %q is not svg", name)
+		}
+	}
+	if !slices.Contains(names, "terminal") {
+		t.Fatalf("MenuIconNames() = %v, want the terminal icon among them", names)
+	}
+}
+
+func TestMenuIconMissing(t *testing.T) {
+	if _, err := MenuIcon("missing"); err == nil {
+		t.Fatal("expected error")
+	}
+}

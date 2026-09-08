@@ -72,12 +72,14 @@ func newStub() *treeview.TreeViewItem {
 	return item
 }
 
-func isStubOnly(item *treeview.TreeViewItem) bool {
-	if len(item.Children) != 1 {
-		return false
+func dropStub(item *treeview.TreeViewItem) bool {
+	for _, child := range item.Children {
+		if _, ok := child.Tag.(stubMarker); ok {
+			item.RemoveChild(child)
+			return true
+		}
 	}
-	_, ok := item.Children[0].Tag.(stubMarker)
-	return ok
+	return false
 }
 
 type View struct {
@@ -85,6 +87,7 @@ type View struct {
 	mu                sync.Mutex
 	idByItem          map[*treeview.TreeViewItem]string
 	itemByID          map[string]*treeview.TreeViewItem
+	kindByID          map[string]repo.Kind
 	expanded          map[string]bool
 	accent            color.RGBA
 	muted             color.RGBA
@@ -92,12 +95,16 @@ type View struct {
 	OnActivate        func(id string)
 	OnSelect          func(id string)
 	OnSelectDirectory func(repoID, relPath string)
+	OnMove            func(id, targetID string, inside bool)
+	OnMenu            func(target MenuTarget) []widget.MenuItem
+	OnGroupToggled    func(id string, expanded bool)
 }
 
 func NewView() *View {
 	return &View{
 		idByItem: map[*treeview.TreeViewItem]string{},
 		itemByID: map[string]*treeview.TreeViewItem{},
+		kindByID: map[string]repo.Kind{},
 		expanded: map[string]bool{},
 	}
 }
@@ -136,7 +143,98 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 	}
 	tree.Tree.OnExpanded = func(e treeview.ExpandedEvent) {
 		v.handleExpanded(e.Item)
+		v.reportToggle(e.Item, true)
 	}
+	tree.Tree.OnCollapsed = func(e treeview.CollapsedEvent) {
+		v.reportToggle(e.Item, false)
+	}
+	tree.NodeContextMenu = v.nodeMenu
+	tree.Tree.CanUserDragNodes = true
+	tree.Tree.CanDropNode = v.canDrop
+	tree.Tree.OnNodeDrop = v.handleDrop
+}
+
+func (v *View) SetCollapsedGroups(ids []string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for _, id := range ids {
+		v.expanded[id] = false
+	}
+}
+
+type MenuTarget struct {
+	ID        string
+	RepoID    string
+	Directory string
+}
+
+func (v *View) nodeMenu(item *treeview.TreeViewItem) []widget.MenuItem {
+	if v.OnMenu == nil {
+		return nil
+	}
+	return v.OnMenu(v.menuTarget(item))
+}
+
+func (v *View) menuTarget(item *treeview.TreeViewItem) MenuTarget {
+	if item == nil {
+		return MenuTarget{}
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if id, ok := v.idByItem[item]; ok {
+		return MenuTarget{ID: id}
+	}
+	entry, ok := item.Tag.(dirEntry)
+	if !ok {
+		return MenuTarget{}
+	}
+	return MenuTarget{RepoID: entry.repoID, Directory: filepath.Join(entry.root, entry.rel)}
+}
+
+func (v *View) canDrop(dragged, target *treeview.TreeViewItem, pos treeview.DropPosition) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	draggedID, ok := v.idByItem[dragged]
+	if !ok || !movableKind(v.kindByID[draggedID]) {
+		return false
+	}
+	targetID, ok := v.idByItem[target]
+	if !ok {
+		return false
+	}
+	if pos == treeview.DropInside {
+		return v.kindByID[targetID] == repo.KindGroup
+	}
+	return movableKind(v.kindByID[targetID])
+}
+
+func movableKind(kind repo.Kind) bool {
+	return kind == repo.KindGroup || kind == repo.KindRepository
+}
+
+func (v *View) handleDrop(dragged, target *treeview.TreeViewItem, pos treeview.DropPosition) bool {
+	v.mu.Lock()
+	draggedID := v.idByItem[dragged]
+	targetID := v.idByItem[target]
+	v.mu.Unlock()
+	if v.OnMove != nil {
+		v.OnMove(draggedID, targetID, pos == treeview.DropInside)
+	}
+	return true
+}
+
+func (v *View) reportToggle(item *treeview.TreeViewItem, expanded bool) {
+	v.mu.Lock()
+	id, ok := v.idByItem[item]
+	kind := v.kindByID[id]
+	if ok {
+		v.expanded[id] = expanded
+	}
+	v.mu.Unlock()
+	if !ok || kind != repo.KindGroup || v.OnGroupToggled == nil {
+		return
+	}
+	v.OnGroupToggled(id, expanded)
 }
 
 func (v *View) Item(id string) (*treeview.TreeViewItem, bool) {
@@ -169,6 +267,7 @@ func (v *View) Render(reg *repo.Registry, state map[string]State) {
 
 	v.idByItem = map[*treeview.TreeViewItem]string{}
 	v.itemByID = map[string]*treeview.TreeViewItem{}
+	v.kindByID = map[string]repo.Kind{}
 
 	activeID := ""
 	if n, ok := reg.Active(); ok {
@@ -207,6 +306,7 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 		item := treeview.NewItem(displayName(n, st, n.ID == activeID))
 		v.idByItem[item] = n.ID
 		v.itemByID[n.ID] = item
+		v.kindByID[n.ID] = n.Kind
 		switch n.Kind {
 		case repo.KindGroup:
 			item.Expanded = v.expandedDefaultLocked(n.ID)
@@ -288,10 +388,9 @@ func (v *View) handleExpanded(item *treeview.TreeViewItem) {
 	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if !isStubOnly(item) {
+	if !dropStub(item) {
 		return
 	}
-	item.ClearChildren()
 	v.appendDirChildrenLocked(item, entry.repoID, entry.root, entry.rel)
 }
 

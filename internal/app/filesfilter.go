@@ -36,10 +36,13 @@ func (a *App) applyFilesFilter() {
 	query := a.filesFilterQuery
 	allowed := a.filesStatusAllowed
 	dir := a.filesDirFilter
+	mode := a.filesMode
 	a.filesMu.Unlock()
 
 	filtered := changes.FilterRowsByStatus(rows, query, allowed)
-	filtered = changes.FilterRowsByDirectory(filtered, dir, a.cfg.UI.FilesSubdirectories)
+	if mode == filesModeWorking {
+		filtered = changes.FilterRowsByDirectory(filtered, dir, a.cfg.UI.FilesSubdirectories)
+	}
 	items := make([]interface{}, len(filtered))
 	for i, r := range filtered {
 		items[i] = r

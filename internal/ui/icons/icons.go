@@ -16,6 +16,7 @@ const (
 	sourceStatus source = iota
 	sourceTree
 	sourceToolbar
+	sourceMenu
 )
 
 type docKey struct {
@@ -43,6 +44,8 @@ var loadStatusIcon = assets.StatusIcon
 var loadTreeIcon = assets.TreeIcon
 
 var loadToolbarIcon = assets.Icon
+
+var loadMenuIcon = assets.MenuIcon
 
 func Status(name string, size int) image.Image {
 	return render(sourceStatus, name, size)
@@ -74,6 +77,10 @@ func ToolbarMuted(name string, size int) image.Image {
 
 func Toolbar(name string, size int, tint color.RGBA) image.Image {
 	return renderTinted(sourceToolbar, name, size, tint)
+}
+
+func Menu(name string, size int, tint color.RGBA) image.Image {
+	return renderTinted(sourceMenu, name, size, tint)
 }
 
 func render(src source, name string, size int) image.Image {
@@ -155,6 +162,8 @@ func load(src source, name string) ([]byte, error) {
 		return loadTreeIcon(name)
 	case sourceToolbar:
 		return loadToolbarIcon(name)
+	case sourceMenu:
+		return loadMenuIcon(name)
 	default:
 		return loadStatusIcon(name)
 	}

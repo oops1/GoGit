@@ -77,11 +77,11 @@ func (a *App) startAutoFetch() {
 	a.autoFetchRunMu.Lock()
 	defer a.autoFetchRunMu.Unlock()
 	a.stopAutoFetchLocked()
-	if !a.cfg.Git.AutoFetch {
-		return
-	}
 	o := a.opened()
 	if o == nil || !a.hasRemotes() {
+		return
+	}
+	if !a.autoFetchEnabled(o) {
 		return
 	}
 	interval := time.Duration(a.cfg.Git.FetchInterval) * time.Second
@@ -147,7 +147,7 @@ func (a *App) performAutoFetch(ctx context.Context) {
 		return
 	}
 	defer func() { _ = r.Close() }()
-	_, err = autoFetchOpsFetch(ctx, r, a.cfg.Git.DefaultRemote, remote.FetchOptions{Transport: a.transportOptions(nil)})
+	_, err = autoFetchOpsFetch(ctx, r, a.effectiveDefaultRemote(r), remote.FetchOptions{Transport: a.transportOptions(nil)})
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			a.log.Warn("auto-fetch failed", "path", o.path, "error", err)

@@ -5,8 +5,6 @@ import (
 	"image"
 	"image/color"
 	"sync"
-
-	"github.com/oops1/gogit/internal/ui/panetitle"
 )
 
 const badgeCornerRadius = 3
@@ -32,7 +30,14 @@ func authorColor(author string) color.RGBA {
 }
 
 func badgeTextColor(bg color.RGBA) color.RGBA {
-	return panetitle.XOR(bg)
+	if luminance(bg) > 140 {
+		return color.RGBA{A: 0xFF}
+	}
+	return color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
+}
+
+func luminance(c color.RGBA) int {
+	return (int(c.R)*299 + int(c.G)*587 + int(c.B)*114) / 1000
 }
 
 type badgeKey struct {
