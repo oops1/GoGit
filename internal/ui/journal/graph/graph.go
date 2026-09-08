@@ -19,6 +19,12 @@ type Segment struct {
 	Color int
 }
 
+type Move struct {
+	From  int
+	To    int
+	Color int
+}
+
 type Row struct {
 	Lane      int
 	Color     int
@@ -26,6 +32,7 @@ type Row struct {
 	Lanes     int
 	Through   []Segment
 	Out       []Segment
+	Moves     []Move
 	FromAbove bool
 	Overflow  bool
 }
@@ -37,6 +44,7 @@ type lane struct {
 
 type Layout struct {
 	lanes []lane
+	moves []Move
 	limit int
 	next  int
 }
@@ -53,6 +61,7 @@ func (l *Layout) SetLimit(lanes int) {
 
 func (l *Layout) Reset() {
 	l.lanes = nil
+	l.moves = nil
 	l.next = 0
 }
 
@@ -65,9 +74,11 @@ func (l *Layout) Add(c Commit) Row {
 	row.Through = l.passing(own)
 	l.lanes[own] = lane{color: color}
 	row.Out = l.placeParents(c.Parents, own, color)
+	row.Moves, l.moves = l.moves, nil
+	row.Through = withoutMoved(row.Through, row.Moves)
 	l.trim()
 
-	row.Lanes = widest(before, l.width(), own+1, row.Through, row.Out)
+	row.Lanes = widest(before, l.width(), own+1, movedLanes(row.Moves), row.Through, row.Out)
 	return l.clamp(row)
 }
 
@@ -107,6 +118,7 @@ func (l *Layout) placeParents(parents []hash.ObjectID, own, color int) []Segment
 func (l *Layout) placeParent(parent hash.ObjectID, own, color int, first bool) Segment {
 	if at, taken := l.laneExpecting(parent); taken {
 		if first && own < at {
+			l.moves = append(l.moves, Move{From: at, To: own, Color: l.lanes[at].color})
 			l.lanes[own] = lane{expect: parent, color: color}
 			l.lanes[at] = lane{}
 			return Segment{Lane: own, Color: color}
@@ -176,7 +188,39 @@ func (l *Layout) clamp(row Row) Row {
 	row.Lane = min(row.Lane, edge)
 	row.Through = clampSegments(row.Through, edge)
 	row.Out = clampSegments(row.Out, edge)
+	row.Moves = clampMoves(row.Moves, edge)
 	return row
+}
+
+func withoutMoved(through []Segment, moves []Move) []Segment {
+	if len(moves) == 0 {
+		return through
+	}
+	kept := through[:0]
+	for _, segment := range through {
+		if movedFrom(moves, segment.Lane) {
+			continue
+		}
+		kept = append(kept, segment)
+	}
+	return kept
+}
+
+func movedFrom(moves []Move, lane int) bool {
+	for _, move := range moves {
+		if move.From == lane {
+			return true
+		}
+	}
+	return false
+}
+
+func clampMoves(moves []Move, edge int) []Move {
+	for i := range moves {
+		moves[i].From = min(moves[i].From, edge)
+		moves[i].To = min(moves[i].To, edge)
+	}
+	return moves
 }
 
 func clampSegments(segments []Segment, edge int) []Segment {
@@ -184,6 +228,14 @@ func clampSegments(segments []Segment, edge int) []Segment {
 		segments[i].Lane = min(segments[i].Lane, edge)
 	}
 	return segments
+}
+
+func movedLanes(moves []Move) []Segment {
+	out := make([]Segment, 0, 2*len(moves))
+	for _, move := range moves {
+		out = append(out, Segment{Lane: move.From, Color: move.Color}, Segment{Lane: move.To, Color: move.Color})
+	}
+	return out
 }
 
 func widest(before, after, own int, groups ...[]Segment) int {

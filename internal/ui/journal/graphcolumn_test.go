@@ -211,3 +211,22 @@ func TestACommitThatIsOnlyLocalIsDrawnInItsOwnColour(t *testing.T) {
 		}
 	}
 }
+
+func TestALaneThatMovesIsDrawnAsACurveAcrossTheRow(t *testing.T) {
+	dc := &recordingGraphCtx{}
+	row := Row{Graph: graph.Row{
+		Lane:  0,
+		Lanes: 2,
+		Moves: []graph.Move{{From: 1, To: 0, Color: 1}},
+	}}
+
+	NewView().drawGraphCell(graphCell(row, dc))
+
+	if len(dc.polylines) != 1 {
+		t.Fatalf("polylines = %d, want the moved lane drawn as a curve", len(dc.polylines))
+	}
+	curve := dc.polylines[0]
+	if curve[0].Y != 0 || curve[len(curve)-1].Y != 20 {
+		t.Fatalf("curve = %v, want it to cross the whole row", curve)
+	}
+}

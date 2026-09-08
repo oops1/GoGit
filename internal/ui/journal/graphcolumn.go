@@ -56,6 +56,9 @@ func (v *View) drawGraphCell(cdc datagrid.CellDrawContext) {
 	for _, segment := range g.Through {
 		drawVertical(cdc, laneX(cdc.Rect, segment.Lane), top, bottom, laneColor(segment.Color))
 	}
+	for _, move := range g.Moves {
+		drawEdge(cdc, laneX(cdc.Rect, move.From), top, laneX(cdc.Rect, move.To), bottom, laneColor(move.Color))
+	}
 	own := laneX(cdc.Rect, g.Lane)
 	if g.FromAbove {
 		drawVertical(cdc, own, top, middle, lineColor(g.Color, row.Unpushed))

@@ -119,24 +119,46 @@ func TestTheLayoutOfARealHistoryLeadsEveryParentToItsLane(t *testing.T) {
 		rows = append(rows, layout.Add(c))
 	}
 
-	lanes := map[hash.ObjectID]int{}
-	for i, c := range commits {
-		lanes[c.ID] = rows[i].Lane
-	}
 	for i, c := range commits {
 		if len(rows[i].Out) != len(c.Parents) {
 			t.Fatalf("commit %s has %d parents and %d lines going down",
 				c.ID.String()[:7], len(c.Parents), len(rows[i].Out))
 		}
-		for at, parent := range c.Parents {
-			want, known := lanes[parent]
-			if !known {
+	}
+	if broken, at := brokenLane(rows); broken {
+		t.Fatalf("row %d leaves a line hanging: %+v", at, rows[at])
+	}
+}
+
+func brokenLane(rows []Row) (bool, int) {
+	open := map[int]bool{}
+	for at, row := range rows {
+		below := map[int]bool{}
+		for _, segment := range row.Through {
+			below[segment.Lane] = true
+		}
+		for _, segment := range row.Out {
+			below[segment.Lane] = true
+		}
+		for _, move := range row.Moves {
+			below[move.To] = true
+		}
+		for lane := range open {
+			if below[lane] || lane == row.Lane || endsHere(row, lane) {
 				continue
 			}
-			if rows[i].Out[at].Lane != want {
-				t.Fatalf("commit %s: parent %d goes to lane %d, want lane %d where the parent sits",
-					c.ID.String()[:7], at, rows[i].Out[at].Lane, want)
-			}
+			return true, at
+		}
+		open = below
+	}
+	return false, 0
+}
+
+func endsHere(row Row, lane int) bool {
+	for _, move := range row.Moves {
+		if move.From == lane {
+			return true
 		}
 	}
+	return false
 }

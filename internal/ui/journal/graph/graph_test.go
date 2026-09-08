@@ -394,7 +394,82 @@ func TestTheMainLineTakesOverTheLaneOfTheBranchItMeets(t *testing.T) {
 	if rows[1].Lane != 0 || !sameLanes(rows[1].Out, 0) {
 		t.Fatalf("row = %+v, want the mainline to keep the first lane", rows[1])
 	}
+	if len(rows[1].Moves) != 1 || rows[1].Moves[0].From != 1 || rows[1].Moves[0].To != 0 {
+		t.Fatalf("moves = %+v, want the branch lane to be led into the first one", rows[1].Moves)
+	}
+	if len(rows[1].Through) != 0 {
+		t.Fatalf("through = %+v, want the moved lane drawn once", rows[1].Through)
+	}
 	if rows[2].Lane != 0 || rows[2].Lanes != 1 {
 		t.Fatalf("row = %+v, want the branch lane to be gone", rows[2])
+	}
+}
+
+func openBelow(row Row) map[int]bool {
+	below := map[int]bool{}
+	for _, segment := range row.Through {
+		below[segment.Lane] = true
+	}
+	for _, segment := range row.Out {
+		below[segment.Lane] = true
+	}
+	for _, move := range row.Moves {
+		below[move.To] = true
+	}
+	return below
+}
+
+func endsAt(row Row, lane int) bool {
+	if lane == row.Lane {
+		return true
+	}
+	for _, move := range row.Moves {
+		if move.From == lane {
+			return true
+		}
+	}
+	return false
+}
+
+func TestNoLineIsLeftHangingInATangledHistory(t *testing.T) {
+	rows := layoutOf([]Commit{
+		commit("m", "a", "b"),
+		commit("a", "c"),
+		commit("b", "c"),
+		commit("c", "d", "e"),
+		commit("d", "f"),
+		commit("e", "f"),
+		commit("f", "g"),
+		commit("g"),
+	})
+
+	open := map[int]bool{}
+	for at, row := range rows {
+		below := openBelow(row)
+		for lane := range open {
+			if below[lane] || endsAt(row, lane) {
+				continue
+			}
+			t.Fatalf("row %d leaves lane %d hanging: %+v", at, lane, row)
+		}
+		open = below
+	}
+}
+
+func TestALaneThatMovesLeavesTheOtherLanesAlone(t *testing.T) {
+	rows := layoutOf([]Commit{
+		commit("m", "a", "b"),
+		commit("t", "z"),
+		commit("a", "b"),
+		commit("b"),
+		commit("z"),
+	})
+
+	moved := rows[2]
+	if len(moved.Moves) != 1 || moved.Moves[0].From != 1 || moved.Moves[0].To != 0 {
+		t.Fatalf("moves = %+v, want the branch lane led into the mainline", moved.Moves)
+	}
+	if !sameLanes(moved.Through, 2) {
+		t.Fatalf("through = %v, want the untouched lane still drawn", lanesOf(moved.Through))
 	}
 }
