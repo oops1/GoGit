@@ -85,6 +85,7 @@ type View struct {
 	mu                sync.Mutex
 	idByItem          map[*treeview.TreeViewItem]string
 	itemByID          map[string]*treeview.TreeViewItem
+	kindByID          map[string]repo.Kind
 	expanded          map[string]bool
 	accent            color.RGBA
 	muted             color.RGBA
@@ -92,12 +93,15 @@ type View struct {
 	OnActivate        func(id string)
 	OnSelect          func(id string)
 	OnSelectDirectory func(repoID, relPath string)
+	OnMove            func(id, targetID string, inside bool)
+	OnGroupToggled    func(id string, expanded bool)
 }
 
 func NewView() *View {
 	return &View{
 		idByItem: map[*treeview.TreeViewItem]string{},
 		itemByID: map[string]*treeview.TreeViewItem{},
+		kindByID: map[string]repo.Kind{},
 		expanded: map[string]bool{},
 	}
 }
@@ -136,7 +140,68 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 	}
 	tree.Tree.OnExpanded = func(e treeview.ExpandedEvent) {
 		v.handleExpanded(e.Item)
+		v.reportToggle(e.Item, true)
 	}
+	tree.Tree.OnCollapsed = func(e treeview.CollapsedEvent) {
+		v.reportToggle(e.Item, false)
+	}
+	tree.Tree.CanUserDragNodes = true
+	tree.Tree.CanDropNode = v.canDrop
+	tree.Tree.OnNodeDrop = v.handleDrop
+}
+
+func (v *View) SetCollapsedGroups(ids []string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for _, id := range ids {
+		v.expanded[id] = false
+	}
+}
+
+func (v *View) canDrop(dragged, target *treeview.TreeViewItem, pos treeview.DropPosition) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	draggedID, ok := v.idByItem[dragged]
+	if !ok || !movableKind(v.kindByID[draggedID]) {
+		return false
+	}
+	targetID, ok := v.idByItem[target]
+	if !ok {
+		return false
+	}
+	if pos == treeview.DropInside {
+		return v.kindByID[targetID] == repo.KindGroup
+	}
+	return movableKind(v.kindByID[targetID])
+}
+
+func movableKind(kind repo.Kind) bool {
+	return kind == repo.KindGroup || kind == repo.KindRepository
+}
+
+func (v *View) handleDrop(dragged, target *treeview.TreeViewItem, pos treeview.DropPosition) bool {
+	v.mu.Lock()
+	draggedID := v.idByItem[dragged]
+	targetID := v.idByItem[target]
+	v.mu.Unlock()
+	if v.OnMove != nil {
+		v.OnMove(draggedID, targetID, pos == treeview.DropInside)
+	}
+	return true
+}
+
+func (v *View) reportToggle(item *treeview.TreeViewItem, expanded bool) {
+	v.mu.Lock()
+	id, ok := v.idByItem[item]
+	kind := v.kindByID[id]
+	if ok {
+		v.expanded[id] = expanded
+	}
+	v.mu.Unlock()
+	if !ok || kind != repo.KindGroup || v.OnGroupToggled == nil {
+		return
+	}
+	v.OnGroupToggled(id, expanded)
 }
 
 func (v *View) Item(id string) (*treeview.TreeViewItem, bool) {
@@ -169,6 +234,7 @@ func (v *View) Render(reg *repo.Registry, state map[string]State) {
 
 	v.idByItem = map[*treeview.TreeViewItem]string{}
 	v.itemByID = map[string]*treeview.TreeViewItem{}
+	v.kindByID = map[string]repo.Kind{}
 
 	activeID := ""
 	if n, ok := reg.Active(); ok {
@@ -207,6 +273,7 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 		item := treeview.NewItem(displayName(n, st, n.ID == activeID))
 		v.idByItem[item] = n.ID
 		v.itemByID[n.ID] = item
+		v.kindByID[n.ID] = n.Kind
 		switch n.Kind {
 		case repo.KindGroup:
 			item.Expanded = v.expandedDefaultLocked(n.ID)

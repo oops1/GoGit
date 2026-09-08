@@ -923,3 +923,23 @@ func TestParentOfReportsARootAndAnUnknownNode(t *testing.T) {
 		t.Fatal("an unknown node has no parent")
 	}
 }
+
+func TestMoveRepositoryRefusesAParentThatIsNotAGroup(t *testing.T) {
+	dir := t.TempDir()
+	reg := New(config.Default())
+	first, err := reg.AddRepository("First", namePath(dir, "first"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := reg.AddRepository("Second", namePath(dir, "second"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := reg.MoveRepository(second.ID, first.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound: a repository holds no repositories", err)
+	}
+	if _, ok := reg.ParentOf(second.ID); ok {
+		t.Fatal("the repository must stay at the root")
+	}
+}

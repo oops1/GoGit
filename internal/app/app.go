@@ -315,6 +315,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView.OnActivate = a.ActivateRepository
 	a.reposView.OnSelect = a.onRepoTreeSelect
 	a.reposView.OnSelectDirectory = a.onRepoTreeSelectDirectory
+	a.reposView.OnMove = a.moveTreeNode
+	a.reposView.OnGroupToggled = a.rememberGroupState
+	a.reposView.SetCollapsedGroups(cfg.UI.CollapsedGroups)
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
 	a.journalView = journal.NewView()

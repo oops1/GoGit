@@ -296,6 +296,9 @@ func (r *Registry) MoveRepository(id, group string) error {
 	if r.cfg.Repositories[idx].Worktree {
 		return ErrKindMismatch
 	}
+	if group != "" && findGroupIndex(r.cfg, group) < 0 {
+		return ErrNotFound
+	}
 	r.cfg.Repositories[idx].Group = group
 	r.Rebuild()
 	return nil

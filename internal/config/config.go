@@ -80,6 +80,7 @@ type UI struct {
 	FilesStatusFilter     []string `toml:"files_status_filter"`
 	FilesSubdirectories   bool     `toml:"files_subdirectories"`
 	JournalFullAuthorName bool     `toml:"journal_full_author_name"`
+	CollapsedGroups       []string `toml:"collapsed_groups"`
 }
 
 type Updates struct {
