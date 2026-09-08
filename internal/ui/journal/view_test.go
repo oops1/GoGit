@@ -243,7 +243,7 @@ func TestTheJournalDrawsNoLinesBetweenRows(t *testing.T) {
 	}
 
 	grid.ApplyTheme(widget.Win11LightTheme())
-	v.Restyle()
+	v.Restyle(widget.Win11LightTheme())
 
 	if grid.Grid.GridLineColor.A != 0 {
 		t.Fatal("a theme change must not bring the lines back")
@@ -251,7 +251,7 @@ func TestTheJournalDrawsNoLinesBetweenRows(t *testing.T) {
 }
 
 func TestRestylingWithoutAGridIsHarmless(t *testing.T) {
-	NewView().Restyle()
+	NewView().Restyle(widget.Win11LightTheme())
 }
 
 func TestTheGraphColumnFollowsWhatIsOnScreen(t *testing.T) {

@@ -21,6 +21,8 @@ const (
 	graphMaxWidth    = 240
 )
 
+var unpushedColor = color.RGBA{R: 0xE5, G: 0xA1, B: 0x1B, A: 0xFF}
+
 func (v *View) newGraphColumn() datagrid.Column {
 	return datagrid.NewTemplateColumn("", v.drawGraphCell)
 }
@@ -32,6 +34,13 @@ func graphColumnWidth(lanes int) int {
 
 func laneColor(index int) color.RGBA {
 	return badgePalette[index%len(badgePalette)]
+}
+
+func lineColor(index int, unpushed bool) color.RGBA {
+	if unpushed {
+		return unpushedColor
+	}
+	return laneColor(index)
 }
 
 func (v *View) drawGraphCell(cdc datagrid.CellDrawContext) {
@@ -49,12 +58,12 @@ func (v *View) drawGraphCell(cdc datagrid.CellDrawContext) {
 	}
 	own := laneX(cdc.Rect, g.Lane)
 	if g.FromAbove {
-		drawVertical(cdc, own, top, middle, laneColor(g.Color))
+		drawVertical(cdc, own, top, middle, lineColor(g.Color, row.Unpushed))
 	}
 	for _, segment := range g.Out {
-		drawEdge(cdc, own, middle, laneX(cdc.Rect, segment.Lane), bottom, laneColor(segment.Color))
+		drawEdge(cdc, own, middle, laneX(cdc.Rect, segment.Lane), bottom, lineColor(segment.Color, row.Unpushed))
 	}
-	drawDot(cdc, own, middle, g)
+	drawDot(cdc, own, middle, g, row.Unpushed)
 	if g.Overflow {
 		drawOverflow(cdc, g)
 	}
@@ -94,9 +103,9 @@ func bend(from, lead, trail, to, t float64) int {
 	return int(rest*rest*rest*from + 3*rest*rest*t*lead + 3*rest*t*t*trail + t*t*t*to + 0.5)
 }
 
-func drawDot(cdc datagrid.CellDrawContext, x, y int, g graph.Row) {
+func drawDot(cdc datagrid.CellDrawContext, x, y int, g graph.Row, unpushed bool) {
 	radius := graphDotRadius
-	col := laneColor(g.Color)
+	col := lineColor(g.Color, unpushed)
 	if g.Merge {
 		cdc.DrawCtx.StrokeEllipseAA(x, y, radius, radius, float64(graphLineWidth), col)
 		return

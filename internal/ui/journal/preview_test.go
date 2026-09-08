@@ -26,6 +26,16 @@ func previewRow(name string, parents ...string) Row {
 	return row
 }
 
+func withRefs(row Row, refs ...Ref) Row {
+	row.Refs = refs
+	return row
+}
+
+func unpushedRow(row Row) Row {
+	row.Unpushed = true
+	return row
+}
+
 func previewID(name string) hash.ObjectID {
 	digits := ""
 	for _, r := range name {
@@ -47,10 +57,10 @@ func TestPreviewCommitGraph(t *testing.T) {
 		t.Skip("GOGIT_PREVIEW_DIR not set")
 	}
 	rows := []Row{
-		previewRow("m", "b", "c"),
-		previewRow("b", "d"),
-		previewRow("c", "d"),
-		previewRow("d", "e"),
+		withRefs(previewRow("m", "b", "c"), Ref{Name: "develop", Head: true}, Ref{Name: "origin/develop", Kind: RefRemote}),
+		unpushedRow(previewRow("b", "d")),
+		unpushedRow(previewRow("c", "d")),
+		withRefs(previewRow("d", "e"), Ref{Name: "main", Kind: RefBranch}, Ref{Name: "v1.3.0", Kind: RefTag}),
 		previewRow("e", "f", "g"),
 		previewRow("f", "h"),
 		previewRow("g", "i"),

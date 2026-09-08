@@ -195,3 +195,19 @@ func TestTheColumnWidensAsTheHistoryBranches(t *testing.T) {
 		t.Fatal("an empty journal must give the width back")
 	}
 }
+
+func TestACommitThatIsOnlyLocalIsDrawnInItsOwnColour(t *testing.T) {
+	dc := &recordingGraphCtx{}
+	row := Row{Unpushed: true, Graph: graph.Row{Lane: 0, Lanes: 1, FromAbove: true, Out: []graph.Segment{{Lane: 0}}}}
+
+	NewView().drawGraphCell(graphCell(row, dc))
+
+	if dc.dots[0].color != unpushedColor {
+		t.Fatalf("dot colour = %v, want the local-only colour", dc.dots[0].color)
+	}
+	for _, line := range dc.lines {
+		if line.color != unpushedColor {
+			t.Fatalf("line colour = %v, want the local-only colour", line.color)
+		}
+	}
+}

@@ -16,12 +16,17 @@ type View struct {
 	items        *datagrid.ObservableCollection
 	authorHeader string
 	lanes        *graph.Layout
+	refs         refPalette
 	OnSelect     func(Row)
 	OnNearEnd    func()
 }
 
 func NewView() *View {
-	return &View{items: datagrid.NewObservableCollection(), lanes: graph.New()}
+	return &View{
+		items: datagrid.NewObservableCollection(),
+		lanes: graph.New(),
+		refs:  paletteOf(widget.CurrentTheme()),
+	}
 }
 
 func (v *View) Bind(grid *widget.DataGridWidget) {
@@ -30,8 +35,9 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 	grid.Grid.RowHeight = rowHeight
 	grid.Grid.FontSize = fontSize
 	grid.Grid.SetItemsSource(v.items)
-	v.Restyle()
+	v.Restyle(widget.CurrentTheme())
 	v.installGraphColumn()
+	v.installMessageColumn()
 	v.SetFullAuthorName(false)
 	grid.Grid.OnScroll = func(int, int) { v.resizeGraphColumn() }
 	grid.Grid.OnSelectionChanged = func(e datagrid.SelectionChangedEvent) {
@@ -48,11 +54,24 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 	}
 }
 
-func (v *View) Restyle() {
+func (v *View) Restyle(t *widget.Theme) {
+	v.refs = paletteOf(t)
 	if v.grid == nil {
 		return
 	}
 	v.grid.Grid.GridLineColor = color.RGBA{}
+}
+
+func (v *View) installMessageColumn() {
+	cols := v.grid.Grid.Columns()
+	if messageColumnIndex >= len(cols) {
+		return
+	}
+	old := cols[messageColumnIndex]
+	fresh := v.newMessageColumn(old.Header())
+	fresh.SetWidth(old.Width())
+	cols[messageColumnIndex] = fresh
+	v.grid.Grid.SetColumns(cols)
 }
 
 func (v *View) Reset() {

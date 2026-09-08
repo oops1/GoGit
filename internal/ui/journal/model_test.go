@@ -147,11 +147,12 @@ func TestLoadDecoratesCommitsWithBranchesTagsAndRemotes(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	want := []string{"feature", "main", "origin/main", "v1"}
-	got := slices.Clone(rows[0].Refs)
-	slices.Sort(got)
-	if !slices.Equal(got, want) {
-		t.Fatalf("Refs = %v, want %v", got, want)
+	want := []string{"main", "feature", "origin/main", "v1"}
+	if got := refNames(rows[0].Refs); !slices.Equal(got, want) {
+		t.Fatalf("Refs = %v, want the head branch, then branches, remotes and tags", got)
+	}
+	if !rows[0].Refs[0].Head || rows[0].Refs[2].Kind != RefRemote || rows[0].Refs[3].Kind != RefTag {
+		t.Fatalf("Refs = %+v, want each ref to carry its kind", rows[0].Refs)
 	}
 }
 
@@ -173,7 +174,7 @@ func TestLoadDecoratesAnnotatedTagsByPeeledTarget(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	if !slices.Contains(rows[0].Refs, "v1") {
+	if !slices.Contains(refNames(rows[0].Refs), "v1") {
 		t.Fatalf("Refs = %v, want it to contain v1", rows[0].Refs)
 	}
 }
@@ -195,7 +196,7 @@ func TestLoadExcludesNonBranchTagRemoteRefsFromDecorations(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	if !slices.Equal(rows[0].Refs, []string{"main"}) {
+	if !slices.Equal(refNames(rows[0].Refs), []string{"main"}) {
 		t.Fatalf("Refs = %v, want [main]", rows[0].Refs)
 	}
 }
@@ -223,7 +224,7 @@ func TestLoadSkipsDanglingSymbolicBranchesInDecorations(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("Load returned %d rows, want 1", len(rows))
 	}
-	if !slices.Equal(rows[0].Refs, []string{"main"}) {
+	if !slices.Equal(refNames(rows[0].Refs), []string{"main"}) {
 		t.Fatalf("Refs = %v, want [main]", rows[0].Refs)
 	}
 }
@@ -446,4 +447,159 @@ func TestTheGraphOfACrissCrossHistoryStaysNarrow(t *testing.T) {
 
 func laterThan(when time.Time) time.Time {
 	return when.Add(time.Hour)
+}
+
+func refNames(list []Ref) []string {
+	names := make([]string, 0, len(list))
+	for _, ref := range list {
+		names = append(names, ref.Name)
+	}
+	return names
+}
+
+func TestCommitsBeyondTheRemoteBranchAreMarkedAsLocal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	pushed := putCommit(t, db, tree, timeAt(1700000000), "ann", "pushed")
+	local := putCommit(t, db, tree, timeAt(1700000060), "ann", "local", pushed)
+	setRef(t, store, refs.BranchName("main"), local)
+	setRef(t, store, refs.HEAD, local)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), pushed)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want both commits", len(rows))
+	}
+	if !rows[0].Unpushed {
+		t.Fatal("a commit the remote does not have must be marked as local")
+	}
+	if rows[1].Unpushed {
+		t.Fatal("a commit the remote already has must not be marked")
+	}
+}
+
+func TestWithoutARemoteNothingIsMarkedAsLocal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "only commit")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || rows[0].Unpushed {
+		t.Fatalf("rows = %+v, want nothing marked without a remote", rows)
+	}
+}
+
+func TestARemoteListThatCannotBeReadStopsTheJournal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+	failure := errors.New("no remotes for you")
+
+	source := revision.Context{Objects: db, Refs: prefixErrorRefs{inner: store, prefix: refs.RemotesPrefix, err: failure}}
+	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+
+	if !errors.Is(err, failure) {
+		t.Fatalf("err = %v, want %v", err, failure)
+	}
+}
+
+func TestAHeadThatHasNoNameLeavesEveryBranchPlain(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	source := revision.Context{Objects: db, Refs: nameErrorRefs{inner: store, err: errors.New("detached")}}
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || len(rows[0].Refs) != 1 || rows[0].Refs[0].Head {
+		t.Fatalf("refs = %+v, want the branch without the head mark", rows[0].Refs)
+	}
+}
+
+func TestRefsOfTheSameKindAreOrderedByName(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("zulu"), id)
+	setRef(t, store, refs.BranchName("alpha"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := refNames(rows[0].Refs); !slices.Equal(got, []string{"main", "alpha", "zulu"}) {
+		t.Fatalf("refs = %v, want the head branch first and the rest in alphabetical order", got)
+	}
+}
+
+func TestARemoteRefWithoutATargetIsIgnored(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "one")
+	setRef(t, store, refs.BranchName("main"), id)
+	setRef(t, store, refs.HEAD, id)
+
+	source := revision.Context{
+		Objects: db,
+		Refs:    fixedRefs{inner: store, list: []refs.Ref{{Name: refs.RemoteBranchName("origin", "main")}}},
+	}
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 1 || rows[0].Unpushed {
+		t.Fatalf("rows = %+v, want a remote without a target to change nothing", rows)
+	}
+}
+
+func TestAHistoryThatCannotBeReadWhileLookingForLocalCommitsIsReported(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	pushed := putCommit(t, db, tree, timeAt(1700000000), "ann", "pushed")
+	local := putCommit(t, db, tree, timeAt(1700000060), "ann", "local", pushed)
+	setRef(t, store, refs.BranchName("main"), local)
+	setRef(t, store, refs.HEAD, local)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), pushed)
+	failure := errors.New("object gone")
+
+	source := revision.Context{Objects: failingObjects{inner: db, fail: pushed, err: failure}, Refs: store}
+	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10)))
+
+	if !errors.Is(err, failure) {
+		t.Fatalf("err = %v, want %v", err, failure)
+	}
 }

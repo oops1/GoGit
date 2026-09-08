@@ -13,6 +13,20 @@ const (
 	dateLayout    = "2006-01-02 15:04"
 )
 
+type RefKind int
+
+const (
+	RefBranch RefKind = iota
+	RefRemote
+	RefTag
+)
+
+type Ref struct {
+	Name string
+	Kind RefKind
+	Head bool
+}
+
 type Row struct {
 	Message   string
 	Author    string
@@ -20,12 +34,12 @@ type Row struct {
 	ShortHash string
 	ID        hash.ObjectID
 	Parents   []hash.ObjectID
-	Refs      []string
+	Refs      []Ref
 	Unpushed  bool
 	Graph     graph.Row
 }
 
-func newRow(commit *revision.Commit, decorations map[hash.ObjectID][]string) Row {
+func newRow(commit *revision.Commit, decorations map[hash.ObjectID][]Ref, unpushed map[hash.ObjectID]struct{}) Row {
 	return Row{
 		Message:   firstLine(commit.Message),
 		Author:    commit.Author.Name,
@@ -34,8 +48,13 @@ func newRow(commit *revision.Commit, decorations map[hash.ObjectID][]string) Row
 		ID:        commit.ID,
 		Parents:   commit.Parents,
 		Refs:      decorations[commit.ID],
-		Unpushed:  false,
+		Unpushed:  contains(unpushed, commit.ID),
 	}
+}
+
+func contains(set map[hash.ObjectID]struct{}, id hash.ObjectID) bool {
+	_, ok := set[id]
+	return ok
 }
 
 func firstLine(message string) string {

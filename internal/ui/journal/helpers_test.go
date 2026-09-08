@@ -172,3 +172,71 @@ func (f headErrorRefs) Prefix(prefix string) iter.Seq2[refs.Ref, error] {
 func (f headErrorRefs) Reflog(name refs.Name) iter.Seq2[refs.ReflogEntry, error] {
 	return f.inner.Reflog(name)
 }
+
+type prefixErrorRefs struct {
+	inner  *refs.Store
+	prefix string
+	err    error
+}
+
+func (f prefixErrorRefs) Resolve(name refs.Name) (refs.Ref, error) { return f.inner.Resolve(name) }
+
+func (f prefixErrorRefs) ResolveName(name refs.Name) (refs.Name, error) {
+	return f.inner.ResolveName(name)
+}
+
+func (f prefixErrorRefs) Prefix(prefix string) iter.Seq2[refs.Ref, error] {
+	if prefix == f.prefix {
+		return func(yield func(refs.Ref, error) bool) { yield(refs.Ref{}, f.err) }
+	}
+	return f.inner.Prefix(prefix)
+}
+
+func (f prefixErrorRefs) Reflog(name refs.Name) iter.Seq2[refs.ReflogEntry, error] {
+	return f.inner.Reflog(name)
+}
+
+type nameErrorRefs struct {
+	inner *refs.Store
+	err   error
+}
+
+func (f nameErrorRefs) Resolve(name refs.Name) (refs.Ref, error) { return f.inner.Resolve(name) }
+
+func (f nameErrorRefs) ResolveName(refs.Name) (refs.Name, error) { return "", f.err }
+
+func (f nameErrorRefs) Prefix(prefix string) iter.Seq2[refs.Ref, error] {
+	return f.inner.Prefix(prefix)
+}
+
+func (f nameErrorRefs) Reflog(name refs.Name) iter.Seq2[refs.ReflogEntry, error] {
+	return f.inner.Reflog(name)
+}
+
+type fixedRefs struct {
+	inner *refs.Store
+	list  []refs.Ref
+}
+
+func (f fixedRefs) Resolve(name refs.Name) (refs.Ref, error) { return f.inner.Resolve(name) }
+
+func (f fixedRefs) ResolveName(name refs.Name) (refs.Name, error) {
+	return f.inner.ResolveName(name)
+}
+
+func (f fixedRefs) Prefix(prefix string) iter.Seq2[refs.Ref, error] {
+	if prefix == refs.RemotesPrefix {
+		return func(yield func(refs.Ref, error) bool) {
+			for _, ref := range f.list {
+				if !yield(ref, nil) {
+					return
+				}
+			}
+		}
+	}
+	return f.inner.Prefix(prefix)
+}
+
+func (f fixedRefs) Reflog(name refs.Name) iter.Seq2[refs.ReflogEntry, error] {
+	return f.inner.Reflog(name)
+}
