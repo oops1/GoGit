@@ -234,3 +234,22 @@ func TestClearSelectionDropsTheHighlightedRow(t *testing.T) {
 func TestClearSelectionWithoutAGridIsANoOp(t *testing.T) {
 	NewView().ClearSelection()
 }
+
+func TestTheJournalDrawsNoLinesBetweenRows(t *testing.T) {
+	v, grid := bound(t)
+
+	if grid.Grid.GridLineColor.A != 0 {
+		t.Fatalf("grid line = %v, want it invisible so the graph runs unbroken", grid.Grid.GridLineColor)
+	}
+
+	grid.ApplyTheme(widget.Win11LightTheme())
+	v.Restyle()
+
+	if grid.Grid.GridLineColor.A != 0 {
+		t.Fatal("a theme change must not bring the lines back")
+	}
+}
+
+func TestRestylingWithoutAGridIsHarmless(t *testing.T) {
+	NewView().Restyle()
+}

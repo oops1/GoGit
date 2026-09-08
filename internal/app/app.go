@@ -766,6 +766,7 @@ func (a *App) applyTheme() {
 	a.applyRepoTreeTheme(theme)
 	a.applyPaneTitleColors(theme)
 	a.applyMenuIcons()
+	a.journalView.Restyle()
 }
 
 func (a *App) applyPaneTitleColors(t *widget.Theme) {

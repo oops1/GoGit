@@ -14,7 +14,7 @@ const (
 	graphLaneWidth   = 14
 	graphLeftPadding = 10
 	graphDotRadius   = 4
-	graphLineWidth   = 2.0
+	graphLineWidth   = 2
 	graphCurveSteps  = 8
 	graphOverflowGap = 4
 	graphMinWidth    = 28
@@ -45,12 +45,11 @@ func (v *View) drawGraphCell(cdc datagrid.CellDrawContext) {
 	middle := top + cdc.Rect.Dy()/2
 
 	for _, segment := range g.Through {
-		x := laneX(cdc.Rect, segment.Lane)
-		cdc.DrawCtx.DrawLineAA(x, top, x, bottom, graphLineWidth, laneColor(segment.Color))
+		drawVertical(cdc, laneX(cdc.Rect, segment.Lane), top, bottom, laneColor(segment.Color))
 	}
 	own := laneX(cdc.Rect, g.Lane)
 	if g.FromAbove {
-		cdc.DrawCtx.DrawLineAA(own, top, own, middle, graphLineWidth, laneColor(g.Color))
+		drawVertical(cdc, own, top, middle, laneColor(g.Color))
 	}
 	for _, segment := range g.Out {
 		drawEdge(cdc, own, middle, laneX(cdc.Rect, segment.Lane), bottom, laneColor(segment.Color))
@@ -65,12 +64,16 @@ func laneX(rect image.Rectangle, lane int) int {
 	return rect.Min.X + graphLeftPadding + lane*graphLaneWidth
 }
 
+func drawVertical(cdc datagrid.CellDrawContext, x, top, bottom int, col color.RGBA) {
+	cdc.DrawCtx.FillRect(x-graphLineWidth/2, top, graphLineWidth, bottom-top, col)
+}
+
 func drawEdge(cdc datagrid.CellDrawContext, fromX, fromY, toX, toY int, col color.RGBA) {
 	if fromX == toX {
-		cdc.DrawCtx.DrawLineAA(fromX, fromY, toX, toY, graphLineWidth, col)
+		drawVertical(cdc, fromX, fromY, toY, col)
 		return
 	}
-	cdc.DrawCtx.StrokePolylineAA(curve(fromX, fromY, toX, toY), graphLineWidth, false, col)
+	cdc.DrawCtx.StrokePolylineAA(curve(fromX, fromY, toX, toY), float64(graphLineWidth), false, col)
 }
 
 func curve(fromX, fromY, toX, toY int) []image.Point {
@@ -95,7 +98,7 @@ func drawDot(cdc datagrid.CellDrawContext, x, y int, g graph.Row) {
 	radius := graphDotRadius
 	col := laneColor(g.Color)
 	if g.Merge {
-		cdc.DrawCtx.StrokeEllipseAA(x, y, radius, radius, graphLineWidth, col)
+		cdc.DrawCtx.StrokeEllipseAA(x, y, radius, radius, float64(graphLineWidth), col)
 		return
 	}
 	cdc.DrawCtx.FillEllipseAA(x, y, radius, radius, col)

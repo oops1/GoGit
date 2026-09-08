@@ -29,6 +29,10 @@ type recordingGraphCtx struct {
 	dots      []drawnDot
 }
 
+func (c *recordingGraphCtx) FillRect(x, y, w, h int, col color.RGBA) {
+	c.lines = append(c.lines, drawnLine{x + w/2, y, x + w/2, y + h, col})
+}
+
 func (c *recordingGraphCtx) DrawLineAA(x1, y1, x2, y2 int, thickness float64, col color.RGBA) {
 	c.lines = append(c.lines, drawnLine{x1, y1, x2, y2, col})
 }

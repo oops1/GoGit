@@ -4,6 +4,8 @@ import (
 	"image"
 	"testing"
 
+	"github.com/oops1/headless-gui/v3/widget"
+
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/ui/repos"
 )
@@ -123,5 +125,16 @@ func TestThePicturesReachTheContextMenus(t *testing.T) {
 		if item.Icon == nil {
 			t.Fatalf("context item %q has no picture", item.Text)
 		}
+	}
+}
+
+func TestMenuIconsSkipItemsTheMenuDoesNotHave(t *testing.T) {
+	applyTreeIcons(nil, repositoryMenuTree, State{})
+
+	subs := []widget.MenuItem{{Text: "one"}}
+	applyTreeIcons(subs, []menuTreeEntry{{Separator: true}}, State{})
+
+	if subs[0].Icon != nil {
+		t.Fatal("a separator has no picture")
 	}
 }

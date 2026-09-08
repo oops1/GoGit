@@ -1,6 +1,8 @@
 package journal
 
 import (
+	"image/color"
+
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
@@ -29,6 +31,7 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 	grid.Grid.RowHeight = rowHeight
 	grid.Grid.FontSize = fontSize
 	grid.Grid.SetItemsSource(v.items)
+	v.Restyle()
 	v.installGraphColumn()
 	v.SetFullAuthorName(false)
 	grid.Grid.OnSelectionChanged = func(e datagrid.SelectionChangedEvent) {
@@ -43,6 +46,13 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 			v.OnNearEnd()
 		}
 	}
+}
+
+func (v *View) Restyle() {
+	if v.grid == nil {
+		return
+	}
+	v.grid.Grid.GridLineColor = color.RGBA{}
 }
 
 func (v *View) Reset() {
