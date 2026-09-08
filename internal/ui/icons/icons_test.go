@@ -380,3 +380,21 @@ func TestToolbarMutedGreysTheIcon(t *testing.T) {
 		t.Fatal("an unknown icon must not render")
 	}
 }
+
+func TestMenuRendersKnownIconAtRequestedSize(t *testing.T) {
+	resetForTest()
+	img := Menu("terminal", 16, color.RGBA{R: 255, A: 255})
+	if img == nil {
+		t.Fatal("Menu(terminal, 16, red) = nil")
+	}
+	if b := img.Bounds(); b.Dx() != 16 || b.Dy() != 16 {
+		t.Fatalf("bounds = %v, want 16x16", b)
+	}
+}
+
+func TestMenuReturnsNilForUnknownName(t *testing.T) {
+	resetForTest()
+	if img := Menu("no-such-icon", 16, color.RGBA{A: 255}); img != nil {
+		t.Fatal("an icon that was never drawn cannot render")
+	}
+}

@@ -12,7 +12,7 @@ var uiFS embed.FS
 //go:embed i18n/*.json
 var i18nFS embed.FS
 
-//go:embed icons/*.svg icons/status/*.svg icons/tree/*.svg
+//go:embed icons/*.svg icons/status/*.svg icons/tree/*.svg icons/menu/*.svg
 var iconsFS embed.FS
 
 const MainWindowXAML = "ui/main_window.xaml"
@@ -61,6 +61,14 @@ func TreeIcon(name string) ([]byte, error) {
 
 func TreeIconNames() []string {
 	return svgNamesIn("icons/tree")
+}
+
+func MenuIcon(name string) ([]byte, error) {
+	return iconsFS.ReadFile("icons/menu/" + name + ".svg")
+}
+
+func MenuIconNames() []string {
+	return svgNamesIn("icons/menu")
 }
 
 func svgNamesIn(dir string) []string {
