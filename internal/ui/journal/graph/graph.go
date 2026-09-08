@@ -106,6 +106,11 @@ func (l *Layout) placeParents(parents []hash.ObjectID, own, color int) []Segment
 
 func (l *Layout) placeParent(parent hash.ObjectID, own, color int, first bool) Segment {
 	if at, taken := l.laneExpecting(parent); taken {
+		if first && own < at {
+			l.lanes[own] = lane{expect: parent, color: color}
+			l.lanes[at] = lane{}
+			return Segment{Lane: own, Color: color}
+		}
 		if first {
 			l.lanes[own] = lane{}
 		}

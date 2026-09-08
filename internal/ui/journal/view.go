@@ -16,7 +16,6 @@ type View struct {
 	items        *datagrid.ObservableCollection
 	authorHeader string
 	lanes        *graph.Layout
-	widest       int
 	OnSelect     func(Row)
 	OnNearEnd    func()
 }
@@ -34,6 +33,7 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 	v.Restyle()
 	v.installGraphColumn()
 	v.SetFullAuthorName(false)
+	grid.Grid.OnScroll = func(int, int) { v.resizeGraphColumn() }
 	grid.Grid.OnSelectionChanged = func(e datagrid.SelectionChangedEvent) {
 		row, ok := e.SelectedItem.(Row)
 		if !ok {
@@ -58,7 +58,6 @@ func (v *View) Restyle() {
 func (v *View) Reset() {
 	v.items.Clear()
 	v.lanes.Reset()
-	v.widest = 0
 	v.resizeGraphColumn()
 }
 
@@ -80,8 +79,22 @@ func (v *View) resizeGraphColumn() {
 	if graphColumnIndex >= len(cols) {
 		return
 	}
-	cols[graphColumnIndex].SetWidth(datagrid.PixelWidth(float64(graphColumnWidth(v.widest))))
+	cols[graphColumnIndex].SetWidth(datagrid.PixelWidth(float64(graphColumnWidth(v.visibleLanes()))))
 	v.grid.Grid.SetColumns(cols)
+}
+
+func (v *View) visibleLanes() int {
+	first := v.grid.Grid.FirstVisibleRow()
+	last := min(first+v.grid.Grid.VisibleRowCount(), v.items.Count())
+	widest := 0
+	for at := max(first, 0); at < last; at++ {
+		row, ok := v.items.Get(at).(Row)
+		if !ok {
+			continue
+		}
+		widest = max(widest, row.Graph.Lanes)
+	}
+	return widest
 }
 
 func (v *View) ClearSelection() {
@@ -92,18 +105,11 @@ func (v *View) ClearSelection() {
 }
 
 func (v *View) Append(rows []Row) {
-	grew := false
 	for _, row := range rows {
 		row.Graph = v.lanes.Add(graph.Commit{ID: row.ID, Parents: row.Parents})
-		if row.Graph.Lanes > v.widest {
-			v.widest = row.Graph.Lanes
-			grew = true
-		}
 		v.items.Add(row)
 	}
-	if grew {
-		v.resizeGraphColumn()
-	}
+	v.resizeGraphColumn()
 }
 
 func (v *View) Count() int {

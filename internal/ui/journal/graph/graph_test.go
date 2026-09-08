@@ -338,3 +338,63 @@ func nameOfID(commits []Commit, id hash.ObjectID) string {
 	}
 	return strings.Repeat("0", 40)
 }
+
+func TestTheMainLineKeepsTheLeftmostLaneAcrossMerges(t *testing.T) {
+	var commits []Commit
+	for step := range 5 {
+		main := fmt.Sprintf("m%d", step)
+		side := fmt.Sprintf("s%d", step)
+		next := fmt.Sprintf("m%d", step+1)
+		commits = append(commits,
+			commit(main, next, side),
+			commit(side, next),
+		)
+	}
+	commits = append(commits, commit("m5"))
+
+	rows := layoutOf(commits)
+
+	for i, c := range commits {
+		if !rows[i].Merge {
+			continue
+		}
+		if rows[i].Lane != 0 {
+			t.Fatalf("merge %d (%v) sits in lane %d, want the leftmost one", i, c.Parents != nil, rows[i].Lane)
+		}
+	}
+	for i, row := range rows {
+		if row.Lanes > 2 {
+			t.Fatalf("row %d takes %d lanes, want the graph to stay narrow", i, row.Lanes)
+		}
+	}
+}
+
+func TestALineThatMeetsAnOlderOneMovesIntoTheLeftmostLane(t *testing.T) {
+	rows := layoutOf([]Commit{
+		commit("m", "a", "b"),
+		commit("b", "a"),
+		commit("a"),
+	})
+
+	if rows[1].Lane != 1 || !sameLanes(rows[1].Out, 0) {
+		t.Fatalf("row = %+v, want the side branch to bend into the mainline", rows[1])
+	}
+	if rows[2].Lane != 0 || rows[2].Lanes != 1 {
+		t.Fatalf("row = %+v, want the shared commit alone in the first lane", rows[2])
+	}
+}
+
+func TestTheMainLineTakesOverTheLaneOfTheBranchItMeets(t *testing.T) {
+	rows := layoutOf([]Commit{
+		commit("m", "a", "b"),
+		commit("a", "b"),
+		commit("b"),
+	})
+
+	if rows[1].Lane != 0 || !sameLanes(rows[1].Out, 0) {
+		t.Fatalf("row = %+v, want the mainline to keep the first lane", rows[1])
+	}
+	if rows[2].Lane != 0 || rows[2].Lanes != 1 {
+		t.Fatalf("row = %+v, want the branch lane to be gone", rows[2])
+	}
+}

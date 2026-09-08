@@ -177,7 +177,7 @@ func TestTheColumnWidensAsTheHistoryBranches(t *testing.T) {
 	v, grid := bound(t)
 	grid.Grid.SetColumns(journalColumns())
 	v.installGraphColumn()
-	narrow := grid.Grid.Columns()[graphColumnIndex].Width()
+	narrow := grid.Grid.Columns()[graphColumnIndex].Width().Value
 
 	v.Append([]Row{
 		{ID: idFor(1), Parents: []hash.ObjectID{idFor(2), idFor(3)}},
@@ -185,13 +185,13 @@ func TestTheColumnWidensAsTheHistoryBranches(t *testing.T) {
 		{ID: idFor(3), Parents: []hash.ObjectID{idFor(4)}},
 	})
 
-	if grid.Grid.Columns()[graphColumnIndex].Width() == narrow {
+	if grid.Grid.Columns()[graphColumnIndex].Width().Value == narrow {
 		t.Fatal("a branching history must widen the graph column")
 	}
 
 	v.Reset()
 
-	if grid.Grid.Columns()[graphColumnIndex].Width() != narrow {
+	if grid.Grid.Columns()[graphColumnIndex].Width().Value != narrow {
 		t.Fatal("an empty journal must give the width back")
 	}
 }

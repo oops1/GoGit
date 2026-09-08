@@ -253,3 +253,49 @@ func TestTheJournalDrawsNoLinesBetweenRows(t *testing.T) {
 func TestRestylingWithoutAGridIsHarmless(t *testing.T) {
 	NewView().Restyle()
 }
+
+func TestTheGraphColumnFollowsWhatIsOnScreen(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	grid.Grid.RowHeight = 20
+	v.installGraphColumn()
+
+	v.Append([]Row{
+		{ID: idFor(1), Parents: []hash.ObjectID{idFor(2), idFor(3)}},
+		{ID: idFor(2), Parents: []hash.ObjectID{idFor(4)}},
+		{ID: idFor(3), Parents: []hash.ObjectID{idFor(4)}},
+		{ID: idFor(4)},
+	})
+	wide := grid.Grid.Columns()[graphColumnIndex].Width().Value
+
+	v.Reset()
+	v.Append([]Row{{ID: idFor(5), Parents: []hash.ObjectID{idFor(6)}}, {ID: idFor(6)}})
+
+	if grid.Grid.Columns()[graphColumnIndex].Width().Value >= wide {
+		t.Fatal("a history without branches must give the width back")
+	}
+}
+
+func TestScrollingRecountsTheLanesOnScreen(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	v.installGraphColumn()
+
+	if grid.Grid.OnScroll == nil {
+		t.Fatal("the column must follow the scrolling")
+	}
+	grid.Grid.OnScroll(0, 10)
+}
+
+func TestARowOfAnotherKindIsSkippedWhenTheLanesAreCounted(t *testing.T) {
+	v, grid := bound(t)
+	grid.Grid.SetColumns(journalColumns())
+	v.installGraphColumn()
+
+	v.items.Add("not a commit")
+	v.resizeGraphColumn()
+
+	if grid.Grid.Columns()[graphColumnIndex].Width().Value != float64(graphColumnWidth(0)) {
+		t.Fatal("a row that is not a commit must not widen the graph")
+	}
+}

@@ -11,13 +11,13 @@ import (
 
 const (
 	graphColumnIndex = 0
-	graphLaneWidth   = 14
-	graphLeftPadding = 10
+	graphLaneWidth   = 12
+	graphLeftPadding = 8
 	graphDotRadius   = 4
 	graphLineWidth   = 2
 	graphCurveSteps  = 8
 	graphOverflowGap = 4
-	graphMinWidth    = 28
+	graphMinWidth    = 22
 	graphMaxWidth    = 240
 )
 
