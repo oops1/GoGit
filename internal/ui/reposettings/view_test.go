@@ -51,6 +51,12 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 	t.Cleanup(func() { loadDialog = prev })
 	full := func() map[string]widget.Widget {
 		return map[string]widget.Widget{
+			"settingsRoot":  widget.NewGrid(),
+			"formContent":   widget.NewGrid(),
+			"footer":        widget.NewGrid(),
+			"formScroll":    widget.NewScrollView(),
+			"identityHint":  widget.NewLabel("", widget.CurrentTheme().LabelText),
+			"pullHint":      widget.NewLabel("", widget.CurrentTheme().LabelText),
 			"name":          widget.NewTextInput(""),
 			"path":          widget.NewLabel("", widget.CurrentTheme().LabelText),
 			"userName":      widget.NewTextInput(""),
@@ -245,5 +251,102 @@ func TestAValueThatIsNotOnTheListSelectsTheFirstRow(t *testing.T) {
 
 	if v.pullDrop.Selected() != 0 || v.autoFetchDrop.Selected() != 0 {
 		t.Fatalf("pull = %d, fetch = %d, want the inherited rows", v.pullDrop.Selected(), v.autoFetchDrop.Selected())
+	}
+}
+
+func TestTheDialogOpensAtTheSizeItWasDrawnFor(t *testing.T) {
+	v := newTestView(t)
+
+	if got := v.Dialog().Bounds(); got.Dx() != dialogWidth || got.Dy() != dialogHeight {
+		t.Fatalf("dialog = %v, want %dx%d", got, dialogWidth, dialogHeight)
+	}
+}
+
+func TestTheDialogShrinksToTheWindowButKeepsAWorkableHeight(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		window int
+		want   int
+	}{
+		{"taller than the dialog", 1200, dialogHeight},
+		{"just enough", 600, 600 - windowMargin},
+		{"tiny", 120, dialogMinHeight},
+		{"unknown", 0, dialogHeight},
+	} {
+		v := newTestView(t)
+
+		v.FitHeight(c.window)
+
+		if got := v.Dialog().Bounds().Dy(); got != c.want {
+			t.Fatalf("%s: height = %d, want %d", c.name, got, c.want)
+		}
+		if got := v.Dialog().Bounds().Dx(); got != dialogWidth {
+			t.Fatalf("%s: width = %d, want it untouched", c.name, got)
+		}
+	}
+}
+
+func TestTextInFieldsKeepsAwayFromTheirBorder(t *testing.T) {
+	v := newTestView(t)
+
+	for _, input := range v.inputs() {
+		if input.PaddingX != fieldPaddingX {
+			t.Fatalf("input padding = %d, want %d", input.PaddingX, fieldPaddingX)
+		}
+	}
+	for _, dropdown := range v.dropdowns() {
+		if dropdown.PaddingX != fieldPaddingX {
+			t.Fatalf("dropdown padding = %d, want %d", dropdown.PaddingX, fieldPaddingX)
+		}
+	}
+}
+
+func TestTheThemeDecidesWhichPaletteTheDialogWears(t *testing.T) {
+	if got := paletteFor(widget.Win11DarkTheme()); got != darkPalette {
+		t.Fatalf("palette = %+v, want the dark one", got)
+	}
+	if got := paletteFor(widget.Win11LightTheme()); got != lightPalette {
+		t.Fatalf("palette = %+v, want the light one", got)
+	}
+}
+
+func TestRestylePaintsTheWholeDialog(t *testing.T) {
+	v := newTestView(t)
+
+	v.Restyle(widget.Win11DarkTheme())
+
+	if v.Dialog().Background != darkPalette.surface || v.footer.Background != darkPalette.chrome {
+		t.Fatalf("surface = %v, footer = %v, want the dark palette", v.Dialog().Background, v.footer.Background)
+	}
+	for _, input := range v.inputs() {
+		if input.Background != darkPalette.input || input.BorderColor != darkPalette.border {
+			t.Fatalf("input = %v on %v, want the dark palette", input.TextColor, input.Background)
+		}
+	}
+	for _, dropdown := range v.dropdowns() {
+		if dropdown.Background != darkPalette.input || dropdown.TextColor != darkPalette.text {
+			t.Fatalf("dropdown = %v on %v, want the dark palette", dropdown.TextColor, dropdown.Background)
+		}
+	}
+	if v.okBtn.Background != darkPalette.primary || v.okBtn.TextColor != darkPalette.onPrimary {
+		t.Fatal("the saving button must stay the accent one")
+	}
+	if v.cancelBtn.Background != darkPalette.input {
+		t.Fatalf("cancel = %v, want the quiet fill", v.cancelBtn.Background)
+	}
+	for _, label := range []*widget.Label{v.pathLabel, v.hintLabel, v.identityHint, v.pullHint} {
+		if label.TextColor != darkPalette.secondary {
+			t.Fatalf("hint colour = %v, want the secondary one", label.TextColor)
+		}
+	}
+}
+
+func TestRestyleGivesTheFormTheHeightItScrollsOver(t *testing.T) {
+	v := newTestView(t)
+
+	v.Restyle(widget.Win11LightTheme())
+
+	if got := v.formContent.Bounds().Dy(); got != v.formScroll.ContentHeight {
+		t.Fatalf("form height = %d, want the scrollable %d", got, v.formScroll.ContentHeight)
 	}
 }
