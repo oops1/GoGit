@@ -47,6 +47,7 @@ func TestPreviewWorktreeDialog(t *testing.T) {
 		view.branchInput.SetText("feature/login")
 		view.onBranchTyped()
 		eng.ShowModal(view.Dialog())
+		view.Restyle(variant.theme)
 
 		eng.SaveFrames(dir + "/worktree-" + variant.name)
 		eng.Start()

@@ -706,7 +706,7 @@ func (a *App) defaultShowAddRepo(initial addrepo.Request, cb func(addrepo.Result
 		return
 	}
 	a.wireAddRepoView(view, cb)
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) wireAddRepoView(view *addrepo.View, cb func(addrepo.Result, bool)) {

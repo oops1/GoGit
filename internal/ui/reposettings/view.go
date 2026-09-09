@@ -10,6 +10,7 @@ import (
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "repo_settings"
@@ -60,7 +61,6 @@ func NewView() (*View, error) {
 	v.dlg.SetContentPadding(0)
 	v.dlg.SetContent(v.root)
 	v.dlg.Resize(dialogWidth, dialogHeight)
-	v.padFields()
 	v.fillChoices()
 	v.wire()
 	v.refresh()
@@ -77,15 +77,6 @@ func (v *View) FitHeight(height int) {
 	v.dlg.Resize(v.dlg.Bounds().Dx(), min(dialogHeight, max(dialogMinHeight, height-windowMargin)))
 }
 
-func (v *View) padFields() {
-	for _, input := range v.inputs() {
-		input.PaddingX = fieldPaddingX
-	}
-	for _, dropdown := range v.dropdowns() {
-		dropdown.PaddingX = fieldPaddingX
-	}
-}
-
 func (v *View) inputs() []*widget.TextInput {
 	return []*widget.TextInput{v.nameInput, v.userNameInput, v.emailInput}
 }
@@ -97,38 +88,18 @@ func (v *View) dropdowns() []*widget.Dropdown {
 func (v *View) Restyle(t *widget.Theme) {
 	viewport := v.formScroll.Bounds()
 	v.formContent.SetBounds(image.Rect(viewport.Min.X, viewport.Min.Y, viewport.Max.X, viewport.Min.Y+v.formScroll.ContentHeight))
-	p := paletteFor(t)
-	v.dlg.Background = p.surface
-	v.dlg.TitleBG = p.chrome
-	v.dlg.TitleColor = p.text
-	v.root.Background = p.surface
-	v.footer.Background = p.chrome
-	for _, label := range v.labels {
-		label.TextColor = p.text
-	}
-	for _, label := range []*widget.Label{v.pathLabel, v.hintLabel, v.identityHint, v.pullHint} {
-		label.TextColor = p.secondary
-	}
-	for _, input := range v.inputs() {
-		input.Background = p.input
-		input.BorderColor = p.border
-		input.TextColor = p.text
-		input.PlaceColor = p.secondary
-	}
-	for _, dropdown := range v.dropdowns() {
-		dropdown.Background = p.input
-		dropdown.BorderColor = p.border
-		dropdown.TextColor = p.text
-		dropdown.ArrowColor = p.text
-	}
-	v.cancelBtn.Background = p.input
-	v.cancelBtn.BorderColor = p.border
-	v.cancelBtn.TextColor = p.text
-	v.okBtn.Background = p.primary
-	v.okBtn.BorderColor = p.primary
-	v.okBtn.HoverBG = p.primaryHover
-	v.okBtn.PressedBG = p.primaryPressed
-	v.okBtn.TextColor = p.onPrimary
+	p := style.Of(t)
+	v.dlg.Background = p.Surface
+	v.dlg.TitleBG = p.Chrome
+	v.dlg.TitleColor = p.Text
+	v.root.Background = p.Surface
+	v.footer.Background = p.Chrome
+	p.Body(v.labels...)
+	p.Hints(v.pathLabel, v.hintLabel, v.identityHint, v.pullHint)
+	p.Fields(v.inputs()...)
+	p.Lists(v.dropdowns()...)
+	p.Quiet(v.cancelBtn)
+	p.Primary(v.okBtn)
 }
 
 func (v *View) bind(named map[string]widget.Widget) error {

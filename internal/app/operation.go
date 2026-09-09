@@ -85,7 +85,7 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 		a.eng.CloseModal(view.Dialog())
 	}
 	view.Dialog().CancelAction = cancel
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 	reporter := OperationReporter{app: a, view: view}
 	go func() {
 		defer func() {

@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T, req Request) *View {
@@ -286,5 +287,26 @@ func TestDialogDefaultAndCancelActionsAreWired(t *testing.T) {
 	v.Dialog().CancelAction()
 	if cancelCalled != 1 {
 		t.Fatalf("CancelAction: OnCancel called %d times, want 1", cancelCalled)
+	}
+}
+
+func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
+	v := newTestView(t, Request{})
+
+	v.Restyle(theme)
+
+	if v.usernameInput.Background != p.Field || v.usernameInput.BorderColor != p.Border || v.usernameInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.usernameInput.BorderColor, v.usernameInput.Background)
+	}
+	if v.secretInput.Background != p.Field || v.secretInput.BorderColor != p.Border || v.secretInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.secretInput.BorderColor, v.secretInput.Background)
+	}
+	if v.okBtn.Background != p.Accent || v.okBtn.TextColor != p.OnAccent {
+		t.Fatalf("main button = %v on %v, want the accent", v.okBtn.TextColor, v.okBtn.Background)
+	}
+	if v.cancelBtn.Background != p.Field || v.cancelBtn.BorderColor != p.Border {
+		t.Fatalf("quiet button = %v, want the field fill", v.cancelBtn.Background)
 	}
 }

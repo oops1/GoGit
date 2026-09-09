@@ -99,6 +99,7 @@ func renderPreviewFrames(t *testing.T, dir string, variant previewVariant, secti
 		view.applySearch(variant.query)
 	}
 	eng.ShowModal(view.Dialog())
+	view.Restyle(variant.theme)
 
 	eng.SaveFrames(dir + "/settings-" + section + "-" + variant.name + "-" + strconv.Itoa(variant.width))
 	eng.Start()

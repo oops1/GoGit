@@ -8,6 +8,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T, req Request) *View {
@@ -217,5 +218,17 @@ func TestDialogCancelActionInvokesReject(t *testing.T) {
 
 	if called != 1 {
 		t.Fatalf("CancelAction: OnReject called %d times, want 1", called)
+	}
+}
+
+func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
+	v := newTestView(t, Request{})
+
+	v.Restyle(theme)
+
+	if v.acceptBtn.Background != p.Field || v.acceptBtn.BorderColor != p.Border {
+		t.Fatalf("quiet button = %v, want the field fill", v.acceptBtn.Background)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T) *View {
@@ -289,53 +290,48 @@ func TestTheDialogShrinksToTheWindowButKeepsAWorkableHeight(t *testing.T) {
 func TestTextInFieldsKeepsAwayFromTheirBorder(t *testing.T) {
 	v := newTestView(t)
 
+	v.Restyle(widget.Win11LightTheme())
+
 	for _, input := range v.inputs() {
-		if input.PaddingX != fieldPaddingX {
-			t.Fatalf("input padding = %d, want %d", input.PaddingX, fieldPaddingX)
+		if input.PaddingX != style.FieldPaddingX {
+			t.Fatalf("input padding = %d, want %d", input.PaddingX, style.FieldPaddingX)
 		}
 	}
 	for _, dropdown := range v.dropdowns() {
-		if dropdown.PaddingX != fieldPaddingX {
-			t.Fatalf("dropdown padding = %d, want %d", dropdown.PaddingX, fieldPaddingX)
+		if dropdown.PaddingX != style.FieldPaddingX {
+			t.Fatalf("dropdown padding = %d, want %d", dropdown.PaddingX, style.FieldPaddingX)
 		}
 	}
 }
 
-func TestTheThemeDecidesWhichPaletteTheDialogWears(t *testing.T) {
-	if got := paletteFor(widget.Win11DarkTheme()); got != darkPalette {
-		t.Fatalf("palette = %+v, want the dark one", got)
-	}
-	if got := paletteFor(widget.Win11LightTheme()); got != lightPalette {
-		t.Fatalf("palette = %+v, want the light one", got)
-	}
-}
-
-func TestRestylePaintsTheWholeDialog(t *testing.T) {
+func TestRestylePaintsTheWholeDialogInTheColoursOfTheTheme(t *testing.T) {
 	v := newTestView(t)
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
 
-	v.Restyle(widget.Win11DarkTheme())
+	v.Restyle(theme)
 
-	if v.Dialog().Background != darkPalette.surface || v.footer.Background != darkPalette.chrome {
-		t.Fatalf("surface = %v, footer = %v, want the dark palette", v.Dialog().Background, v.footer.Background)
+	if v.Dialog().Background != p.Surface || v.footer.Background != p.Chrome {
+		t.Fatalf("surface = %v, footer = %v, want the theme", v.Dialog().Background, v.footer.Background)
 	}
 	for _, input := range v.inputs() {
-		if input.Background != darkPalette.input || input.BorderColor != darkPalette.border {
-			t.Fatalf("input = %v on %v, want the dark palette", input.TextColor, input.Background)
+		if input.Background != p.Field || input.BorderColor != p.Border {
+			t.Fatalf("input = %v on %v, want the field colours", input.BorderColor, input.Background)
 		}
 	}
 	for _, dropdown := range v.dropdowns() {
-		if dropdown.Background != darkPalette.input || dropdown.TextColor != darkPalette.text {
-			t.Fatalf("dropdown = %v on %v, want the dark palette", dropdown.TextColor, dropdown.Background)
+		if dropdown.Background != p.Field || dropdown.TextColor != p.Text {
+			t.Fatalf("dropdown = %v on %v, want the same colours as the inputs", dropdown.TextColor, dropdown.Background)
 		}
 	}
-	if v.okBtn.Background != darkPalette.primary || v.okBtn.TextColor != darkPalette.onPrimary {
-		t.Fatal("the saving button must stay the accent one")
+	if v.okBtn.Background != p.Accent || v.okBtn.TextColor != p.OnAccent {
+		t.Fatal("the saving button must be filled with the accent of the theme")
 	}
-	if v.cancelBtn.Background != darkPalette.input {
+	if v.cancelBtn.Background != p.Field || v.cancelBtn.BorderColor != p.Border {
 		t.Fatalf("cancel = %v, want the quiet fill", v.cancelBtn.Background)
 	}
 	for _, label := range []*widget.Label{v.pathLabel, v.hintLabel, v.identityHint, v.pullHint} {
-		if label.TextColor != darkPalette.secondary {
+		if label.TextColor != p.Secondary {
 			t.Fatalf("hint colour = %v, want the secondary one", label.TextColor)
 		}
 	}

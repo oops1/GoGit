@@ -239,7 +239,7 @@ func (a *App) openClone() {
 	view.OnCancel = func() {
 		a.eng.CloseModal(view.Dialog())
 	}
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) checkCloneURL(view *clone.View, url string) {
@@ -325,7 +325,7 @@ func (a *App) openManageRemotes() {
 	view.OnClose = func() {
 		a.eng.CloseModal(view.Dialog())
 	}
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) remoteEntries(o *openedRepository) []remotes.Entry {

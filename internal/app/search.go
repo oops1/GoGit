@@ -43,7 +43,7 @@ func (a *App) openSearch() {
 	}
 	view.SetRoot(a.defaultSearchRoot())
 	a.wireSearchView(view)
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 }
 
 var userHomeDir = os.UserHomeDir

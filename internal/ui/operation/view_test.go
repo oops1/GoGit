@@ -10,6 +10,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T, title string) *View {
@@ -356,5 +357,17 @@ func TestDialogTitleUsesProvidedTitle(t *testing.T) {
 	v := newTestView(t, "Fetch all remotes")
 	if v.Dialog().Title != "Fetch all remotes" {
 		t.Fatalf("title = %q", v.Dialog().Title)
+	}
+}
+
+func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
+	v := newTestView(t, "Pull")
+
+	v.Restyle(theme)
+
+	if v.cancelBtn.Background != p.Field || v.cancelBtn.BorderColor != p.Border {
+		t.Fatalf("quiet button = %v, want the field fill", v.cancelBtn.Background)
 	}
 }

@@ -40,7 +40,7 @@ func (a *App) openAddWorktree() {
 	view.SetKnown(a.knownWorktreeBranches(o))
 	view.SetParentDirectory(filepath.Dir(o.path))
 	a.wireWorktreeView(view)
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) knownWorktreeBranches(o *openedRepository) worktree.Known {

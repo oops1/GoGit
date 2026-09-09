@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T, initial Request) *View {
@@ -365,5 +366,26 @@ func TestDialogTitleUsesLocalizedText(t *testing.T) {
 	v := newTestView(t, Request{})
 	if v.Dialog().Title != i18n.T("Dialog.AddRepo.Title") {
 		t.Fatalf("title = %q", v.Dialog().Title)
+	}
+}
+
+func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
+	v := newTestView(t, Request{})
+
+	v.Restyle(theme)
+
+	if v.pathInput.Background != p.Field || v.pathInput.BorderColor != p.Border || v.pathInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.pathInput.BorderColor, v.pathInput.Background)
+	}
+	if v.nameInput.Background != p.Field || v.nameInput.BorderColor != p.Border || v.nameInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.nameInput.BorderColor, v.nameInput.Background)
+	}
+	if v.okBtn.Background != p.Accent || v.okBtn.TextColor != p.OnAccent {
+		t.Fatalf("main button = %v on %v, want the accent", v.okBtn.TextColor, v.okBtn.Background)
+	}
+	if v.cancelBtn.Background != p.Field || v.cancelBtn.BorderColor != p.Border {
+		t.Fatalf("quiet button = %v, want the field fill", v.cancelBtn.Background)
 	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "operation"
@@ -51,6 +52,12 @@ func NewView(eng widget.ModalShower, title string) (*View, error) {
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
+
+func (v *View) Restyle(t *widget.Theme) {
+	p := style.Of(t)
+	p.Quiet(v.cancelBtn, v.closeBtn)
+	p.Body(v.statusLabel)
+}
 
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool

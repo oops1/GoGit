@@ -26,8 +26,7 @@ func (a *App) openAbout() {
 	view.OnClose = func() { a.eng.CloseModal(view.Dialog()) }
 	view.OnGitHub = func() { a.openBrowser(projectURL) }
 	view.OnLicense = func() { a.openBrowser(licenseURL) }
-	a.eng.ShowModal(view.Dialog())
-	view.Restyle(themeFor(a.EffectiveTheme()))
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) openBrowser(raw string) {

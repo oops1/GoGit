@@ -35,7 +35,7 @@ func (a *App) confirmHostKey(ctx context.Context, key transport.HostKey) (bool, 
 			a.eng.CloseModal(view.Dialog())
 			ch <- response{}
 		}
-		a.eng.ShowModal(view.Dialog())
+		a.showModal(view.Dialog(), view)
 	})
 	select {
 	case r := <-ch:

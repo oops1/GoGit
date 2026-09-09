@@ -51,7 +51,7 @@ func (a *App) defaultShowSettings(initial settings.Model, cb func(settings.Model
 		return
 	}
 	a.wireSettingsView(view, cb)
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 	a.wireSecretsView(view)
 	a.refreshCredentialSourceInfo(view)
 }
