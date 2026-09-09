@@ -94,12 +94,12 @@ func TestWorkingCopyButtonVisualsSkipAnAppWithoutTheButton(t *testing.T) {
 	a := newTestApp(t)
 	a.filesWorkingCopyBtn = nil
 
-	a.applyWorkingCopyButtonVisuals(themeFor(a.EffectiveTheme()))
+	a.applyWorkingCopyButtonVisuals(a.theme())
 }
 
 func TestWorkingCopyButtonCarriesAnIconAndTheAccent(t *testing.T) {
 	a := newTestApp(t)
-	theme := themeFor(a.EffectiveTheme())
+	theme := a.theme()
 
 	a.applyWorkingCopyButtonVisuals(theme)
 

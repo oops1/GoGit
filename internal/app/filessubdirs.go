@@ -21,7 +21,7 @@ func (a *App) wireFilesSubdirsButton() {
 
 func (a *App) toggleFilesSubdirectories() {
 	a.cfg.UI.FilesSubdirectories = !a.cfg.UI.FilesSubdirectories
-	a.applyFilesSubdirsButtonVisuals(themeFor(a.EffectiveTheme()))
+	a.applyFilesSubdirsButtonVisuals(a.theme())
 	a.applyFilesFilter()
 	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
 		a.log.Warn("save config failed", "error", err)

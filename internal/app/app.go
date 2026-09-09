@@ -35,6 +35,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/panetitle"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
+	"github.com/oops1/gogit/internal/ui/style"
 	"github.com/oops1/gogit/internal/vault"
 )
 
@@ -59,6 +60,7 @@ type App struct {
 	OnExit   func()
 	langID   int
 	detect   func() systheme.Scheme
+	accentOf func() systheme.Accent
 	log      *slog.Logger
 
 	layoutStore   layout.Store
@@ -270,6 +272,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		watchdogInterval:  defaultWatchdogInterval,
 		watchdogStall:     defaultWatchdogStall,
 		detect:            systheme.Detect,
+		accentOf:          systheme.DetectAccent,
 		log:               log,
 		languages:         cat.Codes(),
 		statusLabel:       statusTextWidget,
@@ -755,6 +758,33 @@ func (a *App) SetSystemThemeDetector(fn func() systheme.Scheme) {
 	a.applyTheme()
 }
 
+func (a *App) SetSystemAccentDetector(fn func() systheme.Accent) {
+	a.mu.Lock()
+	a.accentOf = fn
+	a.mu.Unlock()
+	a.applyTheme()
+}
+
+func (a *App) theme() *widget.Theme {
+	name := a.EffectiveTheme()
+	base := themeFor(name)
+	a.mu.Lock()
+	accentOf := a.accentOf
+	a.mu.Unlock()
+	accent := accentOf()
+	if !accent.Known {
+		return base
+	}
+	return style.Tinted(base, accent.For(schemeOf(name)))
+}
+
+func schemeOf(name string) systheme.Scheme {
+	if name == config.ThemeLight {
+		return systheme.Light
+	}
+	return systheme.Dark
+}
+
 func (a *App) EffectiveTheme() string {
 	a.mu.Lock()
 	detect := a.detect
@@ -763,8 +793,9 @@ func (a *App) EffectiveTheme() string {
 }
 
 func (a *App) applyTheme() {
-	theme := themeFor(a.EffectiveTheme())
+	theme := a.theme()
 	a.eng.SetTheme(theme)
+	a.applyWindowFrame(theme)
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
@@ -773,6 +804,17 @@ func (a *App) applyTheme() {
 	a.applyPaneTitleColors(theme)
 	a.applyMenuIcons()
 	a.journalView.Restyle(theme)
+}
+
+func (a *App) applyWindowFrame(t *widget.Theme) {
+	a.mu.Lock()
+	accentOf := a.accentOf
+	a.mu.Unlock()
+	if accent := accentOf(); accent.Known && accent.OnFrame {
+		a.root.BorderColor = accent.For(schemeOf(a.EffectiveTheme()))
+		return
+	}
+	a.root.BorderColor = t.Border
 }
 
 func (a *App) applyPaneTitleColors(t *widget.Theme) {
@@ -789,10 +831,7 @@ func (a *App) FollowSystemTheme(ctx context.Context) {
 	systheme.Watch(ctx, systemThemePoll, a.OnSystemThemeChanged)
 }
 
-func (a *App) OnSystemThemeChanged(systheme.Scheme) bool {
-	if a.cfg.Theme != config.ThemeSystem {
-		return false
-	}
+func (a *App) OnSystemThemeChanged(systheme.State) bool {
 	a.applyTheme()
 	return true
 }

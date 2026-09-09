@@ -10,5 +10,5 @@ type styledView interface {
 
 func (a *App) showModal(modal widget.ModalWidget, view styledView) {
 	a.eng.ShowModal(modal)
-	view.Restyle(themeFor(a.EffectiveTheme()))
+	view.Restyle(a.theme())
 }

@@ -11,16 +11,20 @@ func detectFromDesktopFiles(getenv func(string) string, home string) Scheme {
 	if s := fromGTKThemeEnv(getenv("GTK_THEME")); s != Unknown {
 		return s
 	}
-	configDir := getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		configDir = filepath.Join(home, ".config")
-	}
+	configDir := configHome(getenv, home)
 	for _, rel := range []string{"gtk-4.0/settings.ini", "gtk-3.0/settings.ini"} {
 		if s := fromGTKSettings(filepath.Join(configDir, rel)); s != Unknown {
 			return s
 		}
 	}
 	return fromKDEGlobals(filepath.Join(configDir, "kdeglobals"))
+}
+
+func configHome(getenv func(string) string, home string) string {
+	if dir := getenv("XDG_CONFIG_HOME"); dir != "" {
+		return dir
+	}
+	return filepath.Join(home, ".config")
 }
 
 func fromGTKThemeEnv(value string) Scheme {
@@ -99,4 +103,19 @@ func readINI(path, section string) map[string]string {
 		values[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	}
 	return values
+}
+
+func accentFromDesktopFiles(getenv func(string) string, home string) Accent {
+	path := filepath.Join(configHome(getenv, home), "kdeglobals")
+	if value, ok := readINI(path, "General")["AccentColor"]; ok {
+		if base, ok := parseChannels(value); ok {
+			return withShades(base, false)
+		}
+	}
+	if value, ok := readINI(path, "Colors:Selection")["BackgroundNormal"]; ok {
+		if base, ok := parseChannels(value); ok {
+			return withShades(base, false)
+		}
+	}
+	return Accent{}
 }

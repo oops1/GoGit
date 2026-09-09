@@ -117,7 +117,7 @@ func TestClickingAFilesStatusButtonTogglesItsFilter(t *testing.T) {
 
 func TestApplyFilesStatusButtonVisualsMarksDisabledButtonsDifferentlyFromEnabledOnes(t *testing.T) {
 	a := newTestApp(t)
-	theme := themeFor(a.EffectiveTheme())
+	theme := a.theme()
 
 	enabledBG := a.filesStatusButton(changes.FilterModified).Background
 	enabledBorder := a.filesStatusButton(changes.FilterModified).BorderColor

@@ -84,7 +84,7 @@ func (a *App) wireSearchView(view *search.View) {
 
 func (a *App) startRepositorySearch(view *search.View, root string, includeBare bool) {
 	view.SetScanning(true)
-	view.SetStatus(i18n.T("Dialog.Search.Scanning"), themeFor(a.EffectiveTheme()).LabelText)
+	view.SetStatus(i18n.T("Dialog.Search.Scanning"), a.theme().LabelText)
 	searchWG.Go(func() {
 		found, err := scanRepositories(context.Background(), root, includeBare)
 		a.Post(func() {
@@ -109,7 +109,7 @@ func (a *App) searchStatusColor(err error) color.RGBA {
 	if err != nil {
 		return secretsErrorTextColor
 	}
-	return themeFor(a.EffectiveTheme()).LabelText
+	return a.theme().LabelText
 }
 
 var addRepositoryToRegistry = func(r *repo.Registry, name, path, group string) (*repo.Node, error) {
