@@ -119,20 +119,24 @@ func TestNewViewPropagatesALoadFailure(t *testing.T) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"logo":          widget.NewImageWidget(),
-		"githubIcon":    widget.NewImageWidget(),
-		"summaryFirst":  widget.NewWin10Label(""),
-		"summarySecond": widget.NewWin10Label(""),
-		"tagline":       widget.NewWin10Label(""),
-		"version":       widget.NewWin10Label(""),
-		"platform":      widget.NewWin10Label(""),
-		"architecture":  widget.NewWin10Label(""),
-		"gitEngine":     widget.NewWin10Label(""),
-		"guiEngine":     widget.NewWin10Label(""),
-		"copyright":     widget.NewWin10Label(""),
-		"github":        widget.NewButton(""),
-		"license":       widget.NewButton(""),
-		"ok":            widget.NewButton(""),
+		"platformLabel":     widget.NewWin10Label(""),
+		"architectureLabel": widget.NewWin10Label(""),
+		"gitEngineLabel":    widget.NewWin10Label(""),
+		"guiEngineLabel":    widget.NewWin10Label(""),
+		"logo":              widget.NewImageWidget(),
+		"githubIcon":        widget.NewImageWidget(),
+		"summaryFirst":      widget.NewWin10Label(""),
+		"summarySecond":     widget.NewWin10Label(""),
+		"tagline":           widget.NewWin10Label(""),
+		"version":           widget.NewWin10Label(""),
+		"platform":          widget.NewWin10Label(""),
+		"architecture":      widget.NewWin10Label(""),
+		"gitEngine":         widget.NewWin10Label(""),
+		"guiEngine":         widget.NewWin10Label(""),
+		"copyright":         widget.NewWin10Label(""),
+		"github":            widget.NewButton(""),
+		"license":           widget.NewButton(""),
+		"ok":                widget.NewButton(""),
 	}
 }
 
