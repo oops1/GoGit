@@ -586,3 +586,44 @@ func TestConcurrentWritersStoreEveryObject(t *testing.T) {
 		}
 	}
 }
+
+func TestAnObjectPackedAfterOpeningIsStillFound(t *testing.T) {
+	objects := newObjectsDir(t)
+	db := openDB(t, objects, Options{})
+	packed := packFixtureObjects(t)[0]
+
+	if known, err := db.Has(packed.id); err != nil || known {
+		t.Fatalf("Has gave (%v, %v) before the pack was written", known, err)
+	}
+
+	copyFixturePacks(t, objects)
+
+	kind, data, err := db.Get(packed.id)
+	if err != nil {
+		t.Fatalf("Get returned error %v for an object packed after the database was opened", err)
+	}
+	if kind != packed.kind || int64(len(data)) != packed.size {
+		t.Fatalf("Get gave %s of %d bytes, want %s of %d", kind, len(data), packed.kind, packed.size)
+	}
+	if known, err := db.Has(packed.id); err != nil || !known {
+		t.Fatalf("Has gave (%v, %v) once the pack was there", known, err)
+	}
+	if size, err := db.Size(packed.id); err != nil || size != packed.size {
+		t.Fatalf("Size gave (%d, %v), want %d", size, err, packed.size)
+	}
+}
+
+func TestAnObjectThatIsNowhereStaysMissing(t *testing.T) {
+	db := newFixtureDB(t)
+	missing := hash.SumSHA1(object.TypeBlob.String(), []byte("nobody wrote this"))
+
+	if _, _, err := db.Get(missing); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get returned %v, want ErrNotFound", err)
+	}
+	if known, err := db.Has(missing); err != nil || known {
+		t.Fatalf("Has gave (%v, %v), want it missing", known, err)
+	}
+	if _, err := db.Size(missing); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Size returned %v, want ErrNotFound", err)
+	}
+}

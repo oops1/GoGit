@@ -123,7 +123,7 @@ func (d *DB) Get(id hash.ObjectID) (object.Type, []byte, error) {
 	if kind, data, ok := d.cache.raw.get(id); ok {
 		return kind, data, nil
 	}
-	kind, data, ok, err := d.lookup(id)
+	kind, data, ok, err := d.lookupFresh(id)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -132,6 +132,17 @@ func (d *DB) Get(id hash.ObjectID) (object.Type, []byte, error) {
 	}
 	d.cache.raw.put(id, kind, data)
 	return kind, data, nil
+}
+
+func (d *DB) lookupFresh(id hash.ObjectID) (object.Type, []byte, bool, error) {
+	kind, data, ok, err := d.lookup(id)
+	if ok || err != nil {
+		return kind, data, ok, err
+	}
+	if grown, err := d.Reload(); err != nil || !grown {
+		return 0, nil, false, err
+	}
+	return d.lookup(id)
 }
 
 func (d *DB) lookup(id hash.ObjectID) (object.Type, []byte, bool, error) {
@@ -157,6 +168,13 @@ func (d *DB) lookup(id hash.ObjectID) (object.Type, []byte, bool, error) {
 func (d *DB) Has(id hash.ObjectID) (bool, error) {
 	if _, _, ok := d.cache.raw.get(id); ok {
 		return true, nil
+	}
+	ok, err := d.has(id)
+	if ok || err != nil {
+		return ok, err
+	}
+	if grown, err := d.Reload(); err != nil || !grown {
+		return false, err
 	}
 	return d.has(id)
 }
@@ -195,7 +213,7 @@ func (d *DB) Info(id hash.ObjectID) (object.Type, int64, error) {
 	if kind, data, ok := d.cache.raw.get(id); ok {
 		return kind, int64(len(data)), nil
 	}
-	kind, size, ok, err := d.header(id)
+	kind, size, ok, err := d.headerFresh(id)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -203,6 +221,17 @@ func (d *DB) Info(id hash.ObjectID) (object.Type, int64, error) {
 		return 0, 0, fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
 	return kind, size, nil
+}
+
+func (d *DB) headerFresh(id hash.ObjectID) (object.Type, int64, bool, error) {
+	kind, size, ok, err := d.header(id)
+	if ok || err != nil {
+		return kind, size, ok, err
+	}
+	if grown, err := d.Reload(); err != nil || !grown {
+		return 0, 0, false, err
+	}
+	return d.header(id)
 }
 
 func (d *DB) header(id hash.ObjectID) (object.Type, int64, bool, error) {

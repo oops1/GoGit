@@ -385,6 +385,29 @@ func TestPullFastForwardsTheCurrentBranch(t *testing.T) {
 	}
 }
 
+func TestPullPutsTheCommitsItBroughtIntoTheJournal(t *testing.T) {
+	dir := t.TempDir()
+	server := filepath.Join(dir, "server")
+	local := filepath.Join(dir, "local")
+	initRemoteServerRepo(t, server, "main")
+
+	a := newRemoteTestApp(t)
+	views := captureOperationViews(t)
+	cloneIntoRegistry(t, a, server, local)
+	head := journalRowOnDispatcher(t, a, 0).ID
+
+	newCommit := addRemoteServerCommit(t, server, "main", "second.txt", "second\n")
+
+	a.startPull()
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+
+	row := waitForJournalHeadChange(t, a, head)
+	if row.ID != newCommit {
+		t.Fatalf("journal head = %s, want the commit the pull brought in (%s)", row.ID, newCommit)
+	}
+}
+
 func TestPushSendsLocalCommitsToTheServer(t *testing.T) {
 	dir := t.TempDir()
 	server := filepath.Join(dir, "server")
