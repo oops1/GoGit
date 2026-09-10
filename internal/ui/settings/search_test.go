@@ -362,7 +362,7 @@ func TestSearchAnnotatesNavigationWithMatchesInOtherSections(t *testing.T) {
 
 	v.applySearch("sync")
 
-	want := i18n.Tf("Dialog.Settings.Nav.MatchCount", i18n.T("Dialog.Settings.Nav.Git"), 5)
+	want := i18n.Tf("Dialog.Settings.Nav.MatchCount", i18n.T("Dialog.Settings.Nav.Git"), 6)
 	if got := navHeaderFor(v, "git"); got != want {
 		t.Fatalf("git nav header = %q, want %q", got, want)
 	}

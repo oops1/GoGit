@@ -10,7 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const gitAdvancedRow = 15
+const gitAdvancedRow = 18
 
 type searchField struct {
 	section    string
@@ -89,8 +89,11 @@ func (v *View) buildSearchIndex() {
 		{section: "git", grid: v.sectionGit, rows: []int{10, 11},
 			labelKey: "Dialog.Settings.DefaultRemote", hintKey: "Dialog.Settings.DefaultRemote.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync", value: v.defaultRemote.GetText},
-		{section: "git", grid: v.sectionGit, rows: []int{12, 13, 14},
+		{section: "git", grid: v.sectionGit, rows: []int{12, 13},
 			labelKey: "Dialog.Settings.PruneOnFetch", hintKey: "Dialog.Settings.PruneOnFetch.Hint",
+			groupKey: "Dialog.Settings.Group.FetchSync"},
+		{section: "git", grid: v.sectionGit, rows: []int{14, 15, 16, 17},
+			labelKey: "Dialog.Settings.BanAttribution", hintKey: "Dialog.Settings.BanAttribution.Hint",
 			groupKey: "Dialog.Settings.Group.FetchSync"},
 
 		{section: "git", grid: v.gitAdvancedContent, rows: []int{0, 1},

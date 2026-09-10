@@ -195,6 +195,9 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		return err
 	}
 	defer func() { _ = r.Close() }()
+	if err := a.banAttribution(ctx, r, refs.Name(spec.Src), reporter); err != nil {
+		return err
+	}
 	result, err := ops.Push(ctx, r, a.effectiveDefaultRemote(r), remote.PushOptions{
 		Refspecs:  []refspec.RefSpec{spec},
 		Progress:  prog,
@@ -211,6 +214,24 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		return nil
 	}
 	reporter.Log(i18n.Tf("Operation.Log.Pushed", pushSummary(result.Changes)))
+	return nil
+}
+
+func (a *App) banAttribution(ctx context.Context, r *gitrepo.Repository, branch refs.Name, reporter OperationReporter) error {
+	if !a.cfg.Git.BanAttribution {
+		return nil
+	}
+	result, err := ops.StripAttribution(ctx, r, branch)
+	if errors.Is(err, ops.ErrUnsignedCommit) {
+		reporter.Log(i18n.T("Operation.Log.UnsignedCommit"))
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if result.Rewritten > 0 {
+		reporter.Log(i18n.Tf("Operation.Log.AttributionRemoved", result.Rewritten))
+	}
 	return nil
 }
 
