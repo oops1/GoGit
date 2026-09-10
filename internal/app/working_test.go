@@ -512,3 +512,42 @@ func TestWorkingScanIsNotRestartedWhileItRunsAndRepeatsAfterwards(t *testing.T) 
 		t.Fatalf("after the repeat the scan flags must be clear, busy=%v again=%v", busy, pending)
 	}
 }
+
+func TestARescanAskedForDuringAScanKeepsTheWorkingCopyBusyUntilItStarts(t *testing.T) {
+	a := newTestApp(t)
+	a.workingFlagMu.Lock()
+	a.workingBusy = true
+	a.workingAgain = true
+	a.workingFlagMu.Unlock()
+
+	a.finishWorking()
+
+	a.workingFlagMu.Lock()
+	busy, again := a.workingBusy, a.workingAgain
+	a.workingFlagMu.Unlock()
+	if !busy || again {
+		t.Fatalf("busy = %v, again = %v, want the queued scan to keep the working copy busy", busy, again)
+	}
+
+	waitForPostQueueDrain(t, a)
+
+	a.workingFlagMu.Lock()
+	busy = a.workingBusy
+	a.workingFlagMu.Unlock()
+	if busy {
+		t.Fatal("without a repository the queued scan must leave the working copy idle")
+	}
+}
+
+func TestAScanThatFindsNoRepositoryLeavesNothingBusy(t *testing.T) {
+	a := newTestApp(t)
+
+	a.requestWorking()
+
+	a.workingFlagMu.Lock()
+	busy, again := a.workingBusy, a.workingAgain
+	a.workingFlagMu.Unlock()
+	if busy || again {
+		t.Fatalf("busy = %v, again = %v, want both clear", busy, again)
+	}
+}
