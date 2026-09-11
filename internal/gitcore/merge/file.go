@@ -17,11 +17,12 @@ const (
 )
 
 const (
-	oursMarker   = "<<<<<<<"
-	baseMarker   = "|||||||"
-	middleMarker = "======="
-	theirsMarker = ">>>>>>>"
-	joinGap      = 3
+	oursMarker        = '<'
+	baseMarker        = '|'
+	middleMarker      = '='
+	theirsMarker      = '>'
+	DefaultMarkerSize = 7
+	joinGap           = 3
 )
 
 type Labels struct {
@@ -31,9 +32,17 @@ type Labels struct {
 }
 
 type Options struct {
-	Style  Style
-	Labels Labels
-	Diff   diff.Options
+	Style      Style
+	Labels     Labels
+	Diff       diff.Options
+	MarkerSize int
+}
+
+func (o Options) markerSize() int {
+	if o.MarkerSize <= 0 {
+		return DefaultMarkerSize
+	}
+	return o.MarkerSize
 }
 
 type Result struct {
@@ -160,15 +169,15 @@ func appendConflict(out []string, current chunk, opts Options) []string {
 }
 
 func conflictBody(out, ourSide, theirSide, baseSide []string, opts Options) []string {
-	out = append(out, marker(oursMarker, opts.Labels.Ours))
+	out = append(out, opts.marker(oursMarker, opts.Labels.Ours))
 	out = appendLines(out, ourSide)
 	if opts.Style != StyleMerge {
-		out = append(out, marker(baseMarker, opts.Labels.Base))
+		out = append(out, opts.marker(baseMarker, opts.Labels.Base))
 		out = appendLines(out, baseSide)
 	}
-	out = append(out, marker(middleMarker, ""))
+	out = append(out, opts.marker(middleMarker, ""))
 	out = appendLines(out, theirSide)
-	return append(out, marker(theirsMarker, opts.Labels.Theirs))
+	return append(out, opts.marker(theirsMarker, opts.Labels.Theirs))
 }
 
 func trimCommon(ourSide, theirSide []string) (head, ours, theirs, tail []string) {
@@ -196,7 +205,8 @@ func appendLines(out, lines []string) []string {
 	return out
 }
 
-func marker(mark, label string) string {
+func (o Options) marker(sign byte, label string) string {
+	mark := strings.Repeat(string(sign), o.markerSize())
 	if label == "" {
 		return mark + "\n"
 	}

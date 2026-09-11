@@ -38,6 +38,8 @@ const (
 	ConflictSymlink
 	ConflictSubmodule
 	ConflictFileDirectory
+	ConflictRenameDelete
+	ConflictRenameRename
 )
 
 type Conflict struct {
@@ -49,7 +51,9 @@ type Conflict struct {
 }
 
 type TreeOptions struct {
-	File Options
+	File         Options
+	OurRenames   Renames
+	TheirRenames Renames
 }
 
 type TreeResult struct {
@@ -60,9 +64,13 @@ type TreeResult struct {
 func (r TreeResult) Clean() bool { return len(r.Conflicts) == 0 }
 
 func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (TreeResult, error) {
-	result := TreeResult{Tree: Snapshot{}}
-	for _, path := range unionPaths(base, ours, theirs) {
-		merged, conflict, err := mergePath(path, lookup(base, path), lookup(ours, path), lookup(theirs, path), objects, opts)
+	a, err := align(base, ours, theirs, objects, opts)
+	if err != nil {
+		return TreeResult{}, err
+	}
+	result := TreeResult{Tree: a.decided, Conflicts: a.conflicts}
+	for _, path := range unionPaths(a.base, a.ours, a.theirs) {
+		merged, conflict, err := mergePath(path, lookup(a.base, path), lookup(a.ours, path), lookup(a.theirs, path), objects, a.optionsFor(path, opts))
 		if err != nil {
 			return TreeResult{}, err
 		}
