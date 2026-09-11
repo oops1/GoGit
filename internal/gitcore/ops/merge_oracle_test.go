@@ -77,11 +77,14 @@ type mergeScenario struct {
 	opts   MergeOptions
 	after  func(b *mergeBuilder, ours bool)
 	pick   string
+	onto   string
 }
 
 const (
-	pickCherry = "cherry-pick"
-	pickRevert = "revert"
+	pickCherry      = "cherry-pick"
+	pickRevert      = "revert"
+	pickRebase      = "rebase"
+	pickRebaseByGit = "rebase started by git"
 )
 
 func forkedHistory(ours, theirs map[string]string) func(b *mergeBuilder) {
@@ -287,6 +290,37 @@ func mergeScenarios() []mergeScenario {
 		{name: "revert with a conflict", pick: pickRevert, target: "HEAD~1", setup: revertHistory},
 		{name: "revert resolved and committed", pick: pickRevert, target: "HEAD~1", setup: revertHistory, after: resolveAndCommit},
 		{name: "revert aborted", pick: pickRevert, target: "HEAD~1", setup: revertHistory, after: abortWith("revert")},
+		{name: "rebase", pick: pickRebase, target: "main", setup: rebaseHistory(false)},
+		{name: "rebase with a conflict", pick: pickRebase, target: "main", setup: rebaseHistory(true)},
+		{name: "rebase continued", pick: pickRebase, target: "main", setup: rebaseHistory(true), after: continueRebase(false)},
+		{name: "rebase continued by git", pick: pickRebase, target: "main", setup: rebaseHistory(true), after: continueRebase(true)},
+		{name: "rebase started by git continued by us", pick: pickRebaseByGit, target: "main", setup: rebaseHistory(true), after: continueRebase(false)},
+		{name: "rebase skipped", pick: pickRebase, target: "main", setup: rebaseHistory(true), after: skipRebase},
+		{name: "rebase aborted", pick: pickRebase, target: "main", setup: rebaseHistory(true), after: abortWith("rebase")},
+		{name: "rebase up to date", pick: pickRebase, target: "main", setup: func(b *mergeBuilder) {
+			b.commit("base", map[string]string{"f": f})
+			b.git("checkout", "-q", "-b", "topic")
+			b.commit("topic", map[string]string{"g": g})
+		}},
+		{name: "rebase of a branch behind", pick: pickRebase, target: "main", setup: func(b *mergeBuilder) {
+			b.commit("base", map[string]string{"f": f})
+			b.git("branch", "topic")
+			b.commit("main", map[string]string{"g": g})
+			b.git("checkout", "-q", "topic")
+		}},
+		{name: "rebase over a change already upstream", pick: pickRebase, target: "main", setup: func(b *mergeBuilder) {
+			b.commit("base", map[string]string{"f": f})
+			b.git("checkout", "-q", "-b", "topic")
+			b.commit("shared", map[string]string{"g": g})
+			b.commit("topic only", map[string]string{"h": "h\n"})
+			b.git("checkout", "-q", "main")
+			b.commit("shared", map[string]string{"g": g})
+			b.git("checkout", "-q", "topic")
+		}},
+		{name: "rebase onto another base", pick: pickRebase, target: "main", onto: "other", setup: func(b *mergeBuilder) {
+			rebaseHistory(false)(b)
+			b.git("branch", "other", "main~1")
+		}},
 		{name: "conflict resolved and committed", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: resolveAndCommit},
 		{name: "conflict aborted", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": editLine(f, 4, "THEIRS"), "new": "new\n"})(b)
@@ -318,6 +352,57 @@ func revertHistory(b *mergeBuilder) {
 	b.commit("base", map[string]string{"f": f})
 	b.commit("change", map[string]string{"f": editLine(f, 4, "CHANGED")})
 	b.commit("change again", map[string]string{"f": editLine(f, 4, "AGAIN")})
+}
+
+func rebaseHistory(conflict bool) func(b *mergeBuilder) {
+	f := lines("f", 10)
+	return func(b *mergeBuilder) {
+		b.commit("base", map[string]string{"f": f, "keep": "keep\n"})
+		b.git("checkout", "-q", "-b", "topic")
+		b.commit("topic a", map[string]string{"a": "a\n"})
+		line := 9
+		if conflict {
+			line = 4
+		}
+		b.write(map[string]string{"f": editLine(f, line, "TOPIC")})
+		b.git("commit", "-q", "--author=Other Person <other@example.com>", "-m", "topic f", "-m", "body")
+		b.commit("topic b", map[string]string{"b": "b\n"})
+		b.git("checkout", "-q", "main")
+		b.commit("main f", map[string]string{"f": editLine(f, 4, "MAIN")})
+		b.git("checkout", "-q", "topic")
+	}
+}
+
+func continueRebase(withGit bool) func(b *mergeBuilder, ours bool) {
+	return func(b *mergeBuilder, ours bool) {
+		b.o.t.Helper()
+		b.o.write(b.dir, "f", "resolved\n")
+		if !ours || withGit {
+			b.o.run(b.dir, "add", "f")
+			b.git("-c", "core.editor=true", "rebase", "--continue")
+			return
+		}
+		r := b.o.openRepo(b.dir)
+		if err := Stage(b.o.t.Context(), r, []string{"f"}, StageOptions{}); err != nil {
+			b.o.t.Fatalf("Stage: %v", err)
+		}
+		b.dated()
+		if _, err := ContinueRebase(b.o.t.Context(), r, RebaseOptions{When: time.Unix(b.clock, 0).UTC()}); err != nil {
+			b.o.t.Fatalf("ContinueRebase: %v", err)
+		}
+	}
+}
+
+func skipRebase(b *mergeBuilder, ours bool) {
+	b.o.t.Helper()
+	if !ours {
+		b.git("rebase", "--skip")
+		return
+	}
+	b.dated()
+	if _, err := SkipRebase(b.o.t.Context(), b.o.openRepo(b.dir), RebaseOptions{When: time.Unix(b.clock, 0).UTC()}); err != nil {
+		b.o.t.Fatalf("SkipRebase: %v", err)
+	}
 }
 
 func resolveAndCommit(b *mergeBuilder, ours bool) {
@@ -396,7 +481,10 @@ func mergeStateOf(b *mergeBuilder, refused bool) string {
 	}
 	add("index", b.o.run(b.dir, "ls-files", "-s"))
 	add("status", b.o.run(b.dir, "status", "--porcelain", "-uall"))
-	for _, name := range []string{mergeHeadFile, mergeMsgFile, mergeModeFile, origHeadFile, autoMergeFile, squashMsgFile, pickHeadFile, revertFile} {
+	for _, name := range []string{mergeHeadFile, mergeMsgFile, mergeModeFile, origHeadFile, autoMergeFile, squashMsgFile, pickHeadFile, revertFile, rebaseHeadFile,
+		rebasePath(rebaseHeadName), rebasePath(rebaseOnto), rebasePath(rebaseOrigHead), rebasePath(rebaseTodo), rebasePath(rebaseDone),
+		rebasePath(rebaseMsgNum), rebasePath(rebaseEnd), rebasePath(rebaseStopped), rebasePath(rebaseMessage), rebasePath(rebaseAuthorScript),
+		rebasePath(rebaseRewritten)} {
 		if refused && name == autoMergeFile {
 			continue
 		}
@@ -437,20 +525,29 @@ func sections(state string) map[string]string {
 	return out
 }
 
+const diffLineLimit = 24
+
 func sectionDiff(got, want string) string {
 	ours, theirs := sections(got), sections(want)
-	var b strings.Builder
+	var lines []string
 	for _, label := range slices.Sorted(maps.Keys(unionKeys(ours, theirs, map[string]bool{}))) {
-		if ours[label] != theirs[label] {
-			b.WriteString("== " + label + "\n-- ours:\n" + ours[label] + "\n-- git:\n" + theirs[label] + "\n")
+		if ours[label] == theirs[label] {
+			continue
 		}
+		lines = append(lines, "== "+label, "-- ours: "+strconv.Quote(ours[label]), "-- git:  "+strconv.Quote(theirs[label]))
 	}
-	return b.String()
+	if len(lines) > diffLineLimit {
+		lines = append(lines[:diffLineLimit], "…")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOptions) (MergeResult, error) {
 	t.Helper()
 	switch s.pick {
+	case pickRebase:
+		rebased, err := Rebase(t.Context(), r, s.target, RebaseOptions{When: opts.When, Onto: s.onto})
+		return MergeResult{Conflicts: rebased.Conflicts}, err
 	case pickCherry, pickRevert:
 		run := CherryPick
 		if s.pick == pickRevert {
@@ -477,14 +574,28 @@ func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 			gitSide, ourSide := sides[0], sides[1]
 
 			gitArgs := append(append([]string{"merge", "--no-edit"}, s.args...), s.target)
-			if s.pick != "" {
+			switch s.pick {
+			case "":
+			case pickRebase, pickRebaseByGit:
+				gitArgs = []string{"rebase", s.target}
+				if s.onto != "" {
+					gitArgs = []string{"rebase", "--onto", s.onto, s.target}
+				}
+			default:
 				gitArgs = []string{s.pick, "--no-edit", s.target}
 			}
 			_, gitErr := gitSide.dated().attempt(gitSide.dir, gitArgs...)
 			ourSide.dated()
 			opts := s.opts
 			opts.When = time.Unix(ourSide.clock, 0).UTC()
-			result, ourErr := runOurSide(t, o.openRepo(ourSide.dir), s, opts)
+			var result MergeResult
+			var ourErr error
+			if s.pick == pickRebaseByGit {
+				ourSide.clock -= 60
+				_, ourErr = ourSide.dated().attempt(ourSide.dir, gitArgs...)
+			} else {
+				result, ourErr = runOurSide(t, o.openRepo(ourSide.dir), s, opts)
+			}
 			gitFailed := gitErr != nil
 			ourFailed := ourErr != nil || !result.Clean()
 			if gitFailed != ourFailed {
