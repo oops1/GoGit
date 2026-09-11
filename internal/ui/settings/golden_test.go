@@ -80,6 +80,7 @@ func renderSettingsFrame(t *testing.T, theme *widget.Theme, section string) *ima
 	t.Cleanup(canvas.Stop)
 	canvas.SetTheme(theme)
 	widget.ApplyThemeTree(dlg, theme)
+	view.Restyle(theme)
 	canvas.SetRoot(dlg)
 	frame := canvas.RenderOnce()
 	if frame == nil {

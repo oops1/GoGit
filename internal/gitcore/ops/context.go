@@ -2,9 +2,6 @@ package ops
 
 import (
 	"errors"
-	"os"
-	"os/user"
-	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -31,20 +28,8 @@ func identityOf(r *repo.Repository, when time.Time) (object.Signature, error) {
 var accountIdentity = systemAccountIdentity
 
 func systemAccountIdentity() (string, string) {
-	name := "gogit"
-	if account, err := user.Current(); err == nil {
-		switch {
-		case account.Name != "":
-			name = account.Name
-		case account.Username != "":
-			name = account.Username
-		}
-	}
-	host := "localhost"
-	if reported, err := os.Hostname(); err == nil && reported != "" {
-		host = reported
-	}
-	return name, strings.ReplaceAll(name, " ", ".") + "@" + host
+	sig := refs.AccountSignature(time.Time{})
+	return sig.Name, sig.Email
 }
 
 func fallbackIdentity(when time.Time) object.Signature {

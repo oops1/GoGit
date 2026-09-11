@@ -88,11 +88,11 @@ func TestWatchReportsChanges(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		var current atomic.Int32
 		current.Store(int32(Light))
-		seen := make(chan Scheme, 8)
+		seen := make(chan State, 8)
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			watch(ctx, time.Second, func() Scheme { return Scheme(current.Load()) }, func(s Scheme) bool { seen <- s; return true })
+			watch(ctx, time.Second, func() State { return State{Scheme: Scheme(current.Load())} }, func(s State) bool { seen <- s; return true })
 		}()
 		time.Sleep(1500 * time.Millisecond)
 		current.Store(int32(Dark))
@@ -100,11 +100,11 @@ func TestWatchReportsChanges(t *testing.T) {
 		cancel()
 		<-done
 		close(seen)
-		var got []Scheme
+		var got []State
 		for s := range seen {
 			got = append(got, s)
 		}
-		if len(got) != 1 || got[0] != Dark {
+		if len(got) != 1 || got[0].Scheme != Dark {
 			t.Fatalf("seen = %v", got)
 		}
 	})
@@ -113,5 +113,5 @@ func TestWatchReportsChanges(t *testing.T) {
 func TestWatchPublicWrapper(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	Watch(ctx, time.Hour, func(Scheme) bool { t.Fatal("must not fire"); return false })
+	Watch(ctx, time.Hour, func(State) bool { t.Fatal("must not fire"); return false })
 }

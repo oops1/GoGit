@@ -195,7 +195,7 @@ func (a *App) askCredentials(ctx context.Context, resource, username string, ret
 			a.eng.CloseModal(view.Dialog())
 			ch <- response{}
 		}
-		a.eng.ShowModal(view.Dialog())
+		a.showModal(view.Dialog(), view)
 		view.SetErrorColor(secretsErrorTextColor)
 	})
 	select {
@@ -273,7 +273,7 @@ func (a *App) askUnlockPassword(ctx context.Context, retry bool) ([]byte, bool) 
 			a.eng.CloseModal(view.Dialog())
 			ch <- response{}
 		}
-		a.eng.ShowModal(view.Dialog())
+		a.showModal(view.Dialog(), view)
 	})
 	select {
 	case r := <-ch:

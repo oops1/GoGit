@@ -34,13 +34,20 @@ func (a *App) requestWorking() {
 
 func (a *App) finishWorking() {
 	a.workingFlagMu.Lock()
-	a.workingBusy = false
 	again := a.workingAgain
 	a.workingAgain = false
+	a.workingBusy = again
 	a.workingFlagMu.Unlock()
 	if again {
-		a.Post(a.requestWorking)
+		a.Post(a.startWorking)
 	}
+}
+
+func (a *App) clearWorkingFlags() {
+	a.workingFlagMu.Lock()
+	a.workingBusy = false
+	a.workingAgain = false
+	a.workingFlagMu.Unlock()
 }
 
 func (a *App) startWorking() {
@@ -58,6 +65,7 @@ func (a *App) startWorking() {
 		a.setFilesRows(nil)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(false)
+		a.clearWorkingFlags()
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())

@@ -8,6 +8,7 @@ import (
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "hostkey"
@@ -53,6 +54,12 @@ func NewView(eng widget.ModalShower, req Request) (*View, error) {
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
+
+func (v *View) Restyle(t *widget.Theme) {
+	p := style.Of(t)
+	p.Quiet(v.acceptBtn, v.rejectBtn)
+	p.Body(v.hostText, v.algorithmText, v.fingerprintText)
+}
 
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool

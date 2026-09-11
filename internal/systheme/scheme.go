@@ -27,11 +27,11 @@ func Detect() Scheme {
 	return detect()
 }
 
-func Watch(ctx context.Context, interval time.Duration, fn func(Scheme) bool) {
-	watch(ctx, interval, detect, fn)
+func Watch(ctx context.Context, interval time.Duration, fn func(State) bool) {
+	watch(ctx, interval, DetectState, fn)
 }
 
-func watch(ctx context.Context, interval time.Duration, probe func() Scheme, fn func(Scheme) bool) {
+func watch(ctx context.Context, interval time.Duration, probe func() State, fn func(State) bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	last := probe()

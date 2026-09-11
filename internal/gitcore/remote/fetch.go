@@ -20,7 +20,10 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/transport"
 )
 
-const fetchHeadFile = "FETCH_HEAD"
+const (
+	fetchHeadFile      = "FETCH_HEAD"
+	fetchReflogMessage = "fetch"
+)
 
 var (
 	dial     = dialAny
@@ -90,7 +93,13 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	}
 	defer func() { _ = db.Close() }()
 
-	store, err := refsOpen(refs.Options{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: r.IsBare(), Peeler: db})
+	store, err := refsOpen(refs.Options{
+		GitDir:    r.GitDir(),
+		CommonDir: r.CommonDir(),
+		Bare:      r.IsBare(),
+		Peeler:    db,
+		Committer: refs.CommitterFor(r.Config()),
+	})
 	if err != nil {
 		return FetchResult{}, err
 	}
@@ -197,6 +206,7 @@ func buildFetchRequest(matched []matchedRef, opts FetchOptions, shallow map[hash
 
 func commitRefUpdates(store *refs.Store, db objectStore, shallow map[hash.ObjectID]struct{}, matched []matchedRef, stale []refs.Ref, opts FetchOptions) ([]matchedRef, []Change, error) {
 	tx := store.Begin()
+	tx.SetMessage(fetchReflogMessage)
 	var applied []matchedRef
 	var changes []Change
 	var rejected []error

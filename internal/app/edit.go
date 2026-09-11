@@ -234,7 +234,7 @@ func (a *App) defaultShowCommit(initial commit.Model, cb func(commit.Model, bool
 		return
 	}
 	a.wireCommitView(view, cb)
-	a.eng.ShowModal(view.Dialog())
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) wireCommitView(view *commit.View, cb func(commit.Model, bool)) {

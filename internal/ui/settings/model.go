@@ -30,6 +30,7 @@ type Model struct {
 	PullStrategy          string
 	DefaultRemote         string
 	PruneOnFetch          bool
+	BanAttribution        bool
 	ShallowDepth          int
 	CredentialSource      string
 }
@@ -49,6 +50,7 @@ func FromConfig(cfg *config.Config) Model {
 		PullStrategy:          cfg.Git.PullStrategy,
 		DefaultRemote:         cfg.Git.DefaultRemote,
 		PruneOnFetch:          cfg.Git.PruneOnFetch,
+		BanAttribution:        cfg.Git.BanAttribution,
 		ShallowDepth:          cfg.Git.ShallowDepth,
 		CredentialSource:      cfg.Git.CredentialSource,
 	}
@@ -99,6 +101,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.PullStrategy = n.PullStrategy
 	cfg.Git.DefaultRemote = n.DefaultRemote
 	cfg.Git.PruneOnFetch = n.PruneOnFetch
+	cfg.Git.BanAttribution = n.BanAttribution
 	cfg.Git.ShallowDepth = n.ShallowDepth
 	cfg.Git.CredentialSource = n.CredentialSource
 }

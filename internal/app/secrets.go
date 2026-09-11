@@ -235,7 +235,7 @@ func (a *App) secretsStatusColor(isError bool) color.RGBA {
 	if isError {
 		return secretsErrorTextColor
 	}
-	return themeFor(a.EffectiveTheme()).LabelText
+	return a.theme().LabelText
 }
 
 func secretsStatusText(v *vault.Vault, err error) string {

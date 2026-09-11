@@ -39,6 +39,7 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 		PullStrategy:          config.PullStrategyRebase,
 		DefaultRemote:         "upstream",
 		PruneOnFetch:          true,
+		BanAttribution:        true,
 		ShallowDepth:          20,
 		CredentialSource:      config.CredentialSourceHelper,
 	}

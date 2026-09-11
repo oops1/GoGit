@@ -67,6 +67,7 @@ type Git struct {
 	PullStrategy     string `toml:"pull_strategy"`
 	DefaultRemote    string `toml:"default_remote"`
 	PruneOnFetch     bool   `toml:"prune_on_fetch"`
+	BanAttribution   bool   `toml:"ban_attribution"`
 	ShallowDepth     int    `toml:"shallow_depth"`
 	CredentialSource string `toml:"credential_source"`
 }
@@ -110,7 +111,7 @@ func Default() *Config {
 		Language: "en",
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
-		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault},
+		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true},
 		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
 	}
 }

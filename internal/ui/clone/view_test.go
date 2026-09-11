@@ -8,6 +8,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T, req Request) *View {
@@ -435,5 +436,29 @@ func TestOnFolderPickedIgnoresCancel(t *testing.T) {
 	v.onFolderPicked("ignored", false)
 	if v.dirInput.GetText() != "unchanged" {
 		t.Fatalf("directory = %q, must stay unchanged", v.dirInput.GetText())
+	}
+}
+
+func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
+	v := newTestView(t, Request{})
+
+	v.Restyle(theme)
+
+	if v.urlInput.Background != p.Field || v.urlInput.BorderColor != p.Border || v.urlInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.urlInput.BorderColor, v.urlInput.Background)
+	}
+	if v.dirInput.Background != p.Field || v.dirInput.BorderColor != p.Border || v.dirInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.dirInput.BorderColor, v.dirInput.Background)
+	}
+	if v.branchDrop.Background != p.Field || v.branchDrop.PaddingX != style.FieldPaddingX {
+		t.Fatalf("list = %v, want the same style as the fields", v.branchDrop.Background)
+	}
+	if v.okBtn.Background != p.Accent || v.okBtn.TextColor != p.OnAccent {
+		t.Fatalf("main button = %v on %v, want the accent", v.okBtn.TextColor, v.okBtn.Background)
+	}
+	if v.cancelBtn.Background != p.Field || v.cancelBtn.BorderColor != p.Border {
+		t.Fatalf("quiet button = %v, want the field fill", v.cancelBtn.Background)
 	}
 }

@@ -43,6 +43,7 @@ func TestPreviewSearchDialog(t *testing.T) {
 		})
 		view.SetStatus(i18n.Tf("Dialog.Search.Found", 3), theme.LabelText)
 		eng.ShowModal(view.Dialog())
+		view.Restyle(theme)
 
 		eng.SaveFrames(dir + "/search-" + lang)
 		eng.Start()

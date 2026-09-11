@@ -70,14 +70,14 @@ func cellContext(item interface{}, dc datagrid.DrawContextBridge) datagrid.CellD
 	}
 }
 
-func TestNewAuthorColumnReturnsATextColumnBoundToAuthorWhenFullNameIsEnabled(t *testing.T) {
+func TestNewAuthorColumnReturnsATextColumnBoundToTheAuthorLineWhenFullNameIsEnabled(t *testing.T) {
 	col := NewView().newAuthorColumn("Author", true)
 	textCol, ok := col.(*datagrid.DataGridTextColumn)
 	if !ok {
 		t.Fatalf("column type = %T, want *datagrid.DataGridTextColumn", col)
 	}
-	if textCol.GetBinding() == nil || textCol.GetBinding().Path != "Author" {
-		t.Fatalf("binding = %+v, want path Author", textCol.GetBinding())
+	if textCol.GetBinding() == nil || textCol.GetBinding().Path != "AuthorLine" {
+		t.Fatalf("binding = %+v, want path AuthorLine", textCol.GetBinding())
 	}
 	if col.Header() != "Author" {
 		t.Fatalf("header = %q, want Author", col.Header())

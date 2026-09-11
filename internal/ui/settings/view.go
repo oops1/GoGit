@@ -60,6 +60,7 @@ type View struct {
 	pullStrategy          *widget.TextInput
 	defaultRemote         *widget.TextInput
 	pruneOnFetch          *widget.CheckBox
+	banAttribution        *widget.CheckBox
 	shallowDepth          *widget.NumericUpDown
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
@@ -258,6 +259,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.pruneOnFetch, ok = named["pruneOnFetch"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: pruneOnFetch", ErrWidgetMissing)
 	}
+	if v.banAttribution, ok = named["banAttribution"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: banAttribution", ErrWidgetMissing)
+	}
 	if v.shallowDepth, ok = named["shallowDepth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: shallowDepth", ErrWidgetMissing)
 	}
@@ -328,6 +332,7 @@ func (v *View) apply(m Model) {
 	v.pullStrategy.SetText(m.PullStrategy)
 	v.defaultRemote.SetText(m.DefaultRemote)
 	v.pruneOnFetch.SetChecked(m.PruneOnFetch)
+	v.banAttribution.SetChecked(m.BanAttribution)
 	v.shallowDepth.SetValue(float64(m.ShallowDepth))
 	v.credentialSource.SetSelected(credentialSourceIndex(m.CredentialSource))
 }
@@ -392,6 +397,7 @@ func (v *View) request() Model {
 		PullStrategy:          v.pullStrategy.GetText(),
 		DefaultRemote:         v.defaultRemote.GetText(),
 		PruneOnFetch:          v.pruneOnFetch.IsChecked(),
+		BanAttribution:        v.banAttribution.IsChecked(),
 		ShallowDepth:          int(v.shallowDepth.Value()),
 		CredentialSource:      credentialSourceAt(v.credentialSource.Selected()),
 	}.Normalized()

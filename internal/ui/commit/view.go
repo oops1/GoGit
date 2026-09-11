@@ -8,6 +8,7 @@ import (
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "commit"
@@ -66,6 +67,14 @@ func NewView(eng widget.ModalShower, initial Model) (*View, error) {
 }
 
 func (v *View) Dialog() widget.ModalWidget { return v.modal }
+
+func (v *View) Restyle(t *widget.Theme) {
+	p := style.Of(t)
+	p.Areas(v.message)
+	p.Quiet(v.cancelBtn)
+	p.Primary(v.okBtn)
+	p.Hints(v.stagedLabel)
+}
 
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool

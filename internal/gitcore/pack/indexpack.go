@@ -127,10 +127,11 @@ func IndexPack(ctx context.Context, src io.Reader, dir string, opts IndexOptions
 	}
 
 	packPath := filepath.Join(dir, "pack-"+checksum.String()+packSuffix)
-	if err := os.Rename(tempPath, packPath); err != nil {
-		return IndexResult{}, fmt.Errorf("pack: rename %s to %s: %w", tempPath, packPath, err)
+	reused, err := placeFile(tempPath, packPath)
+	if err != nil {
+		return IndexResult{}, err
 	}
-	renamed = true
+	renamed = !reused
 
 	indexPath := filepath.Join(dir, "pack-"+checksum.String()+indexSuffix)
 	if err := writeIndexFile(dir, indexPath, entries, checksum); err != nil {
@@ -282,7 +283,25 @@ func appendMissingBases(temp appendSink, originalSize int64, objectCount int, ap
 	return checksum, writer.position + hash.Size, nil
 }
 
+func placeFile(tempPath, finalPath string) (bool, error) {
+	if alreadyPlaced(finalPath) {
+		return true, nil
+	}
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return false, fmt.Errorf("pack: rename %s to %s: %w", tempPath, finalPath, err)
+	}
+	return false, nil
+}
+
+func alreadyPlaced(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular()
+}
+
 func writeIndexFile(dir, path string, entries []Entry, checksum hash.ObjectID) error {
+	if alreadyPlaced(path) {
+		return nil
+	}
 	temp, tempPath, err := createTempFile(dir, tempIndexPattern)
 	if err != nil {
 		return err
@@ -296,9 +315,10 @@ func writeIndexFile(dir, path string, entries []Entry, checksum hash.ObjectID) e
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("pack: close %s: %w", tempPath, err)
 	}
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("pack: rename %s to %s: %w", tempPath, path, err)
+	reused, err := placeFile(tempPath, path)
+	if err != nil {
+		return err
 	}
-	renamed = true
+	renamed = !reused
 	return nil
 }

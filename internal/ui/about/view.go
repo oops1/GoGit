@@ -17,7 +17,7 @@ import (
 const dialogName = "about"
 
 const (
-	logoSize       = 106
+	logoSize       = 80
 	githubIconName = "github"
 	githubIconSize = 24
 	okTintPercent  = 14
@@ -52,6 +52,7 @@ type View struct {
 	githubBtn     *widget.Button
 	licenseBtn    *widget.Button
 	okBtn         *widget.Button
+	detailLabels  []*widget.Label
 
 	OnClose   func()
 	OnGitHub  func()
@@ -76,6 +77,13 @@ func (v *View) Dialog() *widget.Dialog { return v.dlg }
 
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool
+	for _, name := range []string{"platformLabel", "architectureLabel", "gitEngineLabel", "guiEngineLabel"} {
+		label, found := named[name].(*widget.Label)
+		if !found {
+			return fmt.Errorf("%w: %s", ErrWidgetMissing, name)
+		}
+		v.detailLabels = append(v.detailLabels, label)
+	}
 	if v.logo, ok = named["logo"].(*widget.ImageWidget); !ok {
 		return fmt.Errorf("%w: logo", ErrWidgetMissing)
 	}
@@ -145,6 +153,9 @@ func (v *View) Restyle(t *widget.Theme) {
 		v.githubIcon.SetImage(mark)
 	}
 	v.tagline.TextColor = t.SecondaryText
+	for _, label := range v.detailLabels {
+		label.TextColor = t.SecondaryText
+	}
 	v.copyright.TextColor = t.SecondaryText
 	v.summaryFirst.TextColor = t.LabelText
 	v.summarySecond.TextColor = t.LabelText

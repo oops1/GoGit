@@ -48,7 +48,7 @@ func TestToolbarButtonsKeepTheirOwnColoursInBothThemes(t *testing.T) {
 func TestToolbarDropsCaptionsWhenTheSettingIsOff(t *testing.T) {
 	a := newTestApp(t)
 	a.cfg.UI.ToolbarCaptions = false
-	a.applyToolbarIcons(themeFor(a.EffectiveTheme()))
+	a.applyToolbarIcons(a.theme())
 
 	btn := a.Widget("btnPull").(*widget.Button)
 	if btn.IconPos != widget.IconOnly {
@@ -83,11 +83,11 @@ func TestActiveRepositoryIconDiffersFromAnInactiveRepository(t *testing.T) {
 	if active.Icon == inactive.Icon {
 		t.Fatal("the active repository must use a different icon than an inactive one")
 	}
-	want := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Accent)
+	want := icons.TreeTinted("repository", 16, a.theme().Accent)
 	if active.Icon != want {
 		t.Fatal("the active repository must use the accent-tinted repository icon")
 	}
-	wantInactive := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Disabled)
+	wantInactive := icons.TreeTinted("repository", 16, a.theme().Disabled)
 	if inactive.Icon != wantInactive {
 		t.Fatal("a repository that is not open must use the muted repository icon")
 	}
@@ -105,7 +105,7 @@ func TestActiveRepositoryWithWorkingCopyChangesShowsTheModifiedIcon(t *testing.T
 	if !ok {
 		t.Fatal("item missing")
 	}
-	want := icons.TreeTinted("repository_modified", 16, themeFor(a.EffectiveTheme()).Accent)
+	want := icons.TreeTinted("repository_modified", 16, a.theme().Accent)
 	if item.Icon != want {
 		t.Fatal("a repository with working copy changes must show the modified icon")
 	}
@@ -123,7 +123,7 @@ func TestActiveRepositoryWithACleanWorkingCopyKeepsThePlainIcon(t *testing.T) {
 	if !ok {
 		t.Fatal("item missing")
 	}
-	want := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Accent)
+	want := icons.TreeTinted("repository", 16, a.theme().Accent)
 	if item.Icon != want {
 		t.Fatal("a repository with a clean working copy must show the plain icon")
 	}
@@ -141,7 +141,7 @@ func TestActiveRepositoryWithOnlyUnmodifiedTrackedFilesKeepsThePlainIcon(t *test
 	if !ok {
 		t.Fatal("item missing")
 	}
-	want := icons.TreeTinted("repository", 16, themeFor(a.EffectiveTheme()).Accent)
+	want := icons.TreeTinted("repository", 16, a.theme().Accent)
 	if item.Icon != want {
 		t.Fatal("an unmodified tracked file reported by IncludeUnmodified must not trigger the modified icon")
 	}
@@ -158,7 +158,7 @@ func TestActiveRepositoryWithAMissingPathShowsTheMissingIcon(t *testing.T) {
 	if !ok {
 		t.Fatal("item missing")
 	}
-	want := icons.TreeTinted("repository_missing", 16, themeFor(a.EffectiveTheme()).Accent)
+	want := icons.TreeTinted("repository_missing", 16, a.theme().Accent)
 	if item.Icon != want {
 		t.Fatal("an active repository whose path is gone must show the missing icon")
 	}

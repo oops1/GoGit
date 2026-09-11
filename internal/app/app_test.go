@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"image/color"
 	"log/slog"
 	"strings"
 	"testing"
@@ -299,15 +300,20 @@ func TestFollowSystemThemeStopsOnCancel(t *testing.T) {
 	a.FollowSystemTheme(ctx)
 }
 
-func TestOnSystemThemeChanged(t *testing.T) {
+func TestOnSystemThemeChangedRepaints(t *testing.T) {
 	a := newTestApp(t)
-	a.SetTheme(config.ThemeSystem)
-	if !a.OnSystemThemeChanged(systheme.Light) {
-		t.Fatal("system theme must react")
-	}
 	a.SetTheme(config.ThemeDark)
-	if a.OnSystemThemeChanged(systheme.Light) {
-		t.Fatal("explicit theme must ignore system changes")
+	purple := color.RGBA{R: 0xC1, G: 0x4D, B: 0xA9, A: 0xFF}
+	a.SetSystemAccentDetector(func() systheme.Accent { return systheme.Accent{} })
+
+	a.accentOf = func() systheme.Accent {
+		return systheme.Accent{Base: purple, Light: purple, Dark: purple, Known: true}
+	}
+	if !a.OnSystemThemeChanged(systheme.State{Scheme: systheme.Dark}) {
+		t.Fatal("a change of the system palette must repaint the window")
+	}
+	if a.theme().Accent != purple {
+		t.Fatalf("accent = %v, want the one the system reports", a.theme().Accent)
 	}
 }
 
@@ -423,5 +429,55 @@ func TestLoggingEmitsDebugEvents(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in log: %s", want, out)
 		}
+	}
+}
+
+func TestTheAppTakesTheAccentOfTheSystem(t *testing.T) {
+	a := newTestApp(t)
+	light := color.RGBA{R: 0xE5, G: 0x9E, B: 0xDB, A: 0xFF}
+	dark := color.RGBA{R: 0xA7, G: 0x3A, B: 0x8E, A: 0xFF}
+	a.SetSystemAccentDetector(func() systheme.Accent {
+		return systheme.Accent{Base: dark, Light: light, Dark: dark, Known: true}
+	})
+
+	a.SetTheme(config.ThemeDark)
+	if got := a.theme().Accent; got != light {
+		t.Fatalf("accent on a dark theme = %v, want the light shade", got)
+	}
+	a.SetTheme(config.ThemeLight)
+	if got := a.theme().Accent; got != dark {
+		t.Fatalf("accent on a light theme = %v, want the dark shade", got)
+	}
+	if a.theme().WindowBG != themeFor(config.ThemeLight).WindowBG {
+		t.Fatal("the window must keep the surface of the theme, as Windows does")
+	}
+}
+
+func TestWithoutASystemAccentThePresetIsLeftAlone(t *testing.T) {
+	a := newTestApp(t)
+	a.SetSystemAccentDetector(func() systheme.Accent { return systheme.Accent{} })
+
+	a.SetTheme(config.ThemeDark)
+
+	if got := a.theme(); *got != *themeFor(config.ThemeDark) {
+		t.Fatal("a system that reports no accent must leave the theme of the preset")
+	}
+}
+
+func TestTheWindowFrameFollowsTheAccentOnlyWhenWindowsColoursIt(t *testing.T) {
+	a := newTestApp(t)
+	accent := color.RGBA{R: 0xE5, G: 0x9E, B: 0xDB, A: 0xFF}
+	a.SetTheme(config.ThemeDark)
+
+	a.SetSystemAccentDetector(func() systheme.Accent {
+		return systheme.Accent{Base: accent, Light: accent, Dark: accent, OnFrame: true, Known: true}
+	})
+	if a.Root().BorderColor != accent {
+		t.Fatalf("frame = %v, want the accent", a.Root().BorderColor)
+	}
+
+	a.SetSystemAccentDetector(func() systheme.Accent { return systheme.Accent{} })
+	if a.Root().BorderColor != themeFor(config.ThemeDark).Border {
+		t.Fatalf("frame = %v, want the border of the theme", a.Root().BorderColor)
 	}
 }

@@ -11,7 +11,7 @@ func TestPaneTitlesStayQuietInBothThemes(t *testing.T) {
 	a := newTestAppWithConfig(t, config.Default())
 	for _, name := range []string{config.ThemeDark, config.ThemeLight} {
 		a.SetTheme(name)
-		theme := themeFor(a.EffectiveTheme())
+		theme := a.theme()
 		panes := a.Dock().Panes()
 		if len(panes) == 0 {
 			t.Fatal("dock has no panes")

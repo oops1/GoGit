@@ -67,7 +67,7 @@ func (a *App) toggleFilesStatusFilter(f changes.StatusFilter) {
 	a.filesStatusAllowed = next
 	a.filesMu.Unlock()
 	a.saveFilesStatusFilter()
-	a.applyFilesStatusButtonVisuals(themeFor(a.EffectiveTheme()))
+	a.applyFilesStatusButtonVisuals(a.theme())
 	a.applyFilesFilter()
 }
 

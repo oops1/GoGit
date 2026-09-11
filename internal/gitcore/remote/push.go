@@ -19,6 +19,8 @@ import (
 const (
 	packWindow = 10
 	packDepth  = 50
+
+	pushReflogMessage = "update by push"
 )
 
 type PushOptions struct {
@@ -69,7 +71,13 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 	}
 	defer func() { _ = db.Close() }()
 
-	store, err := refsOpen(refs.Options{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: r.IsBare(), Peeler: db})
+	store, err := refsOpen(refs.Options{
+		GitDir:    r.GitDir(),
+		CommonDir: r.CommonDir(),
+		Bare:      r.IsBare(),
+		Peeler:    db,
+		Committer: refs.CommitterFor(r.Config()),
+	})
 	if err != nil {
 		return PushResult{}, err
 	}
@@ -276,6 +284,7 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 		byName[p.name.String()] = p
 	}
 	tx := store.Begin()
+	tx.SetMessage(pushReflogMessage)
 	var changes []Change
 	var rejected []transport.RefStatus
 	var errs []error

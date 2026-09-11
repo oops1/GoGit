@@ -56,7 +56,8 @@ func (a *App) openRepoSettings(id string) {
 	view.SetInherited(a.inheritedSettings(cfg))
 	view.Apply(a.localSettings(node, cfg))
 	a.wireRepoSettingsView(view, node.ID, r.GitDir())
-	a.eng.ShowModal(view.Dialog())
+	view.FitHeight(a.root.Bounds().Dy())
+	a.showModal(view.Dialog(), view)
 }
 
 func remoteNames(cfg *gitconfig.Config) []string {

@@ -5,12 +5,14 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/revision"
+	"github.com/oops1/gogit/internal/gitcore/trailer"
 	"github.com/oops1/gogit/internal/ui/journal/graph"
 )
 
 const (
-	shortHashSize = 7
-	dateLayout    = "2006-01-02 15:04"
+	shortHashSize        = 7
+	dateLayout           = "2006-01-02 15:04"
+	attributionSeparator = ", "
 )
 
 type RefKind int
@@ -28,28 +30,51 @@ type Ref struct {
 }
 
 type Row struct {
-	Message   string
-	Author    string
-	Date      string
-	ShortHash string
-	ID        hash.ObjectID
-	Parents   []hash.ObjectID
-	Refs      []Ref
-	Unpushed  bool
-	Graph     graph.Row
+	Message    string
+	Author     string
+	Credited   []string
+	AuthorLine string
+	Date       string
+	ShortHash  string
+	ID         hash.ObjectID
+	Parents    []hash.ObjectID
+	Refs       []Ref
+	Unpushed   bool
+	Graph      graph.Row
 }
 
 func newRow(commit *revision.Commit, decorations map[hash.ObjectID][]Ref, unpushed map[hash.ObjectID]struct{}) Row {
+	credited := creditedBesides(commit.Author.Name, trailer.Attributed(commit.Message))
 	return Row{
-		Message:   firstLine(commit.Message),
-		Author:    commit.Author.Name,
-		Date:      commit.Author.When.Local().Format(dateLayout),
-		ShortHash: commit.ID.String()[:shortHashSize],
-		ID:        commit.ID,
-		Parents:   commit.Parents,
-		Refs:      decorations[commit.ID],
-		Unpushed:  contains(unpushed, commit.ID),
+		Message:    firstLine(commit.Message),
+		Author:     commit.Author.Name,
+		Credited:   credited,
+		AuthorLine: authorLine(commit.Author.Name, credited),
+		Date:       commit.Author.When.Local().Format(dateLayout),
+		ShortHash:  commit.ID.String()[:shortHashSize],
+		ID:         commit.ID,
+		Parents:    commit.Parents,
+		Refs:       decorations[commit.ID],
+		Unpushed:   contains(unpushed, commit.ID),
 	}
+}
+
+func creditedBesides(author string, people []string) []string {
+	others := make([]string, 0, len(people))
+	for _, person := range people {
+		if person != author {
+			others = append(others, person)
+		}
+	}
+	return others
+}
+
+func authorLine(author string, credited []string) string {
+	names := make([]string, 0, len(credited)+1)
+	if author != "" {
+		names = append(names, author)
+	}
+	return strings.Join(append(names, credited...), attributionSeparator)
 }
 
 func contains(set map[hash.ObjectID]struct{}, id hash.ObjectID) bool {

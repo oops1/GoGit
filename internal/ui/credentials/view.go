@@ -9,6 +9,7 @@ import (
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "credentials"
@@ -63,6 +64,15 @@ func NewView(eng widget.ModalShower, req Request) (*View, error) {
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
+
+func (v *View) Restyle(t *widget.Theme) {
+	p := style.Of(t)
+	p.Fields(v.usernameInput, v.secretInput)
+	p.Quiet(v.cancelBtn)
+	p.Primary(v.okBtn)
+	p.Body(v.resourceText)
+	p.Hints(v.saveToLabel, v.hintLabel)
+}
 
 func (v *View) SetErrorColor(c color.RGBA) {
 	v.hintLabel.TextColor = c

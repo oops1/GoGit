@@ -68,6 +68,7 @@ func (v *View) buildHints() {
 	addFieldHint(v.sectionGit, "Dialog.Settings.FetchInterval.Hint", 8, 2)
 	addFieldHint(v.sectionGit, "Dialog.Settings.DefaultRemote.Hint", 10, 2)
 	addCheckboxHint(v.sectionGit, "Dialog.Settings.PruneOnFetch.Hint", 13)
+	addCheckboxHint(v.sectionGit, "Dialog.Settings.BanAttribution.Hint", 16)
 	v.sectionGit.SetBounds(v.sectionGit.Bounds())
 
 	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.WorkTreeDepth.Hint", 0, 2)

@@ -438,3 +438,25 @@ func TestGroupOperations(t *testing.T) {
 		t.Fatalf("repo group not cleared: %+v", cfg.Repositories)
 	}
 }
+
+func TestTheAttributionBanIsOnUntilItIsTurnedOff(t *testing.T) {
+	if !Default().Git.BanAttribution {
+		t.Fatal("a new configuration must ban attribution")
+	}
+
+	kept, err := Parse([]byte("version = 1\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !kept.Git.BanAttribution {
+		t.Fatal("a configuration written before the option existed must keep the ban on")
+	}
+
+	off, err := Parse([]byte("version = 1\n[git]\nban_attribution = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.Git.BanAttribution {
+		t.Fatal("the option must be able to turn the ban off")
+	}
+}

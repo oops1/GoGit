@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestView(t *testing.T, entries []Entry) *View {
@@ -395,5 +396,23 @@ func TestSetErrorUpdatesLabel(t *testing.T) {
 	}
 	if got := v.Error(); got != "custom error" {
 		t.Fatalf("Error() = %q, want %q", got, "custom error")
+	}
+}
+
+func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := style.Of(theme)
+	v := newTestView(t, nil)
+
+	v.Restyle(theme)
+
+	if v.nameInput.Background != p.Field || v.nameInput.BorderColor != p.Border || v.nameInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.nameInput.BorderColor, v.nameInput.Background)
+	}
+	if v.urlInput.Background != p.Field || v.urlInput.BorderColor != p.Border || v.urlInput.PaddingX != style.FieldPaddingX {
+		t.Fatalf("field = %v on %v, want the shared field style", v.urlInput.BorderColor, v.urlInput.Background)
+	}
+	if v.closeBtn.Background != p.Field || v.closeBtn.BorderColor != p.Border {
+		t.Fatalf("quiet button = %v, want the field fill", v.closeBtn.Background)
 	}
 }

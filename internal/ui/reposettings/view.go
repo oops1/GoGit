@@ -3,12 +3,14 @@ package reposettings
 import (
 	"errors"
 	"fmt"
+	"image"
 	"slices"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "repo_settings"
@@ -29,6 +31,13 @@ type View struct {
 	hintLabel     *widget.Label
 	okBtn         *widget.Button
 	cancelBtn     *widget.Button
+	identityHint  *widget.Label
+	pullHint      *widget.Label
+	root          *widget.Grid
+	footer        *widget.Grid
+	formScroll    *widget.ScrollView
+	formContent   *widget.Grid
+	labels        []*widget.Label
 
 	remotes   []string
 	inherited Inherited
@@ -48,18 +57,76 @@ func NewView() (*View, error) {
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
-	v.pathLabel.Muted = true
-	v.hintLabel.Muted = true
+	v.dlg.RemoveChild(v.root)
+	v.dlg.SetContentPadding(0)
+	v.dlg.SetContent(v.root)
+	v.dlg.Resize(dialogWidth, dialogHeight)
 	v.fillChoices()
 	v.wire()
 	v.refresh()
+	v.Restyle(widget.CurrentTheme())
 	return v, nil
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
 
+func (v *View) FitHeight(height int) {
+	if height <= 0 {
+		return
+	}
+	v.dlg.Resize(v.dlg.Bounds().Dx(), min(dialogHeight, max(dialogMinHeight, height-windowMargin)))
+}
+
+func (v *View) inputs() []*widget.TextInput {
+	return []*widget.TextInput{v.nameInput, v.userNameInput, v.emailInput}
+}
+
+func (v *View) dropdowns() []*widget.Dropdown {
+	return []*widget.Dropdown{v.remoteDrop, v.pullDrop, v.autoFetchDrop}
+}
+
+func (v *View) Restyle(t *widget.Theme) {
+	viewport := v.formScroll.Bounds()
+	v.formContent.SetBounds(image.Rect(viewport.Min.X, viewport.Min.Y, viewport.Max.X, viewport.Min.Y+v.formScroll.ContentHeight))
+	p := style.Of(t)
+	v.dlg.Background = p.Surface
+	v.dlg.TitleBG = p.Chrome
+	v.dlg.TitleColor = p.Text
+	v.root.Background = p.Surface
+	v.footer.Background = p.Chrome
+	p.Body(v.labels...)
+	p.Hints(v.pathLabel, v.hintLabel, v.identityHint, v.pullHint)
+	p.Fields(v.inputs()...)
+	p.Lists(v.dropdowns()...)
+	p.Quiet(v.cancelBtn)
+	p.Primary(v.okBtn)
+}
+
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool
+	if v.root, ok = named["settingsRoot"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: settingsRoot", ErrWidgetMissing)
+	}
+	if v.footer, ok = named["footer"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: footer", ErrWidgetMissing)
+	}
+	if v.formScroll, ok = named["formScroll"].(*widget.ScrollView); !ok {
+		return fmt.Errorf("%w: formScroll", ErrWidgetMissing)
+	}
+	if v.formContent, ok = named["formContent"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: formContent", ErrWidgetMissing)
+	}
+	for _, item := range named {
+		if label, ok := item.(*widget.Label); ok {
+			v.labels = append(v.labels, label)
+		}
+	}
+	if v.identityHint, ok = named["identityHint"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: identityHint", ErrWidgetMissing)
+	}
+	if v.pullHint, ok = named["pullHint"].(*widget.Label); !ok {
+		return fmt.Errorf("%w: pullHint", ErrWidgetMissing)
+	}
 	if v.nameInput, ok = named["name"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: name", ErrWidgetMissing)
 	}
@@ -184,6 +251,7 @@ func (v *View) selectedRemote() string {
 
 func (v *View) refresh() {
 	v.current = Validate(v.Settings())
+	v.hintLabel.WrapText = !v.current.OK
 	v.hintLabel.SetText(i18n.Tf(v.current.Key, v.current.Args...))
 	v.okBtn.SetEnabled(v.current.OK)
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const dialogName = "worktree_add"
@@ -61,6 +62,16 @@ func NewView(eng widget.ModalShower) (*View, error) {
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
+
+func (v *View) Restyle(t *widget.Theme) {
+	p := style.Of(t)
+	p.Fields(v.pathInput, v.branchInput, v.startInput)
+	p.Lists(v.branchList)
+	p.Quiet(v.browseBtn, v.cancelBtn)
+	p.Primary(v.okBtn)
+	p.Body(v.branchLabel, v.startLabel)
+	p.Hints(v.hintLabel)
+}
 
 func (v *View) bind(named map[string]widget.Widget) error {
 	var ok bool

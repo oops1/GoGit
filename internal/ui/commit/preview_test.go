@@ -44,6 +44,7 @@ func TestPreviewCommitDialog(t *testing.T) {
 			t.Fatal(err)
 		}
 		eng.ShowModal(view.Dialog())
+		view.Restyle(theme.theme)
 
 		eng.SaveFrames(dir + "/commit-" + theme.name)
 		eng.Start()

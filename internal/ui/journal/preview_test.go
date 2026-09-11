@@ -31,6 +31,12 @@ func withRefs(row Row, refs ...Ref) Row {
 	return row
 }
 
+func creditedRow(row Row, people ...string) Row {
+	row.Credited = people
+	row.AuthorLine = authorLine(row.Author, people)
+	return row
+}
+
 func unpushedRow(row Row) Row {
 	row.Unpushed = true
 	return row
@@ -58,11 +64,11 @@ func TestPreviewCommitGraph(t *testing.T) {
 	}
 	rows := []Row{
 		withRefs(previewRow("m", "b", "c"), Ref{Name: "develop", Head: true}, Ref{Name: "origin/develop", Kind: RefRemote}),
-		unpushedRow(previewRow("b", "d")),
+		unpushedRow(creditedRow(previewRow("b", "d"), "Claude Opus", "Bob Reviewer")),
 		unpushedRow(previewRow("c", "d")),
 		withRefs(previewRow("d", "e"), Ref{Name: "main", Kind: RefBranch}, Ref{Name: "v1.3.0", Kind: RefTag}),
 		previewRow("e", "f", "g"),
-		previewRow("f", "h"),
+		creditedRow(previewRow("f", "h"), "Carol Helper"),
 		previewRow("g", "i"),
 		previewRow("h", "j"),
 		previewRow("i", "j"),
