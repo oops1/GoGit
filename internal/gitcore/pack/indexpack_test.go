@@ -718,3 +718,63 @@ func TestAppendMissingBasesPatchesHeaderAndAppendsInIDOrder(t *testing.T) {
 		t.Fatalf("the file trailer does not match the returned checksum")
 	}
 }
+
+func TestTheSamePackReceivedTwiceKeepsTheOneAlreadyThere(t *testing.T) {
+	builder := newPackBuilder()
+	builder.addObject(t, KindBlob, []byte("the same objects fetched again"))
+	raw := builder.bytes()
+	dir := t.TempDir()
+
+	first, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{})
+	if err != nil {
+		t.Fatalf("first IndexPack returned error %v", err)
+	}
+	held, err := os.Open(first.PackPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = held.Close() }()
+	heldIndex, err := os.Open(first.IndexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = heldIndex.Close() }()
+
+	second, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{})
+	if err != nil {
+		t.Fatalf("second IndexPack returned error %v, want the pack already on disk to be kept", err)
+	}
+
+	if second.PackPath != first.PackPath || second.IndexPath != first.IndexPath || second.Checksum != first.Checksum {
+		t.Fatalf("second = %+v, want the same pack as %+v", second, first)
+	}
+	left, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 2 {
+		t.Fatalf("directory = %v, want only the pack and its index, no leftover incoming file", left)
+	}
+}
+
+func TestAMissingIndexIsWrittenBesideAPackAlreadyThere(t *testing.T) {
+	builder := newPackBuilder()
+	builder.addObject(t, KindBlob, []byte("a pack whose index was lost"))
+	raw := builder.bytes()
+	dir := t.TempDir()
+
+	first, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(first.IndexPath); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{}); err != nil {
+		t.Fatalf("IndexPack returned error %v", err)
+	}
+	if _, err := os.Stat(first.IndexPath); err != nil {
+		t.Fatalf("the index must be written again: %v", err)
+	}
+}
