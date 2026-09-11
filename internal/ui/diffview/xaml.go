@@ -9,7 +9,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 )
 
-const XAMLTag = "DiffView"
+const XAMLTag = "GitDiffView"
 
 var (
 	ErrUnknownMode = errors.New("diffview: unknown mode")

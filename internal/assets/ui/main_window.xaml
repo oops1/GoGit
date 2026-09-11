@@ -131,7 +131,7 @@
                     </DataGrid>
                 </DockPane>
                 <DockContent>
-                    <DiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
+                    <GitDiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
                 </DockContent>
             </DockManager>
 

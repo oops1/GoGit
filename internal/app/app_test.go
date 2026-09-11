@@ -378,7 +378,7 @@ func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
 		`<DockPanel x:Name="filesFilterRow"/>` +
 		filesStatusButtonsXAML +
 		filesSubdirsButtonXAML +
-		`<DataGrid x:Name="journalGrid"/><DiffView x:Name="diffView"/>` +
+		`<DataGrid x:Name="journalGrid"/><GitDiffView x:Name="diffView"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
 	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml), nil)
@@ -472,12 +472,12 @@ func TestTheWindowFrameFollowsTheAccentOnlyWhenWindowsColoursIt(t *testing.T) {
 	a.SetSystemAccentDetector(func() systheme.Accent {
 		return systheme.Accent{Base: accent, Light: accent, Dark: accent, OnFrame: true, Known: true}
 	})
-	if a.Root().BorderColor != accent {
-		t.Fatalf("frame = %v, want the accent", a.Root().BorderColor)
+	if a.Root().FrameColor != accent {
+		t.Fatalf("frame = %v, want the accent", a.Root().FrameColor)
 	}
 
 	a.SetSystemAccentDetector(func() systheme.Accent { return systheme.Accent{} })
-	if a.Root().BorderColor != themeFor(config.ThemeDark).Border {
-		t.Fatalf("frame = %v, want the border of the theme", a.Root().BorderColor)
+	if a.Root().FrameColor != themeFor(config.ThemeDark).WindowFrame {
+		t.Fatalf("frame = %v, want the frame of the theme", a.Root().FrameColor)
 	}
 }

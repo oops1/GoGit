@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"log/slog"
 	"strings"
 	"sync"
@@ -798,7 +799,7 @@ func (a *App) EffectiveTheme() string {
 func (a *App) applyTheme() {
 	theme := a.theme()
 	a.eng.SetTheme(theme)
-	a.applyWindowFrame(theme)
+	a.applyWindowFrame()
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
@@ -809,15 +810,15 @@ func (a *App) applyTheme() {
 	a.journalView.Restyle(theme)
 }
 
-func (a *App) applyWindowFrame(t *widget.Theme) {
+func (a *App) applyWindowFrame() {
 	a.mu.Lock()
 	accentOf := a.accentOf
 	a.mu.Unlock()
 	if accent := accentOf(); accent.Known && accent.OnFrame {
-		a.root.BorderColor = accent.For(schemeOf(a.EffectiveTheme()))
+		a.root.SetFrameColor(accent.For(schemeOf(a.EffectiveTheme())))
 		return
 	}
-	a.root.BorderColor = t.Border
+	a.root.SetFrameColor(color.RGBA{})
 }
 
 func (a *App) applyPaneTitleColors(t *widget.Theme) {
