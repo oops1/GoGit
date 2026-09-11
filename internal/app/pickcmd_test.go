@@ -84,7 +84,7 @@ func TestTheJournalMenuOffersToPickAndRevert(t *testing.T) {
 
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.journalMenu(journal.Row{ID: id}, 0) })
 
-	if len(items) != 5 || items[3].Text != i18n.T("Menu.Context.CherryPick") || items[4].Text != i18n.T("Menu.Context.Revert") || items[3].Disabled {
+	if len(items) != 6 || items[3].Text != i18n.T("Menu.Context.CherryPick") || items[4].Text != i18n.T("Menu.Context.Revert") || items[3].Disabled {
 		t.Fatalf("items = %+v", items)
 	}
 }
