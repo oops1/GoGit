@@ -608,7 +608,7 @@ func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 
 			refused := ourErr != nil
 			if got, want := mergeStateOf(ourSide, refused), mergeStateOf(gitSide, refused); got != want {
-				t.Fatalf("repository differs from git's:\n%s", sectionDiff(got, want))
+				t.Fatalf("repository differs from %s:\n%s", strings.TrimSpace(o.run(gitSide.dir, "--version")), sectionDiff(got, want))
 			}
 		})
 	}
