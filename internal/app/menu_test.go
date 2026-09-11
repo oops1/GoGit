@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/journal"
 )
 
@@ -460,10 +462,29 @@ func TestFilesGridStateColumnRetranslatesOnLanguageChange(t *testing.T) {
 
 	for _, lang := range []string{"ru", "en", "ru"} {
 		a.SetLanguage(lang)
-		waitForWorkingIdle(t, a)
-		if row := filesRowOnDispatcher(t, a, 2); row.State != i18n.T("Files.State.Modified") {
-			t.Fatalf("lang %q: modified file state = %q, want %q", lang, row.State, i18n.T("Files.State.Modified"))
+		want := i18n.T("Files.State.Modified")
+		if got := waitForFileState(t, a, "modified.txt", want); got != want {
+			t.Fatalf("lang %q: modified file state = %q, want %q", lang, got, want)
 		}
+	}
+}
+
+func waitForFileState(t *testing.T, a *App, path, want string) string {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		got := readOnDispatcher(t, a, func() string {
+			for i := range a.filesItems.Count() {
+				if row, ok := a.filesItems.Get(i).(changes.Row); ok && row.RelPath == path {
+					return row.State
+				}
+			}
+			return ""
+		})
+		if got == want || time.Now().After(deadline) {
+			return got
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
