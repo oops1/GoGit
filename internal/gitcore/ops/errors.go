@@ -33,6 +33,7 @@ var (
 	ErrUnmergedPaths      = errors.New("ops: the index has unmerged paths")
 	ErrCannotFastForward  = errors.New("ops: the merge cannot be a fast-forward")
 	ErrUnrelatedHistories = errors.New("ops: refusing to merge unrelated histories")
+	ErrResetPathsWithMode = errors.New("ops: a soft or hard reset cannot take paths")
 )
 
 type OverwriteError struct {

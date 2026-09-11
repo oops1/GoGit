@@ -339,6 +339,26 @@ func mergeFaultScenarios() []faultScenario {
 		}, func(ctx context.Context, tr *testRepo) error {
 			return AbortOperation(ctx, tr.repo)
 		}},
+		{"soft reset", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetSoft))
+			return err
+		}},
+		{"mixed reset", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetMixed))
+			return err
+		}},
+		{"hard reset over local changes", func(tr *testRepo) {
+			tr.resetHistory()
+			tr.writeFile("f", "dirty\n")
+			tr.writeFile("dir/spare", "spare\n")
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetHard))
+			return err
+		}},
+		{"reset of paths", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetMixed, "f", "added"))
+			return err
+		}},
 		{"take a side", func(tr *testRepo) {
 			tr.fork(map[string]string{"f": changeLine(tenLines("f"), 4, "OURS"), "g": changeLine(tenLines("g"), 4, "OURS")}, map[string]string{"f": changeLine(tenLines("f"), 4, "THEIRS"), "g": ""})
 			if _, err := tr.merge("feature", MergeOptions{}); err != nil {

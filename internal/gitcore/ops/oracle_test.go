@@ -96,6 +96,13 @@ func (o *oracle) write(dir, rel, text string) {
 	}
 }
 
+func (o *oracle) remove(dir, rel string) {
+	o.t.Helper()
+	if err := os.Remove(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
+		o.t.Fatalf("Remove returned error %v", err)
+	}
+}
+
 func (o *oracle) openRepo(dir string) *repo.Repository {
 	o.t.Helper()
 	r, err := repo.Open(dir, o.options())
