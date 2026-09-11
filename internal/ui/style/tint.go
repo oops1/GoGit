@@ -7,8 +7,6 @@ import (
 )
 
 const (
-	surfaceTintPercent    = 5
-	controlTintPercent    = 2
 	selectionDarkPercent  = 55
 	selectionLightPercent = 70
 )
@@ -24,18 +22,6 @@ func Tinted(base *widget.Theme, accent color.RGBA) *widget.Theme {
 	t.SplitterHoverBG = accent
 	t.ListItemSelect = selectionFill(accent, base.LabelText, base.ListItemSelect.A)
 	t.DropItemBG = selectionFill(accent, base.DropText, base.DropItemBG.A)
-	for _, surface := range []*color.RGBA{
-		&t.WindowBG, &t.PanelBG, &t.TitleBG, &t.DialogBG, &t.DialogTitleBG,
-		&t.StatusBarBG, &t.TabBG, &t.TabActiveBG, &t.TabContentBG, &t.MenuBG,
-	} {
-		*surface = mix(*surface, accent, surfaceTintPercent)
-	}
-	for _, control := range []*color.RGBA{
-		&t.BtnBG, &t.BtnHoverBG, &t.BtnPressedBG, &t.InputBG, &t.DropBG,
-		&t.Border, &t.InputBorder, &t.BtnBorder, &t.DropBorder,
-	} {
-		*control = mix(*control, accent, controlTintPercent)
-	}
 	return &t
 }
 

@@ -65,20 +65,23 @@ func over(top, bottom color.RGBA) color.RGBA {
 	return color.RGBA{R: blend(top.R, bottom.R), G: blend(top.G, bottom.G), B: blend(top.B, bottom.B), A: 0xFF}
 }
 
-func TestSurfacesTakeATraceOfTheAccent(t *testing.T) {
+func TestTheAccentLeavesTheSurfacesOfTheWindowAlone(t *testing.T) {
 	base := widget.Win11LightTheme()
-	accent := color.RGBA{R: 0xA2, G: 0x7F, B: 0x2B, A: 0xFF}
 
-	t2 := Tinted(base, accent)
+	t2 := Tinted(base, color.RGBA{R: 0xA2, G: 0x7F, B: 0x2B, A: 0xFF})
 
-	if t2.WindowBG == base.WindowBG || t2.PanelBG == base.PanelBG {
-		t.Fatal("the window must take the tint of the system colour")
-	}
-	if distance(t2.WindowBG, base.WindowBG) > distance(t2.WindowBG, accent) {
-		t.Fatalf("window = %v, want it near the colour of the preset, not near the accent", t2.WindowBG)
-	}
-	if distance(t2.InputBG, base.InputBG) >= distance(t2.WindowBG, base.WindowBG) {
-		t.Fatal("fields must be tinted less than the surfaces behind them")
+	for name, pair := range map[string][2]color.RGBA{
+		"WindowBG": {t2.WindowBG, base.WindowBG},
+		"PanelBG":  {t2.PanelBG, base.PanelBG},
+		"TitleBG":  {t2.TitleBG, base.TitleBG},
+		"DialogBG": {t2.DialogBG, base.DialogBG},
+		"InputBG":  {t2.InputBG, base.InputBG},
+		"BtnBG":    {t2.BtnBG, base.BtnBG},
+		"Border":   {t2.Border, base.Border},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("%s = %v, want %v: Windows paints accents with the accent, not the window", name, pair[0], pair[1])
+		}
 	}
 }
 
@@ -91,10 +94,6 @@ func TestTintingLeavesThePresetAlone(t *testing.T) {
 	if *base != was {
 		t.Fatal("the theme it was given must not change")
 	}
-}
-
-func distance(a, b color.RGBA) int {
-	return abs(int(a.R)-int(b.R)) + abs(int(a.G)-int(b.G)) + abs(int(a.B)-int(b.B))
 }
 
 func abs(v int) int {

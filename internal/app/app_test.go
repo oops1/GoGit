@@ -448,8 +448,8 @@ func TestTheAppTakesTheAccentOfTheSystem(t *testing.T) {
 	if got := a.theme().Accent; got != dark {
 		t.Fatalf("accent on a light theme = %v, want the dark shade", got)
 	}
-	if a.theme().WindowBG == themeFor(config.ThemeLight).WindowBG {
-		t.Fatal("the window must take a trace of the system colour")
+	if a.theme().WindowBG != themeFor(config.ThemeLight).WindowBG {
+		t.Fatal("the window must keep the surface of the theme, as Windows does")
 	}
 }
 
