@@ -89,3 +89,32 @@ func TestAMessageWithoutAttributionComesBackUntouched(t *testing.T) {
 		}
 	}
 }
+
+func TestThePeopleAMessageCreditsAreReadInOrderOnce(t *testing.T) {
+	message := "subject\n\nFixes: #12\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\n" +
+		"Helped-by: Bob <bob@example.com>\nReviewed-by: Claude Opus 5 <noreply@anthropic.com>\n"
+
+	got := Attributed(message)
+
+	if len(got) != 2 || got[0] != "Claude Opus 5" || got[1] != "Bob" {
+		t.Fatalf("people = %q, want each credited person once, in the order of the message", got)
+	}
+}
+
+func TestAPersonWithoutANameIsKnownByTheAddress(t *testing.T) {
+	message := "subject\n\nCo-authored-by: <bob@example.com>\nSuggested-by: Ann\nThanks-to:  \n"
+
+	got := Attributed(message)
+
+	if len(got) != 2 || got[0] != "bob@example.com" || got[1] != "Ann" {
+		t.Fatalf("people = %q, want the address when there is no name and the bare name as written", got)
+	}
+}
+
+func TestAMessageThatCreditsNobodyNamesNobody(t *testing.T) {
+	for _, message := range []string{"subject\n", "subject\n\nbody\n", "subject\n\nFixes: #12\n"} {
+		if got := Attributed(message); len(got) != 0 {
+			t.Fatalf("people = %q for %q, want none", got, message)
+		}
+	}
+}

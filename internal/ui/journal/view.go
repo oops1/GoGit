@@ -12,20 +12,23 @@ import (
 const nearEndRows = 5
 
 type View struct {
-	grid         *widget.DataGridWidget
-	items        *datagrid.ObservableCollection
-	authorHeader string
-	lanes        *graph.Layout
-	refs         refPalette
-	OnSelect     func(Row)
-	OnNearEnd    func()
+	grid           *widget.DataGridWidget
+	items          *datagrid.ObservableCollection
+	authorHeader   string
+	fullAuthorName bool
+	lanes          *graph.Layout
+	refs           refPalette
+	credit         creditPalette
+	OnSelect       func(Row)
+	OnNearEnd      func()
 }
 
 func NewView() *View {
 	return &View{
-		items: datagrid.NewObservableCollection(),
-		lanes: graph.New(),
-		refs:  paletteOf(widget.CurrentTheme()),
+		items:  datagrid.NewObservableCollection(),
+		lanes:  graph.New(),
+		refs:   paletteOf(widget.CurrentTheme()),
+		credit: creditOf(widget.CurrentTheme()),
 	}
 }
 
@@ -39,7 +42,7 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 	v.installGraphColumn()
 	v.installMessageColumn()
 	v.SetFullAuthorName(false)
-	grid.Grid.OnScroll = func(int, int) { v.resizeGraphColumn() }
+	grid.Grid.OnScroll = func(int, int) { v.resizeToVisibleRows() }
 	grid.Grid.OnSelectionChanged = func(e datagrid.SelectionChangedEvent) {
 		row, ok := e.SelectedItem.(Row)
 		if !ok {
@@ -56,6 +59,7 @@ func (v *View) Bind(grid *widget.DataGridWidget) {
 
 func (v *View) Restyle(t *widget.Theme) {
 	v.refs = paletteOf(t)
+	v.credit = creditOf(t)
 	if v.grid == nil {
 		return
 	}
@@ -77,7 +81,12 @@ func (v *View) installMessageColumn() {
 func (v *View) Reset() {
 	v.items.Clear()
 	v.lanes.Reset()
+	v.resizeToVisibleRows()
+}
+
+func (v *View) resizeToVisibleRows() {
 	v.resizeGraphColumn()
+	v.resizeAuthorColumn()
 }
 
 func (v *View) installGraphColumn() {
@@ -128,7 +137,7 @@ func (v *View) Append(rows []Row) {
 		row.Graph = v.lanes.Add(graph.Commit{ID: row.ID, Parents: row.Parents})
 		v.items.Add(row)
 	}
-	v.resizeGraphColumn()
+	v.resizeToVisibleRows()
 }
 
 func (v *View) Count() int {
@@ -157,14 +166,12 @@ func (v *View) SetFullAuthorName(fullName bool) {
 	if fullName {
 		header = v.authorHeader
 	}
+	v.fullAuthorName = fullName
 	col := v.newAuthorColumn(header, fullName)
-	if fullName {
-		col.SetWidth(datagrid.PixelWidth(authorBadgeColumnWide))
-	} else {
-		col.SetWidth(datagrid.PixelWidth(float64(authorBadgeColumnWidth(v.grid.Grid.RowHeight))))
-	}
+	col.SetWidth(datagrid.PixelWidth(authorBadgeColumnWide))
 	cols[authorColumnIndex] = col
 	v.grid.Grid.SetColumns(cols)
+	v.resizeAuthorColumn()
 }
 
 const (

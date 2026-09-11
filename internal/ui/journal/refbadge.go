@@ -39,6 +39,10 @@ func paletteOf(t *widget.Theme) refPalette {
 	}
 }
 
+func creditOf(t *widget.Theme) creditPalette {
+	return creditPalette{fill: tintOf(t.PanelBG, t.SecondaryText), text: t.LabelText}
+}
+
 func tintOf(base, accent color.RGBA) color.RGBA {
 	const percent = 30
 	mix := func(b, a uint8) uint8 {

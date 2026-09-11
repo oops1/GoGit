@@ -103,3 +103,35 @@ func join(body string, lines []Line) string {
 	}
 	return out.String()
 }
+
+func Attributed(message string) []string {
+	_, lines, ok := Block(message)
+	if !ok {
+		return nil
+	}
+	var names []string
+	seen := map[string]bool{}
+	for _, line := range lines {
+		if !IsAttribution(line.Key) {
+			continue
+		}
+		name := personOf(line.Value)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return names
+}
+
+func personOf(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if at := strings.IndexByte(value, '<'); at >= 0 {
+		if name := strings.TrimSpace(value[:at]); name != "" {
+			return name
+		}
+		return strings.Trim(strings.TrimSpace(value[at:]), "<>")
+	}
+	return value
+}
