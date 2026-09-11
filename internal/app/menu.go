@@ -97,6 +97,8 @@ func buildEditMenuTree() []menuTreeEntry {
 		leaf("Menu.Edit.Discard", CmdDiscard),
 		{Separator: true},
 		leaf("Menu.Edit.Commit", CmdCommit),
+		{Separator: true},
+		leaf("Menu.Edit.Compare", CmdCompareFiles),
 	}
 }
 

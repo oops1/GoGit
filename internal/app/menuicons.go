@@ -27,6 +27,7 @@ var commandIcons = map[CommandID]string{
 	CmdUnstage:         "unstage",
 	CmdDiscard:         "discard",
 	CmdCommit:          "commit",
+	CmdCompareFiles:    "compare",
 	CmdFetch:           "fetch",
 	CmdPull:            "pull",
 	CmdPush:            "push",

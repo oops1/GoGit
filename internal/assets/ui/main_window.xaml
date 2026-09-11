@@ -32,6 +32,8 @@
                 <MenuItem Header="{Loc Menu.Edit.Discard}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Edit.Commit}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Edit.Compare}"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Remote}">
                 <MenuItem Header="{Loc Menu.Remote.Fetch}" IsEnabled="False"/>

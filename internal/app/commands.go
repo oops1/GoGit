@@ -32,6 +32,7 @@ const (
 	CmdUnstage         CommandID = "edit.unstage"
 	CmdDiscard         CommandID = "edit.discard"
 	CmdCommit          CommandID = "local.commit"
+	CmdCompareFiles    CommandID = "edit.compare-files"
 	CmdResetLayout     CommandID = "view.reset-layout"
 	CmdRefresh         CommandID = "view.refresh"
 	CmdCheckUpdates    CommandID = "help.check-updates"
