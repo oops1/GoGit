@@ -471,9 +471,11 @@ func abortWith(command string) func(b *mergeBuilder, ours bool) {
 func mergeStateOf(b *mergeBuilder, refused bool) string {
 	b.o.t.Helper()
 	var out []string
-	add := func(label, text string) { out = append(out, "== "+label+"\n"+text) }
+	add := func(label, text string) { out = append(out, "== "+label+"\n"+asGitVersionsAgree(label, text)) }
 	add("HEAD", b.o.run(b.dir, "rev-parse", "HEAD"))
 	add("message", b.o.run(b.dir, "log", "-1", "--format=%B%n%P%n%an %ae %ad%n%cn %ce %cd"))
+	history, _ := b.o.attempt(b.dir, "log", "-5", "--format=%T %s")
+	add("history", history)
 	branch, _ := b.o.attempt(b.dir, "symbolic-ref", "-q", "HEAD")
 	add("branch", branch)
 	if !refused {
@@ -512,6 +514,40 @@ func mergeStateOf(b *mergeBuilder, refused bool) string {
 	})
 	if err != nil {
 		b.o.t.Fatal(err)
+	}
+	return strings.Join(out, "\n")
+}
+
+func asGitVersionsAgree(label, text string) string {
+	switch label {
+	case rebasePath(rebaseTodo), rebasePath(rebaseDone):
+		return withoutTodoSubjectComments(text)
+	case rebasePath(rebaseMessage):
+		return strings.TrimRight(withoutCommentLines(text), "\n")
+	}
+	return text
+}
+
+func withoutTodoSubjectComments(text string) string {
+	var out []string
+	for line := range strings.SplitSeq(text, "\n") {
+		command, rest, found := strings.Cut(line, " ")
+		id, subject, hasSubject := strings.Cut(rest, " ")
+		if found && hasSubject {
+			line = command + " " + id + " " + strings.TrimPrefix(subject, "# ")
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+func withoutCommentLines(text string) string {
+	var out []string
+	for line := range strings.SplitSeq(text, "\n") {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		out = append(out, line)
 	}
 	return strings.Join(out, "\n")
 }
