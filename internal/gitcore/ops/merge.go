@@ -98,45 +98,70 @@ func Merge(ctx context.Context, r *repo.Repository, target string, opts MergeOpt
 	return m.merge(target)
 }
 
+type incoming struct {
+	commit  hash.ObjectID
+	label   string
+	reflog  string
+	message func(head headTarget) string
+}
+
 func (m *merger) merge(target string) (MergeResult, error) {
-	state, err := ReadMergeState(m.r)
-	if err != nil {
+	if err := m.refuseWhileMerging(); err != nil {
 		return MergeResult{}, err
-	}
-	if state.InProgress() {
-		return MergeResult{}, ErrMergeInProgress
 	}
 	theirs, ref, err := m.resolve(target)
 	if err != nil {
 		return MergeResult{}, err
 	}
+	return m.integrate(incoming{
+		commit: theirs,
+		label:  target,
+		reflog: "merge " + target,
+		message: func(head headTarget) string {
+			return defaultMergeMessage(m.r, m.rc.refs, target, ref, head)
+		},
+	})
+}
+
+func (m *merger) refuseWhileMerging() error {
+	state, err := ReadMergeState(m.r)
+	if err != nil {
+		return err
+	}
+	if state.InProgress() {
+		return ErrMergeInProgress
+	}
+	return nil
+}
+
+func (m *merger) integrate(in incoming) (MergeResult, error) {
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return MergeResult{}, err
 	}
-	result := MergeResult{Target: theirs, Old: head.old, New: head.old}
+	result := MergeResult{Target: in.commit, Old: head.old, New: head.old}
 	if head.old.IsZero() {
-		return m.fastForward(head, theirs, initialPullNote, result)
+		return m.fastForward(head, in.commit, initialPullNote, result)
 	}
 	if err := writeStateFile(m.r, origHeadFile, head.old.String()+"\n"); err != nil {
 		return result, err
 	}
-	bases, err := revision.MergeBase(revision.Context{Objects: m.store()}, head.old, theirs)
+	bases, err := revision.MergeBase(revision.Context{Objects: m.store()}, head.old, in.commit)
 	if err != nil {
 		return result, err
 	}
 	switch {
-	case slices.Contains(bases, theirs):
+	case slices.Contains(bases, in.commit):
 		result.UpToDate = true
 		return result, nil
 	case slices.Contains(bases, head.old) && m.opts.Mode != MergeNoFastForward && m.opts.Mode != MergeSquash:
-		return m.fastForward(head, theirs, "merge "+target+fastForwardNote, result)
+		return m.fastForward(head, in.commit, in.reflog+fastForwardNote, result)
 	case m.opts.Mode == MergeFastForwardOnly:
 		return result, ErrCannotFastForward
 	case len(bases) == 0:
 		return result, ErrUnrelatedHistories
 	}
-	return m.threeWay(head, theirs, bases, target, ref, result)
+	return m.threeWay(head, bases, in, result)
 }
 
 func (m *merger) resolve(target string) (hash.ObjectID, refs.Name, error) {
@@ -199,7 +224,8 @@ func (m *merger) commits() bool {
 	return m.opts.Mode != MergeSquash && !m.opts.NoCommit
 }
 
-func (m *merger) threeWay(head headTarget, theirs hash.ObjectID, bases []hash.ObjectID, name string, ref refs.Name, result MergeResult) (MergeResult, error) {
+func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, result MergeResult) (MergeResult, error) {
+	theirs := in.commit
 	if m.commits() {
 		if err := m.rc.requireIdentity(); err != nil {
 			return result, err
@@ -217,7 +243,7 @@ func (m *merger) threeWay(head headTarget, theirs hash.ObjectID, bases []hash.Ob
 	if err != nil {
 		return result, err
 	}
-	merged, err := m.mergeTrees(base, oursTree, theirsTree, merge.Labels{Ours: oursLabel, Theirs: name}, 0)
+	merged, err := m.mergeTrees(base, oursTree, theirsTree, merge.Labels{Ours: oursLabel, Theirs: in.label}, 0)
 	if err != nil {
 		return result, err
 	}
@@ -232,7 +258,7 @@ func (m *merger) threeWay(head headTarget, theirs hash.ObjectID, bases []hash.Ob
 	result.Conflicts = to.conflicted()
 	message := m.opts.Message
 	if message == "" {
-		message = defaultMergeMessage(m.r, m.rc.refs, name, ref, head)
+		message = in.message(head)
 	}
 	switch {
 	case m.opts.Mode == MergeSquash:
@@ -244,7 +270,7 @@ func (m *merger) threeWay(head headTarget, theirs hash.ObjectID, bases []hash.Ob
 	if err != nil {
 		return result, err
 	}
-	if err := m.advance(head, commit, "merge "+name+mergeStrategyNote); err != nil {
+	if err := m.advance(head, commit, in.reflog+mergeStrategyNote); err != nil {
 		return result, err
 	}
 	result.New, result.Committed = commit, true

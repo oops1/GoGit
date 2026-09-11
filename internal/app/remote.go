@@ -16,6 +16,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/transport"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/clone"
+	"github.com/oops1/gogit/internal/ui/merge"
 	"github.com/oops1/gogit/internal/ui/remotes"
 )
 
@@ -146,6 +147,10 @@ func (a *App) startSync() {
 		if err := a.runPullBody(ctx, o, prog, reporter); err != nil {
 			return err
 		}
+		if a.workingMergeState().InProgress() {
+			reporter.Log(i18n.T("Operation.Log.SyncStoppedOnMerge"))
+			return nil
+		}
 		return a.runPushBody(ctx, o, prog, reporter)
 	})
 }
@@ -160,17 +165,17 @@ func (a *App) runPullBody(ctx context.Context, o *openedRepository, prog progres
 		Progress: prog,
 		Fetch:    remote.FetchOptions{Progress: prog, Transport: a.transportOptions(prog)},
 	})
-	if errors.Is(err, ops.ErrNotFastForward) {
+	switch {
+	case errors.Is(err, ops.ErrNotFastForward):
 		reporter.Log(i18n.T("Operation.Log.NonFastForward"))
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if result.UpToDate {
+	case errors.Is(err, ops.ErrPullRebaseUnsupported):
+		reporter.Log(i18n.T("Operation.Log.PullRebaseUnsupported"))
+	case err == nil && result.UpToDate:
 		reporter.Log(i18n.T("Operation.Log.UpToDate"))
+	default:
+		reportMerge(reporter, merge.Request{}, result.Merge, err)
 	}
-	return nil
+	return err
 }
 
 func defaultPushRefspec(o *openedRepository) (refspec.RefSpec, error) {

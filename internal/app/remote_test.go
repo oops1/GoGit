@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -631,6 +632,7 @@ func TestPullReportsNonFastForwardWhenHistoriesDiverge(t *testing.T) {
 
 	addRemoteServerCommit(t, server, "main", "server-only.txt", "server\n")
 	addRemoteServerCommit(t, local, "main", "local-only.txt", "local\n")
+	appendLocalConfig(t, local, "[pull]\n\tff = only\n")
 
 	a.startPull()
 	view := lastOperationView(t, views)
@@ -640,6 +642,84 @@ func TestPullReportsNonFastForwardWhenHistoriesDiverge(t *testing.T) {
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, i18n.T("Operation.Log.NonFastForward")) {
 		t.Fatalf("log = %v, want a non-fast-forward line", lines)
+	}
+}
+
+func appendLocalConfig(t *testing.T, dir, text string) {
+	t.Helper()
+	r, err := gitrepo.Open(dir, gitrepo.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	data, err := r.CommonRoot().ReadFile("config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CommonRoot().WriteFile("config", append(data, []byte(text)...), 0o666); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func commitInWorkingCopy(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := writeFile(dir, name, content); err != nil {
+		t.Fatal(err)
+	}
+	r, err := gitrepo.Open(dir, gitrepo.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	if err := ops.Stage(t.Context(), r, []string{name}, ops.StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ops.Commit(t.Context(), r, ops.CommitOptions{Message: "local " + name}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPullMergesDivergedHistoriesAndSaysSo(t *testing.T) {
+	dir := t.TempDir()
+	server := filepath.Join(dir, "server")
+	local := filepath.Join(dir, "local")
+	initRemoteServerRepo(t, server, "main")
+	a := newRemoteTestApp(t)
+	views := captureOperationViews(t)
+	cloneIntoRegistry(t, a, server, local)
+	setTestUserIdentity(t, local)
+	addRemoteServerCommit(t, server, "main", "server-only.txt", "server\n")
+	commitInWorkingCopy(t, local, "local-only.txt", "local\n")
+
+	a.startPull()
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+
+	lines := readOnDispatcher(t, a, view.Lines)
+	prefix, _, _ := strings.Cut(i18n.T("Operation.Log.MergeCommitted"), "%")
+	if !slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, prefix) }) {
+		t.Fatalf("log = %v, want a merge commit line", lines)
+	}
+}
+
+func TestPullWithRebaseExplainsWhatIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	server := filepath.Join(dir, "server")
+	local := filepath.Join(dir, "local")
+	initRemoteServerRepo(t, server, "main")
+	a := newRemoteTestApp(t)
+	views := captureOperationViews(t)
+	cloneIntoRegistry(t, a, server, local)
+	addRemoteServerCommit(t, server, "main", "server-only.txt", "server\n")
+	addRemoteServerCommit(t, local, "main", "local-only.txt", "local\n")
+	appendLocalConfig(t, local, "[pull]\n\trebase = true\n")
+
+	a.startPull()
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+
+	if lines := readOnDispatcher(t, a, view.Lines); !slices.Contains(lines, i18n.T("Operation.Log.PullRebaseUnsupported")) {
+		t.Fatalf("log = %v", lines)
 	}
 }
 
@@ -717,6 +797,31 @@ func TestSyncStopsAtPullFailureWithoutPushing(t *testing.T) {
 	}
 	if got == localOnly {
 		t.Fatal("sync must not push once the pull stage fails")
+	}
+}
+
+func TestSyncStopsBeforePushingAnUnfinishedMerge(t *testing.T) {
+	dir := t.TempDir()
+	server := filepath.Join(dir, "server")
+	local := filepath.Join(dir, "local")
+	initRemoteServerRepo(t, server, "main")
+	addRemoteServerCommit(t, server, "main", "shared.txt", "base\n")
+	a := newRemoteTestApp(t)
+	views := captureOperationViews(t)
+	cloneIntoRegistry(t, a, server, local)
+	setTestUserIdentity(t, local)
+	serverTip := addRemoteServerCommit(t, server, "main", "shared.txt", "server\n")
+	commitInWorkingCopy(t, local, "shared.txt", "local\n")
+
+	a.startSync()
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+
+	if lines := readOnDispatcher(t, a, view.Lines); !slices.Contains(lines, i18n.T("Operation.Log.SyncStoppedOnMerge")) {
+		t.Fatalf("log = %v", lines)
+	}
+	if got, _ := readRemoteRef(t, server, refs.BranchName("main")); got != serverTip {
+		t.Fatal("sync pushed an unfinished merge")
 	}
 }
 
