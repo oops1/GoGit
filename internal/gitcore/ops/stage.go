@@ -152,6 +152,9 @@ func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
 		Stage: index.StageMerged,
 		Stat:  statOf(info, len(data)),
 	}
+	if len(s.idx.Conflicts(rel)) > 0 {
+		s.idx.Remove(rel)
+	}
 	s.idx.Add(entry)
 	return nil
 }

@@ -28,10 +28,21 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err := rc.requireIdentity(); err != nil {
 		return hash.Zero, err
 	}
+	state, err := ReadMergeState(r)
+	if err != nil {
+		return hash.Zero, err
+	}
+	if state.InProgress() && opts.Amend {
+		return hash.Zero, ErrMergeInProgress
+	}
 
 	lock, err := lockIndex(r)
 	if err != nil {
 		return hash.Zero, err
+	}
+	if lock.idx.HasConflicts() {
+		lock.abort()
+		return hash.Zero, ErrUnmergedPaths
 	}
 
 	treeID, err := lock.idx.WriteTree(rc.db)
@@ -51,13 +62,14 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 		lock.abort()
 		return hash.Zero, err
 	}
+	parents = append(parents, state.Heads...)
 
 	empty, err := isEmptyCommit(rc.db, treeID, parents)
 	if err != nil {
 		lock.abort()
 		return hash.Zero, err
 	}
-	if empty && !opts.AllowEmpty {
+	if empty && !opts.AllowEmpty && !state.InProgress() {
 		lock.abort()
 		return hash.Zero, ErrNothingToCommit
 	}
@@ -96,7 +108,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err := lock.commit(); err != nil {
 		return hash.Zero, err
 	}
-	return id, nil
+	return id, clearMergeState(r)
 }
 
 func commitParents(db *odb.DB, headCommit hash.ObjectID, amend bool) ([]hash.ObjectID, error) {
