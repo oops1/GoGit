@@ -107,7 +107,7 @@ func TestOraclePullMergesAsGitPullDoes(t *testing.T) {
 
 			got := pullStateOf(ourSide, ourRoot)
 			if want := pullStateOf(gitSide, gitRoot); got != want {
-				t.Fatalf("repository differs from git's:\n%s", sectionDiff(got, want))
+				t.Fatalf("repository differs from %s: %s", strings.TrimSpace(o.run(gitSide.dir, "--version")), sectionDiff(got, want))
 			}
 		})
 	}

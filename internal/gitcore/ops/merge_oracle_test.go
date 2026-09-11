@@ -525,21 +525,22 @@ func sections(state string) map[string]string {
 	return out
 }
 
-const diffLineLimit = 24
+const diffCharLimit = 1500
 
 func sectionDiff(got, want string) string {
 	ours, theirs := sections(got), sections(want)
-	var lines []string
+	var parts []string
 	for _, label := range slices.Sorted(maps.Keys(unionKeys(ours, theirs, map[string]bool{}))) {
 		if ours[label] == theirs[label] {
 			continue
 		}
-		lines = append(lines, "== "+label, "-- ours: "+strconv.Quote(ours[label]), "-- git:  "+strconv.Quote(theirs[label]))
+		parts = append(parts, "["+label+"] ours="+strconv.Quote(ours[label])+" git="+strconv.Quote(theirs[label]))
 	}
-	if len(lines) > diffLineLimit {
-		lines = append(lines[:diffLineLimit], "…")
+	out := strings.Join(parts, " ")
+	if len(out) > diffCharLimit {
+		out = out[:diffCharLimit] + "…"
 	}
-	return strings.Join(lines, "\n")
+	return out
 }
 
 func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOptions) (MergeResult, error) {
@@ -608,7 +609,7 @@ func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 
 			refused := ourErr != nil
 			if got, want := mergeStateOf(ourSide, refused), mergeStateOf(gitSide, refused); got != want {
-				t.Fatalf("repository differs from %s:\n%s", strings.TrimSpace(o.run(gitSide.dir, "--version")), sectionDiff(got, want))
+				t.Fatalf("repository differs from %s: %s", strings.TrimSpace(o.run(gitSide.dir, "--version")), sectionDiff(got, want))
 			}
 		})
 	}
