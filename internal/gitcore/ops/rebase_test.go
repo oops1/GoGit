@@ -463,3 +463,25 @@ func TestPullWithRebaseNeedsAnIdentity(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestContinueStripsTheConflictCommentsNewerGitLeavesInTheMessage(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.rebaseFork(true)
+	if _, err := Rebase(t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+		t.Fatalf("Rebase returned error %v", err)
+	}
+	tr.writeFile(".git/"+rebasePath(rebaseMessage), "topic f\n\nbody\n\n# Conflicts:\n#\tf\n")
+	tr.writeFile("f", "resolved\n")
+	if err := Stage(t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ContinueRebase(t.Context(), tr.repo, rebaseOptions()); err != nil {
+		t.Fatalf("ContinueRebase returned error %v", err)
+	}
+
+	history := tr.linearHistory(tr.branchTarget("topic"), 3)
+	if history[1].Message != "topic f\n\nbody\n" {
+		t.Fatalf("message = %q", history[1].Message)
+	}
+}

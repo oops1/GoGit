@@ -65,7 +65,7 @@ func buildPullSide(t *testing.T, o *oracle, s pullScenario) (*mergeBuilder, stri
 func pullStateOf(b *mergeBuilder, root string) string {
 	b.o.t.Helper()
 	var out []string
-	add := func(label, text string) { out = append(out, "== "+label+"\n"+text) }
+	add := func(label, text string) { out = append(out, "== "+label+"\n"+asGitVersionsAgree(label, text)) }
 	add("message", b.o.run(b.dir, "log", "-1", "--format=%B%n%an %ae %ad%n%cn %ce %cd"))
 	add("parents", strconv.Itoa(len(strings.Fields(b.o.run(b.dir, "log", "-1", "--format=%P")))))
 	add("reflog", b.o.run(b.dir, "reflog", "-1", "--format=%gs", "HEAD"))

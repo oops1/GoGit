@@ -90,7 +90,7 @@ func ReadRebaseState(r *repo.Repository) (RebaseState, error) {
 	if err != nil {
 		return RebaseState{}, err
 	}
-	state.Message = trimMessage(message)
+	state.Message = trimMessage(normalizeMessage(message))
 	if state.Rewritten, err = readStateFile(r, rebasePath(rebaseRewritten)); err != nil {
 		return RebaseState{}, err
 	}
