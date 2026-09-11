@@ -154,6 +154,7 @@ type App struct {
 
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
+	commands         commandWatch
 
 	postMu     sync.Mutex
 	posted     []func()
@@ -408,6 +409,8 @@ func (a *App) Dispatch(id CommandID) bool {
 		return false
 	}
 	a.log.Debug("command dispatched", "command", string(id))
+	a.commands.begin(id, time.Now())
+	defer a.commands.end()
 	fn()
 	return true
 }

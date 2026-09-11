@@ -8,10 +8,49 @@ import (
 )
 
 const (
-	defaultWatchdogInterval = 5 * time.Second
-	defaultWatchdogStall    = 20 * time.Second
+	defaultWatchdogInterval = 2 * time.Second
+	defaultWatchdogStall    = 8 * time.Second
 	watchdogStackLimit      = 1 << 20
 )
+
+type commandWatch struct {
+	mu      sync.Mutex
+	command CommandID
+	started time.Time
+	depth   int
+	warned  bool
+}
+
+func (c *commandWatch) begin(id CommandID, now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.depth == 0 {
+		c.command = id
+		c.started = now
+		c.warned = false
+	}
+	c.depth++
+}
+
+func (c *commandWatch) end() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.depth--
+}
+
+func (c *commandWatch) overdue(now time.Time, limit time.Duration) (CommandID, time.Duration, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.depth == 0 || c.warned {
+		return "", 0, false
+	}
+	running := now.Sub(c.started)
+	if running < limit {
+		return "", 0, false
+	}
+	c.warned = true
+	return c.command, running, true
+}
 
 type stallWatch struct {
 	name    string
@@ -61,6 +100,9 @@ func (a *App) runWatchdog(ctx context.Context, watches []*stallWatch) {
 	defer ticker.Stop()
 	for {
 		now := time.Now()
+		if id, running, late := a.commands.overdue(now, a.watchdogStall); late {
+			a.log.Error("command stalled", "command", string(id), "for", running, "stacks", goroutineStacks())
+		}
 		for _, w := range watches {
 			stalled, running := w.stalledFor(now)
 			switch {
