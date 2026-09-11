@@ -70,11 +70,11 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 	}
 	a.filesGrid.Data().Grid.SetSelectedIndex(row)
 	path := a.filePathOf(file)
-	items := []widget.MenuItem{
+	items := append(a.conflictItems(file),
 		menuItem("Menu.Context.Reveal", func() { a.revealPath(path) }),
 		menuItem("Menu.Context.Terminal", func() { a.openTerminalAt(containingDirectory(path)) }),
 		menuItem("Menu.Context.CopyPath", func() { a.copyToClipboard(path) }),
-	}
+	)
 	items = append(items, menuSeparator())
 	return append(items, a.editItems()...)
 }

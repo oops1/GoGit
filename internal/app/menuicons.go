@@ -28,6 +28,8 @@ var commandIcons = map[CommandID]string{
 	CmdDiscard:         "discard",
 	CmdCommit:          "commit",
 	CmdCompareFiles:    "compare",
+	CmdMerge:           "merge",
+	CmdAbortMerge:      "merge_abort",
 	CmdFetch:           "fetch",
 	CmdPull:            "pull",
 	CmdPush:            "push",
@@ -47,12 +49,16 @@ var menuGroupIcons = map[string]string{
 }
 
 var contextIcons = map[string]string{
-	"Menu.Context.Open":        "open",
-	"Menu.Context.Reveal":      "reveal",
-	"Menu.Context.Terminal":    "terminal",
-	"Menu.Context.CopyPath":    "copy",
-	"Menu.Context.CopyHash":    "copy",
-	"Menu.Context.CopyMessage": "copy",
+	"Menu.Context.Open":             "open",
+	"Menu.Context.Reveal":           "reveal",
+	"Menu.Context.Terminal":         "terminal",
+	"Menu.Context.CopyPath":         "copy",
+	"Menu.Context.CopyHash":         "copy",
+	"Menu.Context.CopyMessage":      "copy",
+	"Menu.Context.MergeIntoCurrent": "merge",
+	"Menu.Context.TakeOurs":         "take_ours",
+	"Menu.Context.TakeTheirs":       "take_theirs",
+	"Menu.Context.MarkResolved":     "resolved",
 }
 
 func commandIcon(id CommandID) image.Image {

@@ -524,3 +524,27 @@ func TestManyFlatTagsCollapseIntoFoldersWithTheNewestOnTop(t *testing.T) {
 		t.Fatalf("the rest of the tags must collapse into folders, got %v", childTexts(tagsRoot))
 	}
 }
+
+func TestContextMenuIsAskedForTheRefUnderTheCursor(t *testing.T) {
+	v, tw := bound(t)
+	v.Render(fullSnapshot(t))
+	item, ok := v.Item(refs.BranchName("main"))
+	if !ok {
+		t.Fatal("main is not rendered")
+	}
+	if got := tw.NodeContextMenu(item); got != nil {
+		t.Fatalf("menu without a handler = %+v", got)
+	}
+	var asked refs.Name
+	v.OnMenu = func(ref refs.Name) []widget.MenuItem {
+		asked = ref
+		return []widget.MenuItem{{Text: "merge"}}
+	}
+
+	if got := tw.NodeContextMenu(item); len(got) != 1 || asked != refs.BranchName("main") {
+		t.Fatalf("menu = %+v for %s", got, asked)
+	}
+	if got := tw.NodeContextMenu(nil); got != nil {
+		t.Fatalf("menu for no ref = %+v", got)
+	}
+}

@@ -85,3 +85,20 @@ func TestEveryControlOfADialogGetsTheSameColours(t *testing.T) {
 		t.Fatalf("body = %v, hint = %v, want the text and the secondary colour", body.TextColor, hint.TextColor)
 	}
 }
+
+func TestABannerIsTheChromeTouchedByTheAccent(t *testing.T) {
+	theme := widget.Win11DarkTheme()
+	p := Of(theme)
+	panel := widget.NewDockPanel()
+	panel.UseAlpha = true
+	label := widget.NewLabel("", color.RGBA{A: 0xFF})
+
+	p.Banner(panel, label)
+
+	if panel.Background == p.Chrome || panel.Background == p.Accent || panel.UseAlpha || panel.Background.A != p.Chrome.A {
+		t.Fatalf("background = %v, chrome %v, accent %v", panel.Background, p.Chrome, p.Accent)
+	}
+	if label.TextColor != p.Text {
+		t.Fatalf("text = %v", label.TextColor)
+	}
+}

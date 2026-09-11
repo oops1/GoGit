@@ -84,6 +84,7 @@ type App struct {
 	selectedCommit    hash.ObjectID
 
 	filesWorkingCopyBtn *widget.Button
+	banner              mergeBanner
 	askInput            func(title, prompt string, cb func(text string, ok bool))
 	askConfirm          func(title, message string, cb func(ok bool))
 	showAddRepo         func(initial addrepo.Request, cb func(addrepo.Result, bool))
@@ -263,6 +264,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
 	}
+	banner, err := bindMergeBanner(named)
+	if err != nil {
+		return nil, err
+	}
 
 	a := &App{
 		cfg:               cfg,
@@ -286,6 +291,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		filesFilterLabel:  filesFilterCountWidget,
 		newWatcher:        newRealWatcher,
 		journalPageSize:   defaultJournalPageSize,
+		banner:            banner,
 	}
 	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
@@ -375,6 +381,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdCommit] = a.openCommit
 	a.registerRemoteHandlers()
 	a.registerWorktreeHandlers()
+	a.registerMergeHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -809,6 +816,7 @@ func (a *App) applyTheme() {
 	a.applyRepoTreeTheme(theme)
 	a.applyPaneTitleColors(theme)
 	a.applyMenuIcons()
+	a.applyMergeBannerTheme(theme)
 	a.journalView.Restyle(theme)
 }
 

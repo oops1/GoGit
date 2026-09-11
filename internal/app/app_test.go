@@ -376,6 +376,7 @@ func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
 		`<FilesGrid x:Name="filesGrid"/>` +
 		`<TextBox x:Name="filesFilter"/><TextBlock x:Name="filesFilterCount"/>` +
 		`<DockPanel x:Name="filesFilterRow"/>` +
+		mergeBannerXAML +
 		filesStatusButtonsXAML +
 		filesSubdirsButtonXAML +
 		`<DataGrid x:Name="journalGrid"/><GitDiffView x:Name="diffView"/>` +

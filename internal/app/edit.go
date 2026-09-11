@@ -182,6 +182,10 @@ func (a *App) openCommit() {
 	staged := a.stagedCount
 	a.filesMu.Unlock()
 	initial := commit.Model{Staged: staged, LastMessage: a.lastCommitMessage()}
+	if state := a.workingMergeState(); state.Message != "" {
+		initial.Message = state.Message
+		initial.Merging = state.InProgress()
+	}
 	a.showCommit(initial, a.applyCommit)
 }
 

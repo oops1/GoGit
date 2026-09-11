@@ -35,6 +35,10 @@
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Edit.Compare}"/>
             </MenuItem>
+            <MenuItem Header="{Loc Menu.Branch}">
+                <MenuItem Header="{Loc Menu.Branch.Merge}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.AbortMerge}" IsEnabled="False"/>
+            </MenuItem>
             <MenuItem Header="{Loc Menu.Remote}">
                 <MenuItem Header="{Loc Menu.Remote.Fetch}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Remote.Pull}" IsEnabled="False"/>
@@ -97,6 +101,13 @@
                 </DockPane>
                 <DockPane Id="files" Title="{Loc Pane.Files}" Side="Top" Size="200">
                     <DockPanel>
+                        <DockPanel x:Name="mergeBanner" DockPanel.Dock="Top" Margin="4,4,4,0" Visibility="Collapsed">
+                            <Button x:Name="mergeBannerAbort" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Content="{Loc Banner.Merge.Abort}"/>
+                            <Button x:Name="mergeBannerCommit" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Content="{Loc Banner.Merge.Commit}"/>
+                            <TextBlock x:Name="mergeBannerText" Text="" Margin="6,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
                         <DockPanel x:Name="filesFilterRow" DockPanel.Dock="Top" Margin="4,4,4,2">
                             <TextBox x:Name="filesFilter" DockPanel.Dock="Left" Width="220" Margin="0,0,6,0"
                                      Placeholder="{Loc Files.Filter.Placeholder}"/>

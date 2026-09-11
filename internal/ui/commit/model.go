@@ -7,6 +7,7 @@ type Model struct {
 	Amend       bool
 	Staged      int
 	LastMessage string
+	Merging     bool
 }
 
 func (m Model) CanConfirm() bool {
