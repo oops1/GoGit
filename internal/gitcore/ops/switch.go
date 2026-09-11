@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -225,7 +224,7 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targ
 
 func (sw *switcher) isDirty(rel string, idxEntry *index.Entry, tracked func(string) bool) (bool, error) {
 	info, err := fsRootLstat(sw.wt.root, filepath.FromSlash(rel))
-	notExist := errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
+	notExist := missingPath(err)
 	if err != nil && !notExist {
 		return false, err
 	}
@@ -308,7 +307,7 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if err := sw.ctx.Err(); err != nil {
 			return err
 		}
-		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !missingPath(err) {
 			return err
 		}
 		idx.Remove(rel)

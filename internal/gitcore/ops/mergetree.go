@@ -1,8 +1,6 @@
 package ops
 
 import (
-	"errors"
-	"io/fs"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -160,7 +158,7 @@ func applyOutcome(sw *switcher, idx *index.Index, to outcome, changed []string) 
 		if _, keep := to.tree[path]; keep {
 			continue
 		}
-		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(path)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(path)); err != nil && !missingPath(err) {
 			return err
 		}
 		removed = append(removed, path)

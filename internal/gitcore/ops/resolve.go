@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 
 	"github.com/oops1/gogit/internal/gitcore/index"
@@ -79,7 +78,7 @@ func resolveConflict(sw *switcher, idx *index.Index, raw string, side ConflictSi
 		idx.Add(index.Entry{Path: rel, Mode: entry.Mode, ID: entry.ID, Stage: index.StageMerged})
 		return nil
 	}
-	if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !missingPath(err) {
 		return err
 	}
 	return nil

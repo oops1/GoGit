@@ -293,3 +293,24 @@ func TestStageReplacesAFileWithADirectoryAndBack(t *testing.T) {
 		t.Fatal("the directory entries survived its replacement by a file")
 	}
 }
+
+func TestStageDropsAPathUnderWhatBecameAFile(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.writeFile("d/x", "inside\n")
+	if err := Stage(t.Context(), tr.repo, []string{"d/x"}, StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	tr.remove("d")
+	tr.writeFile("d", "file\n")
+
+	if err := Stage(t.Context(), tr.repo, []string{"d/x", "d"}, StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, inside := entryOf(t, tr.index(), "d/x"); inside {
+		t.Fatal("the entry under the new file survived")
+	}
+	if _, file := entryOf(t, tr.index(), "d"); !file {
+		t.Fatal("the new file was not staged")
+	}
+}

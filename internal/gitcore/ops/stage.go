@@ -2,7 +2,6 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -70,7 +69,7 @@ func (s *stager) stage(rel string) error {
 	}
 	info, err := fsRootLstat(s.wt.root, filepath.FromSlash(rel))
 	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	case missingPath(err):
 		return s.stageMissing(rel)
 	case err != nil:
 		return err
@@ -129,7 +128,7 @@ func (s *stager) stageDir(rel string) error {
 	prefix := rel + "/"
 	for _, tracked := range slices.Collect(s.idx.Paths(prefix)) {
 		if !present[tracked] {
-			if _, err := fsRootLstat(s.wt.root, filepath.FromSlash(tracked)); errors.Is(err, fs.ErrNotExist) {
+			if _, err := fsRootLstat(s.wt.root, filepath.FromSlash(tracked)); missingPath(err) {
 				s.idx.Remove(tracked)
 			}
 		}
