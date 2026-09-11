@@ -370,3 +370,23 @@ func TestAFileThatCannotBeSavedStopsTheSaveAndSaysWhy(t *testing.T) {
 		t.Fatalf("message = %q, modified = %v, want the failure and the edit kept", v.message.Text(), v.Modified())
 	}
 }
+
+func TestTheWindowShrinksIntoASmallerMainWindow(t *testing.T) {
+	v := newTestView(t)
+	full := v.Dialog().Bounds()
+
+	v.FitWithin(900, 600)
+	if got := v.Dialog().Bounds(); got.Dx() != 900-windowMargin || got.Dy() != 600-windowMargin {
+		t.Fatalf("size = %v, want it inside the main window", got)
+	}
+
+	v.FitWithin(300, 200)
+	if got := v.Dialog().Bounds(); got.Dx() != dialogMinWidth || got.Dy() != dialogMinHeight {
+		t.Fatalf("size = %v, want the smallest usable size", got)
+	}
+
+	v.FitWithin(5000, 5000)
+	if got := v.Dialog().Bounds(); got.Dx() > full.Dx() || got.Dy() > full.Dy() {
+		t.Fatalf("size = %v, want no larger than the %v it was drawn for", got, full)
+	}
+}

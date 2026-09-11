@@ -21,6 +21,7 @@ const (
 	prevChangeIcon     = "change_prev"
 	nextChangeIcon     = "change_next"
 	navigationIconSize = 18
+	windowMargin       = 48
 )
 
 var ErrWidgetMissing = errors.New("compare: named widget missing")
@@ -74,6 +75,14 @@ func NewView() (*View, error) {
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
+
+func (v *View) FitWithin(width, height int) {
+	size := v.dlg.Bounds()
+	v.dlg.Resize(
+		max(dialogMinWidth, min(size.Dx(), width-windowMargin)),
+		max(dialogMinHeight, min(size.Dy(), height-windowMargin)),
+	)
+}
 
 func (v *View) Diff() *widget.DiffView { return v.diff }
 

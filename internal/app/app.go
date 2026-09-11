@@ -336,6 +336,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesGrid.SetItemsSource(a.filesItems)
 	a.filesGrid.Data().Grid.SelectionMode = datagrid.SelectionExtended
 	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
+	a.filesGrid.Data().Grid.OnRowActivated = a.onFilesRowActivated
 	a.restoreFilesColumns()
 	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
 	a.restoreFilesStatusFilter()
