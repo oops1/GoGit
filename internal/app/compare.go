@@ -30,8 +30,61 @@ type compareSide struct {
 }
 
 func (a *App) openCompare() {
+	a.filesMu.Lock()
+	mode, files := a.filesMode, a.currentFiles
+	a.filesMu.Unlock()
+	if mode == filesModeCommit {
+		a.compareCommitSelection(files)
+		return
+	}
 	left, right := comparePair(a.workingRoot(), a.orderedWorkingPaths())
 	a.openCompareFiles(left, right)
+}
+
+func (a *App) compareCommitSelection(files []diff.File) {
+	var picked []diff.File
+	for _, path := range a.orderedSelectedPaths() {
+		if file, ok := fileOf(files, changes.Row{RelPath: path}); ok {
+			picked = append(picked, file)
+		}
+	}
+	a.compareCommitFiles(picked)
+}
+
+func (a *App) compareCommitFiles(picked []diff.File) {
+	o := a.opened()
+	if o == nil || len(picked) == 0 {
+		a.openCompareFiles("", "")
+		return
+	}
+	commit := a.selectedCommit.String()
+	var left, right compareSide
+	var err error
+	if len(picked) == 1 {
+		left, right, err = commitSides(o, picked[0], commit)
+	} else {
+		left, err = commitVersion(o, picked[0], commit)
+		if err == nil {
+			right, err = commitVersion(o, picked[1], commit)
+		}
+	}
+	if err != nil {
+		a.log.Warn("compare files failed", "error", err)
+		return
+	}
+	a.openCompareSides(left, right)
+}
+
+func commitVersion(o *openedRepository, file diff.File, commit string) (compareSide, error) {
+	data, present, err := blobData(o.db, file.NewID)
+	if err != nil {
+		return compareSide{}, err
+	}
+	side := compareSide{title: shortCommit(commit), note: cmp.Or(file.NewPath, file.OldPath), text: data, readOnly: true}
+	if !present {
+		side.title = i18n.T("Dialog.Compare.Deleted")
+	}
+	return side, nil
 }
 
 func comparePair(root string, paths []string) (string, string) {
@@ -46,9 +99,21 @@ func comparePair(root string, paths []string) (string, string) {
 }
 
 func (a *App) orderedWorkingPaths() []string {
+	a.filesMu.Lock()
+	mode := a.filesMode
+	a.filesMu.Unlock()
+	if mode != filesModeWorking {
+		return nil
+	}
+	return a.orderedSelectedPaths()
+}
+
+func (a *App) orderedSelectedPaths() []string {
 	selected := map[string]bool{}
-	for _, path := range a.selectedWorkingPaths() {
-		selected[path] = true
+	for _, item := range a.filesGrid.Data().Grid.SelectedItems() {
+		if row, ok := item.(changes.Row); ok && row.RelPath != "" {
+			selected[row.RelPath] = true
+		}
 	}
 	var ordered []string
 	for i := range a.filesItems.Count() {

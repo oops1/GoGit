@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -257,4 +258,123 @@ func TestTheSaveDialogIsTheEnginesOwn(t *testing.T) {
 		t.Fatal("the save dialog must open")
 	}
 	a.eng.CloseModal(dialog.Dialog())
+}
+
+func commitFilesInGrid(t *testing.T, a *App, files []diff.File) {
+	t.Helper()
+	readOnDispatcher(t, a, func() bool {
+		a.filesMu.Lock()
+		a.filesMode = filesModeCommit
+		a.currentFiles = files
+		a.filesMu.Unlock()
+		rows := make([]changes.Row, 0, len(files))
+		for _, file := range files {
+			rows = append(rows, changes.Row{RelPath: cmp.Or(file.NewPath, file.OldPath)})
+		}
+		a.setFilesRows(rows)
+		return true
+	})
+}
+
+func TestCompareFilesOnOneFileOfACommitComparesItWithTheParent(t *testing.T) {
+	a, _, captured := workingCompareApp(t)
+	o := a.opened()
+	files := []diff.File{{OldPath: "a.txt", NewPath: "a.txt", OldID: putChangesBlob(t, o.db, "before\n"), NewID: putChangesBlob(t, o.db, "after\n")}}
+	commitFilesInGrid(t, a, files)
+	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(0); return true })
+
+	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+
+	view := *captured
+	if view.Diff().Text(widget.DiffLeft) != "before\n" || view.Diff().Text(widget.DiffRight) != "after\n" {
+		t.Fatalf("sides = %q | %q, want the parent and the commit", view.Diff().Text(widget.DiffLeft), view.Diff().Text(widget.DiffRight))
+	}
+}
+
+func TestCompareFilesOnTwoFilesOfACommitPutsTheirVersionsSideBySide(t *testing.T) {
+	a, _, captured := workingCompareApp(t)
+	o := a.opened()
+	files := []diff.File{
+		{NewPath: "a.txt", NewID: putChangesBlob(t, o.db, "first\n")},
+		{OldPath: "b.txt", OldID: putChangesBlob(t, o.db, "gone\n")},
+	}
+	commitFilesInGrid(t, a, files)
+	grid := a.filesGrid.Data()
+	b := grid.Grid.Bounds()
+	y := func(i int) int {
+		return b.Min.Y + grid.Grid.HeaderHeight + i*grid.Grid.RowHeight + grid.Grid.RowHeight/2
+	}
+	readOnDispatcher(t, a, func() bool {
+		for i, mod := range []widget.KeyMod{0, widget.ModCtrl} {
+			grid.OnMouseButton(widget.MouseEvent{X: b.Min.X + 20, Y: y(i), Button: widget.MouseLeft, Pressed: true, Mod: mod})
+			grid.OnMouseButton(widget.MouseEvent{X: b.Min.X + 20, Y: y(i), Button: widget.MouseLeft, Pressed: false, Mod: mod})
+		}
+		return true
+	})
+
+	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+
+	view := *captured
+	if view.Diff().Text(widget.DiffLeft) != "first\n" || view.Diff().Text(widget.DiffRight) != "" {
+		t.Fatalf("sides = %q | %q, want the two files as the commit has them", view.Diff().Text(widget.DiffLeft), view.Diff().Text(widget.DiffRight))
+	}
+}
+
+func TestCompareFilesOnACommitWithNothingSelectedOpensAnEmptyWindow(t *testing.T) {
+	a, _, captured := workingCompareApp(t)
+	commitFilesInGrid(t, a, []diff.File{{NewPath: "a.txt"}})
+	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(-1); return true })
+
+	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+
+	if *captured == nil || (*captured).Diff().FilePath(widget.DiffLeft) != "" {
+		t.Fatal("the window must open empty")
+	}
+}
+
+func TestCompareFilesOnABrokenCommitFileIsLogged(t *testing.T) {
+	a, _, captured := workingCompareApp(t)
+	missing := hash.SumSHA1("blob", []byte("never written"))
+	commitFilesInGrid(t, a, []diff.File{{NewPath: "a.txt", NewID: missing}, {NewPath: "b.txt", NewID: missing}})
+	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(0); return true })
+
+	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+
+	if *captured != nil {
+		t.Fatal("a file whose objects cannot be read must not open")
+	}
+}
+
+func TestTwoBrokenCommitFilesAreLoggedToo(t *testing.T) {
+	a, _, captured := workingCompareApp(t)
+	o := a.opened()
+	missing := hash.SumSHA1("blob", []byte("never written"))
+	good := putChangesBlob(t, o.db, "fine\n")
+	for _, files := range [][]diff.File{
+		{{NewPath: "a.txt", NewID: missing}, {NewPath: "b.txt", NewID: good}},
+		{{NewPath: "a.txt", NewID: good}, {NewPath: "b.txt", NewID: missing}},
+	} {
+		a.selectedCommit = hash.Zero
+		a.filesMu.Lock()
+		a.currentFiles = files
+		a.filesMu.Unlock()
+		readOnDispatcher(t, a, func() bool {
+			a.compareCommitFiles(files)
+			return true
+		})
+	}
+
+	if *captured != nil {
+		t.Fatal("a pair with an unreadable file must not open")
+	}
+}
+
+func TestTheFilesOfACommitAreNotTakenForWorkingCopyFiles(t *testing.T) {
+	a, _, _ := workingCompareApp(t)
+	commitFilesInGrid(t, a, []diff.File{{NewPath: "a.txt"}})
+	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(0); return true })
+
+	if got := readOnDispatcher(t, a, a.orderedWorkingPaths); got != nil {
+		t.Fatalf("paths = %v, want none: the list holds the files of a commit", got)
+	}
 }
