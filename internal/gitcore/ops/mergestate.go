@@ -32,6 +32,7 @@ const (
 	OperationMerge
 	OperationCherryPick
 	OperationRevert
+	OperationRebase
 )
 
 type MergeState struct {
@@ -40,6 +41,7 @@ type MergeState struct {
 	Reverted      hash.ObjectID
 	Message       string
 	NoFastForward bool
+	Rebasing      bool
 }
 
 func (s MergeState) Operation() Operation {
@@ -50,6 +52,8 @@ func (s MergeState) Operation() Operation {
 		return OperationCherryPick
 	case !s.Reverted.IsZero():
 		return OperationRevert
+	case s.Rebasing:
+		return OperationRebase
 	}
 	return OperationNone
 }
@@ -75,6 +79,11 @@ func ReadMergeState(r *repo.Repository) (MergeState, error) {
 	if state.Reverted, err = readHeadFile(r, revertFile); err != nil {
 		return MergeState{}, err
 	}
+	headName, err := readStateFile(r, rebasePath(rebaseHeadName))
+	if err != nil {
+		return MergeState{}, err
+	}
+	state.Rebasing = headName != ""
 	mode, err := readStateFile(r, mergeModeFile)
 	if err != nil {
 		return MergeState{}, err
@@ -121,11 +130,5 @@ func writeStateFile(r *repo.Repository, name, content string) error {
 }
 
 func clearMergeState(r *repo.Repository) error {
-	var errs []error
-	for _, name := range mergeStateFiles {
-		if err := fsRootRemove(r.Root(), name); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			errs = append(errs, fmt.Errorf("ops: remove %s: %w", name, err))
-		}
-	}
-	return errors.Join(errs...)
+	return removeStateFiles(r, mergeStateFiles...)
 }

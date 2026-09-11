@@ -13,6 +13,8 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
 )
 
 type faultSeam struct {
@@ -101,6 +103,56 @@ func mergeSeams() []faultSeam {
 						return errInjected
 					}
 					return original(tx, name, next, old)
+				}
+			})
+		}},
+		{"read ref", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &refsLookup, func(original func(*refs.Store, refs.Name) (refs.Ref, error)) func(*refs.Store, refs.Name) (refs.Ref, error) {
+				return func(store *refs.Store, name refs.Name) (refs.Ref, error) {
+					if hit(calls, failAt) {
+						return refs.Ref{}, errInjected
+					}
+					return original(store, name)
+				}
+			})
+		}},
+		{"commit refs", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txCommit, func(original func(*refs.Transaction) error) func(*refs.Transaction) error {
+				return func(tx *refs.Transaction) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx)
+				}
+			})
+		}},
+		{"open working tree", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &worktreeOpen, func(original func(*repo.Repository, worktree.Options) (*worktree.Worktree, error)) func(*repo.Repository, worktree.Options) (*worktree.Worktree, error) {
+				return func(r *repo.Repository, opts worktree.Options) (*worktree.Worktree, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(r, opts)
+				}
+			})
+		}},
+		{"detach head", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txDetach, func(original func(*refs.Transaction, refs.Name, hash.ObjectID) error) func(*refs.Transaction, refs.Name, hash.ObjectID) error {
+				return func(tx *refs.Transaction, name refs.Name, id hash.ObjectID) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, id)
+				}
+			})
+		}},
+		{"attach head", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txSetSymbolic, func(original func(*refs.Transaction, refs.Name, refs.Name) error) func(*refs.Transaction, refs.Name, refs.Name) error {
+				return func(tx *refs.Transaction, name, target refs.Name) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, target)
 				}
 			})
 		}},
@@ -248,6 +300,44 @@ func mergeFaultScenarios() []faultScenario {
 		}, func(ctx context.Context, tr *testRepo) error {
 			_, err := Commit(ctx, tr.repo, CommitOptions{Message: "picked", When: mergeTime})
 			return err
+		}},
+		{"rebase", func(tr *testRepo) { tr.rebaseFork(false) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Rebase(ctx, tr.repo, "main", rebaseOptions())
+			return err
+		}},
+		{"rebase with a conflict", func(tr *testRepo) { tr.rebaseFork(true) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Rebase(ctx, tr.repo, "main", rebaseOptions())
+			return err
+		}},
+		{"continue a rebase", func(tr *testRepo) {
+			tr.rebaseFork(true)
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.writeFile("f", "resolved\n")
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := ContinueRebase(ctx, tr.repo, rebaseOptions())
+			return err
+		}},
+		{"skip a rebase step", func(tr *testRepo) {
+			tr.rebaseFork(true)
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := SkipRebase(ctx, tr.repo, rebaseOptions())
+			return err
+		}},
+		{"abort a rebase", func(tr *testRepo) {
+			tr.rebaseFork(true)
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			return AbortOperation(ctx, tr.repo)
 		}},
 		{"take a side", func(tr *testRepo) {
 			tr.fork(map[string]string{"f": changeLine(tenLines("f"), 4, "OURS"), "g": changeLine(tenLines("g"), 4, "OURS")}, map[string]string{"f": changeLine(tenLines("f"), 4, "THEIRS"), "g": ""})

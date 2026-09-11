@@ -22,6 +22,7 @@ var (
 	fsRootMkdirAll  = (*os.Root).MkdirAll
 	fsRootRename    = (*os.Root).Rename
 	fsRootWriteFile = (*os.Root).WriteFile
+	fsRootRemoveAll = (*os.Root).RemoveAll
 )
 
 var (
@@ -36,6 +37,8 @@ var (
 	dbTree        = (*odb.DB).Tree
 	dbCommit      = (*odb.DB).Commit
 	dbPeel        = (*odb.DB).Peel
+	refsLookup    = (*refs.Store).Lookup
+	txCommit      = (*refs.Transaction).Commit
 	txUpdate      = (*refs.Transaction).Update
 	txDelete      = (*refs.Transaction).Delete
 	txSetSymbolic = (*refs.Transaction).SetSymbolic

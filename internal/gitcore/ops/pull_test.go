@@ -130,11 +130,43 @@ func TestPullWithFastForwardOnlyRefusesDivergedHistory(t *testing.T) {
 	}
 }
 
-func TestPullWithRebaseCannotBringInDivergedHistoryYet(t *testing.T) {
-	_, client := divergedPull(t, "[pull]\n\trebase = merges\n")
+func TestPullWithRebaseReplaysLocalCommitsOnTheUpstream(t *testing.T) {
+	src, client := divergedPull(t, "[pull]\n\trebase = merges\n")
+	upstream := src.branchTarget("main")
 
-	if _, err := Pull(t.Context(), client.repo, PullOptions{}); !errors.Is(err, ErrPullRebaseUnsupported) {
-		t.Fatalf("Pull returned %v, want %v", err, ErrPullRebaseUnsupported)
+	result, err := Pull(t.Context(), client.repo, PullOptions{})
+
+	if err != nil || !result.Updated || result.Rebase.Applied != 1 {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+	commit, err := client.db().Commit(client.branchTarget("main"))
+	if err != nil || len(commit.Parents) != 1 || commit.Parents[0] != upstream || commit.Message != "local divergent commit\n" {
+		t.Fatalf("commit = %+v, %v", commit, err)
+	}
+	if head, ok := client.headSymbolicTarget(); !ok || head != refs.BranchName("main") {
+		t.Fatalf("HEAD = %s, attached %v", head, ok)
+	}
+}
+
+func TestPullWithRebaseStopsOnAConflict(t *testing.T) {
+	src := newFetchServer(t)
+	client := cloneForFetch(t, src)
+	client.appendConfig("[user]\n\tname = ann\n\temail = ann@example.com\n[pull]\n\trebase = true\n")
+	client.repo = client.reopen()
+	client.writeFile("a.txt", "local\n")
+	mustStage(t, client, "a.txt")
+	client.commitAll("local")
+	src.writeFile("a.txt", "remote\n")
+	mustStage(t, src, "a.txt")
+	src.commitAll("remote")
+
+	result, err := Pull(t.Context(), client.repo, PullOptions{})
+
+	if err != nil || result.Updated || len(result.Rebase.Conflicts) != 1 {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+	if state, err := ReadRebaseState(client.repo); err != nil || !state.InProgress() {
+		t.Fatalf("state = %+v, %v", state, err)
 	}
 }
 

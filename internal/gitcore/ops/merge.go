@@ -59,11 +59,12 @@ const (
 )
 
 type merger struct {
-	ctx  context.Context
-	r    *repo.Repository
-	wt   *workingTree
-	rc   *repoContext
-	opts MergeOptions
+	ctx    context.Context
+	r      *repo.Repository
+	wt     *workingTree
+	rc     *repoContext
+	opts   MergeOptions
+	action string
 }
 
 func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*merger, error) {
@@ -218,7 +219,7 @@ func (m *merger) advance(head headTarget, commit hash.ObjectID, message string) 
 		tx.Rollback()
 		return err
 	}
-	return tx.Commit()
+	return txCommit(tx)
 }
 
 func (m *merger) commits() bool {
@@ -418,6 +419,13 @@ func AbortOperation(ctx context.Context, r *repo.Repository) error {
 		return err
 	}
 	defer m.close()
+	if state.Operation() == OperationRebase {
+		rebasing, err := ReadRebaseState(r)
+		if err != nil {
+			return err
+		}
+		return m.abortRebase(rebasing)
+	}
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return err

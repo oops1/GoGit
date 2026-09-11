@@ -168,14 +168,23 @@ func (a *App) runPullBody(ctx context.Context, o *openedRepository, prog progres
 	switch {
 	case errors.Is(err, ops.ErrNotFastForward):
 		reporter.Log(i18n.T("Operation.Log.NonFastForward"))
-	case errors.Is(err, ops.ErrPullRebaseUnsupported):
-		reporter.Log(i18n.T("Operation.Log.PullRebaseUnsupported"))
 	case err == nil && result.UpToDate:
 		reporter.Log(i18n.T("Operation.Log.UpToDate"))
+	case len(result.Rebase.Conflicts) > 0:
+		reportRebaseStop(reporter, result.Rebase)
+	case err == nil && !result.Rebase.Old.IsZero():
+		reporter.Log(i18n.Tf("Operation.Log.Rebased", result.Rebase.Applied, shortHash(result.Rebase.New)))
 	default:
 		reportMerge(reporter, merge.Request{}, result.Merge, err)
 	}
 	return err
+}
+
+func reportRebaseStop(reporter OperationReporter, result ops.RebaseResult) {
+	reporter.Log(i18n.Tf("Operation.Log.RebaseStopped", shortHash(result.Stopped), len(result.Conflicts)))
+	for _, path := range result.Conflicts {
+		reporter.Log(i18n.Tf("Operation.Log.MergeConflictPath", path))
+	}
 }
 
 func defaultPushRefspec(o *openedRepository) (refspec.RefSpec, error) {

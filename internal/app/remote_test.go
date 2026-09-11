@@ -702,7 +702,7 @@ func TestPullMergesDivergedHistoriesAndSaysSo(t *testing.T) {
 	}
 }
 
-func TestPullWithRebaseExplainsWhatIsMissing(t *testing.T) {
+func TestPullWithRebaseSaysHowManyCommitsItReplayed(t *testing.T) {
 	dir := t.TempDir()
 	server := filepath.Join(dir, "server")
 	local := filepath.Join(dir, "local")
@@ -710,15 +710,17 @@ func TestPullWithRebaseExplainsWhatIsMissing(t *testing.T) {
 	a := newRemoteTestApp(t)
 	views := captureOperationViews(t)
 	cloneIntoRegistry(t, a, server, local)
+	setTestUserIdentity(t, local)
 	addRemoteServerCommit(t, server, "main", "server-only.txt", "server\n")
-	addRemoteServerCommit(t, local, "main", "local-only.txt", "local\n")
+	commitInWorkingCopy(t, local, "local-only.txt", "local\n")
 	appendLocalConfig(t, local, "[pull]\n\trebase = true\n")
 
 	a.startPull()
 	view := lastOperationView(t, views)
 	waitForFinishedOperation(t, a, view)
 
-	if lines := readOnDispatcher(t, a, view.Lines); !slices.Contains(lines, i18n.T("Operation.Log.PullRebaseUnsupported")) {
+	prefix, _, _ := strings.Cut(i18n.T("Operation.Log.Rebased"), "%")
+	if lines := readOnDispatcher(t, a, view.Lines); !slices.ContainsFunc(lines, func(line string) bool { return strings.HasPrefix(line, prefix) }) {
 		t.Fatalf("log = %v", lines)
 	}
 }

@@ -119,37 +119,56 @@ func (m *merger) planPick(id hash.ObjectID, revert bool) (pickPlan, error) {
 	}, nil
 }
 
+type pickedTree struct {
+	tree      hash.ObjectID
+	empty     bool
+	conflicts []string
+}
+
 func (m *merger) applyPick(head headTarget, id hash.ObjectID, plan pickPlan) (PickResult, error) {
 	result := PickResult{Picked: id}
-	ours, oursTree, err := m.snapshot(head.old)
+	picked, err := m.mergePick(head, plan)
 	if err != nil {
 		return result, err
 	}
-	merged, err := m.mergeTrees(plan.base, oursTree, plan.theirs, plan.labels, 0)
-	if err != nil {
-		return result, err
-	}
-	to := outcomeOf(merged)
-	if err := m.moveTo(ours, to, true); err != nil {
-		return result, err
-	}
-	tree, err := merged.Tree.Write(m.store())
-	if err != nil {
-		return result, err
-	}
-	if err := writeStateFile(m.r, autoMergeFile, tree.String()+"\n"); err != nil {
-		return result, err
-	}
-	result.Conflicts = to.conflicted()
-	if !result.Clean() {
+	result.Conflicts = picked.conflicts
+	switch {
+	case !result.Clean():
 		return result, writeStateFiles(m.r, []stateFile{
 			{plan.stateFile, id.String() + "\n"},
 			{mergeMsgFile, withConflictList(plan.message, result.Conflicts)},
 		})
-	}
-	if tree == oursTree {
+	case picked.empty:
 		return result, ErrNothingToCommit
 	}
+	result.Commit, err = m.commitPick(head, plan, picked.tree)
+	return result, err
+}
+
+func (m *merger) mergePick(head headTarget, plan pickPlan) (pickedTree, error) {
+	ours, oursTree, err := m.snapshot(head.old)
+	if err != nil {
+		return pickedTree{}, err
+	}
+	merged, err := m.mergeTrees(plan.base, oursTree, plan.theirs, plan.labels, 0)
+	if err != nil {
+		return pickedTree{}, err
+	}
+	to := outcomeOf(merged)
+	if err := m.moveTo(ours, to, true); err != nil {
+		return pickedTree{}, err
+	}
+	tree, err := merged.Tree.Write(m.store())
+	if err != nil {
+		return pickedTree{}, err
+	}
+	if err := writeStateFile(m.r, autoMergeFile, tree.String()+"\n"); err != nil {
+		return pickedTree{}, err
+	}
+	return pickedTree{tree: tree, empty: tree == oursTree, conflicts: to.conflicted()}, nil
+}
+
+func (m *merger) commitPick(head headTarget, plan pickPlan, tree hash.ObjectID) (hash.ObjectID, error) {
 	committer := m.rc.sig
 	committer.When = m.opts.When
 	author := committer
@@ -164,11 +183,7 @@ func (m *merger) applyPick(head headTarget, id hash.ObjectID, plan pickPlan) (Pi
 		Message:   plan.message,
 	})
 	if err != nil {
-		return result, err
+		return hash.Zero, err
 	}
-	if err := m.advance(head, commit, plan.reflog); err != nil {
-		return result, err
-	}
-	result.Commit = commit
-	return result, nil
+	return commit, m.advance(head, commit, plan.reflog)
 }
