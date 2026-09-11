@@ -220,6 +220,14 @@ func mergeFaultScenarios() []faultScenario {
 				tr.t.Fatal(err)
 			}
 		}, func(ctx context.Context, tr *testRepo) error { return AbortMerge(ctx, tr.repo) }},
+		{"take a side", func(tr *testRepo) {
+			tr.fork(map[string]string{"f": changeLine(tenLines("f"), 4, "OURS"), "g": changeLine(tenLines("g"), 4, "OURS")}, map[string]string{"f": changeLine(tenLines("f"), 4, "THEIRS"), "g": ""})
+			if _, err := tr.merge("feature", MergeOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			return ResolveConflicts(ctx, tr.repo, []string{"f", "g"}, TakeTheirs)
+		}},
 		{"conclude", func(tr *testRepo) {
 			tr.conflictingFork()
 			if _, err := tr.merge("feature", MergeOptions{}); err != nil {

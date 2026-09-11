@@ -262,6 +262,9 @@ func mergeScenarios() []mergeScenario {
 			b.git("config", "core.autocrlf", "true")
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"f": editLine(f, 9, "THEIRS"), "new": "one\ntwo\n"})(b)
 		}},
+		{name: "conflict taken from ours", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: takeSide(TakeOurs, "f")},
+		{name: "conflict taken from theirs", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: takeSide(TakeTheirs, "f")},
+		{name: "a deletion taken from theirs", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": ""}), after: takeSide(TakeTheirs, "f")},
 		{name: "conflict resolved and committed", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: resolveAndCommit},
 		{name: "conflict aborted", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": editLine(f, 4, "THEIRS"), "new": "new\n"})(b)
@@ -289,6 +292,29 @@ func resolveAndCommit(b *mergeBuilder, ours bool) {
 	b.dated()
 	if _, err := Commit(b.o.t.Context(), r, CommitOptions{Message: state.Message, When: time.Unix(b.clock, 0).UTC()}); err != nil {
 		b.o.t.Fatalf("Commit: %v", err)
+	}
+}
+
+func takeSide(side ConflictSide, paths ...string) func(b *mergeBuilder, ours bool) {
+	return func(b *mergeBuilder, ours bool) {
+		b.o.t.Helper()
+		if ours {
+			if err := ResolveConflicts(b.o.t.Context(), b.o.openRepo(b.dir), paths, side); err != nil {
+				b.o.t.Fatalf("ResolveConflicts: %v", err)
+			}
+			return
+		}
+		flag := "--ours"
+		if side == TakeTheirs {
+			flag = "--theirs"
+		}
+		for _, path := range paths {
+			if _, err := b.o.attempt(b.dir, "checkout", flag, "--", path); err != nil {
+				b.o.run(b.dir, "rm", "-q", "--", path)
+				continue
+			}
+			b.o.run(b.dir, "add", "--", path)
+		}
 	}
 }
 
