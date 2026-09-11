@@ -106,7 +106,7 @@ func blockedPaths(sw *switcher, idx *index.Index, from merge.Snapshot, checked, 
 			continue
 		}
 		entry, _ := idx.Get(path, index.StageMerged)
-		dirty, err := sw.isDirty(path, entry)
+		dirty, err := sw.isDirty(path, entry, func(inside string) bool { _, ok := idx.Get(inside, index.StageMerged); return ok })
 		if err != nil {
 			return nil, err
 		}

@@ -3,6 +3,8 @@ package ops
 import (
 	"errors"
 	"maps"
+	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -37,9 +39,15 @@ func (r *testRepo) commitFiles(message string, files map[string]string) hash.Obj
 	for _, rel := range slices.Sorted(maps.Keys(files)) {
 		if files[rel] == "" {
 			r.remove(rel)
-			continue
+			for dir := path.Dir(rel); dir != "."; dir = path.Dir(dir) {
+				_ = os.Remove(r.path(dir))
+			}
 		}
-		r.writeFile(rel, files[rel])
+	}
+	for _, rel := range slices.Sorted(maps.Keys(files)) {
+		if files[rel] != "" {
+			r.writeFile(rel, files[rel])
+		}
 	}
 	if err := Stage(r.t.Context(), r.repo, slices.Sorted(maps.Keys(files)), StageOptions{}); err != nil {
 		r.t.Fatalf("Stage returned error %v", err)
@@ -647,5 +655,76 @@ func TestAnUnreadableHeadStopsMergeAndAbort(t *testing.T) {
 	}
 	if _, err := tr.merge(feature, MergeOptions{}); err == nil {
 		t.Fatal("merge ran with an unreadable HEAD")
+	}
+}
+
+func TestMergeReplacesAFileWithTheirDirectory(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.fork(map[string]string{"f": changeLine(tenLines("f"), 0, "OURS")}, map[string]string{"keep": "", "keep/inside": "inside\n"})
+
+	result, err := tr.merge("feature", MergeOptions{})
+
+	if err != nil || !result.Committed || tr.readFile("keep/inside") != "inside\n" {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+}
+
+func TestSwitchReplacesAFileWithADirectory(t *testing.T) {
+	tr := newTestRepo(t)
+	base := tr.commitFiles("base", map[string]string{"d": "file\n"})
+	tr.createBranch("other", base)
+	tr.switchTo("other")
+	tr.commitFiles("dir", map[string]string{"d": "", "d/x": "inside\n"})
+	tr.switchTo("main")
+
+	tr.switchTo("other")
+
+	if tr.readFile("d/x") != "inside\n" {
+		t.Fatal("the directory did not replace the file")
+	}
+}
+
+func TestSwitchRefusesToReplaceADirectoryHoldingUntrackedFiles(t *testing.T) {
+	tr := newTestRepo(t)
+	base := tr.commitFiles("base", map[string]string{"d": "file\n"})
+	tr.createBranch("other", base)
+	tr.switchTo("other")
+	tr.commitFiles("dir", map[string]string{"d": "", "d/x": "inside\n"})
+	tr.writeFile("d/sub/untracked", "mine\n")
+
+	err := Switch(t.Context(), tr.repo, "main", SwitchOptions{})
+
+	var overwrite *OverwriteError
+	if !errors.As(err, &overwrite) || tr.readFile("d/sub/untracked") != "mine\n" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestMergeReplacesOurDirectoryWithTheirFile(t *testing.T) {
+	tr := newTestRepo(t)
+	base := tr.commitFiles("base", map[string]string{"d/x": "inside\n", "f": tenLines("f")})
+	tr.createBranch("feature", base)
+	tr.commitFiles("ours", map[string]string{"f": changeLine(tenLines("f"), 0, "OURS")})
+	tr.switchTo("feature")
+	tr.commitFiles("theirs", map[string]string{"d/x": "", "d": "file\n"})
+	tr.switchTo("main")
+
+	result, err := tr.merge("feature", MergeOptions{})
+
+	if err != nil || !result.Committed || tr.readFile("d") != "file\n" {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+}
+
+func TestSwitchStopsWhenADirectoryInTheWayCannotBeRead(t *testing.T) {
+	tr := newTestRepo(t)
+	base := tr.commitFiles("base", map[string]string{"d": "file\n"})
+	tr.createBranch("other", base)
+	tr.switchTo("other")
+	tr.commitFiles("dir", map[string]string{"d": "", "d/x": "inside\n"})
+	swapRootOpenFailForPath(t, "d")
+
+	if err := Switch(t.Context(), tr.repo, "main", SwitchOptions{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v, want the injected failure", err)
 	}
 }

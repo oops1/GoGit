@@ -101,6 +101,7 @@ func (s *stager) stageDir(rel string) error {
 	if err != nil {
 		return err
 	}
+	s.idx.Remove(rel)
 	present := map[string]bool{}
 	for _, entry := range entries {
 		if err := s.ctx.Err(); err != nil {
@@ -154,6 +155,9 @@ func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
 	}
 	if len(s.idx.Conflicts(rel)) > 0 {
 		s.idx.Remove(rel)
+	}
+	for _, inside := range slices.Collect(s.idx.Paths(rel + "/")) {
+		s.idx.Remove(inside)
 	}
 	s.idx.Add(entry)
 	return nil

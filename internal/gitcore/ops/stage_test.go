@@ -267,3 +267,29 @@ func mustStage(t testing.TB, r *testRepo, path string) {
 		t.Fatalf("Stage returned error %v", err)
 	}
 }
+
+func TestStageReplacesAFileWithADirectoryAndBack(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.writeFile("d", "file\n")
+	if err := Stage(t.Context(), tr.repo, []string{"d"}, StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	tr.remove("d")
+	tr.writeFile("d/x", "inside\n")
+
+	if err := Stage(t.Context(), tr.repo, []string{"d"}, StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, file := entryOf(t, tr.index(), "d"); file {
+		t.Fatal("the file entry survived its replacement by a directory")
+	}
+
+	tr.remove("d")
+	tr.writeFile("d", "file again\n")
+	if err := Stage(t.Context(), tr.repo, []string{"d"}, StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, inside := entryOf(t, tr.index(), "d/x"); inside {
+		t.Fatal("the directory entries survived its replacement by a file")
+	}
+}
