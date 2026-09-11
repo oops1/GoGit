@@ -169,3 +169,19 @@ func TestSaveLayoutUpdatesWindowSizeAndPersistsFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestResetLayoutDocksAFloatingPaneThroughItsStateChange(t *testing.T) {
+	a := newTestApp(t)
+	pane := a.Dock().FindPane("journal")
+	pane.Float()
+	var seen []widget.DockPaneState
+	pane.OnStateChanged = func(p *widget.DockPane) { seen = append(seen, p.State()) }
+
+	if err := a.ResetLayout(); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(seen) == 0 || seen[0] != widget.PaneDocked || pane.State() != widget.PaneDocked {
+		t.Fatalf("state changes = %v, final %v", seen, pane.State())
+	}
+}

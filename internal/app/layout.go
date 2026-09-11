@@ -30,12 +30,21 @@ func (a *App) SaveLayout() error {
 }
 
 func (a *App) ResetLayout() error {
+	a.dockFloatingPanes()
 	_ = a.Dock().RestoreLayout(a.defaultLayout)
 	err := os.Remove(a.paths.LayoutFile())
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	return err
+}
+
+func (a *App) dockFloatingPanes() {
+	for _, p := range a.Dock().Panes() {
+		if p.State() == widget.PaneFloating {
+			p.Dock(p.Side())
+		}
+	}
 }
 
 func (a *App) PaneVisible(id string) bool {
