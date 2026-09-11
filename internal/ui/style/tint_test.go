@@ -29,9 +29,40 @@ func TestTheAccentOfTheSystemReplacesTheOneOfThePreset(t *testing.T) {
 	if t2.ListItemSelect.A != base.ListItemSelect.A || t2.DropItemBG.A != base.DropItemBG.A {
 		t.Fatal("selection fills must keep the transparency of the preset")
 	}
-	if t2.ListItemSelect.R != accent.R || t2.DropItemBG.R != accent.R {
-		t.Fatal("selection fills must take the accent")
+	if t2.ListItemSelect == base.ListItemSelect || t2.DropItemBG == base.DropItemBG {
+		t.Fatal("selection fills must follow the accent of the system")
 	}
+}
+
+func TestTextStaysReadableOnASelectionOfAnyAccent(t *testing.T) {
+	accents := []color.RGBA{
+		{R: 0xDC, G: 0xCC, B: 0x7D, A: 0xFF},
+		{R: 0x87, G: 0x66, B: 0x22, A: 0xFF},
+		{R: 0x4C, G: 0xC2, B: 0xFF, A: 0xFF},
+		{R: 0x00, G: 0x5F, B: 0xB8, A: 0xFF},
+		{R: 0xE5, G: 0x9E, B: 0xDB, A: 0xFF},
+		{R: 0x68, G: 0x00, B: 0x81, A: 0xFF},
+	}
+	for _, base := range []*widget.Theme{widget.Win11DarkTheme(), widget.Win11LightTheme()} {
+		for _, accent := range accents {
+			t2 := Tinted(base, accent)
+			shown := over(t2.ListItemSelect, t2.PanelBG)
+
+			if gap := abs(luminance(shown) - luminance(t2.LabelText)); gap < readableGap {
+				t.Fatalf("accent %v on %s: selection %v leaves text %v with a gap of %d, want at least %d",
+					accent, base.Style.Name, shown, t2.LabelText, gap, readableGap)
+			}
+		}
+	}
+}
+
+const readableGap = 100
+
+func over(top, bottom color.RGBA) color.RGBA {
+	blend := func(a, b uint8) uint8 {
+		return uint8((int(a)*int(top.A) + int(b)*(255-int(top.A))) / 255)
+	}
+	return color.RGBA{R: blend(top.R, bottom.R), G: blend(top.G, bottom.G), B: blend(top.B, bottom.B), A: 0xFF}
 }
 
 func TestSurfacesTakeATraceOfTheAccent(t *testing.T) {
