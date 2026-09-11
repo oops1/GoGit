@@ -219,7 +219,36 @@ func mergeFaultScenarios() []faultScenario {
 			if _, err := tr.merge("feature", MergeOptions{}); err != nil {
 				tr.t.Fatal(err)
 			}
-		}, func(ctx context.Context, tr *testRepo) error { return AbortMerge(ctx, tr.repo) }},
+		}, func(ctx context.Context, tr *testRepo) error { return AbortOperation(ctx, tr.repo) }},
+		{"cherry-pick", func(tr *testRepo) { tr.pickFork(false) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CherryPick(ctx, tr.repo, "feature", pickOptions())
+			return err
+		}},
+		{"cherry-pick with a conflict", func(tr *testRepo) { tr.pickFork(true) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CherryPick(ctx, tr.repo, "feature", pickOptions())
+			return err
+		}},
+		{"revert", func(tr *testRepo) {
+			f := tenLines("f")
+			tr.commitFiles("base", map[string]string{"f": f})
+			tr.commitFiles("change", map[string]string{"f": changeLine(f, 4, "CHANGED")})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Revert(ctx, tr.repo, "HEAD", pickOptions())
+			return err
+		}},
+		{"commit after a pick", func(tr *testRepo) {
+			tr.pickFork(true)
+			if _, err := CherryPick(tr.t.Context(), tr.repo, "feature", pickOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.writeFile("f", "resolved\n")
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Commit(ctx, tr.repo, CommitOptions{Message: "picked", When: mergeTime})
+			return err
+		}},
 		{"take a side", func(tr *testRepo) {
 			tr.fork(map[string]string{"f": changeLine(tenLines("f"), 4, "OURS"), "g": changeLine(tenLines("g"), 4, "OURS")}, map[string]string{"f": changeLine(tenLines("f"), 4, "THEIRS"), "g": ""})
 			if _, err := tr.merge("feature", MergeOptions{}); err != nil {

@@ -112,10 +112,11 @@ func (a *App) journalMenu(item any, row int) []widget.MenuItem {
 		return nil
 	}
 	a.journalGrid().Grid.SetSelectedIndex(row)
-	return []widget.MenuItem{
+	items := []widget.MenuItem{
 		menuItem("Menu.Context.CopyHash", func() { a.copyToClipboard(commit.ID.String()) }),
 		menuItem("Menu.Context.CopyMessage", func() { a.copyToClipboard(commit.Message) }),
 	}
+	return append(items, a.pickItems(commit.ID)...)
 }
 
 func (a *App) journalGrid() *widget.DataGridWidget {

@@ -262,7 +262,7 @@ func TestAbortMergeRestoresHeadAndKeepsUnrelatedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := AbortMerge(t.Context(), tr.repo); err != nil {
+	if err := AbortOperation(t.Context(), tr.repo); err != nil {
 		t.Fatal(err)
 	}
 
@@ -281,7 +281,7 @@ func TestAbortWithoutAMergeFails(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.commitFiles("base", map[string]string{"f": "f\n"})
 
-	if err := AbortMerge(t.Context(), tr.repo); !errors.Is(err, ErrNoMergeInProgress) {
+	if err := AbortOperation(t.Context(), tr.repo); !errors.Is(err, ErrNoMergeInProgress) {
 		t.Fatalf("err = %v, want ErrNoMergeInProgress", err)
 	}
 }
@@ -578,7 +578,7 @@ func TestReadMergeStateRejectsAGarbledMergeHead(t *testing.T) {
 	if _, err := tr.merge("main", MergeOptions{}); err == nil {
 		t.Fatal("a merge started over a garbled MERGE_HEAD")
 	}
-	if err := AbortMerge(t.Context(), tr.repo); err == nil {
+	if err := AbortOperation(t.Context(), tr.repo); err == nil {
 		t.Fatal("an abort ran over a garbled MERGE_HEAD")
 	}
 }
@@ -647,7 +647,7 @@ func TestAnUnreadableHeadStopsMergeAndAbort(t *testing.T) {
 	feature := tr.branchTarget("feature").String()
 	tr.writeRawHead("garbage\n")
 
-	if err := AbortMerge(t.Context(), tr.repo); err == nil {
+	if err := AbortOperation(t.Context(), tr.repo); err == nil {
 		t.Fatal("abort ran with an unreadable HEAD")
 	}
 	if err := clearMergeState(tr.repo); err != nil {

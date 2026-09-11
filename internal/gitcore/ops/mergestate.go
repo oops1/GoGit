@@ -17,19 +17,44 @@ const (
 	origHeadFile  = "ORIG_HEAD"
 	autoMergeFile = "AUTO_MERGE"
 	squashMsgFile = "SQUASH_MSG"
+	pickHeadFile  = "CHERRY_PICK_HEAD"
+	revertFile    = "REVERT_HEAD"
 	noFastForward = "no-ff"
 	stateFileMode = 0o666
 )
 
-var mergeStateFiles = []string{mergeHeadFile, mergeMsgFile, mergeModeFile, autoMergeFile, squashMsgFile}
+var mergeStateFiles = []string{mergeHeadFile, mergeMsgFile, mergeModeFile, autoMergeFile, squashMsgFile, pickHeadFile, revertFile}
+
+type Operation int
+
+const (
+	OperationNone Operation = iota
+	OperationMerge
+	OperationCherryPick
+	OperationRevert
+)
 
 type MergeState struct {
 	Heads         []hash.ObjectID
+	Picked        hash.ObjectID
+	Reverted      hash.ObjectID
 	Message       string
 	NoFastForward bool
 }
 
-func (s MergeState) InProgress() bool { return len(s.Heads) > 0 }
+func (s MergeState) Operation() Operation {
+	switch {
+	case len(s.Heads) > 0:
+		return OperationMerge
+	case !s.Picked.IsZero():
+		return OperationCherryPick
+	case !s.Reverted.IsZero():
+		return OperationRevert
+	}
+	return OperationNone
+}
+
+func (s MergeState) InProgress() bool { return s.Operation() != OperationNone }
 
 func ReadMergeState(r *repo.Repository) (MergeState, error) {
 	var state MergeState
@@ -44,6 +69,12 @@ func ReadMergeState(r *repo.Repository) (MergeState, error) {
 		}
 		state.Heads = append(state.Heads, id)
 	}
+	if state.Picked, err = readHeadFile(r, pickHeadFile); err != nil {
+		return MergeState{}, err
+	}
+	if state.Reverted, err = readHeadFile(r, revertFile); err != nil {
+		return MergeState{}, err
+	}
 	mode, err := readStateFile(r, mergeModeFile)
 	if err != nil {
 		return MergeState{}, err
@@ -57,6 +88,18 @@ func ReadMergeState(r *repo.Repository) (MergeState, error) {
 		state.Message += text
 	}
 	return state, nil
+}
+
+func readHeadFile(r *repo.Repository, name string) (hash.ObjectID, error) {
+	text, err := readStateFile(r, name)
+	if err != nil || strings.TrimSpace(text) == "" {
+		return hash.Zero, err
+	}
+	id, err := hash.Parse(strings.TrimSpace(text))
+	if err != nil {
+		return hash.Zero, fmt.Errorf("ops: %s: %w", name, err)
+	}
+	return id, nil
 }
 
 func readStateFile(r *repo.Repository, name string) (string, error) {

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
 const mergeClockStart = 1700000000
@@ -74,7 +76,13 @@ type mergeScenario struct {
 	args   []string
 	opts   MergeOptions
 	after  func(b *mergeBuilder, ours bool)
+	pick   string
 }
+
+const (
+	pickCherry = "cherry-pick"
+	pickRevert = "revert"
+)
 
 func forkedHistory(ours, theirs map[string]string) func(b *mergeBuilder) {
 	return func(b *mergeBuilder) {
@@ -265,12 +273,51 @@ func mergeScenarios() []mergeScenario {
 		{name: "conflict taken from ours", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: takeSide(TakeOurs, "f")},
 		{name: "conflict taken from theirs", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: takeSide(TakeTheirs, "f")},
 		{name: "a deletion taken from theirs", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": ""}), after: takeSide(TakeTheirs, "f")},
+		{name: "cherry-pick", pick: pickCherry, target: "feature", setup: pickHistory(false)},
+		{name: "cherry-pick with a conflict", pick: pickCherry, target: "feature", setup: pickHistory(true)},
+		{name: "cherry-pick resolved and committed", pick: pickCherry, target: "feature", setup: pickHistory(true), after: resolveAndCommit},
+		{name: "cherry-pick aborted", pick: pickCherry, target: "feature", setup: pickHistory(true), after: abortWith("cherry-pick")},
+		{name: "cherry-pick of a merge commit", pick: pickCherry, target: "feature", setup: func(b *mergeBuilder) {
+			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
+			b.git("checkout", "-q", "feature")
+			b.git("merge", "-q", "--no-edit", "--no-ff", "main")
+			b.git("checkout", "-q", "main")
+		}},
+		{name: "revert", pick: pickRevert, target: "HEAD~1", setup: pickHistory(false)},
+		{name: "revert with a conflict", pick: pickRevert, target: "HEAD~1", setup: revertHistory},
+		{name: "revert resolved and committed", pick: pickRevert, target: "HEAD~1", setup: revertHistory, after: resolveAndCommit},
+		{name: "revert aborted", pick: pickRevert, target: "HEAD~1", setup: revertHistory, after: abortWith("revert")},
 		{name: "conflict resolved and committed", target: "feature", setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}), after: resolveAndCommit},
 		{name: "conflict aborted", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": editLine(f, 4, "THEIRS"), "new": "new\n"})(b)
 			b.o.write(b.dir, "keep", "local\n")
 		}, after: abortMerge},
 	}
+}
+
+func pickHistory(conflict bool) func(b *mergeBuilder) {
+	f, g := lines("f", 10), lines("g", 10)
+	return func(b *mergeBuilder) {
+		b.commit("base", map[string]string{"keep": "keep\n", "f": f, "g": g})
+		b.git("branch", "feature")
+		ours := map[string]string{"g": editLine(g, 9, "OURS")}
+		if conflict {
+			ours = map[string]string{"f": editLine(f, 4, "OURS")}
+		}
+		b.commit("ours", ours)
+		b.git("checkout", "-q", "feature")
+		b.commit("unrelated", map[string]string{"h": "h\n"})
+		b.write(map[string]string{"f": editLine(f, 4, "PICKED")})
+		b.git("commit", "-q", "--author=Other Person <other@example.com>", "-m", "picked change", "-m", "with a body")
+		b.git("checkout", "-q", "main")
+	}
+}
+
+func revertHistory(b *mergeBuilder) {
+	f := lines("f", 10)
+	b.commit("base", map[string]string{"f": f})
+	b.commit("change", map[string]string{"f": editLine(f, 4, "CHANGED")})
+	b.commit("change again", map[string]string{"f": editLine(f, 4, "AGAIN")})
 }
 
 func resolveAndCommit(b *mergeBuilder, ours bool) {
@@ -320,12 +367,19 @@ func takeSide(side ConflictSide, paths ...string) func(b *mergeBuilder, ours boo
 
 func abortMerge(b *mergeBuilder, ours bool) {
 	b.o.t.Helper()
-	if !ours {
-		b.git("merge", "--abort")
-		return
-	}
-	if err := AbortMerge(b.o.t.Context(), b.o.openRepo(b.dir)); err != nil {
-		b.o.t.Fatalf("AbortMerge: %v", err)
+	abortWith("merge")(b, ours)
+}
+
+func abortWith(command string) func(b *mergeBuilder, ours bool) {
+	return func(b *mergeBuilder, ours bool) {
+		b.o.t.Helper()
+		if !ours {
+			b.git(command, "--abort")
+			return
+		}
+		if err := AbortOperation(b.o.t.Context(), b.o.openRepo(b.dir)); err != nil {
+			b.o.t.Fatalf("AbortOperation: %v", err)
+		}
 	}
 }
 
@@ -342,7 +396,7 @@ func mergeStateOf(b *mergeBuilder, refused bool) string {
 	}
 	add("index", b.o.run(b.dir, "ls-files", "-s"))
 	add("status", b.o.run(b.dir, "status", "--porcelain", "-uall"))
-	for _, name := range []string{mergeHeadFile, mergeMsgFile, mergeModeFile, origHeadFile, autoMergeFile, squashMsgFile} {
+	for _, name := range []string{mergeHeadFile, mergeMsgFile, mergeModeFile, origHeadFile, autoMergeFile, squashMsgFile, pickHeadFile, revertFile} {
 		if refused && name == autoMergeFile {
 			continue
 		}
@@ -394,6 +448,20 @@ func sectionDiff(got, want string) string {
 	return b.String()
 }
 
+func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOptions) (MergeResult, error) {
+	t.Helper()
+	switch s.pick {
+	case pickCherry, pickRevert:
+		run := CherryPick
+		if s.pick == pickRevert {
+			run = Revert
+		}
+		picked, err := run(t.Context(), r, s.target, PickOptions{When: opts.When})
+		return MergeResult{Conflicts: picked.Conflicts}, err
+	}
+	return Merge(t.Context(), r, s.target, opts)
+}
+
 func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 	for _, s := range mergeScenarios() {
 		t.Run(s.name, func(t *testing.T) {
@@ -408,11 +476,15 @@ func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 			}
 			gitSide, ourSide := sides[0], sides[1]
 
-			_, gitErr := gitSide.dated().attempt(gitSide.dir, append(append([]string{"merge", "--no-edit"}, s.args...), s.target)...)
+			gitArgs := append(append([]string{"merge", "--no-edit"}, s.args...), s.target)
+			if s.pick != "" {
+				gitArgs = []string{s.pick, "--no-edit", s.target}
+			}
+			_, gitErr := gitSide.dated().attempt(gitSide.dir, gitArgs...)
 			ourSide.dated()
 			opts := s.opts
 			opts.When = time.Unix(ourSide.clock, 0).UTC()
-			result, ourErr := Merge(t.Context(), o.openRepo(ourSide.dir), s.target, opts)
+			result, ourErr := runOurSide(t, o.openRepo(ourSide.dir), s, opts)
 			gitFailed := gitErr != nil
 			ourFailed := ourErr != nil || !result.Clean()
 			if gitFailed != ourFailed {

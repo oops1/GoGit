@@ -54,6 +54,7 @@ const (
 	mergeStrategyNote = ": Merge made by the 'ort' strategy."
 	fastForwardNote   = ": Fast-forward"
 	resetToHeadNote   = "reset: moving to HEAD"
+	resetNotePrefix   = "reset: moving to "
 	initialPullNote   = "initial pull"
 )
 
@@ -404,7 +405,7 @@ func (m *merger) commonBases(merged []hash.ObjectID, next hash.ObjectID) ([]hash
 	return out, nil
 }
 
-func AbortMerge(ctx context.Context, r *repo.Repository) error {
+func AbortOperation(ctx context.Context, r *repo.Repository) error {
 	state, err := ReadMergeState(r)
 	if err != nil {
 		return err
@@ -428,7 +429,14 @@ func AbortMerge(ctx context.Context, r *repo.Repository) error {
 	if err := errors.Join(m.resetTo(tree), clearMergeState(r)); err != nil {
 		return err
 	}
-	return m.advance(head, head.old, resetToHeadNote)
+	if err := writeStateFile(r, origHeadFile, head.old.String()+"\n"); err != nil {
+		return err
+	}
+	note := resetToHeadNote
+	if state.Operation() != OperationMerge {
+		note = resetNotePrefix + head.old.String()
+	}
+	return m.advance(head, head.old, note)
 }
 
 type mergeStore struct{ db *odb.DB }

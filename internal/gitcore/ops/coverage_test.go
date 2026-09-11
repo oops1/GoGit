@@ -513,7 +513,7 @@ func TestCommitReflogMessageForMergeCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hash.Sum returned error %v", err)
 	}
-	got := commitReflogMessage(false, []hash.ObjectID{a, b}, "merge stuff\n")
+	got := commitReflogMessage(false, []hash.ObjectID{a, b}, "merge stuff\n", false)
 	want := "commit (merge): merge stuff"
 	if got != want {
 		t.Fatalf("commitReflogMessage = %q, want %q", got, want)

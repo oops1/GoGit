@@ -24,7 +24,7 @@ var newMergeView = merge.NewView
 
 var runMerge = ops.Merge
 
-var runAbortMerge = ops.AbortMerge
+var runAbortMerge = ops.AbortOperation
 
 var runResolveConflicts = ops.ResolveConflicts
 
@@ -274,16 +274,36 @@ func (a *App) showMergeState(state ops.MergeState, conflicts int) {
 	if !state.InProgress() {
 		return
 	}
-	source := mergeSourceName(state)
-	if conflicts > 0 {
-		a.banner.text.SetText(i18n.Tf("Banner.Merge.Conflicts", source, conflicts))
-		return
-	}
-	a.banner.text.SetText(i18n.Tf("Banner.Merge.Ready", source))
+	a.banner.text.SetText(bannerText(state, conflicts))
 }
 
-func mergeSourceName(state ops.MergeState) string {
+var bannerKeys = map[ops.Operation][2]string{
+	ops.OperationMerge:      {"Banner.Merge.Ready", "Banner.Merge.Conflicts"},
+	ops.OperationCherryPick: {"Banner.CherryPick.Ready", "Banner.CherryPick.Conflicts"},
+	ops.OperationRevert:     {"Banner.Revert.Ready", "Banner.Revert.Conflicts"},
+}
+
+func bannerText(state ops.MergeState, conflicts int) string {
+	keys := bannerKeys[state.Operation()]
+	name := operationSubject(state)
+	if conflicts > 0 {
+		return i18n.Tf(keys[1], name, conflicts)
+	}
+	return i18n.Tf(keys[0], name)
+}
+
+func operationSubject(state ops.MergeState) string {
 	subject, _, _ := strings.Cut(state.Message, "\n")
+	switch state.Operation() {
+	case ops.OperationCherryPick:
+		return shortHash(state.Picked) + " " + subject
+	case ops.OperationRevert:
+		return shortHash(state.Reverted)
+	}
+	return mergeSourceName(state, subject)
+}
+
+func mergeSourceName(state ops.MergeState, subject string) string {
 	if _, quoted, ok := strings.Cut(subject, "'"); ok {
 		if name, _, closed := strings.Cut(quoted, "'"); closed && name != "" {
 			return name

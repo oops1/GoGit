@@ -494,8 +494,27 @@ func TestTheMergeSourceIsReadFromTheMessage(t *testing.T) {
 		"Merge commit ''\n":     shortHash(id),
 		"Merge 'unterminated\n": shortHash(id),
 	} {
-		if got := mergeSourceName(ops.MergeState{Heads: []hash.ObjectID{id}, Message: message}); got != want {
+		if got := operationSubject(ops.MergeState{Heads: []hash.ObjectID{id}, Message: message}); got != want {
 			t.Errorf("%q: %q, want %q", message, got, want)
+		}
+	}
+}
+
+func TestTheBannerNamesTheOperationInProgress(t *testing.T) {
+	newTestApp(t)
+	id := hash.SumSHA1("commit", []byte("x"))
+	for _, c := range []struct {
+		state     ops.MergeState
+		conflicts int
+		want      string
+	}{
+		{ops.MergeState{Picked: id, Message: "picked change\n\nbody\n"}, 2, i18n.Tf("Banner.CherryPick.Conflicts", shortHash(id)+" picked change", 2)},
+		{ops.MergeState{Picked: id, Message: "picked change\n"}, 0, i18n.Tf("Banner.CherryPick.Ready", shortHash(id)+" picked change")},
+		{ops.MergeState{Reverted: id, Message: "Revert \"x\"\n"}, 1, i18n.Tf("Banner.Revert.Conflicts", shortHash(id), 1)},
+		{ops.MergeState{Reverted: id}, 0, i18n.Tf("Banner.Revert.Ready", shortHash(id))},
+	} {
+		if got := bannerText(c.state, c.conflicts); got != c.want {
+			t.Errorf("banner = %q, want %q", got, c.want)
 		}
 	}
 }

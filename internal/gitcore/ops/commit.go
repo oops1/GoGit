@@ -35,6 +35,16 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if state.InProgress() && opts.Amend {
 		return hash.Zero, ErrMergeInProgress
 	}
+	author := rc.sig
+	if opts.Author != nil {
+		author = *opts.Author
+	} else if !state.Picked.IsZero() {
+		picked, err := dbCommit(rc.db, state.Picked)
+		if err != nil {
+			return hash.Zero, err
+		}
+		author = picked.Author
+	}
 
 	lock, err := lockIndex(r)
 	if err != nil {
@@ -69,7 +79,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 		lock.abort()
 		return hash.Zero, err
 	}
-	if empty && !opts.AllowEmpty && !state.InProgress() {
+	if empty && !opts.AllowEmpty && state.Operation() != OperationMerge {
 		lock.abort()
 		return hash.Zero, ErrNothingToCommit
 	}
@@ -78,10 +88,8 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if when.IsZero() {
 		when = time.Now()
 	}
-	author := rc.sig
-	author.When = when
-	if opts.Author != nil {
-		author = *opts.Author
+	if opts.Author == nil && state.Picked.IsZero() {
+		author.When = when
 	}
 	committer := rc.sig
 	committer.When = when
@@ -94,7 +102,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	}
 
 	tx := rc.refs.Begin()
-	tx.SetMessage(commitReflogMessage(opts.Amend, parents, message))
+	tx.SetMessage(commitReflogMessage(opts.Amend, parents, message, state.Operation() == OperationCherryPick))
 	if err := txUpdate(tx, target.ref, id, target.old); err != nil {
 		tx.Rollback()
 		lock.abort()
@@ -143,9 +151,11 @@ func isEmptyCommit(db *odb.DB, treeID hash.ObjectID, parents []hash.ObjectID) (b
 	return parentCommit.Tree == treeID, nil
 }
 
-func commitReflogMessage(amend bool, parents []hash.ObjectID, message string) string {
+func commitReflogMessage(amend bool, parents []hash.ObjectID, message string, picking bool) string {
 	kind := "commit"
 	switch {
+	case picking:
+		kind = "commit (cherry-pick)"
 	case amend:
 		kind = "commit (amend)"
 	case len(parents) == 0:
