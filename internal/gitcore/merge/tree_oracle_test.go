@@ -80,6 +80,19 @@ func move(t *testing.T, dir string, moves map[string][2]string, side int) {
 	}
 }
 
+func markExecutable(t *testing.T, dir string, executable map[string]string, side string) {
+	t.Helper()
+	for name, who := range executable {
+		if who != side {
+			continue
+		}
+		if err := os.Chmod(filepath.Join(dir, filepath.FromSlash(name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		runGit(t, dir, "update-index", "--chmod=+x", "--", name)
+	}
+}
+
 func buildBranches(t *testing.T, c treeCase) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -91,20 +104,12 @@ func buildBranches(t *testing.T, c treeCase) string {
 	runGit(t, dir, "checkout", "-q", "-b", "ours")
 	move(t, dir, c.moves, 0)
 	apply(t, dir, c.ours)
-	for name, who := range c.executable {
-		if who == "ours" {
-			runGit(t, dir, "update-index", "--chmod=+x", "--", name)
-		}
-	}
+	markExecutable(t, dir, c.executable, "ours")
 	runGit(t, dir, "commit", "-q", "--allow-empty", "-m", "ours")
 	runGit(t, dir, "checkout", "-q", "theirs")
 	move(t, dir, c.moves, 1)
 	apply(t, dir, c.theirs)
-	for name, who := range c.executable {
-		if who == "theirs" {
-			runGit(t, dir, "update-index", "--chmod=+x", "--", name)
-		}
-	}
+	markExecutable(t, dir, c.executable, "theirs")
 	runGit(t, dir, "commit", "-q", "--allow-empty", "-m", "theirs")
 	return dir
 }

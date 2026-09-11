@@ -230,6 +230,9 @@ func mergeScenarios() []mergeScenario {
 		{name: "binary conflict", target: "feature", setup: forkedHistory(map[string]string{"bin": "ours\x00"}, map[string]string{"bin": "theirs\x00"})},
 		{name: "mode on one side", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(nil, map[string]string{"f": editLine(f, 9, "THEIRS")})(b)
+			if err := os.Chmod(filepath.Join(b.dir, "f"), 0o755); err != nil {
+				b.o.t.Fatal(err)
+			}
 			b.git("update-index", "--chmod=+x", "f")
 			b.git("commit", "-q", "-m", "executable")
 		}},
