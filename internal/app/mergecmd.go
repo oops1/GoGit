@@ -66,7 +66,7 @@ func (a *App) registerMergeHandlers() {
 	a.handlers[CmdMerge] = func() { a.openMerge("") }
 	a.handlers[CmdAbortMerge] = a.confirmAbortMerge
 	a.branchesView.OnMenu = a.branchMenu
-	a.banner.commit.OnClick = func() { a.Dispatch(CmdCommit) }
+	a.banner.commit.OnClick = func() { a.Dispatch(CmdContinue) }
 	a.banner.abort.OnClick = func() { a.Dispatch(CmdAbortMerge) }
 }
 
@@ -181,7 +181,7 @@ func reportMerge(reporter OperationReporter, req merge.Request, result ops.Merge
 	var overwrite *ops.OverwriteError
 	switch {
 	case errors.As(err, &overwrite):
-		reporter.Log(i18n.Tf("Operation.Log.MergeBlocked", strings.Join(overwrite.Paths, ", ")))
+		reporter.Log(i18n.Tf("Operation.Log.MergeBlocked", overwriteList(overwrite)))
 	case errors.Is(err, ops.ErrCannotFastForward):
 		reporter.Log(i18n.T("Operation.Log.MergeNotFastForward"))
 	case errors.Is(err, ops.ErrUnrelatedHistories):
@@ -203,6 +203,10 @@ func reportMerge(reporter OperationReporter, req merge.Request, result ops.Merge
 	default:
 		reporter.Log(i18n.T("Operation.Log.MergeStopped"))
 	}
+}
+
+func overwriteList(overwrite *ops.OverwriteError) string {
+	return strings.Join(overwrite.Paths, ", ")
 }
 
 func (a *App) finishMerge() {
@@ -269,18 +273,27 @@ func (a *App) workingMergeState() ops.MergeState {
 }
 
 func (a *App) showMergeState(state ops.MergeState, conflicts int) {
-	a.setMerging(state.InProgress())
+	a.setMerging(state.InProgress(), state.Operation() == ops.OperationRebase)
 	a.banner.panel.SetVisible(state.InProgress())
 	if !state.InProgress() {
 		return
 	}
 	a.banner.text.SetText(bannerText(state, conflicts))
+	a.banner.commit.SetText(i18n.T(bannerActionKey(state.Operation())))
+}
+
+func bannerActionKey(operation ops.Operation) string {
+	if operation == ops.OperationRebase {
+		return "Banner.Rebase.Continue"
+	}
+	return "Banner.Merge.Commit"
 }
 
 var bannerKeys = map[ops.Operation][2]string{
 	ops.OperationMerge:      {"Banner.Merge.Ready", "Banner.Merge.Conflicts"},
 	ops.OperationCherryPick: {"Banner.CherryPick.Ready", "Banner.CherryPick.Conflicts"},
 	ops.OperationRevert:     {"Banner.Revert.Ready", "Banner.Revert.Conflicts"},
+	ops.OperationRebase:     {"Banner.Rebase.Ready", "Banner.Rebase.Conflicts"},
 }
 
 func bannerText(state ops.MergeState, conflicts int) string {
@@ -299,6 +312,8 @@ func operationSubject(state ops.MergeState) string {
 		return shortHash(state.Picked) + " " + subject
 	case ops.OperationRevert:
 		return shortHash(state.Reverted)
+	case ops.OperationRebase:
+		return subject
 	}
 	return mergeSourceName(state, subject)
 }
@@ -322,10 +337,10 @@ func conflictEntryCount(entries []worktree.Entry) int {
 	return count
 }
 
-func (a *App) setMerging(v bool) {
+func (a *App) setMerging(merging, rebasing bool) {
 	a.mu.Lock()
-	changed := a.state.Merging != v
-	a.state.Merging = v
+	changed := a.state.Merging != merging || a.state.Rebasing != rebasing
+	a.state.Merging, a.state.Rebasing = merging, rebasing
 	a.mu.Unlock()
 	if changed {
 		a.refreshCommands()

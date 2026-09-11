@@ -108,6 +108,10 @@ func buildEditMenuTree() []menuTreeEntry {
 func buildBranchMenuTree() []menuTreeEntry {
 	return []menuTreeEntry{
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Merge", Command: CmdMerge}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Rebase", Command: CmdRebase}},
+		{Separator: true},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
 	}
 }

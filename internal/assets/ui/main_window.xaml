@@ -37,6 +37,10 @@
             </MenuItem>
             <MenuItem Header="{Loc Menu.Branch}">
                 <MenuItem Header="{Loc Menu.Branch.Merge}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Rebase}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Branch.Continue}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Skip}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.AbortMerge}" IsEnabled="False"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Remote}">
