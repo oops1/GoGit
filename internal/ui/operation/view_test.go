@@ -194,6 +194,18 @@ func TestATrackedLineIsWrittenOnceAndThenRewrittenInPlace(t *testing.T) {
 	}
 }
 
+func TestTheLogKeepsItsOwnCopyOfEveryLine(t *testing.T) {
+	v := newTestView(t, "Title")
+	v.Append("first")
+	v.Track("writing", "objects 1 of 3")
+
+	v.lines[0] = "rewritten behind the list"
+
+	if got := v.logList.Items(); got[0] != "first" {
+		t.Fatalf("the list was handed the slice the view keeps writing into: %v", got)
+	}
+}
+
 func TestForgettingTrackedLinesStartsANewOne(t *testing.T) {
 	v := newTestView(t, "Title")
 	v.Track("writing", "objects 1 of 3")
