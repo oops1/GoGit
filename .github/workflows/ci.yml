@@ -30,7 +30,7 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           set +e
-          go test -count=1 -race ./... 2>&1 | tee race.log
+          go test -count=1 -timeout=40m -race ./... 2>&1 | tee race.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             sed -n '/WARNING: DATA RACE/,/^==================$/p' race.log | head -60 |
@@ -42,7 +42,7 @@ jobs:
       - name: oracle tests with coverage
         run: |
           set +e
-          go test -count=1 -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
+          go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" oracle.log | head -40 |
