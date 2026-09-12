@@ -168,7 +168,7 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 	a.stopDiffLocked()
 	o := a.opened()
 	if o == nil || entry.IsDir {
-		a.diffView.Clear()
+		a.clearDiff()
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -179,24 +179,27 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 }
 
 func (a *App) runWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) {
-	file, err := buildWorkingDiff(ctx, o, entry)
+	file, kind, err := buildWorkingDiff(ctx, o, entry)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			a.log.Warn("load working diff failed", "error", err)
 		}
 		return
 	}
-	a.Post(func() { a.diffView.SetDocument(changes.FromFile(file)) })
+	a.Post(func() { a.showDiff(diffTarget{kind: kind, path: entry.Path, file: file}) })
 }
 
-func buildWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
+func buildWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, diffKind, error) {
 	if entry.Conflict != worktree.ConflictNone {
-		return conflictDiff(ctx, o, entry)
+		file, err := conflictDiff(ctx, o, entry)
+		return file, diffKindNone, err
 	}
 	if entry.Unstaged != worktree.StatusUnmodified {
-		return workTreeDiff(ctx, o, entry)
+		file, err := workTreeDiff(ctx, o, entry)
+		return file, diffKindWorktree, err
 	}
-	return indexDiff(ctx, o, entry)
+	file, err := indexDiff(ctx, o, entry)
+	return file, diffKindIndex, err
 }
 
 func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {

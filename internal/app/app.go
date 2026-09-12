@@ -139,6 +139,8 @@ type App struct {
 	diffRunMu  sync.Mutex
 	diffMu     sync.Mutex
 	diffCancel context.CancelFunc
+	shownMu    sync.Mutex
+	shownDiff  diffTarget
 	diffWG     sync.WaitGroup
 
 	workingRunMu  sync.Mutex
