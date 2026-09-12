@@ -377,6 +377,19 @@ func mergeFaultScenarios() []faultScenario {
 			_, err := ContinueRebase(ctx, tr.repo, RebaseOptions{When: mergeTime, Message: "a better subject"})
 			return err
 		}},
+		{"a branch started from a remote one", func(tr *testRepo) {
+			head := tr.commitFiles("base", map[string]string{"f": "f\n"})
+			tr.appendConfig("[remote \"origin\"]\n\turl = https://example.invalid/repo.git\n")
+			tr.repo = tr.reopen()
+			tr.remoteBranch("origin/topic", head)
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := StartBranch(ctx, tr.repo, "topic", "origin/topic", StartBranchOptions{Track: true})
+			return err
+		}},
+		{"a branch started from the current head", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := StartBranch(ctx, tr.repo, "topic", "", StartBranchOptions{})
+			return err
+		}},
 		{"the reflog of a branch", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
 			_, err := Reflog(ctx, tr.repo, "main", ReflogOptions{})
 			return err

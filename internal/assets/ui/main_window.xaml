@@ -36,6 +36,8 @@
                 <MenuItem Header="{Loc Menu.Edit.Compare}"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Branch}">
+                <MenuItem Header="{Loc Menu.Branch.Switch}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Branch.Merge}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.Rebase}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.RebaseInteractive}" IsEnabled="False"/>

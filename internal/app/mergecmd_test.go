@@ -355,7 +355,7 @@ func TestTheBranchMenuMergesAnotherBranchIntoTheCurrentOne(t *testing.T) {
 		t.Fatalf("the current branch offers %+v", items)
 	}
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("feature")) })
-	if len(items) != 2 || items[0].Disabled {
+	if len(items) != 3 || items[0].Disabled {
 		t.Fatalf("items = %+v", items)
 	}
 	readOnDispatcher(t, a, func() bool { items[0].OnClick(); return true })

@@ -33,6 +33,7 @@ var commandIcons = map[CommandID]string{
 	CmdRebase:          "rebase",
 	CmdRebaseSteps:     "rebase",
 	CmdReflog:          "history",
+	CmdSwitch:          "switch",
 	CmdContinue:        "continue",
 	CmdSkip:            "skip",
 	CmdFetch:           "fetch",
@@ -72,6 +73,7 @@ var contextIcons = map[string]string{
 	"Menu.Context.FileHistory":      "history",
 	"Menu.Context.Blame":            "blame",
 	"Menu.Context.Reflog":           "history",
+	"Menu.Context.SwitchHere":       "switch",
 }
 
 func commandIcon(id CommandID) image.Image {
