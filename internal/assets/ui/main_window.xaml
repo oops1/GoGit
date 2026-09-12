@@ -39,6 +39,7 @@
                 <MenuItem Header="{Loc Menu.Branch.Merge}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.Rebase}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.RebaseInteractive}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Reflog}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Branch.Continue}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.Skip}" IsEnabled="False"/>

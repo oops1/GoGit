@@ -36,6 +36,7 @@ const (
 	CmdMerge           CommandID = "branch.merge"
 	CmdRebase          CommandID = "branch.rebase"
 	CmdRebaseSteps     CommandID = "branch.rebase.steps"
+	CmdReflog          CommandID = "branch.reflog"
 	CmdContinue        CommandID = "branch.continue"
 	CmdSkip            CommandID = "branch.skip"
 	CmdAbortMerge      CommandID = "branch.abort-merge"
@@ -148,6 +149,8 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.Merging)
 	case CmdMerge, CmdRebase, CmdRebaseSteps:
 		return s.ActiveRepository != "" && !s.Merging
+	case CmdReflog:
+		return s.ActiveRepository != ""
 	case CmdAbortMerge, CmdContinue:
 		return s.ActiveRepository != "" && s.Merging
 	case CmdSkip:

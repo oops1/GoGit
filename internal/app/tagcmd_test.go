@@ -125,8 +125,11 @@ func TestTheBranchMenuKeepsItsMergeEntryForBranches(t *testing.T) {
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("feature")) })
 	mine := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("main")) })
 
-	if len(items) != 1 || items[0].Text != i18n.T("Menu.Context.MergeIntoCurrent") || mine != nil {
-		t.Fatalf("items = %+v, mine = %+v", items, mine)
+	if len(items) != 2 || items[0].Text != i18n.T("Menu.Context.MergeIntoCurrent") {
+		t.Fatalf("items = %+v", items)
+	}
+	if len(mine) != 1 || mine[0].Text != i18n.T("Menu.Context.Reflog") {
+		t.Fatalf("mine = %+v", mine)
 	}
 }
 

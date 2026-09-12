@@ -110,6 +110,7 @@ func buildBranchMenuTree() []menuTreeEntry {
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Merge", Command: CmdMerge}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Rebase", Command: CmdRebase}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.RebaseInteractive", Command: CmdRebaseSteps}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Reflog", Command: CmdReflog}},
 		{Separator: true},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},

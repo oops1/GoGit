@@ -73,12 +73,14 @@ func (a *App) registerMergeHandlers() {
 func (a *App) branchMenu(ref refs.Name) []widget.MenuItem {
 	state := a.State()
 	current := a.currentBranchName()
-	if ref == refs.BranchName(current) || !mergeable(ref) {
-		return a.deleteTagItems(ref)
+	var items []widget.MenuItem
+	if ref != refs.BranchName(current) && mergeable(ref) {
+		item := menuItem("Menu.Context.MergeIntoCurrent", func() { a.openMerge(ref.Short()) })
+		item.Disabled = !state.Enabled(CmdMerge)
+		items = append(items, item)
 	}
-	item := menuItem("Menu.Context.MergeIntoCurrent", func() { a.openMerge(ref.Short()) })
-	item.Disabled = !state.Enabled(CmdMerge)
-	return append([]widget.MenuItem{item}, a.deleteTagItems(ref)...)
+	items = append(items, a.deleteTagItems(ref)...)
+	return append(items, a.reflogItems(ref)...)
 }
 
 func mergeable(ref refs.Name) bool {

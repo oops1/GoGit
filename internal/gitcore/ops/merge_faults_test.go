@@ -377,6 +377,10 @@ func mergeFaultScenarios() []faultScenario {
 			_, err := ContinueRebase(ctx, tr.repo, RebaseOptions{When: mergeTime, Message: "a better subject"})
 			return err
 		}},
+		{"the reflog of a branch", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reflog(ctx, tr.repo, "main", ReflogOptions{})
+			return err
+		}},
 		{"blame a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {
 			_, err := Blame(ctx, tr.repo, "HEAD", "moved", BlameOptions{Follow: true})
 			return err
