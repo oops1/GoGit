@@ -171,6 +171,8 @@
   "Dialog.Conflict.Undo": "Отменить",
   "Dialog.Conflict.Undo.Tip": "Отменить последнее решение или правку",
   "Dialog.Conflict.Unresolved": "Нерешённых: %d из %d",
+  "Dialog.Conflict.Unsaved.Message": "Сохранить изменения в %s перед закрытием? «Нет» закроет окно без сохранения.",
+  "Dialog.Conflict.Unsaved.Title": "Несохранённые изменения",
   "Dialog.Credentials.Cancel": "Отмена",
   "Dialog.Credentials.Error.Empty": "Введите пароль или токен",
   "Dialog.Credentials.OK": "ОК",

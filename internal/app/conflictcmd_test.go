@@ -195,11 +195,58 @@ func TestTheEditorDoesNotOpenWithoutARepository(t *testing.T) {
 	}
 }
 
-func TestTheEditorCanBeClosed(t *testing.T) {
+func TestAnUntouchedEditorClosesWithoutAsking(t *testing.T) {
 	a, _ := conflictedApp(t)
 	view := openedConflict(t, a)
+	asked := 0
+	a.askSave = func(string, string, func(widget.MessageBoxResult)) { asked++ }
 
-	readOnDispatcher(t, a, func() bool { view.Dialog().CancelAction(); return true })
+	allowed := readOnDispatcher(t, a, func() bool { return view.Dialog().OnClosing() })
+	readOnDispatcher(t, a, func() bool { view.OnClose(); return true })
+
+	if !allowed || asked != 0 {
+		t.Fatalf("closing allowed = %v, asked %d times", allowed, asked)
+	}
+}
+
+func TestClosingAChangedEditorAsksToSave(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		answer widget.MessageBoxResult
+		saved  bool
+	}{
+		{"cancel keeps the window", widget.MBResultCancel, false},
+		{"no closes without saving", widget.MBResultNo, false},
+		{"yes saves first", widget.MBResultYes, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			a, target := conflictedApp(t)
+			view := openedConflict(t, a)
+			question := ""
+			a.askSave = func(_, message string, cb func(widget.MessageBoxResult)) {
+				question = message
+				cb(tt.answer)
+			}
+			readOnDispatcher(t, a, func() bool { view.Merge().ResolveAll(widget.MergeTakeTheirs); return true })
+
+			allowed := readOnDispatcher(t, a, func() bool { return view.Dialog().OnClosing() })
+
+			if allowed {
+				t.Fatal("a changed window closed without asking")
+			}
+			if question != i18n.Tf("Dialog.Conflict.Unsaved.Message", "f.txt") {
+				t.Fatalf("question = %q", question)
+			}
+			if tt.saved {
+				waitForStatusText(t, a, i18n.Tf("Status.ConflictSaved", "f.txt"))
+				return
+			}
+			data, err := os.ReadFile(filepath.Join(target, "f.txt"))
+			if err != nil || !strings.Contains(string(data), "<<<<<<<") {
+				t.Fatalf("f.txt = %q, %v, want it left as it was", data, err)
+			}
+		})
+	}
 }
 
 func TestTheSidesAreNamedAfterTheBranchesTakingPart(t *testing.T) {

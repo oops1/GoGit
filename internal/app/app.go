@@ -95,6 +95,7 @@ type App struct {
 	banner              mergeBanner
 	askInput            func(title, prompt string, cb func(text string, ok bool))
 	askConfirm          func(title, message string, cb func(ok bool))
+	askSave             func(title, message string, cb func(widget.MessageBoxResult))
 	showAddRepo         func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings        func(initial settings.Model, cb func(settings.Model, bool))
 	showCommit          func(initial commit.Model, cb func(commit.Model, bool))
@@ -353,6 +354,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		widget.NewMessageBox(a.eng).ShowQuestion(title, message, func(r widget.MessageBoxResult) {
 			cb(r == widget.MBResultYes)
 		})
+	}
+	a.askSave = func(title, message string, cb func(widget.MessageBoxResult)) {
+		widget.NewMessageBox(a.eng).ShowYesNoCancel(title, message, cb)
 	}
 	a.showAddRepo = a.defaultShowAddRepo
 	a.showSettings = a.defaultShowSettings

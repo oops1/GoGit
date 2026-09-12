@@ -171,6 +171,8 @@
   "Dialog.Conflict.Undo": "Undo",
   "Dialog.Conflict.Undo.Tip": "Undo the last choice or edit",
   "Dialog.Conflict.Unresolved": "Unresolved: %d of %d",
+  "Dialog.Conflict.Unsaved.Message": "Save the changes to %s before closing? No closes the window without saving.",
+  "Dialog.Conflict.Unsaved.Title": "Unsaved changes",
   "Dialog.Credentials.Cancel": "Cancel",
   "Dialog.Credentials.Error.Empty": "Enter a password or a token",
   "Dialog.Credentials.OK": "OK",

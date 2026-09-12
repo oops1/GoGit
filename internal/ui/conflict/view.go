@@ -56,6 +56,7 @@ type View struct {
 
 	path         string
 	finalNewline bool
+	saved        string
 
 	OnSave  func(content string, resolved bool)
 	OnClose func()
@@ -169,6 +170,7 @@ func (v *View) Show(file File) {
 	v.merge.GoToConflict(0)
 	v.say("")
 	v.refresh()
+	v.saved = v.Result()
 }
 
 func styleOf(s merge.Style) widget.MergeStyle {
@@ -222,7 +224,10 @@ func (v *View) requestSave() {
 	v.OnSave(v.Result(), v.merge.Unresolved() == 0)
 }
 
-func (v *View) Saved(resolved bool) {
+func (v *View) Modified() bool { return v.Result() != v.saved }
+
+func (v *View) Saved(content string, resolved bool) {
+	v.saved = content
 	if resolved {
 		v.say(i18n.T("Dialog.Conflict.Saved"))
 		return

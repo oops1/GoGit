@@ -205,12 +205,12 @@ func TestSavingWithoutAListenerIsQuiet(t *testing.T) {
 func TestTheWindowReportsWhatHappenedToTheSave(t *testing.T) {
 	v := shown(t)
 
-	v.Saved(true)
+	v.Saved(v.Result(), true)
 	if v.message.Text() != i18n.T("Dialog.Conflict.Saved") {
 		t.Fatalf("message = %q", v.message.Text())
 	}
 
-	v.Saved(false)
+	v.Saved(v.Result(), false)
 	if v.message.Text() != i18n.T("Dialog.Conflict.SavedWithMarkers") {
 		t.Fatalf("message = %q", v.message.Text())
 	}
@@ -326,5 +326,28 @@ func TestTheWindowCanBeMaximized(t *testing.T) {
 
 	if !v.Dialog().HasWindowButtons() {
 		t.Fatal("the window has no buttons to maximize it")
+	}
+}
+
+func TestTheWindowKnowsWhenItsResultChangedSinceTheLastSave(t *testing.T) {
+	v := shown(t)
+	if v.Modified() {
+		t.Fatal("a window that was just opened counts as changed")
+	}
+
+	v.takeOurs.OnClick()
+	if !v.Modified() {
+		t.Fatal("taking a side did not count as a change")
+	}
+
+	v.undo.OnClick()
+	if v.Modified() {
+		t.Fatal("undoing back to the start still counts as a change")
+	}
+
+	v.takeTheirs.OnClick()
+	v.Saved(v.Result(), true)
+	if v.Modified() {
+		t.Fatal("a saved result still counts as a change")
 	}
 }

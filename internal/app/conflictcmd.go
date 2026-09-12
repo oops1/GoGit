@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/oops1/headless-gui/v3/widget"
+
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
@@ -59,14 +61,36 @@ func (a *App) showConflictEditor(file ops.ConflictFile) {
 		view.FitWithin(bounds.Dx(), bounds.Dy())
 	}
 	view.OnSave = func(content string, resolved bool) {
-		a.saveConflict(view, file.Path, content, resolved)
+		a.saveConflict(view, content, resolved, false)
 	}
-	view.OnClose = func() { a.eng.CloseModal(view.Dialog()) }
-	view.Dialog().CancelAction = view.OnClose
+	view.OnClose = func() { a.closeConflict(view) }
+	view.Dialog().OnClosing = func() bool {
+		if !view.Modified() {
+			return true
+		}
+		a.closeConflict(view)
+		return false
+	}
 	a.showModal(view.Dialog(), view)
 }
 
-func (a *App) saveConflict(view *conflict.View, path, content string, resolved bool) {
+func (a *App) closeConflict(view *conflict.View) {
+	if !view.Modified() {
+		a.eng.CloseModal(view.Dialog())
+		return
+	}
+	a.askSave(i18n.T("Dialog.Conflict.Unsaved.Title"), i18n.Tf("Dialog.Conflict.Unsaved.Message", view.Path()), func(answer widget.MessageBoxResult) {
+		switch answer {
+		case widget.MBResultYes:
+			a.saveConflict(view, view.Result(), view.Unresolved() == 0, true)
+		case widget.MBResultNo:
+			a.eng.CloseModal(view.Dialog())
+		}
+	})
+}
+
+func (a *App) saveConflict(view *conflict.View, content string, resolved, closeAfter bool) {
+	path := view.Path()
 	a.startWrite(func(ctx context.Context, r *gitrepo.Repository) error {
 		return saveResolution(ctx, r, path, []byte(content), ops.ResolutionOptions{MarkResolved: resolved})
 	}, func(err error) {
@@ -75,9 +99,11 @@ func (a *App) saveConflict(view *conflict.View, path, content string, resolved b
 			view.SaveFailed(err)
 			return
 		}
-		view.Saved(resolved)
+		view.Saved(content, resolved)
 		if resolved {
 			a.statusLabel.SetText(i18n.Tf("Status.ConflictSaved", path))
+		}
+		if resolved || closeAfter {
 			a.eng.CloseModal(view.Dialog())
 		}
 		a.RefreshRepository()
