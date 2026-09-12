@@ -45,7 +45,9 @@ jobs:
           go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            tail -60 oracle.log |
+            awk '/^ *--- FAIL/ { seen = 1 } seen' oracle.log | head -120 |
+              while IFS= read -r line; do echo "::error::${line:0:1500}"; done
+            tail -20 oracle.log |
               while IFS= read -r line; do echo "::error::${line:0:1500}"; done
           fi
           exit "$status"
@@ -53,9 +55,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set +e
-          go test -count=40 -tags oracle -run 'TestOracleMergeLeavesTheRepositoryAsGitMergeDoes/revert_resolved_and_committed' ./internal/gitcore/ops/ 2>&1 | tee flake.log
+          go test -count=200 -timeout=40m -tags oracle -run 'TestOracleMergeLeavesTheRepositoryAsGitMergeDoes/(revert|cherry-pick)' ./internal/gitcore/ops/ 2>&1 | tee flake.log
           if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-            tail -80 flake.log |
+            awk '/^ *--- FAIL/ { seen = 1 } seen' flake.log | head -120 |
               while IFS= read -r line; do echo "::error::${line:0:1500}"; done
           fi
           exit 0
