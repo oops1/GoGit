@@ -53,3 +53,18 @@ func TestLoadPropagatesSourceError(t *testing.T) {
 		t.Fatalf("err = %v, want %v", err, wantErr)
 	}
 }
+
+func TestAStretchedDialogStretchesItsContent(t *testing.T) {
+	dlg, _, err := Load("compare", "Title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dlg.SetResizable(true)
+	size := dlg.Bounds()
+
+	dlg.Resize(size.Dx()+200, size.Dy()+120)
+
+	if dlg.Content() == nil || dlg.Content().Bounds() != dlg.ContentBounds() {
+		t.Fatalf("content = %v, want it to fill %v", dlg.Content(), dlg.ContentBounds())
+	}
+}

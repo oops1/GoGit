@@ -20,8 +20,7 @@ func Load(name, title string) (*widget.Dialog, map[string]widget.Widget, error) 
 		return nil, nil, err
 	}
 	dlg := sizedDialog(title, root.Bounds())
-	dlg.AddChild(root)
-	root.SetBounds(dlg.ContentBounds())
+	dlg.SetContent(root)
 	return dlg, named, nil
 }
 
