@@ -1,16 +1,20 @@
 package odb
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"iter"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/pack"
 )
 
 const (
@@ -18,6 +22,18 @@ const (
 	packTempPrefix  = "tmp_"
 	incomingPrefix  = "incoming-"
 	writableMode    = 0o644
+	keepSuffix      = ".keep"
+)
+
+var packFileSuffixes = []string{".idx", ".pack", ".rev", ".bitmap", ".mtimes", ".promisor"}
+
+var (
+	rootChtimes = func(root *os.Root, name string, atime, mtime time.Time) error {
+		return root.Chtimes(name, atime, mtime)
+	}
+	writePackFile = pack.WritePackFile
+	pathChmod     = os.Chmod
+	pathRemove    = os.Remove
 )
 
 type LooseObject struct {
@@ -31,6 +47,7 @@ type PackInfo struct {
 	Objects int
 	Size    int64
 	ModTime time.Time
+	Keep    bool
 }
 
 type TempFile struct {
@@ -146,11 +163,16 @@ func (d *DB) Packs() ([]PackInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("odb: stat %s in %s: %w", rel, d.dir, err)
 		}
+		keep, err := d.hasFile(path.Join(packDirName, file.Name+keepSuffix))
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, PackInfo{
 			Name:    file.Name,
 			Objects: file.Index.Count(),
 			Size:    file.Pack.Size() + info.Size(),
 			ModTime: file.ModTime,
+			Keep:    keep,
 		})
 	}
 	return out, nil
@@ -181,6 +203,78 @@ func (d *DB) PackedSince(since time.Time) iter.Seq[hash.ObjectID] {
 			}
 		}
 	}
+}
+
+func (d *DB) PackObjects(name string) iter.Seq[hash.ObjectID] {
+	return func(yield func(hash.ObjectID) bool) {
+		store := d.store()
+		if store == nil {
+			return
+		}
+		for _, file := range store.Files() {
+			if file.Name != name {
+				continue
+			}
+			for id := range file.Index.Objects() {
+				if !yield(id) {
+					return
+				}
+			}
+			return
+		}
+	}
+}
+
+func (d *DB) PutLoose(kind object.Type, data []byte) (hash.ObjectID, error) {
+	if !kind.Valid() {
+		return hash.Zero, fmt.Errorf("%w: %d", object.ErrUnknownType, uint8(kind))
+	}
+	id := hash.SumSHA1(kind.String(), data)
+	has, err := d.looseHas(id)
+	if err != nil {
+		return hash.Zero, err
+	}
+	if has {
+		return id, nil
+	}
+	return id, d.writeLoose(id, kind, data)
+}
+
+func (d *DB) Touch(id hash.ObjectID, when time.Time) error {
+	if err := rootChtimes(d.root, looseName(id), when, when); err != nil {
+		return fmt.Errorf("odb: touch %s in %s: %w", id, d.dir, err)
+	}
+	return nil
+}
+
+func (d *DB) WritePack(ctx context.Context, ids []hash.ObjectID, opts pack.WriteOptions) (pack.IndexResult, error) {
+	if err := rootMkdirAll(d.root, packDirName, looseDirMode); err != nil {
+		return pack.IndexResult{}, fmt.Errorf("odb: create %s in %s: %w", packDirName, d.dir, err)
+	}
+	return writePackFile(ctx, d.PackDir(), d, ids, opts)
+}
+
+func RemovePackFiles(packDir, name string) error {
+	var failures []error
+	for _, suffix := range packFileSuffixes {
+		file := filepath.Join(packDir, name+suffix)
+		_ = pathChmod(file, writableMode)
+		if err := pathRemove(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			failures = append(failures, fmt.Errorf("odb: remove %s: %w", file, err))
+		}
+	}
+	return errors.Join(failures...)
+}
+
+func (d *DB) hasFile(rel string) (bool, error) {
+	_, err := rootStat(d.root, filepath.FromSlash(rel))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("odb: stat %s in %s: %w", rel, d.dir, err)
+	}
+	return true, nil
 }
 
 func hasAnyPrefix(name string, prefixes []string) bool {

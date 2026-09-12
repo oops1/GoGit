@@ -1,6 +1,7 @@
 package odb
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/pack"
 )
 
 func swapMaintain[T any](t *testing.T, target *T, replacement T) {
@@ -356,5 +358,224 @@ func TestPackedSinceWithoutAnyPackfile(t *testing.T) {
 
 	for id := range db.PackedSince(time.Time{}) {
 		t.Fatalf("unexpected %s", id)
+	}
+}
+
+func TestPacksMarkPackfilesKeptByAKeepFile(t *testing.T) {
+	dir := newObjectsDir(t)
+	copyFixturePacks(t, dir)
+	db := openDB(t, dir, Options{})
+	packs, err := db.Packs()
+	if err != nil || len(packs) == 0 {
+		t.Fatalf("packs = %v, err = %v", packs, err)
+	}
+	writeFile(t, filepath.Join(dir, packDirName, packs[0].Name+keepSuffix), []byte("fetching"))
+
+	marked, err := db.Packs()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range marked {
+		if p.Keep != (p.Name == packs[0].Name) {
+			t.Fatalf("pack %s keep = %v", p.Name, p.Keep)
+		}
+	}
+}
+
+func TestPacksReportAKeepMarkerThatCannotBeExamined(t *testing.T) {
+	dir := newObjectsDir(t)
+	copyFixturePacks(t, dir)
+	db := openDB(t, dir, Options{})
+	boom := errors.New("boom")
+	prev := rootStat
+	swapMaintain(t, &rootStat, func(root *os.Root, name string) (fs.FileInfo, error) {
+		if strings.HasSuffix(name, keepSuffix) {
+			return nil, boom
+		}
+		return prev(root, name)
+	})
+
+	if _, err := db.Packs(); !errors.Is(err, boom) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPackObjectsListsTheObjectsOfOneNamedPack(t *testing.T) {
+	dir := newObjectsDir(t)
+	copyFixturePacks(t, dir)
+	db := openDB(t, dir, Options{})
+	packs, err := db.Packs()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	count := 0
+	for range db.PackObjects(packs[0].Name) {
+		count++
+	}
+	unknown := 0
+	for range db.PackObjects("pack-unknown") {
+		unknown++
+	}
+	stopped := 0
+	for range db.PackObjects(packs[0].Name) {
+		stopped++
+		break
+	}
+
+	if count != packs[0].Objects || unknown != 0 || stopped != 1 {
+		t.Fatalf("count = %d of %d, unknown = %d, stopped = %d", count, packs[0].Objects, unknown, stopped)
+	}
+}
+
+func TestPackObjectsWithoutAnyPackfile(t *testing.T) {
+	dir := newObjectsDir(t)
+	_ = os.RemoveAll(filepath.Join(dir, packDirName))
+	db := openDB(t, dir, Options{})
+
+	for id := range db.PackObjects("pack-anything") {
+		t.Fatalf("unexpected %s", id)
+	}
+}
+
+func TestPutLooseWritesALooseCopyEvenOfAPackedObject(t *testing.T) {
+	dir := newObjectsDir(t)
+	copyFixturePacks(t, dir)
+	db := openDB(t, dir, Options{})
+	id := packFixtureObjects(t)[0].id
+	kind, data, err := db.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := db.PutLoose(kind, data)
+	if err != nil || got != id {
+		t.Fatalf("id = %s, err = %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, looseName(id))); err != nil {
+		t.Fatalf("no loose copy: %v", err)
+	}
+	if again, err := db.PutLoose(kind, data); err != nil || again != id {
+		t.Fatalf("second put = %s, %v", again, err)
+	}
+	if _, err := db.PutLoose(0, data); err == nil {
+		t.Fatal("an invalid type was accepted")
+	}
+}
+
+func TestPutLooseReportsFailures(t *testing.T) {
+	boom := errors.New("boom")
+	t.Run("checking for a loose copy", func(t *testing.T) {
+		db, _ := looseDB(t)
+		swapMaintain(t, &rootStat, func(*os.Root, string) (fs.FileInfo, error) { return nil, boom })
+		if _, err := db.PutLoose(1, []byte("tree? no, a commit that is not")); err == nil {
+			t.Fatal("a failed check was ignored")
+		}
+	})
+	t.Run("writing the loose copy", func(t *testing.T) {
+		db, _ := looseDB(t)
+		swapMaintain(t, &rootCreate, func(*os.Root, string, fs.FileMode) (*os.File, error) { return nil, boom })
+		if _, err := db.PutLoose(3, []byte("a blob that is not there yet")); !errors.Is(err, boom) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+}
+
+func TestTouchSetsTheTimeOfALooseObject(t *testing.T) {
+	db, dir := looseDB(t)
+	id := looseFixtureObjects(t)[0].id
+	when := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	if err := db.Touch(id, when); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(dir, looseName(id)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(when) {
+		t.Fatalf("mtime = %v, want %v", info.ModTime(), when)
+	}
+	if err := db.Touch(hash.Zero, when); err == nil {
+		t.Fatal("touching a missing object passed")
+	}
+}
+
+func TestWritePackStoresTheObjectsInANewPackfile(t *testing.T) {
+	db, dir := looseDB(t)
+	var ids []hash.ObjectID
+	for _, obj := range looseFixtureObjects(t) {
+		ids = append(ids, obj.id)
+	}
+
+	result, err := db.WritePack(t.Context(), ids, pack.WriteOptions{Window: 10, Depth: 50})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Objects != len(ids) || filepath.Dir(result.PackPath) != filepath.Join(dir, packDirName) {
+		t.Fatalf("result = %+v", result)
+	}
+	index, err := pack.OpenIndex(result.IndexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = index.Close() }()
+	if index.Count() != len(ids) {
+		t.Fatalf("index holds %d objects, want %d", index.Count(), len(ids))
+	}
+}
+
+func TestWritePackReportsFailures(t *testing.T) {
+	boom := errors.New("boom")
+	t.Run("creating the pack directory", func(t *testing.T) {
+		db, _ := looseDB(t)
+		swapMaintain(t, &rootMkdirAll, func(*os.Root, string, fs.FileMode) error { return boom })
+		if _, err := db.WritePack(t.Context(), nil, pack.WriteOptions{}); !errors.Is(err, boom) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("writing the packfile", func(t *testing.T) {
+		db, _ := looseDB(t)
+		swapMaintain(t, &writePackFile, func(context.Context, string, pack.ObjectSource, []hash.ObjectID, pack.WriteOptions) (pack.IndexResult, error) {
+			return pack.IndexResult{}, boom
+		})
+		if _, err := db.WritePack(t.Context(), nil, pack.WriteOptions{}); !errors.Is(err, boom) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+}
+
+func TestRemovePackFilesDeletesThePackfileAndItsCompanionsButKeepsTheKeepFile(t *testing.T) {
+	dir := t.TempDir()
+	for _, suffix := range []string{".pack", ".idx", ".rev", ".bitmap", keepSuffix} {
+		if err := os.WriteFile(filepath.Join(dir, "pack-old"+suffix), []byte("x"), 0o444); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := RemovePackFiles(dir, "pack-old"); err != nil {
+		t.Fatal(err)
+	}
+
+	left, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 1 || left[0].Name() != "pack-old"+keepSuffix {
+		t.Fatalf("left = %v", left)
+	}
+}
+
+func TestRemovePackFilesReportsEveryFileItCouldNotRemove(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pack-busy.pack"), []byte("x"))
+	boom := errors.New("boom")
+	swapMaintain(t, &pathRemove, func(string) error { return boom })
+
+	if err := RemovePackFiles(dir, "pack-busy"); !errors.Is(err, boom) {
+		t.Fatalf("err = %v", err)
 	}
 }
