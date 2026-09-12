@@ -8,8 +8,8 @@ github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3 h1:drBZz
 github.com/go-text/typesetting-utils v0.0.0-20260223113751-2d88ac90dae3/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
 github.com/godbus/dbus/v5 v5.2.2 h1:TUR3TgtSVDmjiXOgAAyaZbYmIeP3DPkld3jgKGV8mXQ=
 github.com/godbus/dbus/v5 v5.2.2/go.mod h1:3AAv2+hPq5rdnr5txxxRwiGjPXamgoIHgz9FPBfOp3c=
-github.com/oops1/headless-gui/v3 v3.17.0 h1:5wYWmnjaGP85+o4mI2jImJykZMCdsWNfmVd8Acf2+kI=
-github.com/oops1/headless-gui/v3 v3.17.0/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
+github.com/oops1/headless-gui/v3 v3.17.1 h1:uCfESX7sYhIDanx0aCMJLR1LQ+aPUScn2IKPjmwRW3o=
+github.com/oops1/headless-gui/v3 v3.17.1/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
 golang.org/x/crypto v0.56.0 h1:GUh5Ii4J5jtcseSMiRqr1jXCNHoxjeV9Fmekc2oLy6Y=
 golang.org/x/crypto v0.56.0/go.mod h1:OMW5y6CY9l38uPLmxU6l6pwcXp1obtLo3e6gT7gQR2I=
 golang.org/x/image v0.23.0 h1:HseQ7c2OpPKTPVzNjG5fwJsOTCiiwS4QdsYi5XU6H68=

@@ -61,14 +61,36 @@ type chunk struct {
 	ours     []string
 	theirs   []string
 	base     []string
+	merged   []string
+}
+
+type Chunk struct {
+	Conflict bool
+	Ours     []string
+	Base     []string
+	Theirs   []string
+	Merged   []string
 }
 
 func File(base, ours, theirs []byte, opts Options) Result {
+	return render(prepare(base, ours, theirs, opts), opts)
+}
+
+func Chunks(base, ours, theirs []byte, opts Options) []Chunk {
+	prepared := prepare(base, ours, theirs, opts)
+	out := make([]Chunk, 0, len(prepared))
+	for _, c := range prepared {
+		out = append(out, Chunk{Conflict: c.conflict, Ours: c.ours, Base: c.base, Theirs: c.theirs, Merged: c.merged})
+	}
+	return out
+}
+
+func prepare(base, ours, theirs []byte, opts Options) []chunk {
 	chunks := chunksOf(base, ours, theirs, opts)
 	if opts.Style == StyleMerge {
 		chunks = join(chunks)
 	}
-	return render(chunks, opts)
+	return chunks
 }
 
 func chunksOf(base, ours, theirs []byte, opts Options) []chunk {
@@ -80,7 +102,7 @@ func chunksOf(base, ours, theirs []byte, opts Options) []chunk {
 	at, i, j := 0, 0, 0
 	for i < len(ourChanges) || j < len(theirChanges) {
 		start := nextStart(ourChanges, theirChanges, i, j)
-		out = appendClean(out, baseLines[at:start])
+		out = appendUntouched(out, baseLines[at:start])
 
 		end, takenOurs, takenTheirs := span(ourChanges, theirChanges, i, j)
 		ourSide := applyRegion(baseLines, ourChanges[i:takenOurs], start, end)
@@ -90,25 +112,36 @@ func chunksOf(base, ours, theirs []byte, opts Options) []chunk {
 
 		switch {
 		case slices.Equal(ourSide, theirSide), slices.Equal(theirSide, baseSide):
-			out = appendClean(out, ourSide)
+			out = appendClean(out, chunk{ours: ourSide, base: baseSide, theirs: theirSide, merged: ourSide})
 		case slices.Equal(ourSide, baseSide):
-			out = appendClean(out, theirSide)
+			out = appendClean(out, chunk{ours: ourSide, base: baseSide, theirs: theirSide, merged: theirSide})
 		default:
 			out = append(out, chunk{conflict: true, ours: ourSide, theirs: theirSide, base: baseSide})
 		}
 	}
-	return appendClean(out, baseLines[at:])
+	return appendUntouched(out, baseLines[at:])
 }
 
-func appendClean(out []chunk, lines []string) []chunk {
-	if len(lines) == 0 {
+func appendUntouched(out []chunk, lines []string) []chunk {
+	return appendClean(out, chunk{ours: lines, base: lines, theirs: lines, merged: lines})
+}
+
+func appendClean(out []chunk, clean chunk) []chunk {
+	if len(clean.merged) == 0 && len(clean.ours) == 0 && len(clean.base) == 0 && len(clean.theirs) == 0 {
 		return out
 	}
 	if last := len(out) - 1; last >= 0 && !out[last].conflict {
-		out[last].ours = append(out[last].ours, lines...)
+		out[last].ours = append(out[last].ours, clean.ours...)
+		out[last].base = append(out[last].base, clean.base...)
+		out[last].theirs = append(out[last].theirs, clean.theirs...)
+		out[last].merged = append(out[last].merged, clean.merged...)
 		return out
 	}
-	return append(out, chunk{ours: lines})
+	clean.ours = slices.Clone(clean.ours)
+	clean.base = slices.Clone(clean.base)
+	clean.theirs = slices.Clone(clean.theirs)
+	clean.merged = slices.Clone(clean.merged)
+	return append(out, clean)
 }
 
 func join(chunks []chunk) []chunk {
@@ -125,15 +158,15 @@ func join(chunks []chunk) []chunk {
 
 func joinable(chunks []chunk, at int) bool {
 	return chunks[at-1].conflict && !chunks[at].conflict &&
-		chunks[at+1].conflict && len(chunks[at].ours) <= joinGap
+		chunks[at+1].conflict && len(chunks[at].merged) <= joinGap
 }
 
 func joined(first, between, second chunk) chunk {
 	return chunk{
 		conflict: true,
-		ours:     concat(first.ours, between.ours, second.ours),
-		theirs:   concat(first.theirs, between.ours, second.theirs),
-		base:     concat(first.base, between.ours, second.base),
+		ours:     concat(first.ours, between.merged, second.ours),
+		theirs:   concat(first.theirs, between.merged, second.theirs),
+		base:     concat(first.base, between.merged, second.base),
 	}
 }
 
@@ -150,7 +183,7 @@ func render(chunks []chunk, opts Options) Result {
 	conflicts := 0
 	for _, current := range chunks {
 		if !current.conflict {
-			out = append(out, current.ours...)
+			out = append(out, current.merged...)
 			continue
 		}
 		conflicts++

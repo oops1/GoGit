@@ -11,18 +11,34 @@ import (
 var source = assets.Dialog
 
 func Load(name, title string) (*widget.Dialog, map[string]widget.Widget, error) {
-	data, err := source(name)
+	dlg, root, named, err := build(name, title)
 	if err != nil {
 		return nil, nil, err
 	}
-	root, named, err := widget.LoadUIFromXAML(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	dlg := sizedDialog(title, root.Bounds())
 	dlg.AddChild(root)
 	root.SetBounds(dlg.ContentBounds())
 	return dlg, named, nil
+}
+
+func LoadResizable(name, title string) (*widget.Dialog, map[string]widget.Widget, error) {
+	dlg, root, named, err := build(name, title)
+	if err != nil {
+		return nil, nil, err
+	}
+	dlg.SetContent(root)
+	return dlg, named, nil
+}
+
+func build(name, title string) (*widget.Dialog, widget.Widget, map[string]widget.Widget, error) {
+	data, err := source(name)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	root, named, err := widget.LoadUIFromXAML(data)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return sizedDialog(title, root.Bounds()), root, named, nil
 }
 
 func sizedDialog(title string, content image.Rectangle) *widget.Dialog {

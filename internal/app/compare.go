@@ -162,6 +162,10 @@ func (a *App) onFilesRowActivated(_ int, item any) {
 	if !ok || o == nil {
 		return
 	}
+	if row.Status == changes.RowConflict {
+		a.openConflictEditor(row.RelPath)
+		return
+	}
 	a.filesMu.Lock()
 	mode, files, entries := a.filesMode, a.currentFiles, a.currentEntries
 	a.filesMu.Unlock()

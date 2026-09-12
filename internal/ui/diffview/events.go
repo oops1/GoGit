@@ -10,6 +10,15 @@ func (dv *DiffView) OnMouseButton(e widget.MouseEvent) bool {
 	if !dv.IsEnabled() {
 		return false
 	}
+	if dv.menu.IsOpen() {
+		if e.Button == widget.MouseRight && !e.Pressed {
+			return true
+		}
+		if image.Pt(e.X, e.Y).In(dv.menu.Bounds()) {
+			return dv.menu.OnMouseButton(e)
+		}
+		dv.menu.Close()
+	}
 	s := dv.snapshot()
 	g := dv.layout(s)
 	switch e.Button {
@@ -19,9 +28,11 @@ func (dv *DiffView) OnMouseButton(e widget.MouseEvent) bool {
 		return dv.wheel(e, g, 1)
 	case widget.MouseLeft:
 		if e.Pressed {
-			return dv.press(image.Pt(e.X, e.Y), g, s)
+			return dv.press(image.Pt(e.X, e.Y), e.Mod&widget.ModShift != 0, g, s)
 		}
 		return dv.release()
+	case widget.MouseRight:
+		return e.Pressed && dv.openMenu(image.Pt(e.X, e.Y), g, s)
 	default:
 		return false
 	}
@@ -35,7 +46,7 @@ func (dv *DiffView) wheel(e widget.MouseEvent, g geometry, direction int) bool {
 	return true
 }
 
-func (dv *DiffView) press(pt image.Point, g geometry, s snapshot) bool {
+func (dv *DiffView) press(pt image.Point, extend bool, g geometry, s snapshot) bool {
 	switch {
 	case g.hasV && pt.In(g.vThumb()):
 		dv.startDrag(false, pt.Y, g.scrollY)
@@ -53,6 +64,10 @@ func (dv *DiffView) press(pt image.Point, g geometry, s snapshot) bool {
 		index := g.rowAt(pt.Y)
 		if index < 0 || index >= len(s.rows) {
 			return false
+		}
+		if extend {
+			dv.extendRow(index)
+			return true
 		}
 		dv.selectRow(index, s.mode == SideBySide && pt.X >= g.split)
 		return true
@@ -90,6 +105,10 @@ func (dv *DiffView) release() bool {
 }
 
 func (dv *DiffView) OnMouseMove(x, y int) {
+	if dv.menu.IsOpen() {
+		dv.menu.OnMouseMove(x, y)
+		return
+	}
 	dv.mu.Lock()
 	dragging := dv.dragging
 	horizontal := dv.dragHoriz
@@ -118,6 +137,10 @@ func (dv *DiffView) WantsCapture(e widget.MouseEvent) bool {
 }
 
 func (dv *DiffView) OnKeyEvent(e widget.KeyEvent) {
+	if dv.menu.IsOpen() {
+		dv.menu.OnKeyEvent(e)
+		return
+	}
 	if !e.Pressed || !dv.IsEnabled() {
 		return
 	}

@@ -398,3 +398,17 @@ func TestMenuReturnsNilForUnknownName(t *testing.T) {
 		t.Fatal("an icon that was never drawn cannot render")
 	}
 }
+
+func TestCardRendersItsIconsAndNothingForAnUnknownName(t *testing.T) {
+	resetForTest()
+	img := Card("person", 18, color.RGBA{G: 255, A: 255})
+	if img == nil {
+		t.Fatal("Card(person, 18, green) = nil")
+	}
+	if b := img.Bounds(); b.Dx() != 18 || b.Dy() != 18 {
+		t.Fatalf("bounds = %v, want 18x18", b)
+	}
+	if Card("no-such-icon", 18, color.RGBA{A: 255}) != nil {
+		t.Fatal("an icon that was never drawn cannot render")
+	}
+}

@@ -130,4 +130,5 @@ func (a *App) wireContextMenus() {
 	a.reposView.OnMenu = a.treeMenu
 	a.filesGrid.Data().RowContextMenu = a.filesMenu
 	a.journalGrid().RowContextMenu = a.journalMenu
+	a.diffView.OnMenu = a.diffMenu
 }

@@ -48,7 +48,7 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	a.setFilesSelected(mode == filesModeWorking && row.RelPath != "")
 	if mode == filesModeCommit {
 		if file, ok := fileOf(files, row); ok {
-			a.diffView.SetDocument(changes.FromFile(file))
+			a.showDiff(diffTarget{file: file})
 		}
 		return
 	}
@@ -134,9 +134,9 @@ func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
 	a.Post(func() {
 		a.setFilesRows(rows)
 		if hasFirst {
-			a.diffView.SetDocument(changes.FromFile(first))
+			a.showDiff(diffTarget{file: first})
 		} else {
-			a.diffView.Clear()
+			a.clearDiff()
 		}
 	})
 }
@@ -200,7 +200,7 @@ func (a *App) clearChangesPanels() {
 	a.selectedCommit = hash.ObjectID{}
 	a.setCommitSelected(false)
 	a.setFilesRows(nil)
-	a.diffView.Clear()
+	a.clearDiff()
 	a.setFilesSelected(false)
 	a.setHasStagedChanges(false)
 }

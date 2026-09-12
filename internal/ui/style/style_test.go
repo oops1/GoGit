@@ -102,3 +102,23 @@ func TestABannerIsTheChromeTouchedByTheAccent(t *testing.T) {
 		t.Fatalf("text = %v", label.TextColor)
 	}
 }
+
+func TestATintLeansFromTheFieldTowardsTheAccent(t *testing.T) {
+	p := Of(widget.Win11LightTheme())
+
+	if p.Tint(0) != p.Field || p.Tint(100) != p.Accent {
+		t.Fatalf("tint 0 = %v, tint 100 = %v, want the field and the accent", p.Tint(0), p.Tint(100))
+	}
+}
+
+func TestLineCountsAreBrightOnBothLightAndDarkThemes(t *testing.T) {
+	light := Of(widget.Win11LightTheme())
+	dark := Of(widget.Win11DarkTheme())
+
+	if light.Added() != addedOnLight || light.Deleted() != deletedOnLight {
+		t.Fatalf("light = %v %v", light.Added(), light.Deleted())
+	}
+	if dark.Added() != addedOnDark || dark.Deleted() != deletedOnDark {
+		t.Fatalf("dark = %v %v", dark.Added(), dark.Deleted())
+	}
+}

@@ -54,7 +54,7 @@ func (dv *DiffView) drawRow(ctx widget.DrawContext, g geometry, s snapshot, r ro
 	default:
 		dv.drawSideRow(ctx, g, s, r, y)
 	}
-	if index == s.selected {
+	if s.inRange(index) {
 		ctx.SetClip(g.clipped(g.content))
 		ctx.DrawBorder(g.content.Min.X, y, g.content.Dx(), g.rowH, s.pal.Selection)
 	}

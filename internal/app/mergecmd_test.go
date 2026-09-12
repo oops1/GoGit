@@ -261,10 +261,11 @@ func TestTakingASideSettlesTheConflict(t *testing.T) {
 	items := readOnDispatcher(t, a, func() []widget.MenuItem {
 		return a.conflictItems(changes.Row{Status: changes.RowConflict, RelPath: "f.txt"})
 	})
-	if len(items) != 4 || items[1].Text != i18n.T("Menu.Context.TakeTheirs") {
+	theirs, ok := findMenuItem(items, i18n.T("Menu.Context.TakeTheirs"))
+	if !ok {
 		t.Fatalf("items = %+v", items)
 	}
-	readOnDispatcher(t, a, func() bool { items[1].OnClick(); return true })
+	readOnDispatcher(t, a, func() bool { theirs.OnClick(); return true })
 
 	waitForBannerText(t, a, i18n.Tf("Banner.Merge.Ready", "feature"))
 	data, err := os.ReadFile(filepath.Join(target, "f.txt"))
@@ -280,7 +281,11 @@ func TestOnlyConflictedRowsOfferASide(t *testing.T) {
 		t.Fatalf("items = %+v", items)
 	}
 	items := a.conflictItems(changes.Row{Status: changes.RowConflict, RelPath: "f.txt"})
-	items[0].OnClick()
+	ours, ok := findMenuItem(items, i18n.T("Menu.Context.TakeOurs"))
+	if !ok {
+		t.Fatalf("items = %+v", items)
+	}
+	ours.OnClick()
 }
 
 func TestAFailedResolutionIsReported(t *testing.T) {

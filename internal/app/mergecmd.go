@@ -243,6 +243,7 @@ func (a *App) conflictItems(row changes.Row) []widget.MenuItem {
 	}
 	path := row.RelPath
 	return []widget.MenuItem{
+		menuItem("Menu.Context.ResolveConflict", func() { a.openConflictEditor(path) }),
 		menuItem("Menu.Context.TakeOurs", func() { a.takeSide(path, ops.TakeOurs) }),
 		menuItem("Menu.Context.TakeTheirs", func() { a.takeSide(path, ops.TakeTheirs) }),
 		menuItem("Menu.Context.MarkResolved", a.stageSelected),
