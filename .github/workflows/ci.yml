@@ -49,6 +49,17 @@ jobs:
               while IFS= read -r line; do echo "::error::${line:0:1500}"; done
           fi
           exit "$status"
+      - name: stress the revert oracle
+        if: runner.os == 'Linux'
+        run: |
+          set +e
+          go test -count=40 -tags oracle -run 'TestOracleMergeLeavesTheRepositoryAsGitMergeDoes/revert_resolved_and_committed' ./internal/gitcore/ops/ 2>&1 | tee flake.log
+          if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+            tail -80 flake.log |
+              while IFS= read -r line; do echo "::error::${line:0:1500}"; done
+          fi
+          exit 0
+
       - name: coverage gate
         shell: bash
         run: |
