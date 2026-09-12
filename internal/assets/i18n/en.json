@@ -15,7 +15,6 @@
   "Details.Column.Lines": "Lines",
   "Details.Column.Path": "File",
   "Details.Column.Size": "Size",
-  "Details.Column.Status": "What happened",
   "Details.Empty": "Pick a commit in the journal to see it here.",
   "Details.Info.Author": "Author: %s, %s",
   "Details.Info.Branches": "In branches: %s",

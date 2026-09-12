@@ -7,6 +7,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/commitdetails"
 )
 
@@ -49,7 +50,7 @@ func detailsModel(details ops.CommitDetails) commitdetails.Details {
 	}
 	for _, file := range details.Changes {
 		model.Changes = append(model.Changes, commitdetails.Change{
-			Status:  statusName(file.Status),
+			Status:  string(changes.DiffRowStatus(file.Status)),
 			Path:    file.NewPath,
 			Old:     file.OldPath,
 			Added:   file.Added(),

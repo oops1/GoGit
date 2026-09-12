@@ -57,7 +57,7 @@ type FileRow struct {
 type View struct {
 	tabs    *widget.TabControl
 	info    *widget.Label
-	changes *widget.DataGridWidget
+	changes *iconGrid
 	files   *widget.DataGridWidget
 	details Details
 }
@@ -66,7 +66,7 @@ func NewView(tabs *widget.TabControl) *View {
 	v := &View{
 		tabs:    tabs,
 		info:    widget.NewLabel("", widget.CurrentTheme().LabelText),
-		changes: widget.NewDataGridWidget(),
+		changes: newIconGrid(),
 		files:   widget.NewDataGridWidget(),
 	}
 	v.info.WrapText = true
@@ -93,13 +93,11 @@ func (v *View) Retitle() {
 }
 
 func (v *View) buildColumns() {
-	status := datagrid.NewTextColumn(i18n.T("Details.Column.Status"), "Status")
-	status.SetWidth(datagrid.PixelWidth(120))
-	path := datagrid.NewTextColumn(i18n.T("Details.Column.Path"), "Path")
+	path := datagrid.NewTemplateColumn(i18n.T("Details.Column.Path"), v.changes.drawPathCell)
 	path.SetWidth(datagrid.StarWidth(1))
 	lines := datagrid.NewTextColumn(i18n.T("Details.Column.Lines"), "Changes")
 	lines.SetWidth(datagrid.PixelWidth(110))
-	v.changes.Grid.SetColumns([]datagrid.Column{status, path, lines})
+	v.changes.Grid.SetColumns([]datagrid.Column{path, lines})
 
 	filePath := datagrid.NewTextColumn(i18n.T("Details.Column.Path"), "Path")
 	filePath.SetWidth(datagrid.StarWidth(1))

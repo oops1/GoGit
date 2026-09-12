@@ -15,7 +15,6 @@
   "Details.Column.Lines": "Строки",
   "Details.Column.Path": "Файл",
   "Details.Column.Size": "Размер",
-  "Details.Column.Status": "Что произошло",
   "Details.Empty": "Выберите коммит в журнале, чтобы увидеть его здесь.",
   "Details.Info.Author": "Автор: %s, %s",
   "Details.Info.Branches": "В ветках: %s",
