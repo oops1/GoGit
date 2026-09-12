@@ -101,18 +101,22 @@ func (v *View) SetStatus(text string) {
 
 func (v *View) Append(line string) {
 	v.push(line)
-	v.logList.SetItems(v.lines)
+	v.showLines()
 	v.logList.ScrollToBottom()
 }
 
 func (v *View) Track(slot, line string) {
 	if index, ok := v.tracked[slot]; ok {
 		v.lines[index] = line
-		v.logList.SetItems(v.lines)
+		v.showLines()
 		return
 	}
 	v.tracked[slot] = len(v.lines)
 	v.Append(line)
+}
+
+func (v *View) showLines() {
+	v.logList.SetItems(v.Lines())
 }
 
 func (v *View) ForgetTracked() {
