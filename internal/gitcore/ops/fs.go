@@ -41,6 +41,7 @@ var (
 	txCommit      = (*refs.Transaction).Commit
 	txUpdate      = (*refs.Transaction).Update
 	txDelete      = (*refs.Transaction).Delete
+	txSet         = (*refs.Transaction).Set
 	txSetSymbolic = (*refs.Transaction).SetSymbolic
 	txDetach      = (*refs.Transaction).Detach
 )

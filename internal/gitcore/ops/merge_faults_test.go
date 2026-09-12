@@ -106,6 +106,16 @@ func mergeSeams() []faultSeam {
 				}
 			})
 		}},
+		{"delete ref", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txDelete, func(original func(*refs.Transaction, refs.Name, hash.ObjectID) error) func(*refs.Transaction, refs.Name, hash.ObjectID) error {
+				return func(tx *refs.Transaction, name refs.Name, old hash.ObjectID) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, old)
+				}
+			})
+		}},
 		{"read ref", func(t *testing.T, failAt int, calls *int) {
 			swapSeam(t, &refsLookup, func(original func(*refs.Store, refs.Name) (refs.Ref, error)) func(*refs.Store, refs.Name) (refs.Ref, error) {
 				return func(store *refs.Store, name refs.Name) (refs.Ref, error) {
@@ -357,6 +367,32 @@ func mergeFaultScenarios() []faultScenario {
 		}},
 		{"reset of paths", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
 			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetMixed, "f", "added"))
+			return err
+		}},
+		{"annotated tag", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CreateTag(ctx, tr.repo, "v1", "HEAD~1", tagOptions("first release"))
+			return err
+		}},
+		{"lightweight tag", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CreateTag(ctx, tr.repo, "v1", "", tagOptions(""))
+			return err
+		}},
+		{"delete a tag", func(tr *testRepo) {
+			tr.resetHistory()
+			if _, err := CreateTag(tr.t.Context(), tr.repo, "v1", "", tagOptions("tagged")); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error { return DeleteTag(ctx, tr.repo, "v1") }},
+		{"list tags", func(tr *testRepo) {
+			tr.resetHistory()
+			if _, err := CreateTag(tr.t.Context(), tr.repo, "v1", "", tagOptions("tagged")); err != nil {
+				tr.t.Fatal(err)
+			}
+			if _, err := CreateTag(tr.t.Context(), tr.repo, "v2", "HEAD~1", tagOptions("")); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Tags(ctx, tr.repo)
 			return err
 		}},
 		{"take a side", func(tr *testRepo) {

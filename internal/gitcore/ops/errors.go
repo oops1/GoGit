@@ -34,6 +34,9 @@ var (
 	ErrCannotFastForward  = errors.New("ops: the merge cannot be a fast-forward")
 	ErrUnrelatedHistories = errors.New("ops: refusing to merge unrelated histories")
 	ErrResetPathsWithMode = errors.New("ops: a soft or hard reset cannot take paths")
+	ErrInvalidTagName     = errors.New("ops: invalid tag name")
+	ErrTagExists          = errors.New("ops: tag already exists")
+	ErrTagNotFound        = errors.New("ops: tag not found")
 )
 
 type OverwriteError struct {
