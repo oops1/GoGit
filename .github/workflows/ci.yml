@@ -45,8 +45,8 @@ jobs:
           go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            grep -E "FAIL|panic:|_test\.go:" oracle.log | head -40 |
-              while IFS= read -r line; do echo "::error::$line"; done
+            tail -60 oracle.log |
+              while IFS= read -r line; do echo "::error::${line:0:1500}"; done
           fi
           exit "$status"
       - name: coverage gate
