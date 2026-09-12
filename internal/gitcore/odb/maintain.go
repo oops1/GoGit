@@ -164,6 +164,25 @@ func (d *DB) Packed(id hash.ObjectID) (bool, error) {
 	return store.Contains(id)
 }
 
+func (d *DB) PackedSince(since time.Time) iter.Seq[hash.ObjectID] {
+	return func(yield func(hash.ObjectID) bool) {
+		store := d.store()
+		if store == nil {
+			return
+		}
+		for _, file := range store.Files() {
+			if file.ModTime.Before(since) {
+				continue
+			}
+			for id := range file.Index.Objects() {
+				if !yield(id) {
+					return
+				}
+			}
+		}
+	}
+}
+
 func hasAnyPrefix(name string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(name, prefix) {

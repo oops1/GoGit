@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 )
@@ -313,5 +314,47 @@ func TestPacksReportAnIndexThatCannotBeExamined(t *testing.T) {
 
 	if _, err := db.Packs(); !errors.Is(err, boom) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPackedSinceListsObjectsOfPacksNoOlderThanTheMoment(t *testing.T) {
+	dir := newObjectsDir(t)
+	copyFixturePacks(t, dir)
+	db := openDB(t, dir, Options{})
+	packs, err := db.Packs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	for _, p := range packs {
+		total += p.Objects
+	}
+
+	recent := 0
+	for range db.PackedSince(time.Now().Add(-time.Hour)) {
+		recent++
+	}
+	future := 0
+	for range db.PackedSince(time.Now().Add(time.Hour)) {
+		future++
+	}
+	stopped := 0
+	for range db.PackedSince(time.Time{}) {
+		stopped++
+		break
+	}
+
+	if recent != total || future != 0 || stopped != 1 {
+		t.Fatalf("recent = %d of %d, future = %d, stopped = %d", recent, total, future, stopped)
+	}
+}
+
+func TestPackedSinceWithoutAnyPackfile(t *testing.T) {
+	dir := newObjectsDir(t)
+	_ = os.RemoveAll(filepath.Join(dir, packDirName))
+	db := openDB(t, dir, Options{})
+
+	for id := range db.PackedSince(time.Time{}) {
+		t.Fatalf("unexpected %s", id)
 	}
 }
