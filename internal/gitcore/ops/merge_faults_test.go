@@ -390,6 +390,10 @@ func mergeFaultScenarios() []faultScenario {
 			_, err := StartBranch(ctx, tr.repo, "topic", "", StartBranchOptions{})
 			return err
 		}},
+		{"two branches compared", func(tr *testRepo) { tr.comparableFork() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Compare(ctx, tr.repo, "main", "feature", CompareOptions{})
+			return err
+		}},
 		{"the reflog of a branch", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
 			_, err := Reflog(ctx, tr.repo, "main", ReflogOptions{})
 			return err

@@ -80,6 +80,7 @@ func (a *App) branchMenu(ref refs.Name) []widget.MenuItem {
 		items = append(items, item)
 	}
 	items = append(items, a.switchItems(ref)...)
+	items = append(items, a.compareItems(ref)...)
 	items = append(items, a.deleteTagItems(ref)...)
 	return append(items, a.reflogItems(ref)...)
 }

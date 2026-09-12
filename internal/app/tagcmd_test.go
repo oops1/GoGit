@@ -119,16 +119,25 @@ func TestTheBranchMenuDeletesATag(t *testing.T) {
 	}
 }
 
+func hasMenuItem(items []widget.MenuItem, text string) bool {
+	for _, item := range items {
+		if item.Text == text {
+			return true
+		}
+	}
+	return false
+}
+
 func TestTheBranchMenuKeepsItsMergeEntryForBranches(t *testing.T) {
 	a, _ := forkedApp(t, false)
 
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("feature")) })
 	mine := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("main")) })
 
-	if len(items) != 3 || items[0].Text != i18n.T("Menu.Context.MergeIntoCurrent") {
+	if items[0].Text != i18n.T("Menu.Context.MergeIntoCurrent") || !hasMenuItem(items, i18n.T("Menu.Context.Reflog")) {
 		t.Fatalf("items = %+v", items)
 	}
-	if len(mine) != 1 || mine[0].Text != i18n.T("Menu.Context.Reflog") {
+	if hasMenuItem(mine, i18n.T("Menu.Context.MergeIntoCurrent")) || !hasMenuItem(mine, i18n.T("Menu.Context.Reflog")) {
 		t.Fatalf("mine = %+v", mine)
 	}
 }
