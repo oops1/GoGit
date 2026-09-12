@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/commitdetails"
+	"github.com/oops1/gogit/internal/ui/journal"
 )
 
 var readDetails = ops.Details
@@ -30,6 +31,8 @@ func (a *App) showCommitDetails(id hash.ObjectID) {
 			return
 		}
 		if a.selectedCommit == details.Commit {
+			a.detailsView.SetCopyHandler(a.copyToClipboard)
+			a.detailsView.SetParentHandler(a.selectJournalCommit)
 			a.detailsView.Show(detailsModel(details))
 		}
 	})
@@ -61,4 +64,15 @@ func detailsModel(details ops.CommitDetails) commitdetails.Details {
 		model.Files = append(model.Files, commitdetails.File{Path: file.Path, Size: file.Size})
 	}
 	return model
+}
+
+func (a *App) selectJournalCommit(id hash.ObjectID) {
+	grid := a.journalGrid().Grid
+	items := grid.ItemsSource()
+	for index := range items.Count() {
+		if row, ok := items.Get(index).(journal.Row); ok && row.ID == id {
+			grid.SetSelectedIndex(index)
+			return
+		}
+	}
 }

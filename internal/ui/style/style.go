@@ -14,6 +14,14 @@ const (
 	brightAccent       = 150
 	onBrightAccent     = 0x1A
 	bannerTint         = 18
+	darkField          = 128
+)
+
+var (
+	addedOnLight   = color.RGBA{R: 0x1A, G: 0x7F, B: 0x37, A: 0xFF}
+	deletedOnLight = color.RGBA{R: 0xCF, G: 0x22, B: 0x2E, A: 0xFF}
+	addedOnDark    = color.RGBA{R: 0x3F, G: 0xB9, B: 0x50, A: 0xFF}
+	deletedOnDark  = color.RGBA{R: 0xF8, G: 0x51, B: 0x49, A: 0xFF}
 )
 
 type Palette struct {
@@ -96,6 +104,24 @@ func (p Palette) Body(labels ...*widget.Label) {
 	for _, label := range labels {
 		label.TextColor = p.Text
 	}
+}
+
+func (p Palette) Tint(percent int) color.RGBA {
+	return mix(p.Field, p.Accent, percent)
+}
+
+func (p Palette) Added() color.RGBA {
+	if luminance(p.Field) < darkField {
+		return addedOnDark
+	}
+	return addedOnLight
+}
+
+func (p Palette) Deleted() color.RGBA {
+	if luminance(p.Field) < darkField {
+		return deletedOnDark
+	}
+	return deletedOnLight
 }
 
 func (p Palette) Hints(labels ...*widget.Label) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/i18n"
-	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const shortLength = 7
@@ -46,7 +45,8 @@ type Details struct {
 type ChangeRow struct {
 	Status  string
 	Path    string
-	Changes string
+	Added   int
+	Deleted int
 }
 
 type FileRow struct {
@@ -56,20 +56,19 @@ type FileRow struct {
 
 type View struct {
 	tabs    *widget.TabControl
-	info    *widget.Label
+	info    *infoCard
 	changes *iconGrid
-	files   *widget.DataGridWidget
+	files   *iconGrid
 	details Details
 }
 
 func NewView(tabs *widget.TabControl) *View {
 	v := &View{
 		tabs:    tabs,
-		info:    widget.NewLabel("", widget.CurrentTheme().LabelText),
+		info:    newInfoCard(),
 		changes: newIconGrid(),
-		files:   widget.NewDataGridWidget(),
+		files:   newIconGrid(),
 	}
-	v.info.WrapText = true
 	v.buildColumns()
 	tabs.ClearTabs()
 	tabs.AddTab(i18n.T("Details.Tab.Info"), v.info)
@@ -80,9 +79,14 @@ func NewView(tabs *widget.TabControl) *View {
 }
 
 func (v *View) Restyle(t *widget.Theme) {
-	p := style.Of(t)
-	p.Body(v.info)
+	v.info.Restyle(t)
+	v.changes.Restyle(t)
+	v.files.Restyle(t)
 }
+
+func (v *View) SetCopyHandler(copyText func(string)) { v.info.OnCopy = copyText }
+
+func (v *View) SetParentHandler(openParent func(hash.ObjectID)) { v.info.OnParent = openParent }
 
 func (v *View) Retitle() {
 	for index, key := range []string{"Details.Tab.Info", "Details.Tab.Changes", "Details.Tab.Files"} {
@@ -95,11 +99,11 @@ func (v *View) Retitle() {
 func (v *View) buildColumns() {
 	path := datagrid.NewTemplateColumn(i18n.T("Details.Column.Path"), v.changes.drawPathCell)
 	path.SetWidth(datagrid.StarWidth(1))
-	lines := datagrid.NewTextColumn(i18n.T("Details.Column.Lines"), "Changes")
+	lines := datagrid.NewTemplateColumn(i18n.T("Details.Column.Lines"), v.changes.drawLinesCell)
 	lines.SetWidth(datagrid.PixelWidth(110))
 	v.changes.Grid.SetColumns([]datagrid.Column{path, lines})
 
-	filePath := datagrid.NewTextColumn(i18n.T("Details.Column.Path"), "Path")
+	filePath := datagrid.NewTemplateColumn(i18n.T("Details.Column.Path"), v.files.drawFileCell)
 	filePath.SetWidth(datagrid.StarWidth(1))
 	size := datagrid.NewTextColumn(i18n.T("Details.Column.Size"), "Size")
 	size.SetWidth(datagrid.PixelWidth(110))
@@ -108,7 +112,7 @@ func (v *View) buildColumns() {
 
 func (v *View) Clear() {
 	v.details = Details{}
-	v.info.SetText(i18n.T("Details.Empty"))
+	v.info.Show(Details{})
 	v.changes.Grid.SetItemsSource(datagrid.NewObservableCollectionFrom(nil))
 	v.files.Grid.SetItemsSource(datagrid.NewObservableCollectionFrom(nil))
 }
@@ -121,7 +125,7 @@ func (v *View) Show(details Details) {
 		return
 	}
 	v.details = details
-	v.info.SetText(infoText(details))
+	v.info.Show(details)
 	v.changes.Grid.SetItemsSource(datagrid.NewObservableCollectionFrom(changeRows(details)))
 	v.files.Grid.SetItemsSource(datagrid.NewObservableCollectionFrom(fileRows(details)))
 }
@@ -165,7 +169,8 @@ func changeRows(details Details) []any {
 		rows = append(rows, ChangeRow{
 			Status:  change.Status,
 			Path:    pathOf(change),
-			Changes: i18n.Tf("Details.Lines", change.Added, change.Deleted),
+			Added:   change.Added,
+			Deleted: change.Deleted,
 		})
 	}
 	return rows
