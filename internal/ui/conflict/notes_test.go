@@ -68,15 +68,40 @@ func TestTheNotesDrawOnlyWhereThereIsAPaneAndAText(t *testing.T) {
 	_ = eng.RenderOnce()
 }
 
-func TestTheNotesTakeTheHintColour(t *testing.T) {
+func TestTheNotesTakeTheHintColourOnTheGroundOfTheMergeView(t *testing.T) {
 	notes := newPaneNotes(widget.NewMergeView("", ""), "a", "b", "c")
-	grey := color.RGBA{R: 90, G: 90, B: 90, A: 255}
+	dark := widget.Win11DarkTheme()
 
-	notes.Restyle(grey)
+	notes.Restyle(dark)
 
 	notes.mu.Lock()
 	defer notes.mu.Unlock()
-	if notes.color != grey {
-		t.Fatalf("colour = %v", notes.color)
+	if notes.color != dark.SecondaryText || notes.bg != mergeBackground(dark) {
+		t.Fatalf("colour = %v, ground = %v", notes.color, notes.bg)
+	}
+}
+
+func TestTheGroundUnderTheNotesMatchesTheMergeView(t *testing.T) {
+	white := color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
+	shadedWhite := color.RGBA{R: 244, G: 244, B: 244, A: 0xFF}
+	window := color.RGBA{R: 0xEE, G: 0xEE, B: 0xEE, A: 0xFF}
+	panel := color.RGBA{R: 0xDD, G: 0xDD, B: 0xDD, A: 0xFF}
+
+	for _, tt := range []struct {
+		name  string
+		theme widget.Theme
+		want  color.RGBA
+	}{
+		{"the window colour", widget.Theme{InputBG: white, WindowBG: window}, window},
+		{"no window colour shades the card", widget.Theme{InputBG: white}, shadedWhite},
+		{"a window as light as the card is shaded", widget.Theme{InputBG: white, WindowBG: white}, shadedWhite},
+		{"the panel stands in for a missing field", widget.Theme{PanelBG: panel, WindowBG: window}, window},
+		{"nothing at all falls back to white", widget.Theme{}, shadedWhite},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := mergeBackground(&tt.theme); got != tt.want {
+				t.Fatalf("ground = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

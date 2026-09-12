@@ -279,5 +279,5 @@ func (v *View) Restyle(t *widget.Theme) {
 	v.nextConflict.Icon = icons.Toolbar(nextChangeIcon, navigationIconSize, p.Text)
 	p.Body(v.unresolved, v.position)
 	p.Hints(v.message)
-	v.notes.Restyle(p.Secondary)
+	v.notes.Restyle(t)
 }

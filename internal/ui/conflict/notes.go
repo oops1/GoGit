@@ -20,6 +20,7 @@ const (
 	notePadX          = 8
 	notePadY          = 1
 	noteFontSize      = 8.0
+	mergeShade        = 0.08
 )
 
 type paneNotes struct {
@@ -29,14 +30,35 @@ type paneNotes struct {
 	mu    sync.Mutex
 	texts [3]string
 	color color.RGBA
+	bg    color.RGBA
 }
 
 func newPaneNotes(merge *widget.MergeView, ours, base, theirs string) *paneNotes {
-	return &paneNotes{
-		merge: merge,
-		texts: [3]string{ours, base, theirs},
-		color: widget.CurrentTheme().SecondaryText,
+	n := &paneNotes{merge: merge, texts: [3]string{ours, base, theirs}}
+	n.Restyle(widget.CurrentTheme())
+	return n
+}
+
+func mergeBackground(t *widget.Theme) color.RGBA {
+	card := orColor(t.InputBG, orColor(t.PanelBG, color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}))
+	card.A = 0xFF
+	shaded := blend(card, color.RGBA{R: 0x80, G: 0x80, B: 0x80, A: 0xFF}, mergeShade)
+	if bg := orColor(t.WindowBG, shaded); bg != card {
+		return bg
 	}
+	return shaded
+}
+
+func orColor(c, fallback color.RGBA) color.RGBA {
+	if c.A == 0 {
+		return fallback
+	}
+	return c
+}
+
+func blend(from, to color.RGBA, share float64) color.RGBA {
+	lerp := func(a, b uint8) uint8 { return uint8(float64(a) + (float64(b)-float64(a))*share) }
+	return color.RGBA{R: lerp(from.R, to.R), G: lerp(from.G, to.G), B: lerp(from.B, to.B), A: from.A}
 }
 
 func (n *paneNotes) Bounds() image.Rectangle {
@@ -54,9 +76,9 @@ func (n *paneNotes) Texts() [3]string {
 	return n.texts
 }
 
-func (n *paneNotes) Restyle(col color.RGBA) {
+func (n *paneNotes) Restyle(t *widget.Theme) {
 	n.mu.Lock()
-	n.color = col
+	n.color, n.bg = t.SecondaryText, mergeBackground(t)
 	n.mu.Unlock()
 	n.Invalidate()
 }
@@ -67,9 +89,11 @@ func (n *paneNotes) Draw(ctx widget.DrawContext) {
 		return
 	}
 	n.mu.Lock()
-	texts, col := n.texts, n.color
+	texts, col, bg := n.texts, n.color, n.bg
 	n.mu.Unlock()
 	prev := ctx.Clip()
+	ctx.SetClip(strip.Intersect(prev))
+	ctx.FillRect(strip.Min.X, strip.Min.Y, strip.Dx(), strip.Dy(), bg)
 	for i, span := range paneSpans(strip, n.merge.ShowBase()) {
 		if span[1] <= span[0] || texts[i] == "" {
 			continue
