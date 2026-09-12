@@ -5,7 +5,9 @@
 
     <Grid.RowDefinitions>
         <RowDefinition Height="40"/>
-        <RowDefinition Height="8"/>
+        <RowDefinition Height="4"/>
+        <RowDefinition Height="34"/>
+        <RowDefinition Height="6"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="8"/>
         <RowDefinition Height="36"/>
@@ -28,24 +30,26 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         <Button x:Name="takeOurs" Grid.Column="0" Height="32" VerticalAlignment="Center"
-                Content="{Loc Dialog.Conflict.TakeOurs}"/>
+                Content="{Loc Dialog.Conflict.TakeOurs}" ToolTip="{Loc Dialog.Conflict.TakeOurs.Tip}"/>
         <Button x:Name="takeTheirs" Grid.Column="2" Height="32" VerticalAlignment="Center"
-                Content="{Loc Dialog.Conflict.TakeTheirs}"/>
+                Content="{Loc Dialog.Conflict.TakeTheirs}" ToolTip="{Loc Dialog.Conflict.TakeTheirs.Tip}"/>
         <Button x:Name="takeBoth" Grid.Column="4" Height="32" VerticalAlignment="Center"
-                Content="{Loc Dialog.Conflict.TakeBoth}"/>
+                Content="{Loc Dialog.Conflict.TakeBoth}" ToolTip="{Loc Dialog.Conflict.TakeBoth.Tip}"/>
         <Button x:Name="undo" Grid.Column="6" Height="32" VerticalAlignment="Center"
-                Content="{Loc Dialog.Conflict.Undo}"/>
+                Content="{Loc Dialog.Conflict.Undo}" ToolTip="{Loc Dialog.Conflict.Undo.Tip}"/>
         <Button x:Name="prevConflict" Grid.Column="8" Height="32" VerticalAlignment="Center"
                 ToolTip="{Loc Dialog.Conflict.Prev.Tip}"/>
         <Button x:Name="nextConflict" Grid.Column="10" Height="32" VerticalAlignment="Center"
                 ToolTip="{Loc Dialog.Conflict.Next.Tip}"/>
         <CheckBox x:Name="showBase" Grid.Column="12" VerticalAlignment="Center"
-                  Content="{Loc Dialog.Conflict.ShowBase}"/>
+                  Content="{Loc Dialog.Conflict.ShowBase}" ToolTip="{Loc Dialog.Conflict.ShowBase.Tip}"/>
     </Grid>
 
-    <MergeView x:Name="merge" Grid.Row="2" ShowBase="True" SyntaxHighlight="True" ReadOnly="False"/>
+    <TextBlock x:Name="hint" Grid.Row="2" Text="" VerticalAlignment="Center"/>
 
-    <Grid Grid.Row="4">
+    <MergeView x:Name="merge" Grid.Row="4" ShowBase="True" SyntaxHighlight="True" ReadOnly="False"/>
+
+    <Grid Grid.Row="6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="200"/>
             <ColumnDefinition Width="200"/>
@@ -58,7 +62,7 @@
         <TextBlock x:Name="position" Grid.Column="1" Text="" VerticalAlignment="Center" Height="20"/>
         <TextBlock x:Name="message" Grid.Column="2" Text="" VerticalAlignment="Center" Height="20"/>
         <Button x:Name="save" Grid.Column="3" Height="32" VerticalAlignment="Center"
-                Content="{Loc Dialog.Conflict.Save}"/>
+                Content="{Loc Dialog.Conflict.Save}" ToolTip="{Loc Dialog.Conflict.Save.Tip}"/>
         <Button x:Name="close" Grid.Column="5" Height="32" VerticalAlignment="Center"
                 Content="{Loc Dialog.Conflict.Close}"/>
     </Grid>
