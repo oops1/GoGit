@@ -26,6 +26,16 @@ var (
 
 var reachHeads = []refs.Name{refs.HEAD, refs.OrigHead, refs.MergeHead, refs.CherryPickHead, refs.RebaseHead, refs.BisectHead}
 
+type walkTrouble int
+
+const (
+	troubleUnreadable walkTrouble = iota + 1
+	troubleMalformed
+	troubleWrongType
+)
+
+var ErrWrongObjectType = errors.New("ops: object has another type than the link to it says")
+
 type walkItem struct {
 	id   hash.ObjectID
 	kind object.Type
@@ -38,7 +48,8 @@ type objectWalk struct {
 	seen    map[hash.ObjectID]struct{}
 	commits []commitgraph.Commit
 	stack   []walkItem
-	broken  func(id hash.ObjectID, err error) error
+	strict  bool
+	broken  func(id hash.ObjectID, trouble walkTrouble, err error) error
 }
 
 func newObjectWalk(ctx context.Context, r *repo.Repository, db *odb.DB) (*objectWalk, error) {
@@ -51,7 +62,7 @@ func newObjectWalk(ctx context.Context, r *repo.Repository, db *odb.DB) (*object
 		db:      db,
 		shallow: shallow,
 		seen:    make(map[hash.ObjectID]struct{}),
-		broken:  func(_ hash.ObjectID, err error) error { return err },
+		broken:  func(_ hash.ObjectID, _ walkTrouble, err error) error { return err },
 	}, nil
 }
 
@@ -217,21 +228,38 @@ func (w *objectWalk) run() error {
 
 func (w *objectWalk) visit(item walkItem) error {
 	if item.kind == object.TypeBlob {
-		has, err := w.db.Has(item.id)
-		if err == nil && !has {
-			err = fmt.Errorf("%w: %s", odb.ErrNotFound, item.id)
-		}
-		if err != nil {
-			return w.broken(item.id, err)
-		}
-		return nil
+		return w.visitBlob(item.id)
 	}
 	kind, data, err := w.db.Get(item.id)
 	if err != nil {
-		return w.broken(item.id, err)
+		return w.broken(item.id, troubleUnreadable, err)
+	}
+	if w.strict && item.kind != 0 && kind != item.kind {
+		return w.broken(item.id, troubleWrongType, fmt.Errorf("%w: %s is a %s, not a %s", ErrWrongObjectType, item.id, kind, item.kind))
 	}
 	if err := w.expand(item.id, kind, data); err != nil {
-		return w.broken(item.id, err)
+		return w.broken(item.id, troubleMalformed, err)
+	}
+	return nil
+}
+
+func (w *objectWalk) visitBlob(id hash.ObjectID) error {
+	if w.strict {
+		kind, err := w.db.Type(id)
+		if err != nil {
+			return w.broken(id, troubleUnreadable, err)
+		}
+		if kind != object.TypeBlob {
+			return w.broken(id, troubleWrongType, fmt.Errorf("%w: %s is a %s, not a blob", ErrWrongObjectType, id, kind))
+		}
+		return nil
+	}
+	has, err := w.db.Has(id)
+	if err == nil && !has {
+		err = fmt.Errorf("%w: %s", odb.ErrNotFound, id)
+	}
+	if err != nil {
+		return w.broken(id, troubleUnreadable, err)
 	}
 	return nil
 }
@@ -262,6 +290,9 @@ func (w *objectWalk) expand(id hash.ObjectID, kind object.Type, data []byte) err
 				continue
 			}
 			w.push(entry.ID, entry.Mode.ObjectType())
+		}
+		if w.strict && !tree.IsSorted() {
+			return fmt.Errorf("%w: the entries of tree %s are out of order", object.ErrMalformed, id)
 		}
 	case object.TypeTag:
 		tag, err := object.ParseTag(data)

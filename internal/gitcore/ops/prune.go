@@ -81,7 +81,7 @@ func extendWithRecent(walk *objectWalk, db *odb.DB, expire time.Time) error {
 	for id := range dbPackedSince(db, expire) {
 		walk.push(id, 0)
 	}
-	walk.broken = func(hash.ObjectID, error) error { return nil }
+	walk.broken = func(hash.ObjectID, walkTrouble, error) error { return nil }
 	return walk.run()
 }
 
