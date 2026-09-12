@@ -35,7 +35,7 @@ jobs:
           if [ "$status" -ne 0 ]; then
             sed -n '/WARNING: DATA RACE/,/^==================$/p' race.log | head -60 |
               while IFS= read -r line; do echo "::error::$line"; done
-            grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" race.log | head -40 |
+            grep -E "FAIL|panic:|_test\.go:" race.log | head -40 |
               while IFS= read -r line; do echo "::error::$line"; done
           fi
           exit "$status"
@@ -45,7 +45,7 @@ jobs:
           go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" oracle.log | head -40 |
+            grep -E "FAIL|panic:|_test\.go:" oracle.log | head -40 |
               while IFS= read -r line; do echo "::error::$line"; done
           fi
           exit "$status"
