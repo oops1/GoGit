@@ -18,7 +18,6 @@ const (
 	dialogName         = "conflict"
 	dialogMinWidth     = 900
 	dialogMinHeight    = 640
-	hintScale          = 0.85
 	prevChangeIcon     = "change_prev"
 	nextChangeIcon     = "change_next"
 	navigationIconSize = 18
@@ -54,7 +53,6 @@ type View struct {
 	unresolved   *widget.Label
 	position     *widget.Label
 	message      *widget.Label
-	hint         *widget.Label
 
 	path         string
 	finalNewline bool
@@ -120,7 +118,6 @@ func (v *View) bind(named map[string]widget.Widget) error {
 		"unresolved": &v.unresolved,
 		"position":   &v.position,
 		"message":    &v.message,
-		"hint":       &v.hint,
 	} {
 		label, ok := named[name].(*widget.Label)
 		if !ok {
@@ -132,9 +129,6 @@ func (v *View) bind(named map[string]widget.Widget) error {
 }
 
 func (v *View) wire() {
-	v.hint.SetText(i18n.T("Dialog.Conflict.Hint"))
-	v.hint.FontSize = widget.DefaultFontSizePt * hintScale
-	v.hint.WrapText = true
 	v.takeOurs.OnClick = func() { v.resolve(widget.MergeTakeOurs) }
 	v.takeTheirs.OnClick = func() { v.resolve(widget.MergeTakeTheirs) }
 	v.takeBoth.OnClick = func() { v.resolve(widget.MergeTakeOursThenTheirs) }
@@ -263,5 +257,5 @@ func (v *View) Restyle(t *widget.Theme) {
 	v.prevConflict.Icon = icons.Toolbar(prevChangeIcon, navigationIconSize, p.Text)
 	v.nextConflict.Icon = icons.Toolbar(nextChangeIcon, navigationIconSize, p.Text)
 	p.Body(v.unresolved, v.position)
-	p.Hints(v.message, v.hint)
+	p.Hints(v.message)
 }

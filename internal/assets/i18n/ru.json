@@ -144,11 +144,10 @@
   "Dialog.CompareRefs.Title": "Сравнение ветвей",
   "Dialog.Conflict.Binary": "файл двоичный: выберите сторону в панели файлов",
   "Dialog.Conflict.Close": "Закрыть",
-  "Dialog.Conflict.Hint": "Сверху: слева ваша текущая ветка (HEAD), посередине база — файл в последнем общем коммите обеих веток, справа вливаемая ветка. Снизу итог — его запишет в файл кнопка «Сохранить».",
   "Dialog.Conflict.Next.Tip": "Следующий конфликт",
-  "Dialog.Conflict.Note.Base": "общий предок обеих веток",
-  "Dialog.Conflict.Note.Ours": "ваша ветка, HEAD",
-  "Dialog.Conflict.Note.Theirs": "вливаемая ветка",
+  "Dialog.Conflict.Note.Base": "файл в последнем общем коммите обеих веток",
+  "Dialog.Conflict.Note.Ours": "ваша текущая ветка (HEAD)",
+  "Dialog.Conflict.Note.Theirs": "ветка, которую вы вливаете",
   "Dialog.Conflict.Position": "Строка %d, столбец %d",
   "Dialog.Conflict.Prev.Tip": "Предыдущий конфликт",
   "Dialog.Conflict.Save": "Сохранить",
@@ -776,5 +775,6 @@
   "Toolbar.Push": "Отправить",
   "Toolbar.Push.Tip": "Отправить локальные коммиты во внешний репозиторий",
   "Toolbar.Sync": "Синхронизировать",
-  "Toolbar.Sync.Tip": "Получить, затем отправить"
+  "Toolbar.Sync.Tip": "Получить, затем отправить",
+  "merge.side.result": "итог — запишется в файл кнопкой «Сохранить»"
 }

@@ -144,11 +144,10 @@
   "Dialog.CompareRefs.Title": "Compare Branches",
   "Dialog.Conflict.Binary": "the file is binary: pick a side in the files panel",
   "Dialog.Conflict.Close": "Close",
-  "Dialog.Conflict.Hint": "Top: on the left your current branch (HEAD), in the middle the base — the file in the last commit both branches share, on the right the branch being merged in. Bottom: the result that Save writes to the file.",
   "Dialog.Conflict.Next.Tip": "Next conflict",
-  "Dialog.Conflict.Note.Base": "common ancestor of both branches",
-  "Dialog.Conflict.Note.Ours": "your branch, HEAD",
-  "Dialog.Conflict.Note.Theirs": "the branch being merged in",
+  "Dialog.Conflict.Note.Base": "the file in the last commit both branches share",
+  "Dialog.Conflict.Note.Ours": "your current branch (HEAD)",
+  "Dialog.Conflict.Note.Theirs": "the branch you are merging in",
   "Dialog.Conflict.Position": "Line %d, column %d",
   "Dialog.Conflict.Prev.Tip": "Previous conflict",
   "Dialog.Conflict.Save": "Save",
@@ -776,5 +775,6 @@
   "Toolbar.Push": "Push",
   "Toolbar.Push.Tip": "Push local commits to the remote",
   "Toolbar.Sync": "Sync",
-  "Toolbar.Sync.Tip": "Pull then push"
+  "Toolbar.Sync.Tip": "Pull then push",
+  "merge.side.result": "result — Save writes it to the file"
 }

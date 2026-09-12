@@ -70,7 +70,7 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 			named[name] = widget.NewButton("")
 		}
 		named["showBase"] = widget.NewCheckBox("")
-		for _, name := range []string{"unresolved", "position", "message", "hint"} {
+		for _, name := range []string{"unresolved", "position", "message"} {
 			named[name] = widget.NewLabel("", widget.CurrentTheme().LabelText)
 		}
 		return named
@@ -321,16 +321,10 @@ func TestCtrlSAsksToSave(t *testing.T) {
 	}
 }
 
-func TestTheWindowCanBeMaximizedAndExplainsItsPanels(t *testing.T) {
+func TestTheWindowCanBeMaximized(t *testing.T) {
 	v := shown(t)
 
 	if !v.Dialog().HasWindowButtons() {
 		t.Fatal("the window has no buttons to maximize it")
-	}
-	if v.hint.Text() != i18n.T("Dialog.Conflict.Hint") || !v.hint.WrapText {
-		t.Fatalf("hint = %q, wraps = %v", v.hint.Text(), v.hint.WrapText)
-	}
-	if v.hint.FontSize >= widget.DefaultFontSizePt {
-		t.Fatalf("hint font = %v, want smaller than the body text", v.hint.FontSize)
 	}
 }

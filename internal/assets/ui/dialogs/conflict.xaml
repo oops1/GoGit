@@ -5,9 +5,7 @@
 
     <Grid.RowDefinitions>
         <RowDefinition Height="40"/>
-        <RowDefinition Height="4"/>
-        <RowDefinition Height="34"/>
-        <RowDefinition Height="6"/>
+        <RowDefinition Height="8"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="8"/>
         <RowDefinition Height="36"/>
@@ -45,11 +43,9 @@
                   Content="{Loc Dialog.Conflict.ShowBase}" ToolTip="{Loc Dialog.Conflict.ShowBase.Tip}"/>
     </Grid>
 
-    <TextBlock x:Name="hint" Grid.Row="2" Text="" VerticalAlignment="Center"/>
+    <MergeView x:Name="merge" Grid.Row="2" ShowBase="True" SyntaxHighlight="True" ReadOnly="False"/>
 
-    <MergeView x:Name="merge" Grid.Row="4" ShowBase="True" SyntaxHighlight="True" ReadOnly="False"/>
-
-    <Grid Grid.Row="6">
+    <Grid Grid.Row="4">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="200"/>
             <ColumnDefinition Width="200"/>
