@@ -1,8 +1,14 @@
-# Go.Git 1.4.0 — Merges and history
+# Go.Git 1.4.1 — Merges and history
 
 Merging, rebasing commit by commit, cherry-pick, revert, reset, tags, rerere,
 blame, file history, the reflog, branch comparison, branch switching and a pane
 that explains a commit.
+
+## Fixed since 1.4.0
+
+- The operation log no longer paints torn text in its counting line: the list
+  was handed the very slice the window kept rewriting in place, and the
+  renderer read a line while it was being replaced.
 
 ## Merging
 
