@@ -63,9 +63,16 @@ func keptObjects(ctx context.Context, r *repo.Repository, db *odb.DB, expire tim
 	if err != nil {
 		return nil, err
 	}
+	if err := extendWithRecent(walk, db, expire); err != nil {
+		return nil, err
+	}
+	return walk, nil
+}
+
+func extendWithRecent(walk *objectWalk, db *odb.DB, expire time.Time) error {
 	for loose, err := range dbLooseObjects(db) {
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if !loose.ModTime.Before(expire) {
 			walk.push(loose.ID, 0)
@@ -75,10 +82,7 @@ func keptObjects(ctx context.Context, r *repo.Repository, db *odb.DB, expire tim
 		walk.push(id, 0)
 	}
 	walk.broken = func(hash.ObjectID, error) error { return nil }
-	if err := walk.run(); err != nil {
-		return nil, err
-	}
-	return walk, nil
+	return walk.run()
 }
 
 func pruneLoose(ctx context.Context, db *odb.DB, walk *objectWalk, dryRun bool, result *PruneResult) error {

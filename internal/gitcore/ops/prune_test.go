@@ -37,7 +37,11 @@ func ageFile(t testing.TB, path string, when time.Time) {
 
 func packMaintObjects(t *testing.T, r *testRepo, ids []hash.ObjectID) {
 	t.Helper()
-	db := r.db()
+	db, err := odb.Open(r.repo.ObjectsDir(), odb.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
 	var packData bytes.Buffer
 	result, err := pack.WritePack(t.Context(), &packData, db, ids, pack.WriteOptions{})
 	if err != nil {
