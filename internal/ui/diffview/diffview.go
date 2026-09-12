@@ -42,6 +42,10 @@ type DiffView struct {
 	measured    map[string]int
 
 	OnLineClick func(hunk, line int)
+	OnMenu      func() []widget.MenuItem
+
+	anchor int
+	menu   *widget.PopupMenu
 }
 
 type snapshot struct {
@@ -53,6 +57,7 @@ type snapshot struct {
 	scrollX  int
 	scrollY  int
 	selected int
+	anchor   int
 	pal      Palette
 	font     string
 	size     float64
@@ -63,6 +68,8 @@ func New() *DiffView {
 	return &DiffView{
 		mode:     SideBySide,
 		selected: noSelection,
+		anchor:   noSelection,
+		menu:     widget.NewPopupMenu(),
 		font:     defaultFontFamily,
 		size:     defaultFontSize,
 		rowH:     defaultRowHeight,
@@ -83,6 +90,7 @@ func (dv *DiffView) snapshot() snapshot {
 		scrollX:  dv.scrollX,
 		scrollY:  dv.scrollY,
 		selected: dv.selected,
+		anchor:   dv.anchor,
 		pal:      dv.pal,
 		font:     dv.font,
 		size:     dv.size,
@@ -96,6 +104,7 @@ func (dv *DiffView) SetDocument(doc Document) {
 	dv.set = buildRows(doc, dv.mode)
 	dv.scrollX, dv.scrollY = 0, 0
 	dv.selected = noSelection
+	dv.anchor = noSelection
 	dv.mu.Unlock()
 	dv.Invalidate()
 }
@@ -120,6 +129,7 @@ func (dv *DiffView) SetMode(mode Mode) {
 	dv.set = buildRows(dv.doc, mode)
 	dv.scrollX, dv.scrollY = 0, 0
 	dv.selected = noSelection
+	dv.anchor = noSelection
 	dv.mu.Unlock()
 	dv.Invalidate()
 }
@@ -226,8 +236,9 @@ func (dv *DiffView) selectRow(index int, rightSide bool) {
 		return
 	}
 	dv.mu.Lock()
-	changed := dv.selected != index
+	changed := dv.selected != index || dv.anchor != index
 	dv.selected = index
+	dv.anchor = index
 	dv.mu.Unlock()
 	if changed {
 		dv.Invalidate()
