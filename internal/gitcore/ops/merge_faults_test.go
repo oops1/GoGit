@@ -377,6 +377,14 @@ func mergeFaultScenarios() []faultScenario {
 			_, err := ContinueRebase(ctx, tr.repo, RebaseOptions{When: mergeTime, Message: "a better subject"})
 			return err
 		}},
+		{"blame a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Blame(ctx, tr.repo, "HEAD", "moved", BlameOptions{Follow: true})
+			return err
+		}},
+		{"the history of a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := FileHistory(ctx, tr.repo, "HEAD", "moved", HistoryOptions{Follow: true})
+			return err
+		}},
 		{"a remembered conflict", func(tr *testRepo) {
 			tr.conflictingFork()
 			tr.enableRerere(false)
