@@ -15,7 +15,7 @@ func withRegisteredTag(t *testing.T) {
 
 func TestRegisteredTagBuildsConfiguredDiffView(t *testing.T) {
 	withRegisteredTag(t)
-	xaml := `<Window><DiffView x:Name="diff" Mode="Unified" FontFamily="Courier New" FontSize="13" RowHeight="22"/></Window>`
+	xaml := `<Window><GitDiffView x:Name="diff" Mode="Unified" FontFamily="Courier New" FontSize="13" RowHeight="22"/></Window>`
 	_, named, err := widget.LoadUIFromXAML([]byte(xaml))
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestRegisteredTagBuildsConfiguredDiffView(t *testing.T) {
 
 func TestRegisteredTagUsesDefaultsWithoutAttributes(t *testing.T) {
 	withRegisteredTag(t)
-	_, named, err := widget.LoadUIFromXAML([]byte(`<Window><DiffView x:Name="diff"/></Window>`))
+	_, named, err := widget.LoadUIFromXAML([]byte(`<Window><GitDiffView x:Name="diff"/></Window>`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,11 +47,11 @@ func TestRegisteredTagUsesDefaultsWithoutAttributes(t *testing.T) {
 func TestRegisteredTagRejectsInvalidAttributes(t *testing.T) {
 	withRegisteredTag(t)
 	cases := map[string]string{
-		"mode":            `<Window><DiffView Mode="diagonal"/></Window>`,
-		"font size text":  `<Window><DiffView FontSize="big"/></Window>`,
-		"font size zero":  `<Window><DiffView FontSize="0"/></Window>`,
-		"row height text": `<Window><DiffView RowHeight="tall"/></Window>`,
-		"row height zero": `<Window><DiffView RowHeight="0"/></Window>`,
+		"mode":            `<Window><GitDiffView Mode="diagonal"/></Window>`,
+		"font size text":  `<Window><GitDiffView FontSize="big"/></Window>`,
+		"font size zero":  `<Window><GitDiffView FontSize="0"/></Window>`,
+		"row height text": `<Window><GitDiffView RowHeight="tall"/></Window>`,
+		"row height zero": `<Window><GitDiffView RowHeight="0"/></Window>`,
 	}
 	for name, xaml := range cases {
 		t.Run(name, func(t *testing.T) {

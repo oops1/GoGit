@@ -11,16 +11,18 @@ import (
 )
 
 var (
-	fsOpenRoot     = os.OpenRoot
-	fsRootOpen     = (*os.Root).Open
-	fsRootOpenFile = (*os.Root).OpenFile
-	fsRootLstat    = (*os.Root).Lstat
-	fsRootReadFile = (*os.Root).ReadFile
-	fsRootReadlink = (*os.Root).Readlink
-	fsRootRemove   = (*os.Root).Remove
-	fsRootSymlink  = (*os.Root).Symlink
-	fsRootMkdirAll = (*os.Root).MkdirAll
-	fsRootRename   = (*os.Root).Rename
+	fsOpenRoot      = os.OpenRoot
+	fsRootOpen      = (*os.Root).Open
+	fsRootOpenFile  = (*os.Root).OpenFile
+	fsRootLstat     = (*os.Root).Lstat
+	fsRootReadFile  = (*os.Root).ReadFile
+	fsRootReadlink  = (*os.Root).Readlink
+	fsRootRemove    = (*os.Root).Remove
+	fsRootSymlink   = (*os.Root).Symlink
+	fsRootMkdirAll  = (*os.Root).MkdirAll
+	fsRootRename    = (*os.Root).Rename
+	fsRootWriteFile = (*os.Root).WriteFile
+	fsRootRemoveAll = (*os.Root).RemoveAll
 )
 
 var (
@@ -31,11 +33,15 @@ var (
 var (
 	dbPutObject   = (*odb.DB).PutObject
 	dbPut         = (*odb.DB).Put
+	dbGet         = (*odb.DB).Get
 	dbTree        = (*odb.DB).Tree
 	dbCommit      = (*odb.DB).Commit
 	dbPeel        = (*odb.DB).Peel
+	refsLookup    = (*refs.Store).Lookup
+	txCommit      = (*refs.Transaction).Commit
 	txUpdate      = (*refs.Transaction).Update
 	txDelete      = (*refs.Transaction).Delete
+	txSet         = (*refs.Transaction).Set
 	txSetSymbolic = (*refs.Transaction).SetSymbolic
 	txDetach      = (*refs.Transaction).Detach
 )

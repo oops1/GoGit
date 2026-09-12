@@ -199,7 +199,7 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targ
 		if curOK && tgtOK && cur.Mode == tgt.mode && cur.ID == tgt.id {
 			return nil
 		}
-		dirty, err := sw.isDirty(rel, cur)
+		dirty, err := sw.isDirty(rel, cur, func(path string) bool { _, ok := currentIndex[path]; return ok })
 		if err != nil {
 			return err
 		}
@@ -222,15 +222,17 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targ
 	return conflicts, nil
 }
 
-func (sw *switcher) isDirty(rel string, idxEntry *index.Entry) (bool, error) {
+func (sw *switcher) isDirty(rel string, idxEntry *index.Entry, tracked func(string) bool) (bool, error) {
 	info, err := fsRootLstat(sw.wt.root, filepath.FromSlash(rel))
-	notExist := errors.Is(err, fs.ErrNotExist)
+	notExist := missingPath(err)
 	if err != nil && !notExist {
 		return false, err
 	}
 	switch {
 	case idxEntry == nil && notExist:
 		return false, nil
+	case idxEntry == nil && info.IsDir():
+		return sw.holdsUntracked(rel, tracked)
 	case idxEntry == nil:
 		return true, nil
 	case notExist:
@@ -254,6 +256,27 @@ func (sw *switcher) isDirty(rel string, idxEntry *index.Entry) (bool, error) {
 		haveExec := info.Mode().Perm()&0o111 != 0
 		if wantExec != haveExec {
 			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (sw *switcher) holdsUntracked(dir string, tracked func(string) bool) (bool, error) {
+	entries, err := readDirRoot(sw.wt.root, dir)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		child := joinRel(dir, entry.Name())
+		if !entry.IsDir() {
+			if !tracked(child) {
+				return true, nil
+			}
+			continue
+		}
+		held, err := sw.holdsUntracked(child, tracked)
+		if err != nil || held {
+			return held, err
 		}
 	}
 	return false, nil
@@ -284,11 +307,14 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if err := sw.ctx.Err(); err != nil {
 			return err
 		}
-		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !missingPath(err) {
 			return err
 		}
 		idx.Remove(rel)
 		removedDirs = append(removedDirs, rel)
+	}
+	for _, rel := range removedDirs {
+		sw.pruneEmptyDirs(parentOf(rel))
 	}
 	for rel, tgt := range targetTree {
 		if err := sw.ctx.Err(); err != nil {
@@ -298,9 +324,6 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 			return err
 		}
 		idx.Add(index.Entry{Path: rel, Mode: tgt.mode, ID: tgt.id, Stage: index.StageMerged})
-	}
-	for _, rel := range removedDirs {
-		sw.pruneEmptyDirs(parentOf(rel))
 	}
 	return nil
 }

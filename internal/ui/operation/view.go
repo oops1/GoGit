@@ -30,6 +30,7 @@ type View struct {
 
 	eng      widget.ModalShower
 	lines    []string
+	tracked  map[string]int
 	running  bool
 	finished bool
 
@@ -42,7 +43,7 @@ func NewView(eng widget.ModalShower, title string) (*View, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &View{dlg: dlg, eng: eng}
+	v := &View{dlg: dlg, eng: eng, tracked: map[string]int{}}
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
@@ -99,12 +100,41 @@ func (v *View) SetStatus(text string) {
 }
 
 func (v *View) Append(line string) {
-	v.lines = append(v.lines, line)
-	if len(v.lines) > maxLogLines {
-		v.lines = v.lines[len(v.lines)-maxLogLines:]
-	}
+	v.push(line)
 	v.logList.SetItems(v.lines)
 	v.logList.ScrollToBottom()
+}
+
+func (v *View) Track(slot, line string) {
+	if index, ok := v.tracked[slot]; ok {
+		v.lines[index] = line
+		v.logList.SetItems(v.lines)
+		return
+	}
+	v.tracked[slot] = len(v.lines)
+	v.Append(line)
+}
+
+func (v *View) ForgetTracked() {
+	clear(v.tracked)
+}
+
+func (v *View) push(line string) {
+	v.lines = append(v.lines, line)
+	if len(v.lines) > maxLogLines {
+		v.forgetLines(len(v.lines) - maxLogLines)
+	}
+}
+
+func (v *View) forgetLines(count int) {
+	v.lines = v.lines[count:]
+	for slot, index := range v.tracked {
+		if index < count {
+			delete(v.tracked, slot)
+			continue
+		}
+		v.tracked[slot] = index - count
+	}
 }
 
 func (v *View) Lines() []string {

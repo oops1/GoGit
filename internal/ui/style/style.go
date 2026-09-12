@@ -13,6 +13,7 @@ const (
 	accentPressedShift = 24
 	brightAccent       = 150
 	onBrightAccent     = 0x1A
+	bannerTint         = 18
 )
 
 type Palette struct {
@@ -101,6 +102,12 @@ func (p Palette) Hints(labels ...*widget.Label) {
 	for _, label := range labels {
 		label.TextColor = p.Secondary
 	}
+}
+
+func (p Palette) Banner(panel *widget.DockPanel, labels ...*widget.Label) {
+	panel.Background = mix(p.Chrome, p.Accent, bannerTint)
+	panel.UseAlpha = false
+	p.Body(labels...)
 }
 
 func onAccent(accent color.RGBA) color.RGBA {

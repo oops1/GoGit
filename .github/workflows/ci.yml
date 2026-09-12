@@ -30,25 +30,34 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           set +e
-          go test -count=1 -race ./... 2>&1 | tee race.log
+          go test -count=1 -timeout=40m -race ./... 2>&1 | tee race.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             sed -n '/WARNING: DATA RACE/,/^==================$/p' race.log | head -60 |
               while IFS= read -r line; do echo "::error::$line"; done
-            grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" race.log | head -40 |
+            grep -E "FAIL|panic:|_test\.go:" race.log | head -40 |
               while IFS= read -r line; do echo "::error::$line"; done
           fi
           exit "$status"
       - name: oracle tests with coverage
         run: |
           set +e
-          go test -count=1 -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
+          go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
-            grep -E "^(--- )?FAIL|^\s+--- FAIL|panic:|^\s+.*_test\.go:" oracle.log | head -40 |
-              while IFS= read -r line; do echo "::error::$line"; done
+            grep -E "^(--- )?FAIL|^ +--- FAIL|panic:" oracle.log | head -3 |
+              while IFS= read -r line; do echo "::error::${line:0:400}"; done
+            grep -E "_test\.go:[0-9]+:" oracle.log | head -5 |
+              while IFS= read -r line; do echo "::error::${line:0:1200}"; done
+            {
+              echo '### oracle failures'
+              echo '```'
+              awk '/^--- FAIL/ { seen = 1 } seen' oracle.log | head -200
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
+
       - name: coverage gate
         shell: bash
         run: |

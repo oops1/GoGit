@@ -38,6 +38,7 @@ type View struct {
 	expanded   map[string]bool
 	OnSelect   func(ref refs.Name)
 	OnActivate func(ref refs.Name)
+	OnMenu     func(ref refs.Name) []widget.MenuItem
 }
 
 func NewView() *View {
@@ -56,6 +57,7 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 			v.OnActivate(ref)
 		}
 	}
+	tree.NodeContextMenu = v.nodeMenu
 	tree.Tree.OnSelectedItemChanged = func(e treeview.SelectedItemChangedEvent) {
 		if e.NewItem == nil {
 			return
@@ -64,6 +66,14 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 			v.OnSelect(ref)
 		}
 	}
+}
+
+func (v *View) nodeMenu(item *treeview.TreeViewItem) []widget.MenuItem {
+	ref, ok := v.idByItem[item]
+	if !ok || v.OnMenu == nil {
+		return nil
+	}
+	return v.OnMenu(ref)
 }
 
 func (v *View) Item(ref refs.Name) (*treeview.TreeViewItem, bool) {

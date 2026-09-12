@@ -1,0 +1,560 @@
+//go:build !race
+
+package ops
+
+import (
+	"context"
+	"errors"
+	"io/fs"
+	"os"
+	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/odb"
+	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
+)
+
+type faultSeam struct {
+	name    string
+	install func(t *testing.T, failAt int, calls *int)
+}
+
+func swapSeam[F any](t *testing.T, seam *F, wrap func(original F) F) {
+	t.Helper()
+	original := *seam
+	*seam = wrap(original)
+	t.Cleanup(func() { *seam = original })
+}
+
+func hit(calls *int, failAt int) bool {
+	*calls++
+	return *calls == failAt
+}
+
+func mergeSeams() []faultSeam {
+	return []faultSeam{
+		{"read object", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &dbGet, func(original func(*odb.DB, hash.ObjectID) (object.Type, []byte, error)) func(*odb.DB, hash.ObjectID) (object.Type, []byte, error) {
+				return func(db *odb.DB, id hash.ObjectID) (object.Type, []byte, error) {
+					if hit(calls, failAt) {
+						return 0, nil, errInjected
+					}
+					return original(db, id)
+				}
+			})
+		}},
+		{"read tree", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &dbTree, func(original func(*odb.DB, hash.ObjectID) (*object.Tree, error)) func(*odb.DB, hash.ObjectID) (*object.Tree, error) {
+				return func(db *odb.DB, id hash.ObjectID) (*object.Tree, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(db, id)
+				}
+			})
+		}},
+		{"read commit", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &dbCommit, func(original func(*odb.DB, hash.ObjectID) (*object.Commit, error)) func(*odb.DB, hash.ObjectID) (*object.Commit, error) {
+				return func(db *odb.DB, id hash.ObjectID) (*object.Commit, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(db, id)
+				}
+			})
+		}},
+		{"peel", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &dbPeel, func(original func(*odb.DB, hash.ObjectID) (object.Type, hash.ObjectID, error)) func(*odb.DB, hash.ObjectID) (object.Type, hash.ObjectID, error) {
+				return func(db *odb.DB, id hash.ObjectID) (object.Type, hash.ObjectID, error) {
+					if hit(calls, failAt) {
+						return 0, hash.Zero, errInjected
+					}
+					return original(db, id)
+				}
+			})
+		}},
+		{"write object", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &dbPut, func(original func(*odb.DB, object.Type, []byte) (hash.ObjectID, error)) func(*odb.DB, object.Type, []byte) (hash.ObjectID, error) {
+				return func(db *odb.DB, kind object.Type, data []byte) (hash.ObjectID, error) {
+					if hit(calls, failAt) {
+						return hash.Zero, errInjected
+					}
+					return original(db, kind, data)
+				}
+			})
+		}},
+		{"write commit", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &dbPutObject, func(original func(*odb.DB, object.Object) (hash.ObjectID, error)) func(*odb.DB, object.Object) (hash.ObjectID, error) {
+				return func(db *odb.DB, o object.Object) (hash.ObjectID, error) {
+					if hit(calls, failAt) {
+						return hash.Zero, errInjected
+					}
+					return original(db, o)
+				}
+			})
+		}},
+		{"update ref", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txUpdate, func(original func(*refs.Transaction, refs.Name, hash.ObjectID, hash.ObjectID) error) func(*refs.Transaction, refs.Name, hash.ObjectID, hash.ObjectID) error {
+				return func(tx *refs.Transaction, name refs.Name, next, old hash.ObjectID) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, next, old)
+				}
+			})
+		}},
+		{"delete ref", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txDelete, func(original func(*refs.Transaction, refs.Name, hash.ObjectID) error) func(*refs.Transaction, refs.Name, hash.ObjectID) error {
+				return func(tx *refs.Transaction, name refs.Name, old hash.ObjectID) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, old)
+				}
+			})
+		}},
+		{"read ref", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &refsLookup, func(original func(*refs.Store, refs.Name) (refs.Ref, error)) func(*refs.Store, refs.Name) (refs.Ref, error) {
+				return func(store *refs.Store, name refs.Name) (refs.Ref, error) {
+					if hit(calls, failAt) {
+						return refs.Ref{}, errInjected
+					}
+					return original(store, name)
+				}
+			})
+		}},
+		{"commit refs", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txCommit, func(original func(*refs.Transaction) error) func(*refs.Transaction) error {
+				return func(tx *refs.Transaction) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx)
+				}
+			})
+		}},
+		{"open working tree", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &worktreeOpen, func(original func(*repo.Repository, worktree.Options) (*worktree.Worktree, error)) func(*repo.Repository, worktree.Options) (*worktree.Worktree, error) {
+				return func(r *repo.Repository, opts worktree.Options) (*worktree.Worktree, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(r, opts)
+				}
+			})
+		}},
+		{"detach head", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txDetach, func(original func(*refs.Transaction, refs.Name, hash.ObjectID) error) func(*refs.Transaction, refs.Name, hash.ObjectID) error {
+				return func(tx *refs.Transaction, name refs.Name, id hash.ObjectID) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, id)
+				}
+			})
+		}},
+		{"attach head", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &txSetSymbolic, func(original func(*refs.Transaction, refs.Name, refs.Name) error) func(*refs.Transaction, refs.Name, refs.Name) error {
+				return func(tx *refs.Transaction, name, target refs.Name) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(tx, name, target)
+				}
+			})
+		}},
+		{"write state", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &fsRootWriteFile, func(original func(*os.Root, string, []byte, fs.FileMode) error) func(*os.Root, string, []byte, fs.FileMode) error {
+				return func(root *os.Root, name string, data []byte, mode fs.FileMode) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(root, name, data, mode)
+				}
+			})
+		}},
+		{"read file", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &fsRootReadFile, func(original func(*os.Root, string) ([]byte, error)) func(*os.Root, string) ([]byte, error) {
+				return func(root *os.Root, name string) ([]byte, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(root, name)
+				}
+			})
+		}},
+		{"remove file", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &fsRootRemove, func(original func(*os.Root, string) error) func(*os.Root, string) error {
+				return func(root *os.Root, name string) error {
+					if hit(calls, failAt) {
+						return errInjected
+					}
+					return original(root, name)
+				}
+			})
+		}},
+		{"open file", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &fsRootOpenFile, func(original func(*os.Root, string, int, fs.FileMode) (*os.File, error)) func(*os.Root, string, int, fs.FileMode) (*os.File, error) {
+				return func(root *os.Root, name string, flag int, mode fs.FileMode) (*os.File, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(root, name, flag, mode)
+				}
+			})
+		}},
+		{"open root", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &fsOpenRoot, func(original func(string) (*os.Root, error)) func(string) (*os.Root, error) {
+				return func(dir string) (*os.Root, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(dir)
+				}
+			})
+		}},
+		{"open refs", func(t *testing.T, failAt int, calls *int) {
+			swapSeam(t, &refsOpen, func(original func(refs.Options) (*refs.Store, error)) func(refs.Options) (*refs.Store, error) {
+				return func(opts refs.Options) (*refs.Store, error) {
+					if hit(calls, failAt) {
+						return nil, errInjected
+					}
+					return original(opts)
+				}
+			})
+		}},
+	}
+}
+
+type faultScenario struct {
+	name  string
+	build func(tr *testRepo)
+	run   func(ctx context.Context, tr *testRepo) error
+}
+
+func mergeFaultScenarios() []faultScenario {
+	merge := func(opts MergeOptions) func(ctx context.Context, tr *testRepo) error {
+		return func(ctx context.Context, tr *testRepo) error {
+			opts.When = mergeTime
+			_, err := Merge(ctx, tr.repo, "feature", opts)
+			return err
+		}
+	}
+	clean := func(tr *testRepo) {
+		tr.fork(map[string]string{"f": changeLine(tenLines("f"), 0, "OURS")}, map[string]string{"g": changeLine(tenLines("g"), 0, "THEIRS"), "moved": tenLines("keep")})
+	}
+	return []faultScenario{
+		{"fast-forward", func(tr *testRepo) {
+			base := tr.commitFiles("base", map[string]string{"f": "one\n", "gone": "gone\n"})
+			tr.createBranch("feature", base)
+			tr.switchTo("feature")
+			tr.commitFiles("next", map[string]string{"f": "two\n", "gone": ""})
+			tr.switchTo("main")
+		}, merge(MergeOptions{})},
+		{"clean merge", clean, merge(MergeOptions{})},
+		{"conflict", func(tr *testRepo) { tr.conflictingFork() }, merge(MergeOptions{})},
+		{"squash", func(tr *testRepo) { tr.conflictingFork() }, merge(MergeOptions{Mode: MergeSquash})},
+		{"criss-cross", func(tr *testRepo) {
+			f, g := tenLines("f"), tenLines("g")
+			base := tr.commitFiles("base", map[string]string{"f": f, "g": g})
+			tr.createBranch("feature", base)
+			tr.commitFiles("ours 1", map[string]string{"f": changeLine(f, 0, "OURS")})
+			tr.switchTo("feature")
+			tr.commitFiles("theirs 1", map[string]string{"g": changeLine(g, 0, "THEIRS")})
+			if _, err := tr.merge("main", MergeOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.switchTo("main")
+			if _, err := tr.merge("feature~1", MergeOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.commitFiles("ours 2", map[string]string{"f": changeLine(f, 9, "OURS AGAIN")})
+			tr.switchTo("feature")
+			tr.commitFiles("theirs 2", map[string]string{"g": changeLine(g, 9, "THEIRS AGAIN")})
+			tr.switchTo("main")
+		}, merge(MergeOptions{})},
+		{"abort", func(tr *testRepo) {
+			tr.fork(map[string]string{"f": changeLine(tenLines("f"), 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": changeLine(tenLines("f"), 4, "THEIRS"), "new": "new\n"})
+			if _, err := tr.merge("feature", MergeOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error { return AbortOperation(ctx, tr.repo) }},
+		{"cherry-pick", func(tr *testRepo) { tr.pickFork(false) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CherryPick(ctx, tr.repo, "feature", pickOptions())
+			return err
+		}},
+		{"cherry-pick with a conflict", func(tr *testRepo) { tr.pickFork(true) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CherryPick(ctx, tr.repo, "feature", pickOptions())
+			return err
+		}},
+		{"revert", func(tr *testRepo) {
+			f := tenLines("f")
+			tr.commitFiles("base", map[string]string{"f": f})
+			tr.commitFiles("change", map[string]string{"f": changeLine(f, 4, "CHANGED")})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Revert(ctx, tr.repo, "HEAD", pickOptions())
+			return err
+		}},
+		{"commit after a pick", func(tr *testRepo) {
+			tr.pickFork(true)
+			if _, err := CherryPick(tr.t.Context(), tr.repo, "feature", pickOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.writeFile("f", "resolved\n")
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Commit(ctx, tr.repo, CommitOptions{Message: "picked", When: mergeTime})
+			return err
+		}},
+		{"rebase", func(tr *testRepo) { tr.rebaseFork(false) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Rebase(ctx, tr.repo, "main", rebaseOptions())
+			return err
+		}},
+		{"rebase with a conflict", func(tr *testRepo) { tr.rebaseFork(true) }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Rebase(ctx, tr.repo, "main", rebaseOptions())
+			return err
+		}},
+		{"continue a rebase", func(tr *testRepo) {
+			tr.rebaseFork(true)
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.writeFile("f", "resolved\n")
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := ContinueRebase(ctx, tr.repo, rebaseOptions())
+			return err
+		}},
+		{"skip a rebase step", func(tr *testRepo) {
+			tr.rebaseFork(true)
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := SkipRebase(ctx, tr.repo, rebaseOptions())
+			return err
+		}},
+		{"abort a rebase", func(tr *testRepo) {
+			tr.rebaseFork(true)
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", rebaseOptions()); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			return AbortOperation(ctx, tr.repo)
+		}},
+		{"a rebase that folds commits", func(tr *testRepo) { tr.threeOnTopic() }, func(ctx context.Context, tr *testRepo) error {
+			commits := tr.linearHistory(tr.branchTarget("topic"), 3)
+			_, err := Rebase(ctx, tr.repo, "main", RebaseOptions{
+				When: mergeTime,
+				Todo: steps(actionPick, commits[2].ID(), actionSquash, commits[1].ID(), actionDrop, commits[0].ID()),
+			})
+			return err
+		}},
+		{"a rebase that stops for a reword", func(tr *testRepo) { tr.threeOnTopic() }, func(ctx context.Context, tr *testRepo) error {
+			commits := tr.linearHistory(tr.branchTarget("topic"), 3)
+			_, err := Rebase(ctx, tr.repo, "main", RebaseOptions{
+				When: mergeTime,
+				Todo: steps(actionReword, commits[2].ID(), actionPick, commits[1].ID()),
+			})
+			return err
+		}},
+		{"a reworded commit", func(tr *testRepo) {
+			commits := tr.threeOnTopic()
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", RebaseOptions{
+				When: mergeTime,
+				Todo: steps(actionReword, commits[0], actionPick, commits[1]),
+			}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := ContinueRebase(ctx, tr.repo, RebaseOptions{When: mergeTime, Message: "a better subject"})
+			return err
+		}},
+		{"a branch started from a remote one", func(tr *testRepo) {
+			head := tr.commitFiles("base", map[string]string{"f": "f\n"})
+			tr.appendConfig("[remote \"origin\"]\n\turl = https://example.invalid/repo.git\n")
+			tr.repo = tr.reopen()
+			tr.remoteBranch("origin/topic", head)
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := StartBranch(ctx, tr.repo, "topic", "origin/topic", StartBranchOptions{Track: true})
+			return err
+		}},
+		{"a branch started from the current head", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := StartBranch(ctx, tr.repo, "topic", "", StartBranchOptions{})
+			return err
+		}},
+		{"the details of a commit", func(tr *testRepo) {
+			tr.commitFiles("base", map[string]string{"f": "f\n", "dir/keep": "keep\n"})
+			tr.commitFiles("edit", map[string]string{"f": "edited\n"})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Details(ctx, tr.repo, "HEAD", DetailsOptions{})
+			return err
+		}},
+		{"two branches compared", func(tr *testRepo) { tr.comparableFork() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Compare(ctx, tr.repo, "main", "feature", CompareOptions{})
+			return err
+		}},
+		{"the reflog of a branch", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reflog(ctx, tr.repo, "main", ReflogOptions{})
+			return err
+		}},
+		{"blame a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Blame(ctx, tr.repo, "HEAD", "moved", BlameOptions{Follow: true})
+			return err
+		}},
+		{"the history of a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := FileHistory(ctx, tr.repo, "HEAD", "moved", HistoryOptions{Follow: true})
+			return err
+		}},
+		{"a remembered conflict", func(tr *testRepo) {
+			tr.conflictingFork()
+			tr.enableRerere(false)
+		}, merge(MergeOptions{})},
+		{"a replayed resolution", func(tr *testRepo) {
+			tr.conflictingFork()
+			tr.enableRerere(true)
+			tr.recordAResolution()
+			if _, err := Reset(tr.t.Context(), tr.repo, "HEAD~1", resetOptions(ResetHard)); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, merge(MergeOptions{})},
+		{"a resolution worth recording", func(tr *testRepo) {
+			tr.conflictingFork()
+			tr.enableRerere(false)
+			if _, err := tr.merge("feature", MergeOptions{When: mergeTime}); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.resolveByHand()
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Commit(ctx, tr.repo, CommitOptions{Message: "merged", When: mergeTime})
+			return err
+		}},
+		{"soft reset", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetSoft))
+			return err
+		}},
+		{"mixed reset", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetMixed))
+			return err
+		}},
+		{"hard reset over local changes", func(tr *testRepo) {
+			tr.resetHistory()
+			tr.writeFile("f", "dirty\n")
+			tr.writeFile("dir/spare", "spare\n")
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetHard))
+			return err
+		}},
+		{"reset of paths", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetMixed, "f", "added"))
+			return err
+		}},
+		{"annotated tag", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CreateTag(ctx, tr.repo, "v1", "HEAD~1", tagOptions("first release"))
+			return err
+		}},
+		{"lightweight tag", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
+			_, err := CreateTag(ctx, tr.repo, "v1", "", tagOptions(""))
+			return err
+		}},
+		{"delete a tag", func(tr *testRepo) {
+			tr.resetHistory()
+			if _, err := CreateTag(tr.t.Context(), tr.repo, "v1", "", tagOptions("tagged")); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error { return DeleteTag(ctx, tr.repo, "v1") }},
+		{"list tags", func(tr *testRepo) {
+			tr.resetHistory()
+			if _, err := CreateTag(tr.t.Context(), tr.repo, "v1", "", tagOptions("tagged")); err != nil {
+				tr.t.Fatal(err)
+			}
+			if _, err := CreateTag(tr.t.Context(), tr.repo, "v2", "HEAD~1", tagOptions("")); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Tags(ctx, tr.repo)
+			return err
+		}},
+		{"take a side", func(tr *testRepo) {
+			tr.fork(map[string]string{"f": changeLine(tenLines("f"), 4, "OURS"), "g": changeLine(tenLines("g"), 4, "OURS")}, map[string]string{"f": changeLine(tenLines("f"), 4, "THEIRS"), "g": ""})
+			if _, err := tr.merge("feature", MergeOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			return ResolveConflicts(ctx, tr.repo, []string{"f", "g"}, TakeTheirs)
+		}},
+		{"conclude", func(tr *testRepo) {
+			tr.conflictingFork()
+			if _, err := tr.merge("feature", MergeOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.writeFile("f", "resolved\n")
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Commit(ctx, tr.repo, CommitOptions{Message: "merged", When: mergeTime})
+			return err
+		}},
+	}
+}
+
+func TestMergeFailuresSurfaceTheCauseAtEveryStep(t *testing.T) {
+	for _, scenario := range mergeFaultScenarios() {
+		for _, seam := range mergeSeams() {
+			t.Run(scenario.name+"/"+seam.name, func(t *testing.T) {
+				for failAt := 1; ; failAt++ {
+					tr := newTestRepo(t)
+					scenario.build(tr)
+					calls := 0
+					err := runWithFault(t, func(t *testing.T) error {
+						seam.install(t, failAt, &calls)
+						return scenario.run(t.Context(), tr)
+					})
+					if err != nil && !errors.Is(err, errInjected) {
+						t.Fatalf("failure at call %d surfaced as %v", failAt, err)
+					}
+					if calls < failAt {
+						return
+					}
+				}
+			})
+		}
+	}
+}
+
+func runWithFault(t *testing.T, body func(t *testing.T) error) error {
+	t.Helper()
+	var err error
+	t.Run("step", func(t *testing.T) { err = body(t) })
+	return err
+}
+
+func TestMergeStopsWhenTheContextIsCancelled(t *testing.T) {
+	for _, scenario := range mergeFaultScenarios() {
+		t.Run(scenario.name, func(t *testing.T) {
+			for failAt := 1; ; failAt++ {
+				tr := newTestRepo(t)
+				scenario.build(tr)
+				ctx := newCountingContext(t, failAt).(countingContext)
+				err := scenario.run(ctx, tr)
+				if err != nil && !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation at check %d surfaced as %v", failAt, err)
+				}
+				if *ctx.calls < failAt {
+					return
+				}
+			}
+		})
+	}
+}

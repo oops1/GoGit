@@ -16,6 +16,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/transport"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/clone"
+	"github.com/oops1/gogit/internal/ui/merge"
 	"github.com/oops1/gogit/internal/ui/remotes"
 )
 
@@ -146,6 +147,10 @@ func (a *App) startSync() {
 		if err := a.runPullBody(ctx, o, prog, reporter); err != nil {
 			return err
 		}
+		if a.workingMergeState().InProgress() {
+			reporter.Log(i18n.T("Operation.Log.SyncStoppedOnMerge"))
+			return nil
+		}
 		return a.runPushBody(ctx, o, prog, reporter)
 	})
 }
@@ -160,17 +165,26 @@ func (a *App) runPullBody(ctx context.Context, o *openedRepository, prog progres
 		Progress: prog,
 		Fetch:    remote.FetchOptions{Progress: prog, Transport: a.transportOptions(prog)},
 	})
-	if errors.Is(err, ops.ErrNotFastForward) {
+	switch {
+	case errors.Is(err, ops.ErrNotFastForward):
 		reporter.Log(i18n.T("Operation.Log.NonFastForward"))
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	if result.UpToDate {
+	case err == nil && result.UpToDate:
 		reporter.Log(i18n.T("Operation.Log.UpToDate"))
+	case len(result.Rebase.Conflicts) > 0:
+		reportRebaseStop(reporter, result.Rebase)
+	case err == nil && !result.Rebase.Old.IsZero():
+		reporter.Log(i18n.Tf("Operation.Log.Rebased", result.Rebase.Applied, shortHash(result.Rebase.New)))
+	default:
+		reportMerge(reporter, merge.Request{}, result.Merge, err)
 	}
-	return nil
+	return err
+}
+
+func reportRebaseStop(reporter OperationReporter, result ops.RebaseResult) {
+	reporter.Log(i18n.Tf("Operation.Log.RebaseStopped", shortHash(result.Stopped), len(result.Conflicts)))
+	for _, path := range result.Conflicts {
+		reporter.Log(i18n.Tf("Operation.Log.MergeConflictPath", path))
+	}
 }
 
 func defaultPushRefspec(o *openedRepository) (refspec.RefSpec, error) {

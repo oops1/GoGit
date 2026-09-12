@@ -1,12 +1,14 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 func cleanRepoPath(p string) (string, error) {
@@ -18,6 +20,10 @@ func cleanRepoPath(p string) (string, error) {
 		return "", fmt.Errorf("%w: %q", ErrInvalidPath, p)
 	}
 	return clean, nil
+}
+
+func missingPath(err error) bool {
+	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR)
 }
 
 func joinRel(dir, name string) string {

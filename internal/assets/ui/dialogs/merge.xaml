@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="540" Height="300">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="30"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="8"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="36"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="30"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="110"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="intoLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="{Loc Dialog.Merge.SourceLabel}"/>
+    <ComboBox x:Name="source" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"/>
+
+    <RadioButton x:Name="modeFastForward" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="mergeMode" Content="{Loc Dialog.Merge.Mode.FastForward}" IsChecked="True"/>
+    <RadioButton x:Name="modeMergeCommit" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="mergeMode" Content="{Loc Dialog.Merge.Mode.MergeCommit}"/>
+    <RadioButton x:Name="modeFastForwardOnly" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="mergeMode" Content="{Loc Dialog.Merge.Mode.FastForwardOnly}"/>
+    <RadioButton x:Name="modeSquash" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="mergeMode" Content="{Loc Dialog.Merge.Mode.Squash}"/>
+
+    <CheckBox x:Name="noCommit" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+              Content="{Loc Dialog.Merge.NoCommit}"/>
+
+    <TextBlock x:Name="hint" Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="" FontSize="11" TextWrapping="Wrap"/>
+
+    <Button x:Name="ok" Grid.Row="11" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Merge.OK}"/>
+    <Button x:Name="cancel" Grid.Row="11" Grid.Column="2"
+            Content="{Loc Dialog.Merge.Cancel}"/>
+</Grid>

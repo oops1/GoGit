@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"sync"
 
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/i18n"
@@ -11,17 +10,35 @@ import (
 
 var newOperationView = operation.NewView
 
-var phaseLogKeys = map[string]string{
-	"init":                    "Operation.Log.Initializing",
-	"connecting":              "Operation.Log.Connecting",
-	"negotiating":             "Operation.Log.Negotiating",
-	progress.PhaseReceiving:   "Operation.Log.Receiving",
-	progress.PhaseCounting:    "Operation.Log.Counting",
-	progress.PhaseCompressing: "Operation.Log.Compressing",
-	progress.PhaseWriting:     "Operation.Log.Writing",
-	progress.PhaseResolving:   "Operation.Log.Resolving",
-	"updating-refs":           "Operation.Log.Updating",
-	progress.PhaseCheckout:    "Operation.Log.Checkout",
+type phaseKeys struct {
+	starting string
+	sofar    string
+	outOf    string
+}
+
+var phaseLogKeys = map[string]phaseKeys{
+	"init":                  {starting: "Operation.Log.Initializing"},
+	"connecting":            {starting: "Operation.Log.Connecting"},
+	"negotiating":           {starting: "Operation.Log.Negotiating"},
+	progress.PhaseReceiving: {starting: "Operation.Log.Receiving"},
+	progress.PhaseCounting: {
+		starting: "Operation.Log.Counting",
+		sofar:    "Operation.Log.CountingObjects",
+	},
+	progress.PhaseCompressing: {
+		starting: "Operation.Log.Compressing",
+		outOf:    "Operation.Log.CompressingObjects",
+	},
+	progress.PhaseWriting: {
+		starting: "Operation.Log.Writing",
+		outOf:    "Operation.Log.WritingObjects",
+	},
+	progress.PhaseResolving: {
+		starting: "Operation.Log.Resolving",
+		outOf:    "Operation.Log.ResolvingDeltas",
+	},
+	"updating-refs":        {starting: "Operation.Log.Updating"},
+	progress.PhaseCheckout: {starting: "Operation.Log.Checkout"},
 }
 
 type OperationReporter struct {
@@ -33,6 +50,17 @@ func (r OperationReporter) Log(line string) {
 	r.app.Post(func() { r.view.Append(line) })
 }
 
+func (r OperationReporter) Track(slot, line string) {
+	r.app.Post(func() { r.view.Track(slot, line) })
+}
+
+func (r OperationReporter) Start(slot, line string) {
+	r.app.Post(func() {
+		r.view.ForgetTracked()
+		r.view.Track(slot, line)
+	})
+}
+
 func (r OperationReporter) Status(text string) {
 	r.app.Post(func() { r.view.SetStatus(text) })
 }
@@ -42,9 +70,7 @@ func (r OperationReporter) Progress(fraction float64) {
 }
 
 type operationProgressState struct {
-	mu        sync.Mutex
-	lastPhase string
-	reporter  OperationReporter
+	reporter OperationReporter
 }
 
 func newOperationProgress(reporter OperationReporter) progress.Func {
@@ -53,22 +79,27 @@ func newOperationProgress(reporter OperationReporter) progress.Func {
 }
 
 func (s *operationProgressState) report(r progress.Report) {
-	s.mu.Lock()
-	changed := r.Phase != "" && r.Phase != s.lastPhase
-	if changed {
-		s.lastPhase = r.Phase
-	}
-	s.mu.Unlock()
-	if changed {
-		if key, ok := phaseLogKeys[r.Phase]; ok {
-			s.reporter.Log(i18n.T(key))
-		}
+	if keys, ok := phaseLogKeys[r.Phase]; ok {
+		s.reportPhase(r, keys)
 	}
 	if r.Message != "" {
 		s.reporter.Log(r.Message)
 	}
 	if r.Total > 0 {
 		s.reporter.Progress(float64(r.Current) / float64(r.Total))
+	}
+}
+
+func (s *operationProgressState) reportPhase(r progress.Report, keys phaseKeys) {
+	switch {
+	case r.Total > 0 && keys.outOf != "":
+		s.reporter.Track(r.Phase, i18n.Tf(keys.outOf, r.Current, r.Total))
+	case r.Total == 0 && r.Current > 0 && keys.sofar != "":
+		s.reporter.Track(r.Phase, i18n.Tf(keys.sofar, r.Current))
+	case r.Total == 0 && r.Current == 0:
+		s.reporter.Start(r.Phase, i18n.T(keys.starting))
+	default:
+		s.reporter.Track(r.Phase, i18n.T(keys.starting))
 	}
 }
 

@@ -275,3 +275,11 @@ func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
 		t.Fatalf("quiet button = %v, want the field fill", v.cancelBtn.Background)
 	}
 }
+
+func TestAMergeCommitCannotBeAnAmend(t *testing.T) {
+	v := newTestView(t, Model{Message: "Merge branch 'feature'\n", Amend: true, LastMessage: "previous", Merging: true})
+
+	if v.amendCheck.IsChecked() || v.amendCheck.IsEnabled() || v.message.GetText() != "Merge branch 'feature'\n" {
+		t.Fatalf("amend = %v/%v, message = %q", v.amendCheck.IsChecked(), v.amendCheck.IsEnabled(), v.message.GetText())
+	}
+}

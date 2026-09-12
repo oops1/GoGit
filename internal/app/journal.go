@@ -30,7 +30,9 @@ func (a *App) startJournal() {
 		return
 	}
 	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
-	opts := journal.WalkOptions(a.cfg.Git.LogMaxCount, a.hasRemotes())
+	filter := a.journalFilter()
+	opts := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.hasRemotes()))
+	a.showJournalFilterCount(0, !filter.Empty())
 	ctx, cancel := context.WithCancel(context.Background())
 	pager := newJournalPager(ctx, source, opts)
 	more := make(chan struct{}, 1)
@@ -39,10 +41,10 @@ func (a *App) startJournal() {
 	a.journalMore = more
 	more <- struct{}{}
 	a.journalMu.Unlock()
-	a.journalWG.Go(func() { a.runJournal(ctx, pager, more) })
+	a.journalWG.Go(func() { a.runJournal(ctx, pager, more, !filter.Empty()) })
 }
 
-func (a *App) runJournal(ctx context.Context, pager journalPager, more chan struct{}) {
+func (a *App) runJournal(ctx context.Context, pager journalPager, more chan struct{}, filtered bool) {
 	defer pager.Cancel()
 	for range more {
 		rows, done, err := pager.Next(a.journalPageSize)
@@ -55,6 +57,7 @@ func (a *App) runJournal(ctx context.Context, pager journalPager, more chan stru
 					return
 				}
 				a.journalView.Append(rows)
+				a.showJournalFilterCount(a.journalView.Count(), filtered)
 			})
 		}
 		if done {
@@ -103,4 +106,5 @@ func (a *App) onJournalRowSelected(row journal.Row) {
 	a.setFilesSelected(false)
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))
 	a.startDiff(row.ID)
+	a.showCommitDetails(row.ID)
 }

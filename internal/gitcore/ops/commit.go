@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -28,10 +29,31 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err := rc.requireIdentity(); err != nil {
 		return hash.Zero, err
 	}
+	state, err := ReadMergeState(r)
+	if err != nil {
+		return hash.Zero, err
+	}
+	if state.InProgress() && opts.Amend {
+		return hash.Zero, ErrMergeInProgress
+	}
+	author := rc.sig
+	if opts.Author != nil {
+		author = *opts.Author
+	} else if !state.Picked.IsZero() {
+		picked, err := dbCommit(rc.db, state.Picked)
+		if err != nil {
+			return hash.Zero, err
+		}
+		author = picked.Author
+	}
 
 	lock, err := lockIndex(r)
 	if err != nil {
 		return hash.Zero, err
+	}
+	if lock.idx.HasConflicts() {
+		lock.abort()
+		return hash.Zero, ErrUnmergedPaths
 	}
 
 	treeID, err := lock.idx.WriteTree(rc.db)
@@ -51,13 +73,14 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 		lock.abort()
 		return hash.Zero, err
 	}
+	parents = append(parents, state.Heads...)
 
 	empty, err := isEmptyCommit(rc.db, treeID, parents)
 	if err != nil {
 		lock.abort()
 		return hash.Zero, err
 	}
-	if empty && !opts.AllowEmpty {
+	if empty && !opts.AllowEmpty && state.Operation() != OperationMerge {
 		lock.abort()
 		return hash.Zero, ErrNothingToCommit
 	}
@@ -66,10 +89,8 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if when.IsZero() {
 		when = time.Now()
 	}
-	author := rc.sig
-	author.When = when
-	if opts.Author != nil {
-		author = *opts.Author
+	if opts.Author == nil && state.Picked.IsZero() {
+		author.When = when
 	}
 	committer := rc.sig
 	committer.When = when
@@ -82,7 +103,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	}
 
 	tx := rc.refs.Begin()
-	tx.SetMessage(commitReflogMessage(opts.Amend, parents, message))
+	tx.SetMessage(commitReflogMessage(opts.Amend, parents, message, state.Operation() == OperationCherryPick))
 	if err := txUpdate(tx, target.ref, id, target.old); err != nil {
 		tx.Rollback()
 		lock.abort()
@@ -96,7 +117,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err := lock.commit(); err != nil {
 		return hash.Zero, err
 	}
-	return id, nil
+	return id, errors.Join(recordRerereResolutions(ctx, r, rc.db), clearMergeState(r))
 }
 
 func commitParents(db *odb.DB, headCommit hash.ObjectID, amend bool) ([]hash.ObjectID, error) {
@@ -131,9 +152,11 @@ func isEmptyCommit(db *odb.DB, treeID hash.ObjectID, parents []hash.ObjectID) (b
 	return parentCommit.Tree == treeID, nil
 }
 
-func commitReflogMessage(amend bool, parents []hash.ObjectID, message string) string {
+func commitReflogMessage(amend bool, parents []hash.ObjectID, message string, picking bool) string {
 	kind := "commit"
 	switch {
+	case picking:
+		kind = "commit (cherry-pick)"
 	case amend:
 		kind = "commit (amend)"
 	case len(parents) == 0:

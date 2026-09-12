@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="860" Height="480">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="380"/>
+        <RowDefinition Height="10"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="30"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="110"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="pathLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+               Text="{Loc Dialog.Blame.PathLabel}"/>
+
+    <DataGrid x:Name="lines" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+              Width="860" Height="380"
+              IsReadOnly="True" AutoGenerateColumns="False"
+              CanUserSortColumns="False" SelectionMode="Single"/>
+
+    <TextBlock x:Name="hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+               Text="" FontSize="11" TextWrapping="Wrap"/>
+
+    <Button x:Name="close" Grid.Row="4" Grid.Column="1"
+            Content="{Loc Dialog.Blame.Close}"/>
+</Grid>

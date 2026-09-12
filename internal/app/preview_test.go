@@ -18,6 +18,7 @@ import (
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
+	"github.com/oops1/gogit/internal/ui/merge"
 )
 
 func TestPreviewFrames(t *testing.T) {
@@ -211,6 +212,23 @@ func TestPreviewMenuWithIcons(t *testing.T) {
 		a.menu.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: true, X: x, Y: y})
 		a.menu.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: false, X: x, Y: y})
 		a.Engine().SaveFrames(dir + "/menu-" + theme)
+		a.Engine().Start()
+		time.Sleep(700 * time.Millisecond)
+		a.Engine().Stop()
+	}
+}
+
+func TestPreviewMergeInProgress(t *testing.T) {
+	dir := os.Getenv("GOGIT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("GOGIT_PREVIEW_DIR not set")
+	}
+	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
+		a, _ := forkedApp(t, true)
+		a.SetTheme(theme)
+		mergeThrough(t, a, merge.Request{Source: "feature"})
+		waitForBanner(t, a, true)
+		a.Engine().SaveFrames(dir + "/merging-" + theme)
 		a.Engine().Start()
 		time.Sleep(700 * time.Millisecond)
 		a.Engine().Stop()

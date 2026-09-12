@@ -10,6 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/odb"
+	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/ui/changes"
 )
@@ -65,6 +66,7 @@ func (a *App) startWorking() {
 		a.setFilesRows(nil)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(false)
+		a.showMergeState(ops.MergeState{}, 0)
 		a.clearWorkingFlags()
 		return
 	}
@@ -112,6 +114,8 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	}
 	modified := hasWorkingChanges(status.Entries)
 	staged := stagedEntryCount(status.Entries)
+	merging := a.workingMergeState()
+	conflicts := conflictEntryCount(status.Entries)
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
 	a.currentEntries = entries
@@ -127,6 +131,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		a.setFilesRows(rows)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
+		a.showMergeState(merging, conflicts)
 		a.syncWatcherSkips()
 	})
 }

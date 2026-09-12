@@ -16,6 +16,9 @@ const filesStatusButtonsXAML = `<Button x:Name="filesFilterStaged"/><Button x:Na
 	`<Button x:Name="filesFilterIgnored"/><Button x:Name="filesFilterConflict"/>` +
 	`<Button x:Name="filesFilterUnchanged"/>`
 
+const mergeBannerXAML = `<DockPanel x:Name="mergeBanner"><TextBlock x:Name="mergeBannerText"/>` +
+	`<Button x:Name="mergeBannerCommit"/><Button x:Name="mergeBannerAbort"/></DockPanel>`
+
 const filesSubdirsButtonXAML = `<Button x:Name="filesFilterSubdirs"/><Button x:Name="filesWorkingCopy"/>`
 
 func writeFile(dir, name, content string) error {

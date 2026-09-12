@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="760" Height="440">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="330"/>
+        <RowDefinition Height="10"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="30"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="140"/>
+        <ColumnDefinition Width="110"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="refLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="{Loc Dialog.Reflog.RefLabel}"/>
+
+    <DataGrid x:Name="records" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+              Width="760" Height="330"
+              IsReadOnly="True" AutoGenerateColumns="False"
+              CanUserSortColumns="False" SelectionMode="Single"/>
+
+    <TextBlock x:Name="hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="" FontSize="11" TextWrapping="Wrap"/>
+
+    <Button x:Name="reset" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Reflog.Reset}"/>
+    <Button x:Name="close" Grid.Row="4" Grid.Column="2"
+            Content="{Loc Dialog.Reflog.Close}"/>
+</Grid>

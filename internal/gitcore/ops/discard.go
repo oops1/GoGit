@@ -2,7 +2,6 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -130,7 +129,7 @@ func parentOf(rel string) string {
 func (d *discarder) removeUntracked(rel string) error {
 	name := filepath.FromSlash(rel)
 	info, err := fsRootLstat(d.wt.root, name)
-	if errors.Is(err, fs.ErrNotExist) {
+	if missingPath(err) {
 		return nil
 	}
 	if err != nil {

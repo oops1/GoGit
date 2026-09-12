@@ -99,8 +99,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 func (v *View) apply(m Model) {
 	v.lastMessage = m.LastMessage
 	v.draft = m.Message
-	v.amendCheck.SetChecked(m.Amend)
-	if m.Amend {
+	v.amendCheck.SetChecked(m.Amend && !m.Merging)
+	v.amendCheck.SetEnabled(!m.Merging)
+	if m.Amend && !m.Merging {
 		v.message.SetText(m.LastMessage)
 	} else {
 		v.message.SetText(m.Message)

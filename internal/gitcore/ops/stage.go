@@ -2,7 +2,6 @@ package ops
 
 import (
 	"context"
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -70,7 +69,7 @@ func (s *stager) stage(rel string) error {
 	}
 	info, err := fsRootLstat(s.wt.root, filepath.FromSlash(rel))
 	switch {
-	case errors.Is(err, fs.ErrNotExist):
+	case missingPath(err):
 		return s.stageMissing(rel)
 	case err != nil:
 		return err
@@ -101,6 +100,7 @@ func (s *stager) stageDir(rel string) error {
 	if err != nil {
 		return err
 	}
+	s.idx.Remove(rel)
 	present := map[string]bool{}
 	for _, entry := range entries {
 		if err := s.ctx.Err(); err != nil {
@@ -128,7 +128,7 @@ func (s *stager) stageDir(rel string) error {
 	prefix := rel + "/"
 	for _, tracked := range slices.Collect(s.idx.Paths(prefix)) {
 		if !present[tracked] {
-			if _, err := fsRootLstat(s.wt.root, filepath.FromSlash(tracked)); errors.Is(err, fs.ErrNotExist) {
+			if _, err := fsRootLstat(s.wt.root, filepath.FromSlash(tracked)); missingPath(err) {
 				s.idx.Remove(tracked)
 			}
 		}
@@ -151,6 +151,12 @@ func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
 		ID:    id,
 		Stage: index.StageMerged,
 		Stat:  statOf(info, len(data)),
+	}
+	if len(s.idx.Conflicts(rel)) > 0 {
+		s.idx.Remove(rel)
+	}
+	for _, inside := range slices.Collect(s.idx.Paths(rel + "/")) {
+		s.idx.Remove(inside)
 	}
 	s.idx.Add(entry)
 	return nil

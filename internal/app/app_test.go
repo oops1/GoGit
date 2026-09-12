@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image/color"
 	"log/slog"
 	"strings"
@@ -51,7 +52,7 @@ func TestNewLoadsMainWindow(t *testing.T) {
 			t.Fatalf("side %v size = %d, want %d", side, got, size)
 		}
 	}
-	if len(a.Dock().Panes()) != 4 {
+	if len(a.Dock().Panes()) != 5 {
 		t.Fatalf("panes = %d", len(a.Dock().Panes()))
 	}
 }
@@ -368,20 +369,50 @@ func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
 	}
 }
 
-func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
-	widget.ClearStrings()
-	t.Cleanup(widget.ClearStrings)
-	xaml := `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+const journalFilterXAML = `<ComboBox x:Name="journalFilterBranch"/><TextBox x:Name="journalFilterAuthor"/>` +
+	`<TextBox x:Name="journalFilterMessage"/><TextBlock x:Name="journalFilterCount"/>` +
+	`<DockPanel x:Name="journalFilterRow"/>`
+
+func completeWindowXAML() string {
+	return `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 		`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 		`<FilesGrid x:Name="filesGrid"/>` +
 		`<TextBox x:Name="filesFilter"/><TextBlock x:Name="filesFilterCount"/>` +
 		`<DockPanel x:Name="filesFilterRow"/>` +
+		mergeBannerXAML +
 		filesStatusButtonsXAML +
 		filesSubdirsButtonXAML +
-		`<DataGrid x:Name="journalGrid"/><DiffView x:Name="diffView"/>` +
+		`<DataGrid x:Name="journalGrid"/><GitDiffView x:Name="diffView"/>` +
+		journalFilterXAML +
+		`<TabControl x:Name="detailsTabs"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
-	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml), nil)
+}
+
+func windowWithout(widget string) string {
+	return strings.Replace(completeWindowXAML(), widget, "", 1)
+}
+
+func TestNewFromXAMLNeedsEveryJournalFilterWidget(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	for _, missing := range []string{
+		`<ComboBox x:Name="journalFilterBranch"/>`,
+		`<TextBox x:Name="journalFilterAuthor"/>`,
+		`<TextBox x:Name="journalFilterMessage"/>`,
+		`<TextBlock x:Name="journalFilterCount"/>`,
+		`<DockPanel x:Name="journalFilterRow"/>`,
+	} {
+		if _, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(windowWithout(missing)), nil); !errors.Is(err, ErrWidgetMissing) {
+			t.Errorf("without %s: err = %v", missing, err)
+		}
+	}
+}
+
+func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(completeWindowXAML()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,12 +503,12 @@ func TestTheWindowFrameFollowsTheAccentOnlyWhenWindowsColoursIt(t *testing.T) {
 	a.SetSystemAccentDetector(func() systheme.Accent {
 		return systheme.Accent{Base: accent, Light: accent, Dark: accent, OnFrame: true, Known: true}
 	})
-	if a.Root().BorderColor != accent {
-		t.Fatalf("frame = %v, want the accent", a.Root().BorderColor)
+	if a.Root().FrameColor != accent {
+		t.Fatalf("frame = %v, want the accent", a.Root().FrameColor)
 	}
 
 	a.SetSystemAccentDetector(func() systheme.Accent { return systheme.Accent{} })
-	if a.Root().BorderColor != themeFor(config.ThemeDark).Border {
-		t.Fatalf("frame = %v, want the border of the theme", a.Root().BorderColor)
+	if a.Root().FrameColor != themeFor(config.ThemeDark).WindowFrame {
+		t.Fatalf("frame = %v, want the frame of the theme", a.Root().FrameColor)
 	}
 }

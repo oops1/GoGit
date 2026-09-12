@@ -32,6 +32,16 @@ const (
 	CmdUnstage         CommandID = "edit.unstage"
 	CmdDiscard         CommandID = "edit.discard"
 	CmdCommit          CommandID = "local.commit"
+	CmdCompareFiles    CommandID = "edit.compare-files"
+	CmdMerge           CommandID = "branch.merge"
+	CmdRebase          CommandID = "branch.rebase"
+	CmdRebaseSteps     CommandID = "branch.rebase.steps"
+	CmdReflog          CommandID = "branch.reflog"
+	CmdSwitch          CommandID = "branch.switch"
+	CmdCompareRefs     CommandID = "branch.compare"
+	CmdContinue        CommandID = "branch.continue"
+	CmdSkip            CommandID = "branch.skip"
+	CmdAbortMerge      CommandID = "branch.abort-merge"
 	CmdResetLayout     CommandID = "view.reset-layout"
 	CmdRefresh         CommandID = "view.refresh"
 	CmdCheckUpdates    CommandID = "help.check-updates"
@@ -122,6 +132,9 @@ type State struct {
 	FilesSelected    bool
 	HasStagedChanges bool
 	HasRemotes       bool
+	Merging          bool
+	Rebasing         bool
+	Rewording        bool
 }
 
 func (s State) Enabled(id CommandID) bool {
@@ -135,7 +148,15 @@ func (s State) Enabled(id CommandID) bool {
 	case CmdStage, CmdUnstage, CmdDiscard:
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
-		return s.ActiveRepository != "" && s.HasStagedChanges
+		return s.ActiveRepository != "" && (s.HasStagedChanges || s.Merging)
+	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
+		return s.ActiveRepository != "" && !s.Merging
+	case CmdReflog, CmdCompareRefs:
+		return s.ActiveRepository != ""
+	case CmdAbortMerge, CmdContinue:
+		return s.ActiveRepository != "" && s.Merging
+	case CmdSkip:
+		return s.ActiveRepository != "" && s.Rebasing
 	}
 	return true
 }

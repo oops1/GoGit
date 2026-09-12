@@ -62,6 +62,7 @@ func unstagePath(idx *index.Index, headTree map[string]treeEntry, rel string) {
 		if !hasPrefix(path, prefix) {
 			continue
 		}
+		idx.Remove(path)
 		idx.Add(index.Entry{Path: path, Mode: he.mode, ID: he.id, Stage: index.StageMerged})
 	}
 	for _, tracked := range collectPaths(idx, prefix) {
@@ -74,13 +75,12 @@ func unstagePath(idx *index.Index, headTree map[string]treeEntry, rel string) {
 func resetSingle(idx *index.Index, headTree map[string]treeEntry, rel string) bool {
 	he, existsInHead := headTree[rel]
 	_, existsInIndex := idx.Get(rel, index.StageMerged)
-	if !existsInHead && !existsInIndex {
+	if !existsInHead && !existsInIndex && len(idx.Conflicts(rel)) == 0 {
 		return false
 	}
+	idx.Remove(rel)
 	if existsInHead {
 		idx.Add(index.Entry{Path: rel, Mode: he.mode, ID: he.id, Stage: index.StageMerged})
-	} else {
-		idx.Remove(rel)
 	}
 	return true
 }

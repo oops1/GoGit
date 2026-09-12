@@ -44,6 +44,11 @@ func newOracle(t *testing.T) *oracle {
 			"USERPROFILE=" + home,
 			"GIT_CONFIG_GLOBAL=" + globalConfig,
 			"GIT_CONFIG_NOSYSTEM=1",
+			"GIT_CONFIG_COUNT=2",
+			"GIT_CONFIG_KEY_0=gc.auto",
+			"GIT_CONFIG_VALUE_0=0",
+			"GIT_CONFIG_KEY_1=maintenance.auto",
+			"GIT_CONFIG_VALUE_1=false",
 			"GIT_TERMINAL_PROMPT=0",
 		},
 	}
@@ -93,6 +98,22 @@ func (o *oracle) write(dir, rel, text string) {
 	}
 	if err := os.WriteFile(full, []byte(text), 0o666); err != nil {
 		o.t.Fatalf("WriteFile returned error %v", err)
+	}
+}
+
+func (o *oracle) read(dir, rel string) string {
+	o.t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+	if err != nil {
+		o.t.Fatalf("ReadFile returned error %v", err)
+	}
+	return string(data)
+}
+
+func (o *oracle) remove(dir, rel string) {
+	o.t.Helper()
+	if err := os.Remove(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
+		o.t.Fatalf("Remove returned error %v", err)
 	}
 }
 

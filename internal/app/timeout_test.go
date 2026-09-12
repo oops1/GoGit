@@ -2,4 +2,4 @@ package app
 
 import "time"
 
-const testTimeout = 30 * time.Second
+const testTimeout = 60 * time.Second

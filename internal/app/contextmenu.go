@@ -70,13 +70,14 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 	}
 	a.filesGrid.Data().Grid.SetSelectedIndex(row)
 	path := a.filePathOf(file)
-	items := []widget.MenuItem{
+	items := append(a.conflictItems(file),
 		menuItem("Menu.Context.Reveal", func() { a.revealPath(path) }),
 		menuItem("Menu.Context.Terminal", func() { a.openTerminalAt(containingDirectory(path)) }),
 		menuItem("Menu.Context.CopyPath", func() { a.copyToClipboard(path) }),
-	}
+	)
 	items = append(items, menuSeparator())
-	return append(items, a.editItems()...)
+	items = append(items, a.editItems()...)
+	return append(items, a.historyItems(file.RelPath)...)
 }
 
 func (a *App) editItems() []widget.MenuItem {
@@ -112,10 +113,13 @@ func (a *App) journalMenu(item any, row int) []widget.MenuItem {
 		return nil
 	}
 	a.journalGrid().Grid.SetSelectedIndex(row)
-	return []widget.MenuItem{
+	items := []widget.MenuItem{
 		menuItem("Menu.Context.CopyHash", func() { a.copyToClipboard(commit.ID.String()) }),
 		menuItem("Menu.Context.CopyMessage", func() { a.copyToClipboard(commit.Message) }),
 	}
+	items = append(items, a.pickItems(commit.ID)...)
+	items = append(items, a.resetItems(commit.ID)...)
+	return append(items, a.tagItems(commit.ID)...)
 }
 
 func (a *App) journalGrid() *widget.DataGridWidget {

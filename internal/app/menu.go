@@ -9,8 +9,9 @@ import (
 
 const repositoryMenuIndex = 0
 const editMenuIndex = 1
-const remoteMenuIndex = 2
-const viewMenuIndex = 3
+const branchMenuIndex = 2
+const remoteMenuIndex = 3
+const viewMenuIndex = 4
 
 type menuLeafEntry struct {
 	Key     string
@@ -36,6 +37,7 @@ type menuDef struct {
 
 var repositoryMenuTree = buildRepositoryMenuTree()
 var editMenuTree = buildEditMenuTree()
+var branchMenuTree = buildBranchMenuTree()
 var remoteMenuTree = buildRemoteMenuTree()
 var viewMenuTree = buildViewMenuTree()
 var helpMenuTree = buildHelpMenuTree()
@@ -43,6 +45,7 @@ var helpMenuTree = buildHelpMenuTree()
 var menuBarDefs = []menuDef{
 	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Edit", Tree: editMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Branch", Tree: branchMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Remote", Tree: remoteMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
 	{TitleKey: "Menu.Help", Tree: helpMenuTree, LeafText: plainLeafText},
@@ -97,6 +100,24 @@ func buildEditMenuTree() []menuTreeEntry {
 		leaf("Menu.Edit.Discard", CmdDiscard),
 		{Separator: true},
 		leaf("Menu.Edit.Commit", CmdCommit),
+		{Separator: true},
+		leaf("Menu.Edit.Compare", CmdCompareFiles),
+	}
+}
+
+func buildBranchMenuTree() []menuTreeEntry {
+	return []menuTreeEntry{
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Switch", Command: CmdSwitch}},
+		{Separator: true},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Merge", Command: CmdMerge}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Rebase", Command: CmdRebase}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.RebaseInteractive", Command: CmdRebaseSteps}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Reflog", Command: CmdReflog}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Compare", Command: CmdCompareRefs}},
+		{Separator: true},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
 	}
 }
 
@@ -261,6 +282,7 @@ func (a *App) retranslateRepoTrees() {
 		return
 	}
 	a.branchesView.Render(snap)
+	a.showJournalBranches(snap)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 }
 

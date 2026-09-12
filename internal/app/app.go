@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image/color"
 	"log/slog"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/commit"
+	"github.com/oops1/gogit/internal/ui/commitdetails"
 	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -68,14 +70,21 @@ type App struct {
 
 	languages []string
 
-	registry          *repo.Registry
-	reposView         *repos.View
-	branchesView      *branches.View
-	journalView       *journal.View
-	diffView          *diffview.DiffView
-	filesGrid         *filesgrid.Grid
-	filesFilterInput  *widget.TextInput
-	filesFilterLabel  *widget.Label
+	registry         *repo.Registry
+	reposView        *repos.View
+	branchesView     *branches.View
+	journalView      *journal.View
+	diffView         *diffview.DiffView
+	filesGrid        *filesgrid.Grid
+	filesFilterInput *widget.TextInput
+	filesFilterLabel *widget.Label
+
+	journalFilterBranch  *widget.Dropdown
+	journalFilterAuthor  *widget.TextInput
+	journalFilterMessage *widget.TextInput
+	journalFilterLabel   *widget.Label
+
+	detailsView       *commitdetails.View
 	statusLabel       *widget.Label
 	statusBranchLabel *widget.Label
 	stateMu           sync.RWMutex
@@ -83,11 +92,13 @@ type App struct {
 	selectedCommit    hash.ObjectID
 
 	filesWorkingCopyBtn *widget.Button
+	banner              mergeBanner
 	askInput            func(title, prompt string, cb func(text string, ok bool))
 	askConfirm          func(title, message string, cb func(ok bool))
 	showAddRepo         func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings        func(initial settings.Model, cb func(settings.Model, bool))
 	showCommit          func(initial commit.Model, cb func(commit.Model, bool))
+	rewordMessage       string
 	showError           func(title, message string)
 	showInfo            func(title, message string)
 
@@ -122,6 +133,8 @@ type App struct {
 	journalPageSize int
 
 	filesItems *datagrid.ObservableCollection
+
+	readWG sync.WaitGroup
 
 	diffRunMu  sync.Mutex
 	diffMu     sync.Mutex
@@ -258,9 +271,39 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
 		}
 	}
+	journalBranchWidget, ok := named["journalFilterBranch"].(*widget.Dropdown)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterBranch", ErrWidgetMissing)
+	}
+	journalAuthorWidget, ok := named["journalFilterAuthor"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterAuthor", ErrWidgetMissing)
+	}
+	journalMessageWidget, ok := named["journalFilterMessage"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterMessage", ErrWidgetMissing)
+	}
+	journalCountWidget, ok := named["journalFilterCount"].(*widget.Label)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterCount", ErrWidgetMissing)
+	}
+	journalCountWidget.TextAlign = widget.TextAlignRight
+	journalFilterRow, ok := named["journalFilterRow"].(*widget.DockPanel)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterRow", ErrWidgetMissing)
+	}
+	journalFilterRow.LastChildFill = true
+	detailsTabs, ok := named["detailsTabs"].(*widget.TabControl)
+	if !ok {
+		return nil, fmt.Errorf("%w: detailsTabs", ErrWidgetMissing)
+	}
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
+	}
+	banner, err := bindMergeBanner(named)
+	if err != nil {
+		return nil, err
 	}
 
 	a := &App{
@@ -283,8 +326,16 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		filesGrid:         filesGridWidget,
 		filesFilterInput:  filesFilterWidget,
 		filesFilterLabel:  filesFilterCountWidget,
-		newWatcher:        newRealWatcher,
-		journalPageSize:   defaultJournalPageSize,
+
+		journalFilterBranch:  journalBranchWidget,
+		journalFilterAuthor:  journalAuthorWidget,
+		journalFilterMessage: journalMessageWidget,
+		journalFilterLabel:   journalCountWidget,
+
+		detailsView:     commitdetails.NewView(detailsTabs),
+		newWatcher:      newRealWatcher,
+		journalPageSize: defaultJournalPageSize,
+		banner:          banner,
 	}
 	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
@@ -335,12 +386,14 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.filesGrid.SetItemsSource(a.filesItems)
 	a.filesGrid.Data().Grid.SelectionMode = datagrid.SelectionExtended
 	a.filesGrid.SetOnSelectionChanged(a.onFilesRowSelected)
+	a.filesGrid.Data().Grid.OnRowActivated = a.onFilesRowActivated
 	a.restoreFilesColumns()
 	a.filesGrid.OnColumnsChanged = a.saveFilesColumns
 	a.restoreFilesStatusFilter()
 	a.wireFilesStatusButtons()
 	a.wireFilesSubdirsButton()
 	a.filesFilterInput.OnChange = a.onFilesFilterChanged
+	a.wireJournalFilter()
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
 	a.refreshBranchCache()
@@ -360,6 +413,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdAddGroup] = a.addGroup
 	a.handlers[CmdAddOrCreate] = a.addOrCreateRepository
 	a.handlers[CmdSearch] = a.openSearch
+	a.handlers[CmdCompareFiles] = a.openCompare
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
 	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
@@ -372,6 +426,11 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdCommit] = a.openCommit
 	a.registerRemoteHandlers()
 	a.registerWorktreeHandlers()
+	a.registerMergeHandlers()
+	a.registerRebaseHandlers()
+	a.registerReflogHandlers()
+	a.registerSwitchHandlers()
+	a.registerCompareHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -509,6 +568,7 @@ func (a *App) ActivateRepository(id string) {
 	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
+	a.showJournalBranches(snap)
 	a.refreshDivergence(opened)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
@@ -585,6 +645,7 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.branchesView.Render(snap)
+	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
@@ -798,7 +859,7 @@ func (a *App) EffectiveTheme() string {
 func (a *App) applyTheme() {
 	theme := a.theme()
 	a.eng.SetTheme(theme)
-	a.applyWindowFrame(theme)
+	a.applyWindowFrame()
 	a.applyToolbarIcons(theme)
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
@@ -806,18 +867,20 @@ func (a *App) applyTheme() {
 	a.applyRepoTreeTheme(theme)
 	a.applyPaneTitleColors(theme)
 	a.applyMenuIcons()
+	a.applyMergeBannerTheme(theme)
 	a.journalView.Restyle(theme)
+	a.detailsView.Restyle(theme)
 }
 
-func (a *App) applyWindowFrame(t *widget.Theme) {
+func (a *App) applyWindowFrame() {
 	a.mu.Lock()
 	accentOf := a.accentOf
 	a.mu.Unlock()
 	if accent := accentOf(); accent.Known && accent.OnFrame {
-		a.root.BorderColor = accent.For(schemeOf(a.EffectiveTheme()))
+		a.root.SetFrameColor(accent.For(schemeOf(a.EffectiveTheme())))
 		return
 	}
-	a.root.BorderColor = t.Border
+	a.root.SetFrameColor(color.RGBA{})
 }
 
 func (a *App) applyPaneTitleColors(t *widget.Theme) {
@@ -852,6 +915,7 @@ func effectiveTheme(name string, detect func() systheme.Scheme) string {
 func (a *App) SetLanguage(code string) {
 	a.cfg.Language = code
 	i18n.Apply(code)
+	a.detailsView.Retitle()
 	a.log.Debug("language changed", "language", code)
 }
 

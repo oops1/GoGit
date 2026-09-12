@@ -14,7 +14,7 @@ type headTarget struct {
 }
 
 func resolveHeadTarget(store *refs.Store) (headTarget, error) {
-	ref, err := store.Lookup(refs.HEAD)
+	ref, err := refsLookup(store, refs.HEAD)
 	if err != nil {
 		return headTarget{}, err
 	}
@@ -22,7 +22,7 @@ func resolveHeadTarget(store *refs.Store) (headTarget, error) {
 		return headTarget{ref: refs.HEAD, detached: true, old: ref.Target}, nil
 	}
 	branch := ref.SymbolicTarget
-	resolved, err := store.Lookup(branch)
+	resolved, err := refsLookup(store, branch)
 	if errors.Is(err, refs.ErrNotFound) {
 		return headTarget{ref: branch, detached: false, old: hash.Zero}, nil
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -17,7 +18,7 @@ type mergeCase struct {
 	theirs []byte
 }
 
-func gitMergeFile(t *testing.T, c mergeCase, style Style) (string, bool) {
+func gitMergeFile(t *testing.T, c mergeCase, style Style, markerSize int) (string, bool) {
 	t.Helper()
 	dir := t.TempDir()
 	write := func(name string, data []byte) string {
@@ -34,9 +35,21 @@ func gitMergeFile(t *testing.T, c mergeCase, style Style) (string, bool) {
 	case StyleZDiff3:
 		args = append(args, "--zdiff3")
 	}
+	if markerSize > 0 {
+		args = append(args, "--marker-size="+strconv.Itoa(markerSize))
+	}
 	args = append(args, write("ours", c.ours), write("base", c.base), write("theirs", c.theirs))
 	cmd := exec.Command("git", args...)
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "SystemRoot=" + os.Getenv("SystemRoot"), "GIT_CONFIG_NOSYSTEM=1"}
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"SystemRoot=" + os.Getenv("SystemRoot"),
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto",
+		"GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto",
+		"GIT_CONFIG_VALUE_1=false",
+	}
 	out, err := cmd.Output()
 	if err == nil {
 		return string(out), false
@@ -94,16 +107,19 @@ func TestOurMergeIsTheOneGitWrites(t *testing.T) {
 	}
 	for _, c := range mergeCases() {
 		for _, style := range styles {
-			want, conflicted := gitMergeFile(t, c, style.style)
-			got := File(c.base, c.ours, c.theirs, Options{
-				Style:  style.style,
-				Labels: Labels{Ours: "ours", Base: "base", Theirs: "theirs"},
-			})
-			if string(got.Content) != want {
-				t.Fatalf("%s/%s:\n got %q\nwant %q", c.name, style.name, got.Content, want)
-			}
-			if conflicted != (got.Conflicts > 0) {
-				t.Fatalf("%s/%s: conflicts = %d, git %v", c.name, style.name, got.Conflicts, conflicted)
+			for _, markerSize := range []int{0, 3, 10} {
+				want, conflicted := gitMergeFile(t, c, style.style, markerSize)
+				got := File(c.base, c.ours, c.theirs, Options{
+					Style:      style.style,
+					Labels:     Labels{Ours: "ours", Base: "base", Theirs: "theirs"},
+					MarkerSize: markerSize,
+				})
+				if string(got.Content) != want {
+					t.Fatalf("%s/%s/%d:\n got %q\nwant %q", c.name, style.name, markerSize, got.Content, want)
+				}
+				if conflicted != (got.Conflicts > 0) {
+					t.Fatalf("%s/%s/%d: conflicts = %d, git %v", c.name, style.name, markerSize, got.Conflicts, conflicted)
+				}
 			}
 		}
 	}

@@ -32,6 +32,21 @@
                 <MenuItem Header="{Loc Menu.Edit.Discard}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Edit.Commit}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Edit.Compare}"/>
+            </MenuItem>
+            <MenuItem Header="{Loc Menu.Branch}">
+                <MenuItem Header="{Loc Menu.Branch.Switch}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Branch.Merge}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Rebase}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.RebaseInteractive}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Reflog}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Compare}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Branch.Continue}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.Skip}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Branch.AbortMerge}" IsEnabled="False"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Remote}">
                 <MenuItem Header="{Loc Menu.Remote.Fetch}" IsEnabled="False"/>
@@ -95,6 +110,13 @@
                 </DockPane>
                 <DockPane Id="files" Title="{Loc Pane.Files}" Side="Top" Size="200">
                     <DockPanel>
+                        <DockPanel x:Name="mergeBanner" DockPanel.Dock="Top" Margin="4,4,4,0" Visibility="Collapsed">
+                            <Button x:Name="mergeBannerAbort" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Content="{Loc Banner.Merge.Abort}"/>
+                            <Button x:Name="mergeBannerCommit" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Content="{Loc Banner.Merge.Commit}"/>
+                            <TextBlock x:Name="mergeBannerText" Text="" Margin="6,4,0,4" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
                         <DockPanel x:Name="filesFilterRow" DockPanel.Dock="Top" Margin="4,4,4,2">
                             <TextBox x:Name="filesFilter" DockPanel.Dock="Left" Width="220" Margin="0,0,6,0"
                                      Placeholder="{Loc Files.Filter.Placeholder}"/>
@@ -120,7 +142,19 @@
                     </DockPanel>
                 </DockPane>
                 <DockPane Id="journal" Title="{Loc Pane.Journal}" Side="Bottom" Size="220">
-                    <DataGrid x:Name="journalGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DockPanel LastChildFill="True">
+                        <DockPanel x:Name="journalFilterRow" DockPanel.Dock="Top" Height="28" LastChildFill="True">
+                            <TextBlock x:Name="journalFilterBranchLabel" DockPanel.Dock="Left" Text="{Loc Journal.Filter.Branch}"
+                                       FontSize="9" Margin="8,6,4,4"/>
+                            <ComboBox x:Name="journalFilterBranch" DockPanel.Dock="Left" Width="160" Height="24" Margin="0,2,6,2"/>
+                            <TextBlock x:Name="journalFilterAuthorLabel" DockPanel.Dock="Left" Text="{Loc Journal.Filter.Author}"
+                                       FontSize="9" Margin="0,6,4,4"/>
+                            <TextBox x:Name="journalFilterAuthor" DockPanel.Dock="Left" Width="140" Height="24" Margin="0,2,6,2"/>
+                            <TextBlock x:Name="journalFilterCount" DockPanel.Dock="Right" Text="" Width="110"
+                                       FontSize="9" Margin="0,6,10,4"/>
+                            <TextBox x:Name="journalFilterMessage" Height="24" Margin="0,2,6,2"/>
+                        </DockPanel>
+                        <DataGrid x:Name="journalGrid" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="" Binding="{Binding Graph}" Width="60"/>
                             <DataGridTextColumn Header="" Binding="{Binding Message}" Width="*"/>
@@ -128,10 +162,14 @@
                             <DataGridTextColumn Header="" Binding="{Binding Date}" Width="140"/>
                             <DataGridTextColumn Header="" Binding="{Binding ShortHash}" Width="90"/>
                         </DataGrid.Columns>
-                    </DataGrid>
+                        </DataGrid>
+                    </DockPanel>
+                </DockPane>
+                <DockPane Id="details" Title="{Loc Pane.Details}" Side="Right" Size="320">
+                    <TabControl x:Name="detailsTabs"/>
                 </DockPane>
                 <DockContent>
-                    <DiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
+                    <GitDiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
                 </DockContent>
             </DockManager>
 
