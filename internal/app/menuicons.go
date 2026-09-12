@@ -65,6 +65,8 @@ var contextIcons = map[string]string{
 	"Menu.Context.CherryPick":       "cherry_pick",
 	"Menu.Context.Revert":           "revert",
 	"Menu.Context.Reset":            "reset",
+	"Menu.Context.CreateTag":        "tag_add",
+	"Menu.Context.DeleteTag":        "tag_remove",
 }
 
 func commandIcon(id CommandID) image.Image {

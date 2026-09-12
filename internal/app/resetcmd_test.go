@@ -38,8 +38,7 @@ func TestTheJournalMenuOffersToResetTheBranch(t *testing.T) {
 
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.journalMenu(journal.Row{ID: id}, 0) })
 
-	last := items[len(items)-1]
-	if last.Text != i18n.T("Menu.Context.Reset") || last.Disabled {
+	if items[5].Text != i18n.T("Menu.Context.Reset") || items[5].Disabled {
 		t.Fatalf("items = %+v", items)
 	}
 }

@@ -117,7 +117,8 @@ func (a *App) journalMenu(item any, row int) []widget.MenuItem {
 		menuItem("Menu.Context.CopyMessage", func() { a.copyToClipboard(commit.Message) }),
 	}
 	items = append(items, a.pickItems(commit.ID)...)
-	return append(items, a.resetItems(commit.ID)...)
+	items = append(items, a.resetItems(commit.ID)...)
+	return append(items, a.tagItems(commit.ID)...)
 }
 
 func (a *App) journalGrid() *widget.DataGridWidget {

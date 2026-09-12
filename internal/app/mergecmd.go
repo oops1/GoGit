@@ -74,11 +74,11 @@ func (a *App) branchMenu(ref refs.Name) []widget.MenuItem {
 	state := a.State()
 	current := a.currentBranchName()
 	if ref == refs.BranchName(current) || !mergeable(ref) {
-		return nil
+		return a.deleteTagItems(ref)
 	}
 	item := menuItem("Menu.Context.MergeIntoCurrent", func() { a.openMerge(ref.Short()) })
 	item.Disabled = !state.Enabled(CmdMerge)
-	return []widget.MenuItem{item}
+	return append([]widget.MenuItem{item}, a.deleteTagItems(ref)...)
 }
 
 func mergeable(ref refs.Name) bool {
