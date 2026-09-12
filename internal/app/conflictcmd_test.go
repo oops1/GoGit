@@ -106,7 +106,7 @@ func TestSavingAnUnfinishedResolutionKeepsTheConflict(t *testing.T) {
 	view := openedConflict(t, a)
 
 	readOnDispatcher(t, a, func() bool { view.Merge().OnSaveRequest(); return true })
-	waitForWorkingIdle(t, a)
+	waitForConflictMessage(t, a, view, i18n.T("Dialog.Conflict.SavedWithMarkers"))
 
 	data, err := os.ReadFile(filepath.Join(target, "f.txt"))
 	if err != nil || !strings.Contains(string(data), "<<<<<<<") {
