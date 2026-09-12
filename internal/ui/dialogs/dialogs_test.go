@@ -54,8 +54,8 @@ func TestLoadPropagatesSourceError(t *testing.T) {
 	}
 }
 
-func TestAStretchedDialogStretchesItsContent(t *testing.T) {
-	dlg, _, err := Load("compare", "Title")
+func TestAResizableDialogStretchesItsContent(t *testing.T) {
+	dlg, _, err := LoadResizable("compare", "Title")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,5 +66,27 @@ func TestAStretchedDialogStretchesItsContent(t *testing.T) {
 
 	if dlg.Content() == nil || dlg.Content().Bounds() != dlg.ContentBounds() {
 		t.Fatalf("content = %v, want it to fill %v", dlg.Content(), dlg.ContentBounds())
+	}
+}
+
+func TestLoadResizablePropagatesSourceError(t *testing.T) {
+	prev := source
+	wantErr := errors.New("boom")
+	source = func(name string) ([]byte, error) { return nil, wantErr }
+	t.Cleanup(func() { source = prev })
+
+	if _, _, err := LoadResizable("whatever", "Title"); !errors.Is(err, wantErr) {
+		t.Fatalf("err = %v, want %v", err, wantErr)
+	}
+}
+
+func TestAPlainDialogKeepsItsContentWhereItWasPlaced(t *testing.T) {
+	dlg, _, err := Load("add_repo", "Title")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if dlg.Content() != nil {
+		t.Fatal("a plain dialog handed its layout to the stretching content slot")
 	}
 }
