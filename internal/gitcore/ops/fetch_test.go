@@ -39,7 +39,9 @@ func cloneForFetch(t testing.TB, src *testRepo) *testRepo {
 		t.Fatalf("Clone returned error %v", err)
 	}
 	t.Cleanup(func() { _ = r.Close() })
-	return &testRepo{t: t, dir: dest, repo: r, clock: 1700000000}
+	client := &testRepo{t: t, dir: dest, repo: r, clock: 1700000000, globalFile: isolatedGlobalFile(t)}
+	client.repo = client.reopen()
+	return client
 }
 
 func TestFetchBringsInNewCommitsFromTheConfiguredRemote(t *testing.T) {
