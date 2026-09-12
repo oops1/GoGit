@@ -5,7 +5,7 @@
 
     <Grid.RowDefinitions>
         <RowDefinition Height="40"/>
-        <RowDefinition Height="8"/>
+        <RowDefinition Height="22"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="8"/>
         <RowDefinition Height="36"/>
@@ -41,6 +41,21 @@
                 ToolTip="{Loc Dialog.Conflict.Next.Tip}"/>
         <CheckBox x:Name="showBase" Grid.Column="12" VerticalAlignment="Center"
                   Content="{Loc Dialog.Conflict.ShowBase}" ToolTip="{Loc Dialog.Conflict.ShowBase.Tip}"/>
+    </Grid>
+
+    <Grid x:Name="notes" Grid.Row="1">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="14"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="32"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="noteOurs" Grid.Column="1" Text="{Loc Dialog.Conflict.Note.Ours}" VerticalAlignment="Bottom" Height="20"/>
+        <TextBlock x:Name="noteBase" Grid.Column="3" Text="{Loc Dialog.Conflict.Note.Base}" VerticalAlignment="Bottom" Height="20"/>
+        <TextBlock x:Name="noteTheirs" Grid.Column="5" Text="{Loc Dialog.Conflict.Note.Theirs}" VerticalAlignment="Bottom" Height="20"/>
     </Grid>
 
     <MergeView x:Name="merge" Grid.Row="2" ShowBase="True" SyntaxHighlight="True" ReadOnly="False"/>

@@ -39,7 +39,7 @@ func (a *App) openConflictEditor(path string) {
 
 func (a *App) showConflictEditor(file ops.ConflictFile) {
 	if file.Binary {
-		a.statusLabel.SetText(i18n.Tf("Status.ConflictOpenFailed", i18n.T("Dialog.Conflict.Binary")))
+		a.statusLabel.SetText(i18n.Tf("Status.ConflictBinary", file.Path, i18n.T("Menu.Context.TakeOurs"), i18n.T("Menu.Context.TakeTheirs")))
 		return
 	}
 	view, err := newConflictView()
@@ -102,6 +102,7 @@ func (a *App) saveConflict(view *conflict.View, content string, resolved, closeA
 		view.Saved(content, resolved)
 		if resolved {
 			a.statusLabel.SetText(i18n.Tf("Status.ConflictSaved", path))
+			a.selectFilesPathWhenShown(path)
 		}
 		if resolved || closeAfter {
 			a.eng.CloseModal(view.Dialog())

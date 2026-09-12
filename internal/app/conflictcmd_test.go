@@ -99,6 +99,53 @@ func TestResolvingInTheEditorStagesTheFile(t *testing.T) {
 	if !strings.HasSuffix(string(data), "\n") {
 		t.Fatalf("f.txt = %q, want the trailing newline kept", data)
 	}
+	waitForSelectedFile(t, a, "f.txt")
+}
+
+func waitForSelectedFile(t *testing.T, a *App, path string) {
+	t.Helper()
+	grid := a.filesGrid.Data().Grid
+	deadline := time.Now().Add(testTimeout)
+	for {
+		row, ok := readOnDispatcher(t, a, grid.SelectedItem).(changes.Row)
+		if ok && row.RelPath == path && row.Status != changes.RowConflict {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("selected = %+v, want %s picked once it is no longer in conflict", row, path)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestAResolvedFileIsPickedOnlyOnceTheListShowsItSettled(t *testing.T) {
+	a, _ := conflictedApp(t)
+	grid := a.filesGrid.Data().Grid
+
+	pending := readOnDispatcher(t, a, func() string {
+		a.selectFilesPathWhenShown("f.txt")
+		a.selectPendingFilesRow([]changes.Row{{RelPath: "other.txt", Status: changes.RowModified}, {RelPath: "f.txt", Status: changes.RowConflict}})
+		a.filesMu.Lock()
+		defer a.filesMu.Unlock()
+		return a.filesPendingPath
+	})
+	if pending != "f.txt" {
+		t.Fatalf("pending = %q, want the path kept while the file is still in conflict", pending)
+	}
+
+	selected := readOnDispatcher(t, a, func() int {
+		grid.SetSelectedIndex(-1)
+		a.selectPendingFilesRow([]changes.Row{{RelPath: "other.txt", Status: changes.RowModified}, {RelPath: "f.txt", Status: changes.RowModified}})
+		a.filesMu.Lock()
+		defer a.filesMu.Unlock()
+		if a.filesPendingPath != "" {
+			return -2
+		}
+		return 1
+	})
+	if selected != 1 {
+		t.Fatal("the pending path was not cleared once the file was picked")
+	}
 }
 
 func TestSavingAnUnfinishedResolutionKeepsTheConflict(t *testing.T) {
@@ -163,7 +210,8 @@ func TestABinaryConflictSendsTheUserToTheFilesPanel(t *testing.T) {
 		return true
 	})
 
-	if got := readOnDispatcher(t, a, a.statusLabel.Text); got != i18n.Tf("Status.ConflictOpenFailed", i18n.T("Dialog.Conflict.Binary")) {
+	want := i18n.Tf("Status.ConflictBinary", "bin", i18n.T("Menu.Context.TakeOurs"), i18n.T("Menu.Context.TakeTheirs"))
+	if got := readOnDispatcher(t, a, a.statusLabel.Text); got != want {
 		t.Fatalf("status = %q", got)
 	}
 }

@@ -70,7 +70,8 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 			named[name] = widget.NewButton("")
 		}
 		named["showBase"] = widget.NewCheckBox("")
-		for _, name := range []string{"unresolved", "position", "message"} {
+		named["notes"] = widget.NewGrid()
+		for _, name := range []string{"unresolved", "position", "message", "noteOurs", "noteBase", "noteTheirs"} {
 			named[name] = widget.NewLabel("", widget.CurrentTheme().LabelText)
 		}
 		return named
@@ -268,6 +269,26 @@ func TestTheBaseCanBeHidden(t *testing.T) {
 
 	if v.Merge().ShowBase() {
 		t.Fatal("the base panel is still shown")
+	}
+	if v.BaseNote() != "" || v.notes.ColDefs[baseNoteColumn].Value != 0 || v.notes.ColDefs[baseGutterColumn].Value != 0 {
+		t.Fatalf("base note = %q, columns = %+v, want it folded away", v.BaseNote(), v.notes.ColDefs)
+	}
+
+	v.showBase.OnChange(true)
+
+	if v.BaseNote() != i18n.T("Dialog.Conflict.Note.Base") || v.notes.ColDefs[baseNoteColumn].Mode != widget.GridSizeStar {
+		t.Fatalf("base note = %q, columns = %+v, want it back", v.BaseNote(), v.notes.ColDefs)
+	}
+}
+
+func TestEachPanelIsExplainedAboveIt(t *testing.T) {
+	v := shown(t)
+
+	if v.noteOurs.Text() != i18n.T("Dialog.Conflict.Note.Ours") || v.noteTheirs.Text() != i18n.T("Dialog.Conflict.Note.Theirs") {
+		t.Fatalf("notes = %q, %q", v.noteOurs.Text(), v.noteTheirs.Text())
+	}
+	if v.noteBase.FontSize != noteFontSize {
+		t.Fatalf("note font = %v, want the smaller %v", v.noteBase.FontSize, noteFontSize)
 	}
 }
 

@@ -22,11 +22,15 @@ const (
 	nextChangeIcon     = "change_next"
 	navigationIconSize = 18
 	windowMargin       = 48
+	noteGutter         = 10
+	noteFontSize       = 9.0
+	baseGutterColumn   = 2
+	baseNoteColumn     = 3
 )
 
 var ErrWidgetMissing = errors.New("conflict: named widget missing")
 
-var loadDialog = dialogs.Load
+var loadDialog = dialogs.LoadResizable
 
 type File struct {
 	Path         string
@@ -53,6 +57,10 @@ type View struct {
 	unresolved   *widget.Label
 	position     *widget.Label
 	message      *widget.Label
+	notes        *widget.Grid
+	noteOurs     *widget.Label
+	noteBase     *widget.Label
+	noteTheirs   *widget.Label
 
 	path         string
 	finalNewline bool
@@ -70,6 +78,9 @@ func NewView() (*View, error) {
 	v := &View{dlg: dlg}
 	if err := v.bind(named); err != nil {
 		return nil, err
+	}
+	for _, note := range []*widget.Label{v.noteOurs, v.noteBase, v.noteTheirs} {
+		note.FontSize = noteFontSize
 	}
 	dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
 	dlg.SetResizable(true)
@@ -115,10 +126,16 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.showBase, ok = named["showBase"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showBase", ErrWidgetMissing)
 	}
+	if v.notes, ok = named["notes"].(*widget.Grid); !ok {
+		return fmt.Errorf("%w: notes", ErrWidgetMissing)
+	}
 	for name, target := range map[string]**widget.Label{
 		"unresolved": &v.unresolved,
 		"position":   &v.position,
 		"message":    &v.message,
+		"noteOurs":   &v.noteOurs,
+		"noteBase":   &v.noteBase,
+		"noteTheirs": &v.noteTheirs,
 	} {
 		label, ok := named[name].(*widget.Label)
 		if !ok {
@@ -143,13 +160,29 @@ func (v *View) wire() {
 		}
 	}
 	v.showBase.SetChecked(true)
-	v.showBase.OnChange = v.merge.SetShowBase
+	v.showBase.OnChange = v.setShowBase
 	v.merge.OnResolvedChanged = func(int) { v.refresh() }
 	v.merge.OnResultEdited = v.refresh
 	v.merge.OnCurrentConflict = func(int) { v.refresh() }
 	v.merge.OnCaretMoved = func(int, int) { v.refresh() }
 	v.merge.OnSaveRequest = v.requestSave
 }
+
+func (v *View) setShowBase(show bool) {
+	v.merge.SetShowBase(show)
+	gutter, pane, note := widget.GridDefinition{Mode: widget.GridSizePixel}, widget.GridDefinition{Mode: widget.GridSizePixel}, ""
+	if show {
+		gutter = widget.GridDefinition{Mode: widget.GridSizePixel, Value: noteGutter}
+		pane = widget.GridDefinition{Mode: widget.GridSizeStar, Value: 1}
+		note = i18n.T("Dialog.Conflict.Note.Base")
+	}
+	v.notes.ColDefs[baseGutterColumn] = gutter
+	v.notes.ColDefs[baseNoteColumn] = pane
+	v.noteBase.SetText(note)
+	v.notes.SetBounds(v.notes.Bounds())
+}
+
+func (v *View) BaseNote() string { return v.noteBase.Text() }
 
 func (v *View) resolve(how widget.MergeResolution) {
 	v.merge.ResolveCurrent(how)
@@ -162,9 +195,9 @@ func (v *View) Show(file File) {
 	v.dlg.Title = i18n.Tf("Dialog.Conflict.TitleFor", file.Path)
 	v.merge.SetStyle(styleOf(file.Style))
 	v.merge.SetSides(
-		widget.MergeSideInfo{Title: file.OursLabel, Note: i18n.T("Dialog.Conflict.Note.Ours")},
-		widget.MergeSideInfo{Title: file.BaseLabel, Note: i18n.T("Dialog.Conflict.Note.Base")},
-		widget.MergeSideInfo{Title: file.TheirsLabel, Note: i18n.T("Dialog.Conflict.Note.Theirs")},
+		widget.MergeSideInfo{Title: file.OursLabel, Note: file.Path},
+		widget.MergeSideInfo{Title: file.BaseLabel, Note: file.Path},
+		widget.MergeSideInfo{Title: file.TheirsLabel, Note: file.Path},
 	)
 	v.merge.SetChunks(blocksOf(file.Blocks))
 	v.merge.GoToConflict(0)
@@ -262,5 +295,5 @@ func (v *View) Restyle(t *widget.Theme) {
 	v.prevConflict.Icon = icons.Toolbar(prevChangeIcon, navigationIconSize, p.Text)
 	v.nextConflict.Icon = icons.Toolbar(nextChangeIcon, navigationIconSize, p.Text)
 	p.Body(v.unresolved, v.position)
-	p.Hints(v.message)
+	p.Hints(v.message, v.noteOurs, v.noteBase, v.noteTheirs)
 }

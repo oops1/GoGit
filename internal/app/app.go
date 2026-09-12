@@ -159,6 +159,7 @@ type App struct {
 	mutedDirs          []string
 	commitSelected     bool
 	filesAllRows       []changes.Row
+	filesPendingPath   string
 	filesFilterQuery   string
 	filesDirFilter     string
 	filesStatusAllowed map[changes.StatusFilter]bool
