@@ -70,22 +70,19 @@ func TestAnEmptyCommitClearsTheDetailsPanel(t *testing.T) {
 	}
 }
 
+func waitForReads(a *App) { a.readWG.Wait() }
+
 func TestDetailsOfAnotherCommitDoNotOverwriteTheSelectionThatFollowed(t *testing.T) {
 	a, target := forkedApp(t, false)
 	head := branchTip(t, target, "main")
 	other := branchTip(t, target, "feature")
-	prev := readDetails
-	readDetails = func(ctx context.Context, r *gitrepo.Repository, rev string, opts ops.DetailsOptions) (ops.CommitDetails, error) {
-		details, err := prev(ctx, r, rev, opts)
-		return details, err
-	}
-	t.Cleanup(func() { readDetails = prev })
 
 	readOnDispatcher(t, a, func() bool {
 		a.selectedCommit = head
 		a.showCommitDetails(other)
 		return true
 	})
+	waitForReads(a)
 	waitForPostQueueDrain(t, a)
 
 	if got := readOnDispatcher(t, a, a.detailsView.Details); got.Commit == other {
