@@ -31,6 +31,7 @@ var commandIcons = map[CommandID]string{
 	CmdMerge:           "merge",
 	CmdAbortMerge:      "merge_abort",
 	CmdRebase:          "rebase",
+	CmdRebaseSteps:     "rebase",
 	CmdContinue:        "continue",
 	CmdSkip:            "skip",
 	CmdFetch:           "fetch",

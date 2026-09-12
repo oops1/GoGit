@@ -90,6 +90,7 @@ type App struct {
 	showAddRepo         func(initial addrepo.Request, cb func(addrepo.Result, bool))
 	showSettings        func(initial settings.Model, cb func(settings.Model, bool))
 	showCommit          func(initial commit.Model, cb func(commit.Model, bool))
+	rewordMessage       string
 	showError           func(title, message string)
 	showInfo            func(title, message string)
 

@@ -35,6 +35,7 @@ const (
 	CmdCompareFiles    CommandID = "edit.compare-files"
 	CmdMerge           CommandID = "branch.merge"
 	CmdRebase          CommandID = "branch.rebase"
+	CmdRebaseSteps     CommandID = "branch.rebase.steps"
 	CmdContinue        CommandID = "branch.continue"
 	CmdSkip            CommandID = "branch.skip"
 	CmdAbortMerge      CommandID = "branch.abort-merge"
@@ -130,6 +131,7 @@ type State struct {
 	HasRemotes       bool
 	Merging          bool
 	Rebasing         bool
+	Rewording        bool
 }
 
 func (s State) Enabled(id CommandID) bool {
@@ -144,7 +146,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.Merging)
-	case CmdMerge, CmdRebase:
+	case CmdMerge, CmdRebase, CmdRebaseSteps:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdAbortMerge, CmdContinue:
 		return s.ActiveRepository != "" && s.Merging

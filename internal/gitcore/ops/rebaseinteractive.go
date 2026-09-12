@@ -1,12 +1,14 @@
 package ops
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
 var rebaseActions = []string{actionPick, actionReword, actionEdit, actionSquash, actionFixup, actionDrop}
@@ -212,4 +214,24 @@ func (m *merger) stagedTree() (hash.ObjectID, error) {
 		return hash.Zero, ErrUnmergedPaths
 	}
 	return idx.WriteTree(m.store())
+}
+
+func PlannedRebase(ctx context.Context, r *repo.Repository, upstream string) ([]RebaseStep, error) {
+	m, err := openMerger(ctx, r, MergeOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer m.close()
+	base, _, err := m.resolve(upstream)
+	if err != nil {
+		return nil, err
+	}
+	head, err := resolveHeadCommit(m.rc.refs)
+	if err != nil {
+		return nil, err
+	}
+	if head.IsZero() {
+		return nil, ErrUnbornHead
+	}
+	return m.rebaseTodo(base, head)
 }
