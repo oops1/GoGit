@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/i18n"
@@ -11,10 +12,28 @@ import (
 
 const allBranchesKey = "Journal.Filter.AllBranches"
 
+var journalNow = time.Now
+
+var journalPeriods = []struct {
+	key  string
+	back func(now time.Time) time.Time
+}{
+	{key: "Journal.Filter.Period.All"},
+	{key: "Journal.Filter.Period.Day", back: func(now time.Time) time.Time { return now.AddDate(0, 0, -1) }},
+	{key: "Journal.Filter.Period.Week", back: func(now time.Time) time.Time { return now.AddDate(0, 0, -7) }},
+	{key: "Journal.Filter.Period.Month", back: func(now time.Time) time.Time { return now.AddDate(0, -1, 0) }},
+	{key: "Journal.Filter.Period.Year", back: func(now time.Time) time.Time { return now.AddDate(-1, 0, 0) }},
+}
+
 func (a *App) wireJournalFilter() {
 	a.journalFilterBranch.OnChange = func(int, string) { a.onJournalFilterChanged() }
 	a.journalFilterAuthor.OnChange = func(string) { a.onJournalFilterChanged() }
 	a.journalFilterMessage.OnChange = func(string) { a.onJournalFilterChanged() }
+	a.journalFilterPath.OnChange = func(string) { a.onJournalFilterChanged() }
+	a.journalFilterContent.OnChange = func(string) { a.onJournalFilterChanged() }
+	a.journalFilterRegexp.OnChange = func(bool) { a.onJournalFilterChanged() }
+	a.journalFilterPeriod.OnChange = func(int, string) { a.onJournalFilterChanged() }
+	a.showJournalPeriods()
 	a.showJournalFilterCount(0, false)
 }
 
@@ -22,11 +41,27 @@ func (a *App) onJournalFilterChanged() {
 	a.startJournal()
 }
 
+func (a *App) showJournalPeriods() {
+	chosen := max(a.journalFilterPeriod.Selected(), 0)
+	names := make([]string, 0, len(journalPeriods))
+	for _, period := range journalPeriods {
+		names = append(names, i18n.T(period.key))
+	}
+	a.journalFilterPeriod.SetItems(names)
+	a.journalFilterPeriod.SetSelected(min(chosen, len(names)-1))
+}
+
 func (a *App) journalFilter() journal.Filter {
 	branch := a.journalFilterBranch.SelectedText()
 	filter := journal.Filter{
-		Author:  a.journalFilterAuthor.GetText(),
-		Message: a.journalFilterMessage.GetText(),
+		Author:        a.journalFilterAuthor.GetText(),
+		Message:       a.journalFilterMessage.GetText(),
+		Path:          a.journalFilterPath.GetText(),
+		Content:       a.journalFilterContent.GetText(),
+		ContentRegexp: a.journalFilterRegexp.IsChecked(),
+	}
+	if period := a.journalFilterPeriod.Selected(); period > 0 && period < len(journalPeriods) {
+		filter.Since = journalPeriods[period].back(journalNow())
 	}
 	if branch != "" && branch != i18n.T(allBranchesKey) {
 		filter.Branch = branch

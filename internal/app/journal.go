@@ -31,7 +31,11 @@ func (a *App) startJournal() {
 	}
 	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
 	filter := a.journalFilter()
-	opts := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.hasRemotes()))
+	opts, err := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.hasRemotes()))
+	if err != nil {
+		a.journalFilterLabel.SetText(i18n.T("Journal.Filter.BadPattern"))
+		return
+	}
 	a.showJournalFilterCount(0, !filter.Empty())
 	ctx, cancel := context.WithCancel(context.Background())
 	pager := newJournalPager(ctx, source, opts)

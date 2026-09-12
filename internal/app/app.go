@@ -83,6 +83,10 @@ type App struct {
 	journalFilterAuthor  *widget.TextInput
 	journalFilterMessage *widget.TextInput
 	journalFilterLabel   *widget.Label
+	journalFilterPath    *widget.TextInput
+	journalFilterContent *widget.TextInput
+	journalFilterRegexp  *widget.CheckBox
+	journalFilterPeriod  *widget.Dropdown
 
 	detailsView       *commitdetails.View
 	statusLabel       *widget.Label
@@ -287,6 +291,27 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: journalFilterMessage", ErrWidgetMissing)
 	}
+	journalPathWidget, ok := named["journalFilterPath"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterPath", ErrWidgetMissing)
+	}
+	journalContentWidget, ok := named["journalFilterContent"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterContent", ErrWidgetMissing)
+	}
+	journalRegexpWidget, ok := named["journalFilterRegexp"].(*widget.CheckBox)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterRegexp", ErrWidgetMissing)
+	}
+	journalPeriodWidget, ok := named["journalFilterPeriod"].(*widget.Dropdown)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterPeriod", ErrWidgetMissing)
+	}
+	journalSearchRow, ok := named["journalSearchRow"].(*widget.DockPanel)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalSearchRow", ErrWidgetMissing)
+	}
+	journalSearchRow.LastChildFill = true
 	journalCountWidget, ok := named["journalFilterCount"].(*widget.Label)
 	if !ok {
 		return nil, fmt.Errorf("%w: journalFilterCount", ErrWidgetMissing)
@@ -335,6 +360,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		journalFilterAuthor:  journalAuthorWidget,
 		journalFilterMessage: journalMessageWidget,
 		journalFilterLabel:   journalCountWidget,
+		journalFilterPath:    journalPathWidget,
+		journalFilterContent: journalContentWidget,
+		journalFilterRegexp:  journalRegexpWidget,
+		journalFilterPeriod:  journalPeriodWidget,
 
 		detailsView:     commitdetails.NewView(detailsTabs),
 		newWatcher:      newRealWatcher,
@@ -923,6 +952,7 @@ func (a *App) SetLanguage(code string) {
 	a.cfg.Language = code
 	i18n.Apply(code)
 	a.detailsView.Retitle()
+	a.showJournalPeriods()
 	a.log.Debug("language changed", "language", code)
 }
 
