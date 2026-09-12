@@ -383,7 +383,7 @@ func mustNode(t *testing.T, a *App, id string) *repo.Node {
 
 func TestWithoutALocalFileEverythingIsInherited(t *testing.T) {
 	a, main, _ := newWorktreeTestApp(t)
-	cfg, err := gitconfig.Load(gitconfig.Options{WorktreeDir: main, NoSystem: true})
+	cfg, err := gitconfig.Load(gitconfig.Options{WorktreeDir: main, GlobalFile: filepath.Join(t.TempDir(), "gitconfig"), NoSystem: true})
 	if err != nil {
 		t.Fatal(err)
 	}
