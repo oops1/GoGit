@@ -22,10 +22,6 @@ const (
 	nextChangeIcon     = "change_next"
 	navigationIconSize = 18
 	windowMargin       = 48
-	noteGutter         = 10
-	noteFontSize       = 9.0
-	baseGutterColumn   = 2
-	baseNoteColumn     = 3
 )
 
 var ErrWidgetMissing = errors.New("conflict: named widget missing")
@@ -57,10 +53,7 @@ type View struct {
 	unresolved   *widget.Label
 	position     *widget.Label
 	message      *widget.Label
-	notes        *widget.Grid
-	noteOurs     *widget.Label
-	noteBase     *widget.Label
-	noteTheirs   *widget.Label
+	notes        *paneNotes
 
 	path         string
 	finalNewline bool
@@ -79,8 +72,8 @@ func NewView() (*View, error) {
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
-	for _, note := range []*widget.Label{v.noteOurs, v.noteBase, v.noteTheirs} {
-		note.FontSize = noteFontSize
+	if err := v.attachNotes(dlg); err != nil {
+		return nil, err
 	}
 	dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
 	dlg.SetResizable(true)
@@ -126,16 +119,10 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.showBase, ok = named["showBase"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showBase", ErrWidgetMissing)
 	}
-	if v.notes, ok = named["notes"].(*widget.Grid); !ok {
-		return fmt.Errorf("%w: notes", ErrWidgetMissing)
-	}
 	for name, target := range map[string]**widget.Label{
 		"unresolved": &v.unresolved,
 		"position":   &v.position,
 		"message":    &v.message,
-		"noteOurs":   &v.noteOurs,
-		"noteBase":   &v.noteBase,
-		"noteTheirs": &v.noteTheirs,
 	} {
 		label, ok := named[name].(*widget.Label)
 		if !ok {
@@ -160,7 +147,7 @@ func (v *View) wire() {
 		}
 	}
 	v.showBase.SetChecked(true)
-	v.showBase.OnChange = v.setShowBase
+	v.showBase.OnChange = v.merge.SetShowBase
 	v.merge.OnResolvedChanged = func(int) { v.refresh() }
 	v.merge.OnResultEdited = v.refresh
 	v.merge.OnCurrentConflict = func(int) { v.refresh() }
@@ -168,21 +155,17 @@ func (v *View) wire() {
 	v.merge.OnSaveRequest = v.requestSave
 }
 
-func (v *View) setShowBase(show bool) {
-	v.merge.SetShowBase(show)
-	gutter, pane, note := widget.GridDefinition{Mode: widget.GridSizePixel}, widget.GridDefinition{Mode: widget.GridSizePixel}, ""
-	if show {
-		gutter = widget.GridDefinition{Mode: widget.GridSizePixel, Value: noteGutter}
-		pane = widget.GridDefinition{Mode: widget.GridSizeStar, Value: 1}
-		note = i18n.T("Dialog.Conflict.Note.Base")
+func (v *View) attachNotes(dlg *widget.Dialog) error {
+	content := dlg.Content()
+	if content == nil {
+		return fmt.Errorf("%w: content", ErrWidgetMissing)
 	}
-	v.notes.ColDefs[baseGutterColumn] = gutter
-	v.notes.ColDefs[baseNoteColumn] = pane
-	v.noteBase.SetText(note)
-	v.notes.SetBounds(v.notes.Bounds())
+	v.notes = newPaneNotes(v.merge, i18n.T("Dialog.Conflict.Note.Ours"), i18n.T("Dialog.Conflict.Note.Base"), i18n.T("Dialog.Conflict.Note.Theirs"))
+	v.notes.SetGridProps(v.merge.GetGridRow(), v.merge.GetGridColumn(), v.merge.GetGridRowSpan(), v.merge.GetGridColSpan())
+	content.AddChild(v.notes)
+	content.SetBounds(content.Bounds())
+	return nil
 }
-
-func (v *View) BaseNote() string { return v.noteBase.Text() }
 
 func (v *View) resolve(how widget.MergeResolution) {
 	v.merge.ResolveCurrent(how)
@@ -295,5 +278,6 @@ func (v *View) Restyle(t *widget.Theme) {
 	v.prevConflict.Icon = icons.Toolbar(prevChangeIcon, navigationIconSize, p.Text)
 	v.nextConflict.Icon = icons.Toolbar(nextChangeIcon, navigationIconSize, p.Text)
 	p.Body(v.unresolved, v.position)
-	p.Hints(v.message, v.noteOurs, v.noteBase, v.noteTheirs)
+	p.Hints(v.message)
+	v.notes.Restyle(p.Secondary)
 }
