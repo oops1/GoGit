@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="1180" Height="720">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="40"/>
+        <RowDefinition Height="8"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="8"/>
+        <RowDefinition Height="36"/>
+    </Grid.RowDefinitions>
+
+    <Grid Grid.Row="0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="130"/>
+            <ColumnDefinition Width="8"/>
+            <ColumnDefinition Width="130"/>
+            <ColumnDefinition Width="8"/>
+            <ColumnDefinition Width="130"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="110"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="36"/>
+            <ColumnDefinition Width="4"/>
+            <ColumnDefinition Width="36"/>
+            <ColumnDefinition Width="20"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Button x:Name="takeOurs" Grid.Column="0" Height="32" VerticalAlignment="Center"
+                Content="{Loc Dialog.Conflict.TakeOurs}"/>
+        <Button x:Name="takeTheirs" Grid.Column="2" Height="32" VerticalAlignment="Center"
+                Content="{Loc Dialog.Conflict.TakeTheirs}"/>
+        <Button x:Name="takeBoth" Grid.Column="4" Height="32" VerticalAlignment="Center"
+                Content="{Loc Dialog.Conflict.TakeBoth}"/>
+        <Button x:Name="undo" Grid.Column="6" Height="32" VerticalAlignment="Center"
+                Content="{Loc Dialog.Conflict.Undo}"/>
+        <Button x:Name="prevConflict" Grid.Column="8" Height="32" VerticalAlignment="Center"
+                ToolTip="{Loc Dialog.Conflict.Prev.Tip}"/>
+        <Button x:Name="nextConflict" Grid.Column="10" Height="32" VerticalAlignment="Center"
+                ToolTip="{Loc Dialog.Conflict.Next.Tip}"/>
+        <CheckBox x:Name="showBase" Grid.Column="12" VerticalAlignment="Center"
+                  Content="{Loc Dialog.Conflict.ShowBase}"/>
+    </Grid>
+
+    <MergeView x:Name="merge" Grid.Row="2" ShowBase="True" SyntaxHighlight="True" ReadOnly="False"/>
+
+    <Grid Grid.Row="4">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="120"/>
+            <ColumnDefinition Width="8"/>
+            <ColumnDefinition Width="110"/>
+        </Grid.ColumnDefinitions>
+        <TextBlock x:Name="unresolved" Grid.Column="0" Text="" VerticalAlignment="Center" Height="20"/>
+        <TextBlock x:Name="position" Grid.Column="1" Text="" VerticalAlignment="Center" Height="20"/>
+        <TextBlock x:Name="message" Grid.Column="2" Text="" VerticalAlignment="Center" Height="20"/>
+        <Button x:Name="save" Grid.Column="3" Height="32" VerticalAlignment="Center"
+                Content="{Loc Dialog.Conflict.Save}"/>
+        <Button x:Name="close" Grid.Column="5" Height="32" VerticalAlignment="Center"
+                Content="{Loc Dialog.Conflict.Close}"/>
+    </Grid>
+</Grid>
