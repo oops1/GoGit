@@ -50,3 +50,5 @@ that explains a commit.
 - The Compare files window: two sides, editing and saving, navigation between
   changes; the files selected in the working copy are filled in for you.
 - Panes torn off into their own windows come back when the layout is reset.
+- The operation log counts objects: "Writing objects: 12 of 35" is rewritten in
+  place instead of repeating the same line over and over.
