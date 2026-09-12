@@ -96,6 +96,15 @@ func (o *oracle) write(dir, rel, text string) {
 	}
 }
 
+func (o *oracle) read(dir, rel string) string {
+	o.t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+	if err != nil {
+		o.t.Fatalf("ReadFile returned error %v", err)
+	}
+	return string(data)
+}
+
 func (o *oracle) remove(dir, rel string) {
 	o.t.Helper()
 	if err := os.Remove(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {

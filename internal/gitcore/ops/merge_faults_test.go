@@ -349,6 +349,32 @@ func mergeFaultScenarios() []faultScenario {
 		}, func(ctx context.Context, tr *testRepo) error {
 			return AbortOperation(ctx, tr.repo)
 		}},
+		{"a remembered conflict", func(tr *testRepo) {
+			tr.conflictingFork()
+			tr.enableRerere(false)
+		}, merge(MergeOptions{})},
+		{"a replayed resolution", func(tr *testRepo) {
+			tr.conflictingFork()
+			tr.enableRerere(true)
+			tr.recordAResolution()
+			if _, err := Reset(tr.t.Context(), tr.repo, "HEAD~1", resetOptions(ResetHard)); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, merge(MergeOptions{})},
+		{"a resolution worth recording", func(tr *testRepo) {
+			tr.conflictingFork()
+			tr.enableRerere(false)
+			if _, err := tr.merge("feature", MergeOptions{When: mergeTime}); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.resolveByHand()
+			if err := Stage(tr.t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Commit(ctx, tr.repo, CommitOptions{Message: "merged", When: mergeTime})
+			return err
+		}},
 		{"soft reset", func(tr *testRepo) { tr.resetHistory() }, func(ctx context.Context, tr *testRepo) error {
 			_, err := Reset(ctx, tr.repo, "HEAD~1", resetOptions(ResetSoft))
 			return err

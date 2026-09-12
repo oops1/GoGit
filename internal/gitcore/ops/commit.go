@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -116,7 +117,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err := lock.commit(); err != nil {
 		return hash.Zero, err
 	}
-	return id, clearMergeState(r)
+	return id, errors.Join(recordRerereResolutions(ctx, r, rc.db), clearMergeState(r))
 }
 
 func commitParents(db *odb.DB, headCommit hash.ObjectID, amend bool) ([]hash.ObjectID, error) {

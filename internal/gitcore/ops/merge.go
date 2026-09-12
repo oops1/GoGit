@@ -264,9 +264,9 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 	}
 	switch {
 	case m.opts.Mode == MergeSquash:
-		return result, m.stopAfterSquash(head.old, theirs, tree, result.Conflicts)
+		return result, errors.Join(m.stopAfterSquash(head.old, theirs, tree, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	case !result.Clean() || m.opts.NoCommit:
-		return result, m.stopBeforeCommit(theirs, tree, message, result.Conflicts)
+		return result, errors.Join(m.stopBeforeCommit(theirs, tree, message, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	}
 	commit, err := m.writeMergeCommit(tree, head.old, theirs, message)
 	if err != nil {
@@ -434,7 +434,7 @@ func AbortOperation(ctx context.Context, r *repo.Repository) error {
 	if err != nil {
 		return err
 	}
-	if err := errors.Join(m.resetTo(tree), clearMergeState(r)); err != nil {
+	if err := errors.Join(m.resetTo(tree), clearMergeState(r), forgetMergeRR(r)); err != nil {
 		return err
 	}
 	if err := writeStateFile(r, origHeadFile, head.old.String()+"\n"); err != nil {

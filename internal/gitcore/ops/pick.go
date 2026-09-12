@@ -134,10 +134,10 @@ func (m *merger) applyPick(head headTarget, id hash.ObjectID, plan pickPlan) (Pi
 	result.Conflicts = picked.conflicts
 	switch {
 	case !result.Clean():
-		return result, writeStateFiles(m.r, []stateFile{
+		return result, errors.Join(writeStateFiles(m.r, []stateFile{
 			{plan.stateFile, id.String() + "\n"},
 			{mergeMsgFile, withConflictList(plan.message, result.Conflicts)},
-		})
+		}), m.rerere().conflicts(result.Conflicts))
 	case picked.empty:
 		return result, ErrNothingToCommit
 	}

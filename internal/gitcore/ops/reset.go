@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"time"
@@ -77,7 +78,7 @@ func (m *merger) reset(target string, opts ResetOptions) (ResetResult, error) {
 	if err := m.advance(head, commit, resetNotePrefix+target); err != nil {
 		return result, err
 	}
-	return result, clearMergeState(m.r)
+	return result, errors.Join(clearMergeState(m.r), forgetMergeRR(m.r))
 }
 
 func (m *merger) refuseSoftResetWhileMerging() error {

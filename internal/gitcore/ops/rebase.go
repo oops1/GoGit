@@ -227,7 +227,7 @@ func (m *merger) runRebase(state RebaseState, result RebaseResult) (RebaseResult
 		if len(picked.conflicts) > 0 {
 			state.Stopped, state.Message, state.Author = step.Commit, plan.message, plan.author
 			result.Stopped, result.Conflicts = step.Commit, picked.conflicts
-			return result, errors.Join(writeRebaseState(m.r, state), writeStateFile(m.r, mergeMsgFile, withConflictList(plan.message, picked.conflicts)))
+			return result, errors.Join(writeRebaseState(m.r, state), writeStateFile(m.r, mergeMsgFile, withConflictList(plan.message, picked.conflicts)), m.rerere().conflicts(picked.conflicts))
 		}
 		if !picked.empty {
 			commit, err := m.commitPick(head, plan, picked.tree)
