@@ -116,7 +116,7 @@ func (v *View) Track(slot, line string) {
 }
 
 func (v *View) showLines() {
-	v.logList.SetItems(v.Lines())
+	v.logList.SetItems(v.lines)
 }
 
 func (v *View) ForgetTracked() {
