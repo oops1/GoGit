@@ -390,6 +390,13 @@ func mergeFaultScenarios() []faultScenario {
 			_, err := StartBranch(ctx, tr.repo, "topic", "", StartBranchOptions{})
 			return err
 		}},
+		{"the details of a commit", func(tr *testRepo) {
+			tr.commitFiles("base", map[string]string{"f": "f\n", "dir/keep": "keep\n"})
+			tr.commitFiles("edit", map[string]string{"f": "edited\n"})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Details(ctx, tr.repo, "HEAD", DetailsOptions{})
+			return err
+		}},
 		{"two branches compared", func(tr *testRepo) { tr.comparableFork() }, func(ctx context.Context, tr *testRepo) error {
 			_, err := Compare(ctx, tr.repo, "main", "feature", CompareOptions{})
 			return err

@@ -106,4 +106,5 @@ func (a *App) onJournalRowSelected(row journal.Row) {
 	a.setFilesSelected(false)
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))
 	a.startDiff(row.ID)
+	a.showCommitDetails(row.ID)
 }

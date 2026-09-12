@@ -30,6 +30,7 @@ import (
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/commit"
+	"github.com/oops1/gogit/internal/ui/commitdetails"
 	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -82,11 +83,13 @@ type App struct {
 	journalFilterAuthor  *widget.TextInput
 	journalFilterMessage *widget.TextInput
 	journalFilterLabel   *widget.Label
-	statusLabel          *widget.Label
-	statusBranchLabel    *widget.Label
-	stateMu              sync.RWMutex
-	selectedNode         string
-	selectedCommit       hash.ObjectID
+
+	detailsView       *commitdetails.View
+	statusLabel       *widget.Label
+	statusBranchLabel *widget.Label
+	stateMu           sync.RWMutex
+	selectedNode      string
+	selectedCommit    hash.ObjectID
 
 	filesWorkingCopyBtn *widget.Button
 	banner              mergeBanner
@@ -290,6 +293,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		return nil, fmt.Errorf("%w: journalFilterRow", ErrWidgetMissing)
 	}
 	journalFilterRow.LastChildFill = true
+	detailsTabs, ok := named["detailsTabs"].(*widget.TabControl)
+	if !ok {
+		return nil, fmt.Errorf("%w: detailsTabs", ErrWidgetMissing)
+	}
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
@@ -324,9 +331,11 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		journalFilterAuthor:  journalAuthorWidget,
 		journalFilterMessage: journalMessageWidget,
 		journalFilterLabel:   journalCountWidget,
-		newWatcher:           newRealWatcher,
-		journalPageSize:      defaultJournalPageSize,
-		banner:               banner,
+
+		detailsView:     commitdetails.NewView(detailsTabs),
+		newWatcher:      newRealWatcher,
+		journalPageSize: defaultJournalPageSize,
+		banner:          banner,
 	}
 	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
@@ -860,6 +869,7 @@ func (a *App) applyTheme() {
 	a.applyMenuIcons()
 	a.applyMergeBannerTheme(theme)
 	a.journalView.Restyle(theme)
+	a.detailsView.Restyle(theme)
 }
 
 func (a *App) applyWindowFrame() {
@@ -905,6 +915,7 @@ func effectiveTheme(name string, detect func() systheme.Scheme) string {
 func (a *App) SetLanguage(code string) {
 	a.cfg.Language = code
 	i18n.Apply(code)
+	a.detailsView.Retitle()
 	a.log.Debug("language changed", "language", code)
 }
 

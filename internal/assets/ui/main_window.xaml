@@ -165,6 +165,9 @@
                         </DataGrid>
                     </DockPanel>
                 </DockPane>
+                <DockPane Id="details" Title="{Loc Pane.Details}" Side="Right" Size="320">
+                    <TabControl x:Name="detailsTabs"/>
+                </DockPane>
                 <DockContent>
                     <GitDiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
                 </DockContent>

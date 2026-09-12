@@ -52,7 +52,7 @@ func TestNewLoadsMainWindow(t *testing.T) {
 			t.Fatalf("side %v size = %d, want %d", side, got, size)
 		}
 	}
-	if len(a.Dock().Panes()) != 4 {
+	if len(a.Dock().Panes()) != 5 {
 		t.Fatalf("panes = %d", len(a.Dock().Panes()))
 	}
 }
@@ -384,6 +384,7 @@ func completeWindowXAML() string {
 		filesSubdirsButtonXAML +
 		`<DataGrid x:Name="journalGrid"/><GitDiffView x:Name="diffView"/>` +
 		journalFilterXAML +
+		`<TabControl x:Name="detailsTabs"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
 }
