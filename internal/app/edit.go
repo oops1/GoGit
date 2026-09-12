@@ -114,6 +114,7 @@ func (a *App) stopWrite() {
 		cancel()
 	}
 	a.writeWG.Wait()
+	a.readWG.Wait()
 }
 
 func (a *App) stageSelected() {

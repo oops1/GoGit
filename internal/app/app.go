@@ -126,6 +126,8 @@ type App struct {
 
 	filesItems *datagrid.ObservableCollection
 
+	readWG sync.WaitGroup
+
 	diffRunMu  sync.Mutex
 	diffMu     sync.Mutex
 	diffCancel context.CancelFunc

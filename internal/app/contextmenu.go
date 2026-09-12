@@ -76,7 +76,8 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 		menuItem("Menu.Context.CopyPath", func() { a.copyToClipboard(path) }),
 	)
 	items = append(items, menuSeparator())
-	return append(items, a.editItems()...)
+	items = append(items, a.editItems()...)
+	return append(items, a.historyItems(file.RelPath)...)
 }
 
 func (a *App) editItems() []widget.MenuItem {

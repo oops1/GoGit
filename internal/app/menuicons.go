@@ -68,6 +68,8 @@ var contextIcons = map[string]string{
 	"Menu.Context.Reset":            "reset",
 	"Menu.Context.CreateTag":        "tag_add",
 	"Menu.Context.DeleteTag":        "tag_remove",
+	"Menu.Context.FileHistory":      "history",
+	"Menu.Context.Blame":            "blame",
 }
 
 func commandIcon(id CommandID) image.Image {

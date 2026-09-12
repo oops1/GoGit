@@ -17,11 +17,12 @@ type HistoryOptions struct {
 }
 
 type HistoryEntry struct {
-	Commit hash.ObjectID
-	Author object.Signature
-	When   object.Signature
-	Path   string
-	Old    string
+	Commit  hash.ObjectID
+	Author  object.Signature
+	When    object.Signature
+	Subject string
+	Path    string
+	Old     string
 }
 
 func (e HistoryEntry) Renamed() bool { return e.Old != "" && e.Old != e.Path }
@@ -81,7 +82,7 @@ func (h *historian) walkPath(start hash.ObjectID, path string) (hash.ObjectID, s
 		if h.full() {
 			return hash.Zero, "", nil
 		}
-		entry := HistoryEntry{Commit: commit.ID, Author: commit.Author, When: commit.Committer, Path: path, Old: path}
+		entry := HistoryEntry{Commit: commit.ID, Author: commit.Author, When: commit.Committer, Subject: firstLine(commit.Message), Path: path, Old: path}
 		older, renamed, err := h.renamedIn(commit, path)
 		if err != nil {
 			return hash.Zero, "", err
