@@ -194,6 +194,84 @@ func TestOperationProgressLogsEveryCorePhaseTranslated(t *testing.T) {
 	}
 }
 
+func TestOperationProgressCountsTheObjectsOnOneLinePerPhase(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+
+	a.RunOperation("Push", func(_ context.Context, reporter OperationReporter) error {
+		prog := newOperationProgress(reporter)
+		prog.Phase(progress.PhaseCounting)
+		for i := int64(1); i <= 3; i++ {
+			prog.Count(progress.PhaseCounting, i, 0)
+		}
+		for i := int64(1); i <= 3; i++ {
+			prog.Count(progress.PhaseCompressing, i, 3)
+			prog.Count(progress.PhaseWriting, i, 3)
+		}
+		return nil
+	})
+
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+	lines := readOnDispatcher(t, a, view.Lines)
+
+	want := []string{
+		i18n.Tf("Operation.Log.CountingObjects", int64(3)),
+		i18n.Tf("Operation.Log.CompressingObjects", int64(3), int64(3)),
+		i18n.Tf("Operation.Log.WritingObjects", int64(3), int64(3)),
+	}
+	if !slices.Equal(lines, want) {
+		t.Fatalf("lines = %v, want %v", lines, want)
+	}
+}
+
+func TestOperationProgressKeepsOneLineForAPhaseThatCannotCount(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+
+	a.RunOperation("Fetch", func(_ context.Context, reporter OperationReporter) error {
+		prog := newOperationProgress(reporter)
+		prog.Phase(progress.PhaseReceiving)
+		prog.Count(progress.PhaseReceiving, 4096, 0)
+		prog.Count(progress.PhaseReceiving, 8192, 0)
+		prog.Message("remote: well done")
+		return nil
+	})
+
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+	lines := readOnDispatcher(t, a, view.Lines)
+
+	want := []string{i18n.T("Operation.Log.Receiving"), "remote: well done"}
+	if !slices.Equal(lines, want) {
+		t.Fatalf("lines = %v, want %v", lines, want)
+	}
+}
+
+func TestASecondOperationStartsItsOwnProgressLines(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+
+	a.RunOperation("Sync", func(_ context.Context, reporter OperationReporter) error {
+		prog := newOperationProgress(reporter)
+		for range 2 {
+			prog.Phase("connecting")
+			prog.Count(progress.PhaseWriting, 1, 1)
+		}
+		return nil
+	})
+
+	view := lastOperationView(t, views)
+	waitForFinishedOperation(t, a, view)
+	lines := readOnDispatcher(t, a, view.Lines)
+
+	connecting := i18n.T("Operation.Log.Connecting")
+	writing := i18n.Tf("Operation.Log.WritingObjects", int64(1), int64(1))
+	if !slices.Equal(lines, []string{connecting, writing, connecting, writing}) {
+		t.Fatalf("lines = %v", lines)
+	}
+}
+
 func TestStopNetOperationsCancelsARunningOperationAndWaits(t *testing.T) {
 	a := newTestApp(t)
 	views := captureOperationViews(t)

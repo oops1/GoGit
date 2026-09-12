@@ -177,6 +177,73 @@ func TestAppendTrimsToMaxLogLines(t *testing.T) {
 	}
 }
 
+func TestATrackedLineIsWrittenOnceAndThenRewrittenInPlace(t *testing.T) {
+	v := newTestView(t, "Title")
+
+	v.Track("writing", "objects 1 of 3")
+	v.Track("compressing", "packed 1 of 3")
+	v.Track("writing", "objects 2 of 3")
+	v.Track("writing", "objects 3 of 3")
+
+	lines := v.Lines()
+	if len(lines) != 2 || lines[0] != "objects 3 of 3" || lines[1] != "packed 1 of 3" {
+		t.Fatalf("lines = %v", lines)
+	}
+	if got := v.logList.Items(); len(got) != 2 || got[0] != "objects 3 of 3" {
+		t.Fatalf("log items = %v", got)
+	}
+}
+
+func TestForgettingTrackedLinesStartsANewOne(t *testing.T) {
+	v := newTestView(t, "Title")
+	v.Track("writing", "objects 1 of 3")
+
+	v.ForgetTracked()
+	v.Track("writing", "objects 1 of 5")
+
+	lines := v.Lines()
+	if len(lines) != 2 || lines[0] != "objects 1 of 3" || lines[1] != "objects 1 of 5" {
+		t.Fatalf("lines = %v", lines)
+	}
+}
+
+func TestATrackedLineFollowsItselfWhenTheLogIsTrimmed(t *testing.T) {
+	v := newTestView(t, "Title")
+	v.Append("the oldest line")
+	v.Track("writing", "objects 1 of 3")
+	for i := 0; i < maxLogLines-2; i++ {
+		v.Append(fmt.Sprintf("line-%d", i))
+	}
+
+	v.Append("one line too many")
+	v.Track("writing", "objects 2 of 3")
+
+	lines := v.Lines()
+	if len(lines) != maxLogLines || lines[0] != "objects 2 of 3" {
+		t.Fatalf("lines[0] = %q of %d lines", lines[0], len(lines))
+	}
+}
+
+func TestATrackedLineTrimmedAwayIsWrittenAgain(t *testing.T) {
+	v := newTestView(t, "Title")
+	v.Track("writing", "objects 1 of 3")
+	for i := 0; i < maxLogLines; i++ {
+		v.Append(fmt.Sprintf("line-%d", i))
+	}
+
+	v.Track("writing", "objects 2 of 3")
+
+	lines := v.Lines()
+	if lines[len(lines)-1] != "objects 2 of 3" {
+		t.Fatalf("last line = %q", lines[len(lines)-1])
+	}
+	for _, line := range lines {
+		if line == "objects 1 of 3" {
+			t.Fatal("the trimmed line came back")
+		}
+	}
+}
+
 func TestLinesReturnsIndependentCopy(t *testing.T) {
 	v := newTestView(t, "Title")
 	v.Append("one")
