@@ -349,6 +349,34 @@ func mergeFaultScenarios() []faultScenario {
 		}, func(ctx context.Context, tr *testRepo) error {
 			return AbortOperation(ctx, tr.repo)
 		}},
+		{"a rebase that folds commits", func(tr *testRepo) { tr.threeOnTopic() }, func(ctx context.Context, tr *testRepo) error {
+			commits := tr.linearHistory(tr.branchTarget("topic"), 3)
+			_, err := Rebase(ctx, tr.repo, "main", RebaseOptions{
+				When: mergeTime,
+				Todo: steps(actionPick, commits[2].ID(), actionSquash, commits[1].ID(), actionDrop, commits[0].ID()),
+			})
+			return err
+		}},
+		{"a rebase that stops for a reword", func(tr *testRepo) { tr.threeOnTopic() }, func(ctx context.Context, tr *testRepo) error {
+			commits := tr.linearHistory(tr.branchTarget("topic"), 3)
+			_, err := Rebase(ctx, tr.repo, "main", RebaseOptions{
+				When: mergeTime,
+				Todo: steps(actionReword, commits[2].ID(), actionPick, commits[1].ID()),
+			})
+			return err
+		}},
+		{"a reworded commit", func(tr *testRepo) {
+			commits := tr.threeOnTopic()
+			if _, err := Rebase(tr.t.Context(), tr.repo, "main", RebaseOptions{
+				When: mergeTime,
+				Todo: steps(actionReword, commits[0], actionPick, commits[1]),
+			}); err != nil {
+				tr.t.Fatal(err)
+			}
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := ContinueRebase(ctx, tr.repo, RebaseOptions{When: mergeTime, Message: "a better subject"})
+			return err
+		}},
 		{"a remembered conflict", func(tr *testRepo) {
 			tr.conflictingFork()
 			tr.enableRerere(false)

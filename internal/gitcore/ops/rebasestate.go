@@ -32,7 +32,13 @@ const (
 	rebaseInteractive   = "interactive"
 	rebaseDropRedundant = "drop_redundant_commits"
 	rebaseNoReschedule  = "no-reschedule-failed-exec"
+	rebaseAmend         = "amend"
 	actionPick          = "pick"
+	actionReword        = "reword"
+	actionEdit          = "edit"
+	actionSquash        = "squash"
+	actionFixup         = "fixup"
+	actionDrop          = "drop"
 	authorNameKey       = "GIT_AUTHOR_NAME"
 	authorEmailKey      = "GIT_AUTHOR_EMAIL"
 	authorDateKey       = "GIT_AUTHOR_DATE"
@@ -57,10 +63,13 @@ type RebaseState struct {
 	Done      []RebaseStep
 	Todo      []RebaseStep
 	Stopped   hash.ObjectID
+	Amend     hash.ObjectID
 	Message   string
 	Author    *object.Signature
 	Rewritten string
 }
+
+func (s RebaseState) Amending() bool { return !s.Amend.IsZero() }
 
 func (s RebaseState) InProgress() bool { return s.HeadName != "" }
 
@@ -72,7 +81,7 @@ func ReadRebaseState(r *repo.Repository) (RebaseState, error) {
 		return RebaseState{}, err
 	}
 	state := RebaseState{HeadName: strings.TrimSpace(headName)}
-	for name, into := range map[string]*hash.ObjectID{rebaseOnto: &state.Onto, rebaseOrigHead: &state.OrigHead, rebaseStopped: &state.Stopped} {
+	for name, into := range map[string]*hash.ObjectID{rebaseOnto: &state.Onto, rebaseOrigHead: &state.OrigHead, rebaseStopped: &state.Stopped, rebaseAmend: &state.Amend} {
 		if *into, err = readHeadFile(r, rebasePath(name)); err != nil {
 			return RebaseState{}, err
 		}
@@ -234,7 +243,7 @@ func writeRebaseState(r *repo.Repository, s RebaseState) error {
 		{rebasePath(rebaseNoReschedule), ""},
 	}
 	if s.Stopped.IsZero() {
-		return errors.Join(writeStateFiles(r, files), removeStateFiles(r, rebasePath(rebaseStopped), rebasePath(rebaseMessage), rebasePath(rebaseAuthorScript), rebaseHeadFile))
+		return errors.Join(writeStateFiles(r, files), removeStateFiles(r, rebasePath(rebaseStopped), rebasePath(rebaseMessage), rebasePath(rebaseAuthorScript), rebasePath(rebaseAmend), rebaseHeadFile))
 	}
 	files = append(files,
 		stateFile{rebasePath(rebaseStopped), s.Stopped.String() + "\n"},
@@ -244,7 +253,10 @@ func writeRebaseState(r *repo.Repository, s RebaseState) error {
 	if s.Author != nil {
 		files = append(files, stateFile{rebasePath(rebaseAuthorScript), formatAuthorScript(*s.Author)})
 	}
-	return writeStateFiles(r, files)
+	if !s.Amending() {
+		return errors.Join(writeStateFiles(r, files), removeStateFiles(r, rebasePath(rebaseAmend)))
+	}
+	return writeStateFiles(r, append(files, stateFile{rebasePath(rebaseAmend), s.Amend.String() + "\n"}))
 }
 
 func removeStateFiles(r *repo.Repository, names ...string) error {

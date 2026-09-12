@@ -176,7 +176,7 @@ func pullRebase(ctx context.Context, r *repo.Repository, upstream hash.ObjectID,
 	}
 	defer m.close()
 	m.action = pullNote
-	return m.rebaseOnto(upstream, upstream, upstream.String())
+	return m.rebaseOnto(upstream, upstream, upstream.String(), nil)
 }
 
 func pullIntoBare(r *repo.Repository, branchRef refs.Name, oldCommit, newCommit hash.ObjectID, fetchResult remote.FetchResult) (PullResult, error) {

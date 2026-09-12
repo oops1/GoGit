@@ -18,6 +18,8 @@ var (
 	ErrRebaseStepUnsupported = errors.New("ops: the rebase step is not supported")
 )
 
+func joinErrors(errs ...error) error { return errors.Join(errs...) }
+
 const (
 	rebaseAction = "rebase"
 	returningTo  = "returning to "
@@ -33,6 +35,8 @@ func (m *merger) rebaseNote(kind string) string {
 
 type RebaseOptions struct {
 	Onto     string
+	Todo     []RebaseStep
+	Message  string
 	When     time.Time
 	Progress progress.Func
 }
@@ -43,8 +47,12 @@ type RebaseResult struct {
 	UpToDate  bool
 	Applied   int
 	Stopped   hash.ObjectID
+	Amend     hash.ObjectID
+	Message   string
 	Conflicts []string
 }
+
+func (r RebaseResult) Amending() bool { return !r.Amend.IsZero() }
 
 func (r RebaseResult) Finished() bool { return r.Stopped.IsZero() }
 
@@ -68,10 +76,10 @@ func Rebase(ctx context.Context, r *repo.Repository, upstream string, opts Rebas
 		}
 		ontoName = opts.Onto
 	}
-	return m.rebaseOnto(base, onto, ontoName)
+	return m.rebaseOnto(base, onto, ontoName, opts.Todo)
 }
 
-func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName string) (RebaseResult, error) {
+func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName string, todo []RebaseStep) (RebaseResult, error) {
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return RebaseResult{}, err
@@ -82,7 +90,7 @@ func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName string) (RebaseRe
 	case head.old.IsZero():
 		return RebaseResult{}, ErrUnbornHead
 	}
-	return m.startRebase(head, base, onto, ontoName)
+	return m.startRebase(head, base, onto, ontoName, todo)
 }
 
 func openRebaser(ctx context.Context, r *repo.Repository, opts RebaseOptions) (*merger, error) {
@@ -97,7 +105,7 @@ func openRebaser(ctx context.Context, r *repo.Repository, opts RebaseOptions) (*
 	return m, nil
 }
 
-func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName string) (RebaseResult, error) {
+func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName string, chosen []RebaseStep) (RebaseResult, error) {
 	result := RebaseResult{Old: head.old, New: head.old}
 	upToDate, err := m.rebaseIsUpToDate(head.old, base, onto)
 	if err != nil || upToDate {
@@ -110,6 +118,12 @@ func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName
 	todo, err := m.rebaseTodo(base, head.old)
 	if err != nil {
 		return result, err
+	}
+	if len(chosen) > 0 {
+		if err := validateTodo(chosen); err != nil {
+			return result, err
+		}
+		todo = chosen
 	}
 	if err := writeStateFile(m.r, origHeadFile, head.old.String()+"\n"); err != nil {
 		return result, err
@@ -142,10 +156,7 @@ func (m *merger) rebaseIsUpToDate(head, base, onto hash.ObjectID) (bool, error) 
 		return false, err
 	}
 	bases, err := revision.MergeBase(ctx, base, head)
-	if err != nil {
-		return false, err
-	}
-	return len(bases) == 1 && bases[0] == onto, nil
+	return err == nil && len(bases) == 1 && bases[0] == onto, err
 }
 
 func (m *merger) requireCleanWorkTree() error {
@@ -204,46 +215,6 @@ func (m *merger) detachAt(commit hash.ObjectID, note string) error {
 	return txCommit(tx)
 }
 
-func (m *merger) runRebase(state RebaseState, result RebaseResult) (RebaseResult, error) {
-	for len(state.Todo) > 0 {
-		step := state.Todo[0]
-		if step.Action != actionPick {
-			return result, ErrRebaseStepUnsupported
-		}
-		head, err := resolveHeadTarget(m.rc.refs)
-		if err != nil {
-			return result, err
-		}
-		plan, err := m.planPick(step.Commit, false)
-		if err != nil {
-			return result, err
-		}
-		plan.reflog = m.rebaseNote("pick") + firstLine(plan.message)
-		picked, err := m.mergePick(head, plan)
-		if err != nil {
-			return result, err
-		}
-		state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
-		if len(picked.conflicts) > 0 {
-			state.Stopped, state.Message, state.Author = step.Commit, plan.message, plan.author
-			result.Stopped, result.Conflicts = step.Commit, picked.conflicts
-			return result, errors.Join(writeRebaseState(m.r, state), writeStateFile(m.r, mergeMsgFile, withConflictList(plan.message, picked.conflicts)), m.rerere().conflicts(picked.conflicts))
-		}
-		if !picked.empty {
-			commit, err := m.commitPick(head, plan, picked.tree)
-			if err != nil {
-				return result, err
-			}
-			state.Rewritten += step.Commit.String() + " " + commit.String() + "\n"
-			result.Applied++
-		}
-		if err := writeRebaseState(m.r, state); err != nil {
-			return result, err
-		}
-	}
-	return m.finishRebase(state, result)
-}
-
 func (m *merger) finishRebase(state RebaseState, result RebaseResult) (RebaseResult, error) {
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
@@ -283,6 +254,12 @@ func ContinueRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions)
 	}
 	defer m.close()
 	result := RebaseResult{Old: state.OrigHead}
+	if state.Amending() {
+		if err := m.continueAmending(&state, &result, opts.Message); err != nil {
+			return result, err
+		}
+		return m.runRebase(state, result)
+	}
 	if !state.Stopped.IsZero() {
 		commit, err := m.commitResolution(state)
 		if err != nil {
@@ -301,14 +278,7 @@ func ContinueRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions)
 }
 
 func (m *merger) commitResolution(state RebaseState) (hash.ObjectID, error) {
-	idx, err := readIndex(m.r)
-	if err != nil {
-		return hash.Zero, err
-	}
-	if idx.HasConflicts() {
-		return hash.Zero, ErrUnmergedPaths
-	}
-	tree, err := idx.WriteTree(m.store())
+	tree, err := m.stagedTree()
 	if err != nil {
 		return hash.Zero, err
 	}
@@ -337,7 +307,7 @@ func SkipRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions) (Re
 	if err := m.resetToHead(); err != nil {
 		return result, err
 	}
-	state.Stopped, state.Message, state.Author = hash.Zero, "", nil
+	state.Stopped, state.Amend, state.Message, state.Author = hash.Zero, hash.Zero, "", nil
 	if err := errors.Join(writeRebaseState(m.r, state), removeStateFiles(m.r, mergeMsgFile)); err != nil {
 		return result, err
 	}
