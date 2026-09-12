@@ -50,6 +50,11 @@ func (o *oracle) env() []string {
 		"USERPROFILE=" + o.home,
 		"XDG_CONFIG_HOME=" + filepath.Join(o.home, ".config"),
 		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto",
+		"GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto",
+		"GIT_CONFIG_VALUE_1=false",
 		"GIT_TERMINAL_PROMPT=0",
 	}
 }

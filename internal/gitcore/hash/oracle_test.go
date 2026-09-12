@@ -15,7 +15,10 @@ func gitHashObject(t *testing.T, objectType string, data []byte) string {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "git", "hash-object", "-t", objectType, "--stdin", "--literally")
 	cmd.Stdin = bytes.NewReader(data)
-	cmd.Env = append(cmd.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+	cmd.Env = append(cmd.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto", "GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto", "GIT_CONFIG_VALUE_1=false")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("git hash-object: %v", err)

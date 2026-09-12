@@ -285,7 +285,7 @@ func TestOracleWorktreeConfigMatchesGitConfigWorktree(t *testing.T) {
 	main := filepath.Join(o.dir, "main")
 	writeFile(t, filepath.Join(main, "a.txt"), "hello\n")
 	o.run(main, "add", "a.txt")
-	o.run(main, "commit", "-q", "-m", "first")
+	o.run(main, "-c", "gc.auto=0", "-c", "maintenance.auto=false", "commit", "-q", "-m", "first")
 	o.run(main, "config", "extensions.worktreeConfig", "true")
 	o.run(main, "worktree", "add", "-q", filepath.Join(o.dir, "second"), "-b", "second")
 	second := filepath.Join(o.dir, "second")

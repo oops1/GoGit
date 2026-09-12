@@ -20,6 +20,11 @@ func gitEnv() []string {
 	return []string{
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto",
+		"GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto",
+		"GIT_CONFIG_VALUE_1=false",
 		"GIT_AUTHOR_NAME=A U Thor",
 		"GIT_AUTHOR_EMAIL=author@example.com",
 		"GIT_AUTHOR_DATE=1700000000 +0300",

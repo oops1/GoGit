@@ -40,7 +40,16 @@ func gitMergeFile(t *testing.T, c mergeCase, style Style, markerSize int) (strin
 	}
 	args = append(args, write("ours", c.ours), write("base", c.base), write("theirs", c.theirs))
 	cmd := exec.Command("git", args...)
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "SystemRoot=" + os.Getenv("SystemRoot"), "GIT_CONFIG_NOSYSTEM=1"}
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"SystemRoot=" + os.Getenv("SystemRoot"),
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_COUNT=2",
+		"GIT_CONFIG_KEY_0=gc.auto",
+		"GIT_CONFIG_VALUE_0=0",
+		"GIT_CONFIG_KEY_1=maintenance.auto",
+		"GIT_CONFIG_VALUE_1=false",
+	}
 	out, err := cmd.Output()
 	if err == nil {
 		return string(out), false
