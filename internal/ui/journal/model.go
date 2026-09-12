@@ -15,6 +15,7 @@ import (
 type Options struct {
 	Walk       revision.Options
 	HasRemotes bool
+	Tip        hash.ObjectID
 }
 
 func WalkOptions(maxCount int, hasRemotes bool) Options {
@@ -26,7 +27,7 @@ func WalkOptions(maxCount int, hasRemotes bool) Options {
 
 func Load(ctx context.Context, source revision.Context, opts Options) iter.Seq2[Row, error] {
 	return func(yield func(Row, error) bool) {
-		head, err := resolveHead(source)
+		head, err := startTip(source, opts)
 		if err != nil {
 			yield(Row{}, err)
 			return
@@ -98,6 +99,13 @@ func loadDecorations(source revision.Context) (map[hash.ObjectID][]Ref, error) {
 		slices.SortStableFunc(decorations[id], byRefImportance)
 	}
 	return decorations, nil
+}
+
+func startTip(source revision.Context, opts Options) (hash.ObjectID, error) {
+	if !opts.Tip.IsZero() {
+		return opts.Tip, nil
+	}
+	return resolveHead(source)
 }
 
 func loadUnpushed(ctx context.Context, source revision.Context, head hash.ObjectID, opts Options) (map[hash.ObjectID]struct{}, error) {

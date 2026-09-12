@@ -69,19 +69,24 @@ type App struct {
 
 	languages []string
 
-	registry          *repo.Registry
-	reposView         *repos.View
-	branchesView      *branches.View
-	journalView       *journal.View
-	diffView          *diffview.DiffView
-	filesGrid         *filesgrid.Grid
-	filesFilterInput  *widget.TextInput
-	filesFilterLabel  *widget.Label
-	statusLabel       *widget.Label
-	statusBranchLabel *widget.Label
-	stateMu           sync.RWMutex
-	selectedNode      string
-	selectedCommit    hash.ObjectID
+	registry         *repo.Registry
+	reposView        *repos.View
+	branchesView     *branches.View
+	journalView      *journal.View
+	diffView         *diffview.DiffView
+	filesGrid        *filesgrid.Grid
+	filesFilterInput *widget.TextInput
+	filesFilterLabel *widget.Label
+
+	journalFilterBranch  *widget.Dropdown
+	journalFilterAuthor  *widget.TextInput
+	journalFilterMessage *widget.TextInput
+	journalFilterLabel   *widget.Label
+	statusLabel          *widget.Label
+	statusBranchLabel    *widget.Label
+	stateMu              sync.RWMutex
+	selectedNode         string
+	selectedCommit       hash.ObjectID
 
 	filesWorkingCopyBtn *widget.Button
 	banner              mergeBanner
@@ -263,6 +268,28 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
 		}
 	}
+	journalBranchWidget, ok := named["journalFilterBranch"].(*widget.Dropdown)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterBranch", ErrWidgetMissing)
+	}
+	journalAuthorWidget, ok := named["journalFilterAuthor"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterAuthor", ErrWidgetMissing)
+	}
+	journalMessageWidget, ok := named["journalFilterMessage"].(*widget.TextInput)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterMessage", ErrWidgetMissing)
+	}
+	journalCountWidget, ok := named["journalFilterCount"].(*widget.Label)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterCount", ErrWidgetMissing)
+	}
+	journalCountWidget.TextAlign = widget.TextAlignRight
+	journalFilterRow, ok := named["journalFilterRow"].(*widget.DockPanel)
+	if !ok {
+		return nil, fmt.Errorf("%w: journalFilterRow", ErrWidgetMissing)
+	}
+	journalFilterRow.LastChildFill = true
 	diffWidget, ok := named["diffView"].(*diffview.DiffView)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
@@ -292,9 +319,14 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		filesGrid:         filesGridWidget,
 		filesFilterInput:  filesFilterWidget,
 		filesFilterLabel:  filesFilterCountWidget,
-		newWatcher:        newRealWatcher,
-		journalPageSize:   defaultJournalPageSize,
-		banner:            banner,
+
+		journalFilterBranch:  journalBranchWidget,
+		journalFilterAuthor:  journalAuthorWidget,
+		journalFilterMessage: journalMessageWidget,
+		journalFilterLabel:   journalCountWidget,
+		newWatcher:           newRealWatcher,
+		journalPageSize:      defaultJournalPageSize,
+		banner:               banner,
 	}
 	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
@@ -352,6 +384,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.wireFilesStatusButtons()
 	a.wireFilesSubdirsButton()
 	a.filesFilterInput.OnChange = a.onFilesFilterChanged
+	a.wireJournalFilter()
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
 	a.refreshBranchCache()
@@ -525,6 +558,7 @@ func (a *App) ActivateRepository(id string) {
 	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
+	a.showJournalBranches(snap)
 	a.refreshDivergence(opened)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
@@ -601,6 +635,7 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.branchesView.Render(snap)
+	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()

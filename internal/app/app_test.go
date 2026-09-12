@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image/color"
 	"log/slog"
 	"strings"
@@ -368,10 +369,12 @@ func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
 	}
 }
 
-func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
-	widget.ClearStrings()
-	t.Cleanup(widget.ClearStrings)
-	xaml := `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+const journalFilterXAML = `<ComboBox x:Name="journalFilterBranch"/><TextBox x:Name="journalFilterAuthor"/>` +
+	`<TextBox x:Name="journalFilterMessage"/><TextBlock x:Name="journalFilterCount"/>` +
+	`<DockPanel x:Name="journalFilterRow"/>`
+
+func completeWindowXAML() string {
+	return `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 		`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 		`<FilesGrid x:Name="filesGrid"/>` +
 		`<TextBox x:Name="filesFilter"/><TextBlock x:Name="filesFilterCount"/>` +
@@ -380,9 +383,35 @@ func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
 		filesStatusButtonsXAML +
 		filesSubdirsButtonXAML +
 		`<DataGrid x:Name="journalGrid"/><GitDiffView x:Name="diffView"/>` +
+		journalFilterXAML +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
 		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
-	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(xaml), nil)
+}
+
+func windowWithout(widget string) string {
+	return strings.Replace(completeWindowXAML(), widget, "", 1)
+}
+
+func TestNewFromXAMLNeedsEveryJournalFilterWidget(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	for _, missing := range []string{
+		`<ComboBox x:Name="journalFilterBranch"/>`,
+		`<TextBox x:Name="journalFilterAuthor"/>`,
+		`<TextBox x:Name="journalFilterMessage"/>`,
+		`<TextBlock x:Name="journalFilterCount"/>`,
+		`<DockPanel x:Name="journalFilterRow"/>`,
+	} {
+		if _, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(windowWithout(missing)), nil); !errors.Is(err, ErrWidgetMissing) {
+			t.Errorf("without %s: err = %v", missing, err)
+		}
+	}
+}
+
+func TestNewFromXAMLBuildsTheFilesGridWithItsDefaultColumns(t *testing.T) {
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	a, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(completeWindowXAML()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

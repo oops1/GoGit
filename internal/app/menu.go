@@ -281,6 +281,7 @@ func (a *App) retranslateRepoTrees() {
 		return
 	}
 	a.branchesView.Render(snap)
+	a.showJournalBranches(snap)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 }
 

@@ -141,7 +141,19 @@
                     </DockPanel>
                 </DockPane>
                 <DockPane Id="journal" Title="{Loc Pane.Journal}" Side="Bottom" Size="220">
-                    <DataGrid x:Name="journalGrid" AutoGenerateColumns="False" IsReadOnly="True">
+                    <DockPanel LastChildFill="True">
+                        <DockPanel x:Name="journalFilterRow" DockPanel.Dock="Top" Height="28" LastChildFill="True">
+                            <TextBlock x:Name="journalFilterBranchLabel" DockPanel.Dock="Left" Text="{Loc Journal.Filter.Branch}"
+                                       FontSize="9" Margin="8,6,4,4"/>
+                            <ComboBox x:Name="journalFilterBranch" DockPanel.Dock="Left" Width="160" Height="24" Margin="0,2,6,2"/>
+                            <TextBlock x:Name="journalFilterAuthorLabel" DockPanel.Dock="Left" Text="{Loc Journal.Filter.Author}"
+                                       FontSize="9" Margin="0,6,4,4"/>
+                            <TextBox x:Name="journalFilterAuthor" DockPanel.Dock="Left" Width="140" Height="24" Margin="0,2,6,2"/>
+                            <TextBlock x:Name="journalFilterCount" DockPanel.Dock="Right" Text="" Width="110"
+                                       FontSize="9" Margin="0,6,10,4"/>
+                            <TextBox x:Name="journalFilterMessage" Height="24" Margin="0,2,6,2"/>
+                        </DockPanel>
+                        <DataGrid x:Name="journalGrid" AutoGenerateColumns="False" IsReadOnly="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="" Binding="{Binding Graph}" Width="60"/>
                             <DataGridTextColumn Header="" Binding="{Binding Message}" Width="*"/>
@@ -149,7 +161,8 @@
                             <DataGridTextColumn Header="" Binding="{Binding Date}" Width="140"/>
                             <DataGridTextColumn Header="" Binding="{Binding ShortHash}" Width="90"/>
                         </DataGrid.Columns>
-                    </DataGrid>
+                        </DataGrid>
+                    </DockPanel>
                 </DockPane>
                 <DockContent>
                     <GitDiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
