@@ -2,6 +2,7 @@ package journal
 
 import (
 	"image/color"
+	"sync"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
@@ -14,6 +15,7 @@ const nearEndRows = 5
 type View struct {
 	grid           *widget.DataGridWidget
 	items          *datagrid.ObservableCollection
+	columnsMu      sync.Mutex
 	authorHeader   string
 	fullAuthorName bool
 	lanes          *graph.Layout
@@ -67,6 +69,8 @@ func (v *View) Restyle(t *widget.Theme) {
 }
 
 func (v *View) installMessageColumn() {
+	v.columnsMu.Lock()
+	defer v.columnsMu.Unlock()
 	cols := v.grid.Grid.Columns()
 	if messageColumnIndex >= len(cols) {
 		return
@@ -85,21 +89,31 @@ func (v *View) Reset() {
 }
 
 func (v *View) resizeToVisibleRows() {
-	v.resizeGraphColumn()
-	v.resizeAuthorColumn()
+	v.columnsMu.Lock()
+	defer v.columnsMu.Unlock()
+	v.resizeGraphColumnLocked()
+	v.resizeAuthorColumnLocked()
 }
 
 func (v *View) installGraphColumn() {
+	v.columnsMu.Lock()
+	defer v.columnsMu.Unlock()
 	cols := v.grid.Grid.Columns()
 	if graphColumnIndex >= len(cols) {
 		return
 	}
 	cols[graphColumnIndex] = v.newGraphColumn()
 	v.grid.Grid.SetColumns(cols)
-	v.resizeGraphColumn()
+	v.resizeGraphColumnLocked()
 }
 
 func (v *View) resizeGraphColumn() {
+	v.columnsMu.Lock()
+	defer v.columnsMu.Unlock()
+	v.resizeGraphColumnLocked()
+}
+
+func (v *View) resizeGraphColumnLocked() {
 	if v.grid == nil {
 		return
 	}
@@ -154,13 +168,14 @@ func (v *View) SetFullAuthorName(fullName bool) {
 	if v.grid == nil {
 		return
 	}
+	v.columnsMu.Lock()
+	defer v.columnsMu.Unlock()
 	cols := v.grid.Grid.Columns()
 	if authorColumnIndex >= len(cols) {
 		return
 	}
-	old := cols[authorColumnIndex]
-	if old.Header() != "" {
-		v.authorHeader = old.Header()
+	if current := cols[authorColumnIndex].Header(); current != "" {
+		v.authorHeader = current
 	}
 	header := ""
 	if fullName {
@@ -171,7 +186,7 @@ func (v *View) SetFullAuthorName(fullName bool) {
 	col.SetWidth(datagrid.PixelWidth(authorBadgeColumnWide))
 	cols[authorColumnIndex] = col
 	v.grid.Grid.SetColumns(cols)
-	v.resizeAuthorColumn()
+	v.resizeAuthorColumnLocked()
 }
 
 const (
