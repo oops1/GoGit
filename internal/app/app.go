@@ -619,6 +619,7 @@ func (a *App) ActivateRepository(id string) {
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
 	a.refreshRemoteState()
+	a.refreshFlowState(opened, snap.Current)
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()

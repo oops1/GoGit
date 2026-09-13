@@ -99,7 +99,7 @@ func TestAFileOfACommitIsComparedWithItsParent(t *testing.T) {
 	a.filesMode = filesModeCommit
 	a.currentFiles = []diff.File{{OldPath: "a.txt", NewPath: "a.txt", OldID: oldID, NewID: newID}}
 	a.filesMu.Unlock()
-	a.selectedCommit = commit
+	runOnDispatcher(t, a, func() { a.selectedCommit = commit })
 
 	activate(t, a, "a.txt")
 

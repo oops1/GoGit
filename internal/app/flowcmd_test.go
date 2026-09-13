@@ -198,6 +198,23 @@ func TestGitFlowCommandsFollowTheSettingsAndTheBranch(t *testing.T) {
 	}
 }
 
+func TestOpeningAConfiguredRepositoryEnablesGitFlow(t *testing.T) {
+	a, target := forkedApp(t, false)
+	cfg := ops.DefaultFlowConfig()
+	cfg.Master = "main"
+	if err := ops.WriteFlowConfig(openRepoAt(t, target), cfg); err != nil {
+		t.Fatal(err)
+	}
+	id := readOnDispatcher(t, a, func() string { return a.cfg.ActiveRepository })
+
+	runOnDispatcher(t, a, func() { a.ActivateRepository(id) })
+
+	state := readOnDispatcher(t, a, a.State)
+	if !state.FlowConfigured || !state.Enabled(CmdFlowStartFeature) || !state.Enabled(CmdFlowStartRelease) {
+		t.Fatalf("state after opening a configured repository = %+v", state)
+	}
+}
+
 func TestTheToolbarGitFlowMenuFollowsTheMode(t *testing.T) {
 	bare := newTestApp(t)
 	buttonOf := func(app *App) *widget.MenuButton {
