@@ -36,5 +36,5 @@ func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID,
 	}
 
 	opts.Progress.Phase(progress.PhaseCheckout)
-	return layoutWorkingTree(ctx, r, wt, db, targetTree, opts.Force)
+	return layoutWorkingTree(ctx, r, wt, db, nil, targetTree, opts.Force)
 }

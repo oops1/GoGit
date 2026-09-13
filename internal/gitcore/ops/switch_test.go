@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 )
 
@@ -212,5 +213,96 @@ func TestSwitchLeavesUntrackedFilesAlone(t *testing.T) {
 	}
 	if !r.exists("untracked.txt") {
 		t.Fatalf("untracked.txt should have been preserved")
+	}
+}
+
+func TestSwitchFailsWhenTheCurrentCommitCannotBeRead(t *testing.T) {
+	r := sharedBranchesRepo(t)
+	r.writeRawRef("refs/heads/main", bogusObjectID(t, r.repo.ObjectFormat).String()+"\n")
+
+	if err := Switch(t.Context(), r.repo, "topic", SwitchOptions{}); err == nil {
+		t.Fatal("Switch left a branch whose commit does not exist without reading its tree")
+	}
+	if r.readFile("a.txt") != "shared\n" {
+		t.Fatal("a failed switch touched the working tree")
+	}
+}
+
+func sharedBranchesRepo(t *testing.T) *testRepo {
+	t.Helper()
+	r := newTestRepo(t)
+	r.writeFile("a.txt", "shared\n")
+	r.writeFile("b.txt", "main\n")
+	mustStage(t, r, "a.txt")
+	mustStage(t, r, "b.txt")
+	r.createBranch("topic", r.commitAll("initial"))
+	return r
+}
+
+func blobID(t *testing.T, r *testRepo, text string) hash.ObjectID {
+	t.Helper()
+	id, err := hashSum(r.repo.ObjectFormat, "blob", []byte(text))
+	if err != nil {
+		t.Fatalf("hashSum returned error %v", err)
+	}
+	return id
+}
+
+func TestSwitchBetweenBranchesOnTheSameCommitKeepsEveryChange(t *testing.T) {
+	r := sharedBranchesRepo(t)
+	r.writeFile("a.txt", "edited\n")
+	r.writeFile("b.txt", "staged\n")
+	mustStage(t, r, "b.txt")
+	r.writeFile("c.txt", "new\n")
+	mustStage(t, r, "c.txt")
+
+	if err := Switch(t.Context(), r.repo, "topic", SwitchOptions{}); err != nil {
+		t.Fatalf("Switch returned error %v", err)
+	}
+
+	if r.readFile("a.txt") != "edited\n" || r.readFile("b.txt") != "staged\n" || r.readFile("c.txt") != "new\n" {
+		t.Fatalf("the switch lost local changes: a=%q b=%q", r.readFile("a.txt"), r.readFile("b.txt"))
+	}
+	idx := r.index()
+	for rel, want := range map[string]string{"a.txt": "shared\n", "b.txt": "staged\n", "c.txt": "new\n"} {
+		entry, ok := entryOf(t, idx, rel)
+		if !ok || entry.ID != blobID(t, r, want) {
+			t.Fatalf("index %s = %+v, %v; want the blob of %q", rel, entry, ok, want)
+		}
+	}
+}
+
+func TestSwitchCarriesChangesToSharedFilesAndRefusesStagedChangesToDifferentOnes(t *testing.T) {
+	r := sharedBranchesRepo(t)
+	if err := Switch(t.Context(), r.repo, "topic", SwitchOptions{}); err != nil {
+		t.Fatalf("Switch returned error %v", err)
+	}
+	r.writeFile("b.txt", "topic\n")
+	mustStage(t, r, "b.txt")
+	r.commitAll("on topic")
+	if err := Switch(t.Context(), r.repo, "main", SwitchOptions{}); err != nil {
+		t.Fatalf("Switch returned error %v", err)
+	}
+	r.writeFile("a.txt", "edited\n")
+
+	if err := Switch(t.Context(), r.repo, "topic", SwitchOptions{}); err != nil {
+		t.Fatalf("Switch with a change to a shared file returned error %v", err)
+	}
+	if r.readFile("a.txt") != "edited\n" || r.readFile("b.txt") != "topic\n" {
+		t.Fatalf("a=%q b=%q; want the edit carried and topic's b.txt", r.readFile("a.txt"), r.readFile("b.txt"))
+	}
+	if err := Switch(t.Context(), r.repo, "main", SwitchOptions{}); err != nil {
+		t.Fatalf("Switch back returned error %v", err)
+	}
+	r.writeFile("b.txt", "staged\n")
+	mustStage(t, r, "b.txt")
+
+	err := Switch(t.Context(), r.repo, "topic", SwitchOptions{})
+	var overwrite *OverwriteError
+	if !errors.As(err, &overwrite) || len(overwrite.Paths) != 1 || overwrite.Paths[0] != "b.txt" {
+		t.Fatalf("err = %v, want b.txt refused", err)
+	}
+	if r.readFile("b.txt") != "staged\n" || r.readFile("a.txt") != "edited\n" {
+		t.Fatal("a refused switch changed the working tree")
 	}
 }

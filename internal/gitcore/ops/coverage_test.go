@@ -1412,8 +1412,8 @@ func TestIsDirtySubmoduleEntryIsNotDirty(t *testing.T) {
 	if err := os.MkdirAll(r.path("sub"), 0o777); err != nil {
 		t.Fatalf("MkdirAll returned error %v", err)
 	}
-	if err := Switch(t.Context(), r.repo, "feature", SwitchOptions{}); err != nil {
-		t.Fatalf("Switch returned error %v", err)
+	if err := CheckoutTree(t.Context(), r.repo, first, CheckoutOptions{}); err != nil {
+		t.Fatalf("CheckoutTree returned error %v", err)
 	}
 }
 
@@ -1486,7 +1486,7 @@ func TestIsDirtySymlinkEntryUsesInjection(t *testing.T) {
 	r := newTestRepo(t)
 	r.writeFile("a.txt", "hello\n")
 	mustStage(t, r, "a.txt")
-	r.commitAll("initial")
+	first := r.commitAll("initial")
 	db := r.db()
 	oldTarget, err := db.Put(object.TypeBlob, []byte("old-target"))
 	if err != nil {
@@ -1497,7 +1497,7 @@ func TestIsDirtySymlinkEntryUsesInjection(t *testing.T) {
 	r.saveIndex(idx)
 	swapRootLstatSymlinkForPath(t, "link")
 	swapRootReadlinkForPath(t, "link", "new-target")
-	err = Switch(t.Context(), r.repo, "main", SwitchOptions{})
+	err = CheckoutTree(t.Context(), r.repo, first, CheckoutOptions{})
 	var overwrite *OverwriteError
 	if !errors.As(err, &overwrite) {
 		t.Fatalf("err = %v, want *OverwriteError", err)
@@ -1508,7 +1508,7 @@ func TestIsDirtySymlinkEntryFailsWhenReadlinkFails(t *testing.T) {
 	r := newTestRepo(t)
 	r.writeFile("a.txt", "hello\n")
 	mustStage(t, r, "a.txt")
-	r.commitAll("initial")
+	first := r.commitAll("initial")
 	db := r.db()
 	oldTarget, err := db.Put(object.TypeBlob, []byte("old-target"))
 	if err != nil {
@@ -1518,7 +1518,7 @@ func TestIsDirtySymlinkEntryFailsWhenReadlinkFails(t *testing.T) {
 	idx.Add(index.Entry{Path: "link", Mode: object.ModeSymlink, ID: oldTarget, Stage: index.StageMerged})
 	r.saveIndex(idx)
 	swapRootLstatSymlinkForPath(t, "link")
-	err = Switch(t.Context(), r.repo, "main", SwitchOptions{})
+	err = CheckoutTree(t.Context(), r.repo, first, CheckoutOptions{})
 	if err == nil {
 		t.Fatalf("expected an error")
 	}
