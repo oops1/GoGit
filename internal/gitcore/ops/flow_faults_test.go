@@ -25,7 +25,7 @@ func TestFinishReleaseReportsAFailedPush(t *testing.T) {
 	})
 
 	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Push: true, Network: originFlow}); !errors.Is(err, errInjected) {
-		t.Fatalf("FinishRelease returned %v, want the push failure", err)
+		t.Fatalf("FinishFlow returned %v, want the push failure", err)
 	}
 }
 
@@ -36,7 +36,7 @@ func TestFinishReleaseReportsAFailedBranchDeletion(t *testing.T) {
 	})
 
 	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{DeleteBranch: true}); !errors.Is(err, errInjected) {
-		t.Fatalf("FinishRelease returned %v, want the deletion failure", err)
+		t.Fatalf("FinishFlow returned %v, want the deletion failure", err)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestFinishReleaseReportsAStateThatCannotBeSaved(t *testing.T) {
 	})
 
 	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, errInjected) {
-		t.Fatalf("FinishRelease returned %v, want the state write failure", err)
+		t.Fatalf("FinishFlow returned %v, want the state write failure", err)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestFinishReleaseReportsAStateThatCannotBeCleared(t *testing.T) {
 	})
 
 	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, errInjected) {
-		t.Fatalf("FinishRelease returned %v, want the state removal failure", err)
+		t.Fatalf("FinishFlow returned %v, want the state removal failure", err)
 	}
 }
 
@@ -90,22 +90,13 @@ func TestFlowNotBehindReportsWhatItCannotRead(t *testing.T) {
 	startFlowRelease(t, r, "1.0", originFlow)
 
 	t.Run("refs cannot be opened", func(t *testing.T) {
-		swapSeam(t, &refsOpen, func(func(refs.Options) (*refs.Store, error)) func(refs.Options) (*refs.Store, error) {
-			return func(refs.Options) (*refs.Store, error) { return nil, errInjected }
-		})
+		failRefsOpen(t)
 		if err := flowNotBehind(r.repo, originFlow, "develop"); !errors.Is(err, errInjected) {
 			t.Fatalf("flowNotBehind returned %v", err)
 		}
 	})
 	t.Run("the remote branch cannot be read", func(t *testing.T) {
-		swapSeam(t, &refsLookup, func(original func(*refs.Store, refs.Name) (refs.Ref, error)) func(*refs.Store, refs.Name) (refs.Ref, error) {
-			return func(store *refs.Store, name refs.Name) (refs.Ref, error) {
-				if name.IsRemote() {
-					return refs.Ref{}, errInjected
-				}
-				return original(store, name)
-			}
-		})
+		failRemoteLookups(t)
 		if err := flowNotBehind(r.repo, originFlow, "develop"); !errors.Is(err, errInjected) {
 			t.Fatalf("flowNotBehind returned %v", err)
 		}
@@ -121,6 +112,56 @@ func TestFlowNotBehindReportsWhatItCannotRead(t *testing.T) {
 		})
 		if err := flowNotBehind(r.repo, originFlow, "develop"); err == nil {
 			t.Fatal("flowNotBehind walked a commit that does not exist")
+		}
+	})
+}
+
+func failRefsOpen(t *testing.T) {
+	t.Helper()
+	swapSeam(t, &refsOpen, func(func(refs.Options) (*refs.Store, error)) func(refs.Options) (*refs.Store, error) {
+		return func(refs.Options) (*refs.Store, error) { return nil, errInjected }
+	})
+}
+
+func failRemoteLookups(t *testing.T) {
+	t.Helper()
+	swapSeam(t, &refsLookup, func(original func(*refs.Store, refs.Name) (refs.Ref, error)) func(*refs.Store, refs.Name) (refs.Ref, error) {
+		return func(store *refs.Store, name refs.Name) (refs.Ref, error) {
+			if name.IsRemote() {
+				return refs.Ref{}, errInjected
+			}
+			return original(store, name)
+		}
+	})
+}
+
+func TestFlowReportsReferencesItCannotRead(t *testing.T) {
+	r, _ := newFlowRepo(t)
+	if err := AddRemote(r.repo, "origin", newBareTestRepo(t).dir); err != nil {
+		t.Fatalf("AddRemote returned error %v", err)
+	}
+	r.repo = r.reopen()
+	startFlowRelease(t, r, "1.0", FlowNetwork{})
+
+	t.Run("refs cannot be opened", func(t *testing.T) {
+		failRefsOpen(t)
+		if _, err := ConfigureFlow(t.Context(), r.repo, mainFlowConfig()); !errors.Is(err, errInjected) {
+			t.Fatalf("ConfigureFlow returned %v", err)
+		}
+		if _, err := StartFlow(t.Context(), r.repo, FlowKindFeature, "login", StartFlowOptions{}); !errors.Is(err, errInjected) {
+			t.Fatalf("StartFlow returned %v", err)
+		}
+	})
+	t.Run("remote branches cannot be read", func(t *testing.T) {
+		failRemoteLookups(t)
+		if _, err := StartFlow(t.Context(), r.repo, FlowKindFeature, "login", StartFlowOptions{Network: originFlow}); !errors.Is(err, errInjected) {
+			t.Fatalf("StartFlow returned %v", err)
+		}
+		if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Fetch: true, Network: originFlow}); !errors.Is(err, errInjected) {
+			t.Fatalf("FinishFlow with a fetch returned %v", err)
+		}
+		if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Push: true, Network: originFlow}); !errors.Is(err, errInjected) {
+			t.Fatalf("FinishFlow with a push returned %v", err)
 		}
 	})
 }

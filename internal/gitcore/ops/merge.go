@@ -120,9 +120,22 @@ func (m *merger) merge(target string) (MergeResult, error) {
 		label:  target,
 		reflog: "merge " + target,
 		message: func(head headTarget) string {
-			return defaultMergeMessage(m.r, m.rc.refs, target, ref, head)
+			return defaultMergeMessage(m.r, m.rc.refs, target, ref, head) + m.tagMessage(ref)
 		},
 	})
+}
+
+func (m *merger) tagMessage(ref refs.Name) string {
+	found, err := refsLookup(m.rc.refs, ref)
+	if err != nil || !ref.IsTag() {
+		return ""
+	}
+	kind, data, err := dbGet(m.rc.db, found.Target)
+	tag, parseErr := object.ParseTag(data)
+	if err != nil || kind != object.TypeTag || parseErr != nil {
+		return ""
+	}
+	return "\n" + tag.Message
 }
 
 func (m *merger) refuseWhileMerging() error {

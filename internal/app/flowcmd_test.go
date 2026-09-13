@@ -310,7 +310,7 @@ func TestFinishFlowLogsEveryOutcome(t *testing.T) {
 
 func TestTheFlowStateFollowsAPendingFinishAndAnUnreadableRepository(t *testing.T) {
 	a, target := flowReadyApp(t, true)
-	if err := os.WriteFile(filepath.Join(target, ".git", "GOGIT_FLOW"), []byte("hotfix\n2.0\n1\nfalse\nfalse\n"), 0o666); err != nil {
+	if err := os.WriteFile(filepath.Join(target, ".git", "GOGIT_FLOW"), []byte("hotfix\n2.0\n1\nfalse\nfalse\n2.0\ntrue\n0\n"), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	readOnDispatcher(t, a, func() bool { a.RefreshRepository(); return true })
