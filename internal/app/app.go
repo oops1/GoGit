@@ -992,6 +992,7 @@ func (a *App) Run() error {
 	go a.FollowSystemTheme(ctx)
 	a.scheduleUpdateCheck()
 	go a.runWatchdog(ctx, a.watches())
+	go a.keepPopupsInCanvas(ctx, widget.PopupsHosted)
 	win := window.New(a.eng, a.root.Title)
 	a.applyWindowIcon(win)
 	if a.OnExit == nil {
