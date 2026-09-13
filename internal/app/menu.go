@@ -118,6 +118,12 @@ func buildBranchMenuTree() []menuTreeEntry {
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
+		{Separator: true},
+		{Group: &menuGroupEntry{Key: "Menu.Branch.GitFlow", Items: []menuLeafEntry{
+			{Key: "Menu.Branch.GitFlow.StartRelease", Command: CmdFlowStartRelease},
+			{Key: "Menu.Branch.GitFlow.FinishRelease", Command: CmdFlowFinishRelease},
+			{Key: "Menu.Branch.GitFlow.Configure", Command: CmdFlowConfigure},
+		}}},
 	}
 }
 
@@ -247,11 +253,16 @@ func (a *App) refreshCommands() {
 }
 
 func applyTreeEnabled(subs []widget.MenuItem, tree []menuTreeEntry, state State) {
-	for i, entry := range tree {
-		if i >= len(subs) || entry.Leaf == nil {
-			continue
+	for i := range min(len(subs), len(tree)) {
+		entry := tree[i]
+		switch {
+		case entry.Leaf != nil:
+			subs[i].Disabled = !state.Enabled(entry.Leaf.Command)
+		case entry.Group != nil:
+			for j := range min(len(entry.Group.Items), len(subs[i].SubItems)) {
+				subs[i].SubItems[j].Disabled = !state.Enabled(entry.Group.Items[j].Command)
+			}
 		}
-		subs[i].Disabled = !state.Enabled(entry.Leaf.Command)
 	}
 }
 

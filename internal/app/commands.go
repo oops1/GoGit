@@ -11,41 +11,44 @@ import (
 type CommandID string
 
 const (
-	CmdAddOrCreate     CommandID = "repository.add-or-create"
-	CmdAddGroup        CommandID = "repository.add-group"
-	CmdSearch          CommandID = "repository.search"
-	CmdCloseRepository CommandID = "repository.close-repository"
-	CmdAddWorktree     CommandID = "repository.add-worktree"
-	CmdRemoveWorktree  CommandID = "repository.remove-worktree"
-	CmdPruneWorktrees  CommandID = "repository.prune-worktrees"
-	CmdRepoSettings    CommandID = "repository.repo-settings"
-	CmdSettings        CommandID = "repository.settings"
-	CmdClose           CommandID = "repository.close"
-	CmdClone           CommandID = "repository.clone"
-	CmdFetch           CommandID = "remote.fetch"
-	CmdPull            CommandID = "remote.pull"
-	CmdSync            CommandID = "remote.sync"
-	CmdPush            CommandID = "remote.push"
-	CmdPrune           CommandID = "remote.prune"
-	CmdManageRemotes   CommandID = "remote.manage"
-	CmdStage           CommandID = "edit.stage"
-	CmdUnstage         CommandID = "edit.unstage"
-	CmdDiscard         CommandID = "edit.discard"
-	CmdCommit          CommandID = "local.commit"
-	CmdCompareFiles    CommandID = "edit.compare-files"
-	CmdMerge           CommandID = "branch.merge"
-	CmdRebase          CommandID = "branch.rebase"
-	CmdRebaseSteps     CommandID = "branch.rebase.steps"
-	CmdReflog          CommandID = "branch.reflog"
-	CmdSwitch          CommandID = "branch.switch"
-	CmdCompareRefs     CommandID = "branch.compare"
-	CmdContinue        CommandID = "branch.continue"
-	CmdSkip            CommandID = "branch.skip"
-	CmdAbortMerge      CommandID = "branch.abort-merge"
-	CmdResetLayout     CommandID = "view.reset-layout"
-	CmdRefresh         CommandID = "view.refresh"
-	CmdCheckUpdates    CommandID = "help.check-updates"
-	CmdAbout           CommandID = "help.about"
+	CmdAddOrCreate       CommandID = "repository.add-or-create"
+	CmdAddGroup          CommandID = "repository.add-group"
+	CmdSearch            CommandID = "repository.search"
+	CmdCloseRepository   CommandID = "repository.close-repository"
+	CmdAddWorktree       CommandID = "repository.add-worktree"
+	CmdRemoveWorktree    CommandID = "repository.remove-worktree"
+	CmdPruneWorktrees    CommandID = "repository.prune-worktrees"
+	CmdRepoSettings      CommandID = "repository.repo-settings"
+	CmdSettings          CommandID = "repository.settings"
+	CmdClose             CommandID = "repository.close"
+	CmdClone             CommandID = "repository.clone"
+	CmdFetch             CommandID = "remote.fetch"
+	CmdPull              CommandID = "remote.pull"
+	CmdSync              CommandID = "remote.sync"
+	CmdPush              CommandID = "remote.push"
+	CmdPrune             CommandID = "remote.prune"
+	CmdManageRemotes     CommandID = "remote.manage"
+	CmdStage             CommandID = "edit.stage"
+	CmdUnstage           CommandID = "edit.unstage"
+	CmdDiscard           CommandID = "edit.discard"
+	CmdCommit            CommandID = "local.commit"
+	CmdCompareFiles      CommandID = "edit.compare-files"
+	CmdMerge             CommandID = "branch.merge"
+	CmdRebase            CommandID = "branch.rebase"
+	CmdRebaseSteps       CommandID = "branch.rebase.steps"
+	CmdReflog            CommandID = "branch.reflog"
+	CmdSwitch            CommandID = "branch.switch"
+	CmdCompareRefs       CommandID = "branch.compare"
+	CmdContinue          CommandID = "branch.continue"
+	CmdSkip              CommandID = "branch.skip"
+	CmdAbortMerge        CommandID = "branch.abort-merge"
+	CmdFlowStartRelease  CommandID = "branch.flow.start-release"
+	CmdFlowFinishRelease CommandID = "branch.flow.finish-release"
+	CmdFlowConfigure     CommandID = "branch.flow.configure"
+	CmdResetLayout       CommandID = "view.reset-layout"
+	CmdRefresh           CommandID = "view.refresh"
+	CmdCheckUpdates      CommandID = "help.check-updates"
+	CmdAbout             CommandID = "help.about"
 )
 
 const (
@@ -135,11 +138,13 @@ type State struct {
 	Merging          bool
 	Rebasing         bool
 	Rewording        bool
+	FlowRelease      string
+	FlowPending      string
 }
 
 func (s State) Enabled(id CommandID) bool {
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh, CmdRepoSettings:
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure:
 		return s.ActiveRepository != ""
 	case CmdFetch, CmdPull, CmdSync, CmdPush, CmdPrune:
 		return s.ActiveRepository != "" && s.HasRemotes
@@ -149,8 +154,10 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.Merging)
-	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
+	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch, CmdFlowStartRelease:
 		return s.ActiveRepository != "" && !s.Merging
+	case CmdFlowFinishRelease:
+		return s.ActiveRepository != "" && !s.Merging && (s.FlowRelease != "" || s.FlowPending != "")
 	case CmdReflog, CmdCompareRefs:
 		return s.ActiveRepository != ""
 	case CmdAbortMerge, CmdContinue:

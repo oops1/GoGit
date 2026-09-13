@@ -47,6 +47,12 @@
                 <MenuItem Header="{Loc Menu.Branch.Continue}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.Skip}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.AbortMerge}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Branch.GitFlow}">
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartRelease}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishRelease}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.Configure}" IsEnabled="False"/>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Remote}">
                 <MenuItem Header="{Loc Menu.Remote.Fetch}" IsEnabled="False"/>

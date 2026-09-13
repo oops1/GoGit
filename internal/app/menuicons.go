@@ -50,9 +50,10 @@ var commandIcons = map[CommandID]string{
 }
 
 var menuGroupIcons = map[string]string{
-	"Menu.View.Panes":    "panes",
-	"Menu.View.Theme":    "theme",
-	"Menu.View.Language": "language",
+	"Menu.View.Panes":     "panes",
+	"Menu.View.Theme":     "theme",
+	"Menu.View.Language":  "language",
+	"Menu.Branch.GitFlow": "merge",
 }
 
 var contextIcons = map[string]string{

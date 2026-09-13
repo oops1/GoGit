@@ -471,6 +471,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.registerRemoteHandlers()
 	a.registerWorktreeHandlers()
 	a.registerMergeHandlers()
+	a.registerFlowHandlers()
 	a.registerRebaseHandlers()
 	a.registerReflogHandlers()
 	a.registerSwitchHandlers()
@@ -694,6 +695,7 @@ func (a *App) RefreshRepository() {
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
 	a.refreshRemoteState()
+	a.refreshFlowState(o, snap.Current)
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startJournal()
 	if a.commitIsSelected() {

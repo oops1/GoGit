@@ -38,7 +38,7 @@ const (
 
 const (
 	flowStateFile    = "GOGIT_FLOW"
-	flowKindRelease  = "release"
+	FlowKindRelease  = "release"
 	flowFinishPrefix = "Finish "
 	flowStateFields  = 6
 )
@@ -186,12 +186,12 @@ func FinishRelease(ctx context.Context, r *repo.Repository, version string, opts
 	if err != nil {
 		return FinishReleaseResult{}, err
 	}
-	state, resumed, err := resumeFlow(r, flowKindRelease, version)
+	state, resumed, err := resumeFlow(r, FlowKindRelease, version)
 	if err != nil {
 		return FinishReleaseResult{}, err
 	}
 	if !resumed {
-		state = flowState{kind: flowKindRelease, name: version, step: FlowStepMergeMaster, push: opts.Push, deleteBranch: opts.DeleteBranch, message: opts.TagMessage}
+		state = flowState{kind: FlowKindRelease, name: version, step: FlowStepMergeMaster, push: opts.Push, deleteBranch: opts.DeleteBranch, message: opts.TagMessage}
 		if err := flowFetch(ctx, r, opts.Network, fetch); err != nil {
 			return FinishReleaseResult{}, err
 		}
