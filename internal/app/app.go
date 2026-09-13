@@ -406,6 +406,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
+	a.keepDetailsTabsVisible()
 	a.setupSidebar()
 	a.applyLayoutMode(cfg.UI.Layout)
 
@@ -963,6 +964,7 @@ func (a *App) SetLanguage(code string) {
 	a.cfg.Language = code
 	i18n.Apply(code)
 	a.detailsView.Retitle()
+	a.keepDetailsTabsVisible()
 	a.showJournalPeriods()
 	a.retitleSidebar()
 	a.log.Debug("language changed", "language", code)

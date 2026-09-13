@@ -31,6 +31,7 @@ func (a *App) SaveLayout() error {
 
 func (a *App) ResetLayout() error {
 	_ = a.Dock().RestoreLayout(a.defaultLayout)
+	a.keepDetailsTabsVisible()
 	err := os.Remove(a.paths.LayoutFile())
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
