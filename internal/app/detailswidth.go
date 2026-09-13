@@ -17,18 +17,17 @@ func detailsTabsWidth(tabs *widget.TabControl) int {
 }
 
 func (a *App) keepDetailsTabsVisible() {
-	dock := a.Dock()
-	pane := dock.FindPane(paneDetails)
+	pane := a.Dock().FindPane(paneDetails)
 	tabs, ok := a.named["detailsTabs"].(*widget.TabControl)
 	if pane == nil || !ok {
 		return
 	}
-	side := pane.Side()
-	if side != widget.DockLeft && side != widget.DockRight {
-		return
+	pane.OnStateChanged = func(*widget.DockPane) { a.keepDetailsTabsVisible() }
+	width := 0
+	if side := pane.Side(); side == widget.DockLeft || side == widget.DockRight {
+		width = detailsTabsWidth(tabs)
 	}
-	if need := detailsTabsWidth(tabs); dock.SideSize(side) < need {
-		dock.SetSideSize(side, need)
-		dock.SetBounds(dock.Bounds())
+	if pane.MinSize != width {
+		pane.SetMinSize(width)
 	}
 }

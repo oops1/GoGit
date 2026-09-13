@@ -8,32 +8,27 @@ import (
 	"github.com/oops1/gogit/internal/config"
 )
 
-func detailsSideSize(t *testing.T, a *App, side widget.DockSide) int {
+func detailsMinSize(t *testing.T, a *App) int {
 	t.Helper()
-	return readOnDispatcher(t, a, func() int { return a.Dock().SideSize(side) })
+	return readOnDispatcher(t, a, func() int { return a.Dock().FindPane(paneDetails).MinSize })
 }
 
-func TestTheDetailsPaneWidensToShowEveryTab(t *testing.T) {
+func TestTheDetailsPaneCannotBeNarrowerThanItsTabs(t *testing.T) {
 	a := newTestApp(t)
 	tabs := a.Widget("detailsTabs").(*widget.TabControl)
 	need := readOnDispatcher(t, a, func() int { return detailsTabsWidth(tabs) })
 
-	readOnDispatcher(t, a, func() bool {
-		a.Dock().SetSideSize(widget.DockRight, 80)
-		a.keepDetailsTabsVisible()
-		return true
-	})
-	if got := detailsSideSize(t, a, widget.DockRight); got < need {
-		t.Fatalf("details side = %d, want at least %d", got, need)
+	if got := detailsMinSize(t, a); got != need {
+		t.Fatalf("details minimum = %d, want %d", got, need)
 	}
-
-	readOnDispatcher(t, a, func() bool {
-		a.Dock().SetSideSize(widget.DockRight, need+120)
-		a.keepDetailsTabsVisible()
-		return true
+	width := readOnDispatcher(t, a, func() int {
+		dock := a.Dock()
+		dock.SetSideSize(dock.FindPane(paneDetails).Side(), 80)
+		dock.SetBounds(dock.Bounds())
+		return dock.FindPane(paneDetails).Bounds().Dx()
 	})
-	if got := detailsSideSize(t, a, widget.DockRight); got != need+120 {
-		t.Fatalf("a wide details side changed to %d", got)
+	if width < need {
+		t.Fatalf("details pane dragged to %d, narrower than its tabs %d", width, need)
 	}
 }
 
@@ -53,16 +48,18 @@ func TestTheDetailsWidthCountsOnlyVisibleTabs(t *testing.T) {
 	}
 }
 
-func TestTheDetailsPaneOnTheBottomOrMissingIsLeftAlone(t *testing.T) {
+func TestTheDetailsMinimumFollowsTheSideItIsDockedTo(t *testing.T) {
 	a := newTestApp(t)
-	readOnDispatcher(t, a, func() bool {
-		a.Dock().FindPane(paneDetails).Dock(widget.DockBottom)
-		a.Dock().SetSideSize(widget.DockBottom, 90)
-		a.keepDetailsTabsVisible()
-		return true
-	})
-	if got := detailsSideSize(t, a, widget.DockBottom); got != 90 {
-		t.Fatalf("bottom side = %d, want it untouched", got)
+	side := readOnDispatcher(t, a, func() widget.DockSide { return a.Dock().FindPane(paneDetails).Side() })
+	need := detailsMinSize(t, a)
+
+	readOnDispatcher(t, a, func() bool { a.Dock().FindPane(paneDetails).Dock(widget.DockBottom); return true })
+	if got := detailsMinSize(t, a); got != 0 {
+		t.Fatalf("details minimum at the bottom = %d, want none", got)
+	}
+	readOnDispatcher(t, a, func() bool { a.Dock().FindPane(paneDetails).Dock(side); return true })
+	if got := detailsMinSize(t, a); got != need {
+		t.Fatalf("details minimum back at the side = %d, want %d", got, need)
 	}
 
 	bare, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(completeWindowXAML()), nil)
