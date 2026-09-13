@@ -37,6 +37,18 @@ func clickCheckBox(cb *widget.CheckBox) {
 	cb.OnMouseButton(widget.MouseEvent{Button: widget.MouseLeft, Pressed: false})
 }
 
+func TestTheCommitDialogCountsTheFilesItWillTake(t *testing.T) {
+	staged := newTestView(t, Model{Staged: 3})
+	files := newTestView(t, Model{Staged: 0, Files: 2})
+
+	if got := staged.stagedLabel.Text(); got != i18n.Tf("Dialog.Commit.Staged", 3) {
+		t.Fatalf("staged label = %q", got)
+	}
+	if got := files.stagedLabel.Text(); got != i18n.Tf("Dialog.Commit.Files", 2) {
+		t.Fatalf("files label = %q", got)
+	}
+}
+
 func TestNewViewPropagatesLoadDialogError(t *testing.T) {
 	widget.ClearStrings()
 	defer widget.ClearStrings()

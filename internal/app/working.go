@@ -66,6 +66,7 @@ func (a *App) startWorking() {
 		a.setFilesRows(nil)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(false)
+		a.setHasChanges(false)
 		a.showMergeState(ops.MergeState{}, 0)
 		a.clearWorkingFlags()
 		return
@@ -132,6 +133,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		a.showSidebarWorkingCounts(len(rows), staged)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
+		a.setHasChanges(modified)
 		a.showMergeState(merging, conflicts)
 		a.syncWatcherSkips()
 	})

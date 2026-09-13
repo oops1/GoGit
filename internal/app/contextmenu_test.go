@@ -150,9 +150,9 @@ func TestTheFilesMenuActsOnTheFileUnderTheCursor(t *testing.T) {
 	if want := filepath.Join(main, "src", "a.txt"); *clipboard != want {
 		t.Fatalf("clipboard = %q, want %q", *clipboard, want)
 	}
-	clickMenuItem(t, items, "Menu.Context.Terminal")
+	clickMenuItem(t, items, "Menu.Files.OpenFile")
 	if len(*started) != 1 {
-		t.Fatalf("started = %v, want the terminal alone", *started)
+		t.Fatalf("started = %v, want the file opened", *started)
 	}
 	if _, ok := findMenuItem(items, i18n.T("Menu.Edit.Stage")); !ok {
 		t.Fatalf("menu = %v, want the staging items", menuTexts(items))

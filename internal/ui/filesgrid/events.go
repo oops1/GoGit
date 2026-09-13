@@ -16,6 +16,9 @@ func (g *Grid) OnMouseButton(e widget.MouseEvent) bool {
 	if !g.dg.IsEnabled() {
 		return false
 	}
+	if g.dg.HasOverlay() {
+		return g.dg.OnMouseButton(e)
+	}
 	if g.menu.IsOpen() {
 		if e.Button == widget.MouseRight && !e.Pressed {
 			return true
@@ -44,6 +47,10 @@ func (g *Grid) OnMouseButton(e widget.MouseEvent) bool {
 }
 
 func (g *Grid) OnMouseMove(x, y int) {
+	if g.dg.HasOverlay() {
+		g.dg.OnMouseMove(x, y)
+		return
+	}
 	if g.menu.IsOpen() {
 		g.menu.OnMouseMove(x, y)
 		return

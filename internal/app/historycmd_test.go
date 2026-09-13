@@ -80,12 +80,12 @@ func TestTheFilesMenuOffersTheHistoryAndTheBlame(t *testing.T) {
 
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.filesMenu(changes.Row{RelPath: "f.txt"}, 0) })
 
-	last := items[len(items)-2]
-	if last.Text != i18n.T("Menu.Context.FileHistory") || last.Disabled {
-		t.Fatalf("items = %+v", items)
+	history, found := findMenuItem(items, i18n.T("Menu.Context.FileHistory"))
+	if !found || history.Disabled {
+		t.Fatalf("items = %v", menuTexts(items))
 	}
-	if items[len(items)-1].Text != i18n.T("Menu.Context.Blame") {
-		t.Fatalf("items = %+v", items)
+	if _, found := findMenuItem(items, i18n.T("Menu.Context.Blame")); !found {
+		t.Fatalf("items = %v", menuTexts(items))
 	}
 }
 

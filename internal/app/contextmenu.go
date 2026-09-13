@@ -16,6 +16,16 @@ func menuItem(key string, action func()) widget.MenuItem {
 	return widget.MenuItem{Text: i18n.T(key), Icon: menuKeyIcon(key), OnClick: action}
 }
 
+func enabledItem(key string, action func(), enabled bool) widget.MenuItem {
+	item := menuItem(key, action)
+	item.Disabled = !enabled
+	return item
+}
+
+func laterItem(key string) widget.MenuItem {
+	return enabledItem(key, nil, false)
+}
+
 func menuSeparator() widget.MenuItem {
 	return widget.MenuItem{Separator: true}
 }
@@ -69,15 +79,71 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 		return nil
 	}
 	a.filesGrid.Data().Grid.SetSelectedIndex(row)
+	working := len(a.selectedWorkingPaths()) > 0
+	a.setFilesSelected(working)
+	state := a.State()
 	path := a.filePathOf(file)
-	items := append(a.conflictItems(file),
-		menuItem("Menu.Context.Reveal", func() { a.revealPath(path) }),
-		menuItem("Menu.Context.Terminal", func() { a.openTerminalAt(containingDirectory(path)) }),
-		menuItem("Menu.Context.CopyPath", func() { a.copyToClipboard(path) }),
+	rel := file.RelPath
+	tracked := file.Status != changes.RowUntracked
+	conflict := file.Status == changes.RowConflict
+	onDisk := path != "" && file.Status != changes.RowDeleted
+
+	items := []widget.MenuItem{
+		enabledItem("Menu.Files.OpenFile", func() { a.openFile(path) }, onDisk),
+		enabledItem("Menu.Context.Reveal", func() { a.revealPath(path) }, path != ""),
+		laterItem("Menu.Files.Edit"),
+		laterItem("Menu.Files.SetExecutable"),
+		laterItem("Menu.Files.UnsetExecutable"),
+		menuSeparator(),
+		enabledItem("Menu.Files.ShowChanges", a.openCompare, state.Enabled(CmdCompareFiles)),
+	}
+	if history := a.historyItems(rel); len(history) > 1 {
+		for _, entry := range history[1:] {
+			entry.Disabled = entry.Disabled || !tracked
+			items = append(items, entry)
+		}
+	}
+	items = append(items,
+		laterItem("Menu.Files.Investigate"),
+		menuSeparator(),
+		enabledItem("Menu.Edit.Commit", a.openCommit, state.Enabled(CmdCommit)),
+		laterItem("Menu.Files.StashSelection"),
+		menuSeparator(),
 	)
-	items = append(items, menuSeparator())
-	items = append(items, a.editItems()...)
-	return append(items, a.historyItems(file.RelPath)...)
+	edit := a.editItems()
+	edit[0].Disabled = edit[0].Disabled || (file.WorkingState == "" && !conflict)
+	edit[1].Disabled = edit[1].Disabled || file.IndexState == ""
+	edit[2].Disabled = edit[2].Disabled || !tracked
+	return append(items,
+		edit[0],
+		edit[1],
+		laterItem("Menu.Files.IndexEditor"),
+		laterItem("Menu.Files.Rename"),
+		menuSeparator(),
+		enabledItem("Menu.Files.ConflictSolver", func() { a.openConflictEditor(rel) }, conflict),
+		a.resolveMenu(file),
+		menuSeparator(),
+		laterItem("Menu.Files.Ignore"),
+		edit[2],
+		laterItem("Menu.Files.Remove"),
+		enabledItem("Menu.Files.Delete", func() { a.deleteFile(path) }, working && onDisk),
+		menuSeparator(),
+		enabledItem("Menu.Files.CopyName", func() { a.copyToClipboard(file.Name) }, file.Name != ""),
+		enabledItem("Menu.Context.CopyPath", func() { a.copyToClipboard(path) }, path != ""),
+		enabledItem("Menu.Files.CopyRelativePath", func() { a.copyToClipboard(rel) }, rel != ""),
+		menuSeparator(),
+		laterItem("Menu.Files.SelectDirectory"),
+		laterItem("Menu.Files.SelectRoot"),
+	)
+}
+
+func (a *App) resolveMenu(file changes.Row) widget.MenuItem {
+	item := widget.MenuItem{Text: i18n.T("Menu.Files.Resolve"), Disabled: true}
+	if conflict := a.conflictItems(file); len(conflict) > 2 {
+		item.Disabled = false
+		item.SubItems = conflict[1 : len(conflict)-1]
+	}
+	return item
 }
 
 func (a *App) editItems() []widget.MenuItem {
@@ -92,9 +158,7 @@ func (a *App) editItems() []widget.MenuItem {
 		{"Menu.Edit.Unstage", CmdUnstage, a.unstageSelected},
 		{"Menu.Edit.Discard", CmdDiscard, a.discardSelected},
 	} {
-		item := menuItem(entry.key, entry.run)
-		item.Disabled = !state.Enabled(entry.id)
-		items = append(items, item)
+		items = append(items, enabledItem(entry.key, entry.run, state.Enabled(entry.id)))
 	}
 	return items
 }

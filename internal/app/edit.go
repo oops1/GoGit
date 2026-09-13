@@ -17,6 +17,8 @@ type writeFunc func(ctx context.Context, r *gitrepo.Repository) error
 
 var newCommitView = commit.NewView
 
+var stageForCommit = ops.Stage
+
 func (a *App) selectedWorkingPaths() []string {
 	a.filesMu.Lock()
 	mode := a.filesMode
@@ -181,13 +183,34 @@ func (a *App) openCommit() {
 	}
 	a.filesMu.Lock()
 	staged := a.stagedCount
+	entries := a.currentEntries
 	a.filesMu.Unlock()
 	initial := commit.Model{Staged: staged, LastMessage: a.lastCommitMessage()}
-	if state := a.workingMergeState(); state.Message != "" {
+	state := a.workingMergeState()
+	if state.Message != "" {
 		initial.Message = state.Message
 		initial.Merging = state.InProgress()
 	}
-	a.showCommit(initial, a.applyCommit)
+	var paths []string
+	if staged == 0 && !state.InProgress() {
+		paths = a.commitPaths(entries)
+		initial.Files = len(paths)
+	}
+	a.showCommit(initial, func(m commit.Model, ok bool) { a.commitFiles(m, ok, paths) })
+}
+
+func (a *App) commitPaths(entries []worktree.Entry) []string {
+	if paths := a.selectedWorkingPaths(); len(paths) > 0 {
+		return paths
+	}
+	paths := make([]string, 0, len(entries))
+	for _, e := range entries {
+		changed := e.Staged != worktree.StatusUnmodified || e.Unstaged != worktree.StatusUnmodified
+		if changed && e.Unstaged != worktree.StatusIgnored {
+			paths = append(paths, e.Path)
+		}
+	}
+	return paths
 }
 
 func (a *App) lastCommitMessage() string {
@@ -207,11 +230,20 @@ func (a *App) lastCommitMessage() string {
 }
 
 func (a *App) applyCommit(m commit.Model, ok bool) {
+	a.commitFiles(m, ok, nil)
+}
+
+func (a *App) commitFiles(m commit.Model, ok bool, paths []string) {
 	if !ok || a.opened() == nil {
 		return
 	}
 	var newID hash.ObjectID
 	started := a.startWrite(func(ctx context.Context, r *gitrepo.Repository) error {
+		if len(paths) > 0 {
+			if err := stageForCommit(ctx, r, paths, ops.StageOptions{}); err != nil {
+				return err
+			}
+		}
 		id, err := ops.Commit(ctx, r, ops.CommitOptions{Message: m.Message, Amend: m.Amend})
 		newID = id
 		return err

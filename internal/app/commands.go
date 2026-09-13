@@ -141,6 +141,7 @@ type State struct {
 	ActiveIsWorktree bool
 	FilesSelected    bool
 	HasStagedChanges bool
+	HasChanges       bool
 	HasRemotes       bool
 	Merging          bool
 	Rebasing         bool
@@ -178,7 +179,7 @@ func (s State) Enabled(id CommandID) bool {
 	case CmdStage, CmdUnstage, CmdDiscard:
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
-		return s.ActiveRepository != "" && (s.HasStagedChanges || s.Merging)
+		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)
 	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdFlowStartFeature:

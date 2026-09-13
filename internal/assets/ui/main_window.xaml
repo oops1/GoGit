@@ -213,7 +213,7 @@
                 <TextBlock x:Name="statusText" Grid.Column="0" Text="{Loc Status.Ready}" Margin="8,0" TextTrimming="CharacterEllipsis"/>
                 <Rectangle Grid.Column="1" Fill="#40808080"/>
                 <TextBlock x:Name="statusBranch" Grid.Column="2" Text="" Margin="8,0" MaxWidth="320" TextTrimming="CharacterEllipsis"/>
-                <Rectangle Grid.Column="3" Fill="#40808080"/>
+                <Rectangle Grid.Column="3" Fill="#40808080" Visibility="Collapsed"/>
                 <ProgressBar x:Name="statusProgress" Grid.Column="4" Value="0" Margin="8,4" Visibility="Collapsed"/>
             </Grid>
         </Grid>

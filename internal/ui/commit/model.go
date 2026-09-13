@@ -6,6 +6,7 @@ type Model struct {
 	Message     string
 	Amend       bool
 	Staged      int
+	Files       int
 	LastMessage string
 	Merging     bool
 }

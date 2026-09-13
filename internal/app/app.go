@@ -547,6 +547,16 @@ func (a *App) setHasStagedChanges(v bool) {
 	}
 }
 
+func (a *App) setHasChanges(v bool) {
+	a.mu.Lock()
+	changed := a.state.HasChanges != v
+	a.state.HasChanges = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
 func (a *App) setHasRemotes(v bool) {
 	a.mu.Lock()
 	changed := a.state.HasRemotes != v

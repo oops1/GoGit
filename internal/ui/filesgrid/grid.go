@@ -191,23 +191,27 @@ func (g *Grid) ApplyTheme(t *widget.Theme) {
 	g.menu.ApplyTheme(t)
 }
 
-func (g *Grid) HasOverlay() bool { return g.menu.IsOpen() }
+func (g *Grid) HasOverlay() bool { return g.menu.IsOpen() || g.dg.HasOverlay() }
 
 func (g *Grid) DrawOverlay(ctx widget.DrawContext) {
 	if g.menu.IsOpen() {
 		g.menu.DrawOverlay(ctx)
 	}
+	g.dg.DrawOverlay(ctx)
 }
 
 func (g *Grid) OverlayBounds() image.Rectangle {
 	if g.menu.IsOpen() {
 		return g.menu.OverlayBounds()
 	}
-	return image.Rectangle{}
+	return g.dg.OverlayBounds()
 }
 
 func (g *Grid) Dismiss() {
 	if g.menu.IsOpen() {
 		g.menu.Close()
 	}
+	g.dg.Dismiss()
 }
+
+func (g *Grid) ContextMenuAt(x, y int) *widget.PopupMenu { return g.dg.ContextMenuAt(x, y) }
