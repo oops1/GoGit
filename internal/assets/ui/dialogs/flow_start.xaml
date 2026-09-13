@@ -17,9 +17,8 @@
         <ColumnDefinition Width="90"/>
     </Grid.ColumnDefinitions>
 
-    <TextBlock x:Name="versionLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-               Text="{Loc Dialog.FlowStart.VersionLabel}"/>
-    <TextBox x:Name="version" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"/>
+    <TextBlock x:Name="nameLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Text=""/>
+    <TextBox x:Name="name" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"/>
 
     <TextBlock x:Name="hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                Text="" FontSize="11" TextWrapping="Wrap"/>

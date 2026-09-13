@@ -24,6 +24,7 @@ var (
 	ErrFlowBehind        = errors.New("ops: branch is behind its remote")
 	ErrFlowPending       = errors.New("ops: another git-flow finish is waiting")
 	ErrFlowState         = errors.New("ops: git-flow state is damaged")
+	ErrFlowKind          = errors.New("ops: unknown git-flow branch kind")
 )
 
 type FlowStep int
@@ -38,12 +39,16 @@ const (
 
 const (
 	flowStateFile    = "GOGIT_FLOW"
+	FlowKindFeature  = "feature"
 	FlowKindRelease  = "release"
+	FlowKindHotfix   = "hotfix"
 	flowFinishPrefix = "Finish "
 	flowStateFields  = 6
 )
 
 var flowConfigSection = "gitflow"
+
+var FlowKinds = []string{FlowKindFeature, FlowKindRelease, FlowKindHotfix}
 
 var (
 	flowPush         = Push
@@ -122,44 +127,72 @@ type FlowNetwork struct {
 
 func (n FlowNetwork) enabled() bool { return n.Remote != "" }
 
-type StartReleaseOptions struct {
+type FlowBranch struct {
+	Prefix string
+	Base   string
+	Tagged bool
+}
+
+func (c FlowConfig) Branch(kind string) (FlowBranch, error) {
+	switch kind {
+	case FlowKindFeature:
+		return FlowBranch{Prefix: c.FeaturePrefix, Base: c.Develop}, nil
+	case FlowKindRelease:
+		return FlowBranch{Prefix: c.ReleasePrefix, Base: c.Develop, Tagged: true}, nil
+	case FlowKindHotfix:
+		return FlowBranch{Prefix: c.HotfixPrefix, Base: c.Master, Tagged: true}, nil
+	}
+	return FlowBranch{}, fmt.Errorf("%w: %s", ErrFlowKind, kind)
+}
+
+func (c FlowConfig) BranchKind(branch string) (string, string, bool) {
+	for _, kind := range FlowKinds {
+		b, _ := c.Branch(kind)
+		if name, cut := strings.CutPrefix(branch, b.Prefix); cut && b.Prefix != "" && name != "" {
+			return kind, name, true
+		}
+	}
+	return "", "", false
+}
+
+type StartFlowOptions struct {
 	Network FlowNetwork
 }
 
-func StartRelease(ctx context.Context, r *repo.Repository, version string, opts StartReleaseOptions) (refs.Name, error) {
-	cfg, err := configuredFlow(r, version)
+func StartFlow(ctx context.Context, r *repo.Repository, kind, name string, opts StartFlowOptions) (refs.Name, error) {
+	_, branch, err := configuredFlow(r, kind, name)
 	if err != nil {
 		return "", err
 	}
-	fetch, err := flowFetchSpecs(opts.Network, cfg.Develop)
+	fetch, err := flowFetchSpecs(opts.Network, branch.Base)
 	if err != nil {
 		return "", err
 	}
 	if err := flowFetch(ctx, r, opts.Network, fetch); err != nil {
 		return "", err
 	}
-	name := cfg.ReleasePrefix + version
-	if _, err := StartBranch(ctx, r, name, refs.BranchName(cfg.Develop).String(), StartBranchOptions{}); err != nil {
+	full := branch.Prefix + name
+	if _, err := StartBranch(ctx, r, full, refs.BranchName(branch.Base).String(), StartBranchOptions{}); err != nil {
 		return "", err
 	}
-	return refs.BranchName(name), nil
+	return refs.BranchName(full), nil
 }
 
-type FinishReleaseOptions struct {
-	TagMessage   string
+type FinishFlowOptions struct {
+	Message      string
 	Push         bool
 	DeleteBranch bool
 	When         time.Time
 	Network      FlowNetwork
 }
 
-type FinishReleaseResult struct {
+type FinishFlowResult struct {
 	Tag       TagResult
 	Conflicts []string
 	Stopped   FlowStep
 }
 
-func (r FinishReleaseResult) Finished() bool { return r.Stopped == 0 }
+func (r FinishFlowResult) Finished() bool { return r.Stopped == 0 }
 
 type FlowFinish struct {
 	Kind string
@@ -172,52 +205,60 @@ func PendingFlowFinish(r *repo.Repository) (FlowFinish, bool, error) {
 	return FlowFinish{Kind: state.kind, Name: state.name, Step: state.step}, found, err
 }
 
-func FinishRelease(ctx context.Context, r *repo.Repository, version string, opts FinishReleaseOptions) (FinishReleaseResult, error) {
-	cfg, err := configuredFlow(r, version)
+func FinishFlow(ctx context.Context, r *repo.Repository, kind, name string, opts FinishFlowOptions) (FinishFlowResult, error) {
+	cfg, branch, err := configuredFlow(r, kind, name)
 	if err != nil {
-		return FinishReleaseResult{}, err
+		return FinishFlowResult{}, err
 	}
-	tag := cfg.VersionTagPrefix + version
-	fetch, err := flowFetchSpecs(opts.Network, cfg.Master, cfg.Develop)
-	if err != nil {
-		return FinishReleaseResult{}, err
+	tag := cfg.VersionTagPrefix + name
+	targets, pushed, first := []string{cfg.Develop}, []refs.Name{refs.BranchName(cfg.Develop)}, FlowStepMergeDevelop
+	if branch.Tagged {
+		targets = []string{cfg.Master, cfg.Develop}
+		pushed = append(pushed, refs.BranchName(cfg.Master), refs.TagName(tag))
+		first = FlowStepMergeMaster
 	}
-	push, err := refspec.ParseAll(flowPushTexts(refs.BranchName(cfg.Develop), refs.BranchName(cfg.Master), refs.TagName(tag)))
+	fetch, err := flowFetchSpecs(opts.Network, targets...)
 	if err != nil {
-		return FinishReleaseResult{}, err
+		return FinishFlowResult{}, err
 	}
-	state, resumed, err := resumeFlow(r, FlowKindRelease, version)
+	push, err := refspec.ParseAll(flowPushTexts(pushed...))
 	if err != nil {
-		return FinishReleaseResult{}, err
+		return FinishFlowResult{}, err
+	}
+	state, resumed, err := resumeFlow(r, kind, name)
+	if err != nil {
+		return FinishFlowResult{}, err
 	}
 	if !resumed {
-		state = flowState{kind: FlowKindRelease, name: version, step: FlowStepMergeMaster, push: opts.Push, deleteBranch: opts.DeleteBranch, message: opts.TagMessage}
+		state = flowState{kind: kind, name: name, step: first, push: opts.Push, deleteBranch: opts.DeleteBranch, message: opts.Message}
 		if err := flowFetch(ctx, r, opts.Network, fetch); err != nil {
-			return FinishReleaseResult{}, err
+			return FinishFlowResult{}, err
 		}
-		for _, branch := range []string{cfg.Master, cfg.Develop} {
-			if err := flowNotBehind(r, opts.Network, branch); err != nil {
-				return FinishReleaseResult{}, err
+		for _, target := range targets {
+			if err := flowNotBehind(r, opts.Network, target); err != nil {
+				return FinishFlowResult{}, err
 			}
 		}
 	}
-	f := &releaseFinish{ctx: ctx, r: r, cfg: cfg, net: opts.Network, when: opts.When, state: state, tag: tag, push: push}
+	f := &flowFinisher{ctx: ctx, r: r, cfg: cfg, net: opts.Network, when: opts.When, state: state, branch: branch.Prefix + name, tagged: branch.Tagged, tag: tag, push: push}
 	return f.run()
 }
 
-type releaseFinish struct {
+type flowFinisher struct {
 	ctx    context.Context
 	r      *repo.Repository
 	cfg    FlowConfig
 	net    FlowNetwork
 	when   time.Time
 	state  flowState
+	branch string
+	tagged bool
 	tag    string
 	push   []refspec.RefSpec
-	result FinishReleaseResult
+	result FinishFlowResult
 }
 
-func (f *releaseFinish) run() (FinishReleaseResult, error) {
+func (f *flowFinisher) run() (FinishFlowResult, error) {
 	for ; f.state.step <= FlowStepDeleteBranch; f.state.step++ {
 		conflicts, err := f.do(f.state.step)
 		if err != nil {
@@ -231,12 +272,11 @@ func (f *releaseFinish) run() (FinishReleaseResult, error) {
 	return f.result, removeStateFiles(f.r, flowStateFile)
 }
 
-func (f *releaseFinish) do(step FlowStep) ([]string, error) {
-	release := f.cfg.ReleasePrefix + f.state.name
+func (f *flowFinisher) do(step FlowStep) ([]string, error) {
 	message := flowFinishPrefix + f.state.name
 	switch step {
 	case FlowStepMergeMaster:
-		return flowMerge(f.ctx, f.r, f.cfg.Master, release, message, f.when)
+		return flowMerge(f.ctx, f.r, f.cfg.Master, f.branch, message, f.when)
 	case FlowStepTag:
 		var err error
 		f.result.Tag, err = CreateTag(f.ctx, f.r, f.tag, refs.BranchName(f.cfg.Master).String(), CreateTagOptions{
@@ -246,7 +286,10 @@ func (f *releaseFinish) do(step FlowStep) ([]string, error) {
 		})
 		return nil, err
 	case FlowStepMergeDevelop:
-		return flowMerge(f.ctx, f.r, f.cfg.Develop, f.tag, message, f.when)
+		if f.tagged {
+			return flowMerge(f.ctx, f.r, f.cfg.Develop, f.tag, message, f.when)
+		}
+		return flowMerge(f.ctx, f.r, f.cfg.Develop, f.branch, cmp.Or(f.state.message, message), f.when)
 	case FlowStepPush:
 		if !f.state.push || !f.net.enabled() {
 			return nil, nil
@@ -257,19 +300,20 @@ func (f *releaseFinish) do(step FlowStep) ([]string, error) {
 		if !f.state.deleteBranch {
 			return nil, nil
 		}
-		return nil, flowDeleteBranch(f.ctx, f.r, release, true)
+		return nil, flowDeleteBranch(f.ctx, f.r, f.branch, true)
 	}
 }
 
-func configuredFlow(r *repo.Repository, name string) (FlowConfig, error) {
+func configuredFlow(r *repo.Repository, kind, name string) (FlowConfig, FlowBranch, error) {
 	cfg, ok := ReadFlowConfig(r)
 	switch {
 	case !ok:
-		return cfg, ErrFlowNotConfigured
+		return cfg, FlowBranch{}, ErrFlowNotConfigured
 	case strings.TrimSpace(name) == "":
-		return cfg, ErrFlowEmptyName
+		return cfg, FlowBranch{}, ErrFlowEmptyName
 	}
-	return cfg, nil
+	branch, err := cfg.Branch(kind)
+	return cfg, branch, err
 }
 
 func flowFetchSpecs(net FlowNetwork, branches ...string) ([]refspec.RefSpec, error) {

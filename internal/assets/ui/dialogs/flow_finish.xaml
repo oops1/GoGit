@@ -22,17 +22,14 @@
         <ColumnDefinition Width="90"/>
     </Grid.ColumnDefinitions>
 
-    <TextBlock x:Name="releaseLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Text=""/>
+    <TextBlock x:Name="branchLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Text=""/>
 
-    <TextBlock x:Name="messageLabel" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
-               Text="{Loc Dialog.FlowFinish.MessageLabel}"/>
+    <TextBlock x:Name="messageLabel" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Text=""/>
     <TextBox x:Name="message" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
              AcceptsReturn="True" TextWrapping="Wrap"/>
 
-    <CheckBox x:Name="push" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
-              Content="{Loc Dialog.FlowFinish.Push}"/>
-    <CheckBox x:Name="deleteBranch" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3"
-              Content="{Loc Dialog.FlowFinish.DeleteBranch}"/>
+    <CheckBox x:Name="push" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3" Content=""/>
+    <CheckBox x:Name="deleteBranch" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Content=""/>
 
     <TextBlock x:Name="hint" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
                Text="" FontSize="11" TextWrapping="Wrap"/>

@@ -34,10 +34,35 @@ func captureFlowViews[V any](t *testing.T, seam *func() (V, error)) *[]V {
 	return views
 }
 
+func captureKindViews[V any](t *testing.T, seam *func(string) (V, error)) *[]V {
+	t.Helper()
+	views := &[]V{}
+	prev := *seam
+	*seam = func(kind string) (V, error) {
+		view, err := prev(kind)
+		if err == nil {
+			*views = append(*views, view)
+		}
+		return view, err
+	}
+	t.Cleanup(func() { *seam = prev })
+	return views
+}
+
 func failFlowView[V any](t *testing.T, seam *func() (V, error)) {
 	t.Helper()
 	prev := *seam
 	*seam = func() (V, error) {
+		var none V
+		return none, errors.New("no dialog")
+	}
+	t.Cleanup(func() { *seam = prev })
+}
+
+func failKindView[V any](t *testing.T, seam *func(string) (V, error)) {
+	t.Helper()
+	prev := *seam
+	*seam = func(string) (V, error) {
 		var none V
 		return none, errors.New("no dialog")
 	}
@@ -95,38 +120,53 @@ func operationLines(t *testing.T, a *App, views *[]*operation.View) []string {
 	return readOnDispatcher(t, a, view.Lines)
 }
 
-func TestGitFlowCommandsFollowTheRepositoryAndTheRelease(t *testing.T) {
+func TestGitFlowCommandsFollowTheRepositoryAndTheBranch(t *testing.T) {
+	release := FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}
+	feature := FlowBranch{Kind: ops.FlowKindFeature, Name: "login"}
+	hotfix := FlowBranch{Kind: ops.FlowKindHotfix, Name: "1.0.1"}
+	starts := []CommandID{CmdFlowStartFeature, CmdFlowStartRelease, CmdFlowStartHotfix}
+	finishes := []CommandID{CmdFlowFinishFeature, CmdFlowFinishRelease, CmdFlowFinishHotfix}
 	for _, c := range []struct {
-		state                    State
-		start, finish, configure bool
+		state            State
+		start, configure bool
+		finish           []bool
 	}{
-		{State{}, false, false, false},
-		{State{ActiveRepository: "r"}, true, false, true},
-		{State{ActiveRepository: "r", Merging: true, FlowRelease: "1.0"}, false, false, true},
-		{State{ActiveRepository: "r", FlowRelease: "1.0"}, true, true, true},
-		{State{ActiveRepository: "r", FlowPending: "1.0"}, true, true, true},
+		{State{}, false, false, []bool{false, false, false}},
+		{State{ActiveRepository: "r"}, true, true, []bool{false, false, false}},
+		{State{ActiveRepository: "r", Merging: true, FlowCurrent: release}, false, true, []bool{false, false, false}},
+		{State{ActiveRepository: "r", FlowCurrent: release}, true, true, []bool{false, true, false}},
+		{State{ActiveRepository: "r", FlowCurrent: feature}, true, true, []bool{true, false, false}},
+		{State{ActiveRepository: "r", FlowCurrent: feature, FlowPending: hotfix}, true, true, []bool{false, false, true}},
 	} {
-		if c.state.Enabled(CmdFlowStartRelease) != c.start || c.state.Enabled(CmdFlowFinishRelease) != c.finish || c.state.Enabled(CmdFlowConfigure) != c.configure {
-			t.Errorf("state %+v", c.state)
+		for i := range starts {
+			if c.state.Enabled(starts[i]) != c.start || c.state.Enabled(finishes[i]) != c.finish[i] {
+				t.Errorf("state %+v: %s or %s", c.state, starts[i], finishes[i])
+			}
+		}
+		if c.state.Enabled(CmdFlowConfigure) != c.configure {
+			t.Errorf("state %+v: configure", c.state)
 		}
 	}
 
 	a, _ := flowReadyApp(t, true)
 	disabled := readOnDispatcher(t, a, func() []bool {
 		items := a.menu.Items()[branchMenuIndex].Items
-		sub := items[len(items)-1].SubItems
-		return []bool{sub[0].Disabled, sub[1].Disabled, sub[2].Disabled}
+		var off []bool
+		for _, sub := range items[len(items)-1].SubItems {
+			off = append(off, sub.Disabled)
+		}
+		return off
 	})
 
-	if !slices.Equal(disabled, []bool{false, true, false}) {
-		t.Fatalf("git-flow items disabled = %v, want only Finish Release off", disabled)
+	if !slices.Equal(disabled, []bool{false, true, false, true, false, true, false}) {
+		t.Fatalf("git-flow items disabled = %v, want only the finishes off", disabled)
 	}
 }
 
 func TestStartingAReleaseAsksForTheSettingsFirstAndCreatesTheBranch(t *testing.T) {
 	a, _ := flowReadyApp(t, false)
 	configs := captureFlowViews(t, &newFlowConfigView)
-	starts := captureFlowViews(t, &newFlowStartView)
+	starts := captureKindViews(t, &newFlowStartView)
 	operations := captureOperationViews(t)
 
 	if !readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdFlowStartRelease) }) {
@@ -139,32 +179,32 @@ func TestStartingAReleaseAsksForTheSettingsFirstAndCreatesTheBranch(t *testing.T
 	}
 	readOnDispatcher(t, a, func() bool { config.OnOK(model); return true })
 	start := waitForFlowView(t, a, starts)
-	readOnDispatcher(t, a, func() bool { start.OnOK(flow.StartModel{Version: "1.0"}); return true })
+	readOnDispatcher(t, a, func() bool { start.OnOK(flow.StartModel{Name: "1.0"}); return true })
 	lines := operationLines(t, a, operations)
 	waitForWorkingIdle(t, a)
 
-	if !slices.Contains(lines, i18n.Tf("Operation.Log.ReleaseStarted", "release/1.0")) {
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowStarted", "release/1.0")) {
 		t.Fatalf("operation log = %v", lines)
 	}
 	if got := readOnDispatcher(t, a, a.currentBranchName); got != "release/1.0" {
 		t.Fatalf("current branch = %q", got)
 	}
-	if got := readOnDispatcher(t, a, a.State).FlowRelease; got != "1.0" {
-		t.Fatalf("flow release = %q", got)
+	if got := readOnDispatcher(t, a, a.State).FlowCurrent; got != (FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}) {
+		t.Fatalf("flow branch = %+v", got)
 	}
 }
 
 func TestFinishingTheReleaseTagsItAndReturnsToDevelop(t *testing.T) {
 	a, _ := flowReadyApp(t, true)
 	operations := captureOperationViews(t)
-	readOnDispatcher(t, a, func() bool { a.startRelease("1.0"); return true })
+	readOnDispatcher(t, a, func() bool { a.startFlow(ops.FlowKindRelease, "1.0"); return true })
 	operationLines(t, a, operations)
 	waitForWorkingIdle(t, a)
-	readOnDispatcher(t, a, func() bool { a.startRelease("1.0"); return true })
-	if lines := operationLines(t, a, operations); slices.Contains(lines, i18n.Tf("Operation.Log.ReleaseStarted", "release/1.0")) {
+	readOnDispatcher(t, a, func() bool { a.startFlow(ops.FlowKindRelease, "1.0"); return true })
+	if lines := operationLines(t, a, operations); slices.Contains(lines, i18n.Tf("Operation.Log.FlowStarted", "release/1.0")) {
 		t.Fatalf("a second start of the same release succeeded: %v", lines)
 	}
-	finishes := captureFlowViews(t, &newFlowFinishView)
+	finishes := captureKindViews(t, &newFlowFinishView)
 
 	if !readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdFlowFinishRelease) }) {
 		t.Fatal("Finish Release did not dispatch")
@@ -183,27 +223,78 @@ func TestFinishingTheReleaseTagsItAndReturnsToDevelop(t *testing.T) {
 	if !slices.Contains(readOnDispatcher(t, a, a.tagNames), "1.0") {
 		t.Fatal("the release tag is missing")
 	}
-	if got := readOnDispatcher(t, a, a.State); got.FlowRelease != "" || got.FlowPending != "" {
+	if got := readOnDispatcher(t, a, a.State); got.FlowCurrent != (FlowBranch{}) || got.FlowPending != (FlowBranch{}) {
 		t.Fatalf("flow state = %+v", got)
 	}
 }
 
-func TestFinishReleaseLogsEveryOutcome(t *testing.T) {
+func runFlowDialog[V any](t *testing.T, a *App, operations *[]*operation.View, views *[]V, id CommandID, confirm func(V)) []string {
+	t.Helper()
+	if !readOnDispatcher(t, a, func() bool { return a.Dispatch(id) }) {
+		t.Fatalf("%s did not dispatch", id)
+	}
+	view := waitForFlowView(t, a, views)
+	readOnDispatcher(t, a, func() bool { confirm(view); return true })
+	lines := operationLines(t, a, operations)
+	waitForWorkingIdle(t, a)
+	return lines
+}
+
+func TestFeaturesAndHotfixesStartAndFinishFromTheMenu(t *testing.T) {
+	a, target := flowReadyApp(t, true)
+	r, err := gitrepo.Open(target, gitrepo.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := ops.DefaultFlowConfig()
+	cfg.Master, cfg.FeaturePrefix = "main", "topic/"
+	err = ops.WriteFlowConfig(r, cfg)
+	_ = r.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations := captureOperationViews(t)
+	starts := captureKindViews(t, &newFlowStartView)
+	finishes := captureKindViews(t, &newFlowFinishView)
+	finishWithDefaults := func(v *flow.FinishView) { v.OnOK(v.Model()) }
+
+	lines := runFlowDialog(t, a, operations, starts, CmdFlowStartFeature, func(v *flow.StartView) { v.OnOK(flow.StartModel{Name: "login"}) })
+	if got := readOnDispatcher(t, a, a.State).FlowCurrent; got != (FlowBranch{Kind: ops.FlowKindFeature, Name: "login"}) {
+		t.Fatalf("flow branch = %+v, log = %v", got, lines)
+	}
+	lines = runFlowDialog(t, a, operations, finishes, CmdFlowFinishFeature, finishWithDefaults)
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.FeatureFinished", "login")) || readOnDispatcher(t, a, a.currentBranchName) != "develop" {
+		t.Fatalf("feature finish log = %v", lines)
+	}
+
+	runFlowDialog(t, a, operations, starts, CmdFlowStartHotfix, func(v *flow.StartView) { v.OnOK(flow.StartModel{Name: "1.0.1"}) })
+	if got := readOnDispatcher(t, a, a.currentBranchName); got != "hotfix/1.0.1" {
+		t.Fatalf("current branch = %q", got)
+	}
+	lines = runFlowDialog(t, a, operations, finishes, CmdFlowFinishHotfix, finishWithDefaults)
+
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.HotfixFinished", "1.0.1")) || !slices.Contains(readOnDispatcher(t, a, a.tagNames), "1.0.1") {
+		t.Fatalf("hotfix finish log = %v", lines)
+	}
+}
+
+func TestFinishFlowLogsEveryOutcome(t *testing.T) {
 	a := newTestApp(t)
 	operations := captureOperationViews(t)
 	for _, c := range []struct {
-		result ops.FinishReleaseResult
+		kind   string
+		result ops.FinishFlowResult
 		err    error
 		want   []string
 	}{
-		{ops.FinishReleaseResult{}, nil, []string{i18n.Tf("Operation.Log.ReleaseFinished", "1.0")}},
-		{ops.FinishReleaseResult{Stopped: ops.FlowStepMergeMaster, Conflicts: []string{"a.txt"}}, nil, []string{i18n.Tf("Operation.Log.MergeConflictPath", "a.txt"), i18n.Tf("Operation.Log.ReleaseStopped", 1)}},
-		{ops.FinishReleaseResult{}, ops.ErrFlowBehind, []string{i18n.T("Operation.Log.ReleaseBehind")}},
-		{ops.FinishReleaseResult{}, errors.New("boom"), nil},
+		{ops.FlowKindRelease, ops.FinishFlowResult{}, nil, []string{i18n.Tf("Operation.Log.ReleaseFinished", "1.0")}},
+		{ops.FlowKindFeature, ops.FinishFlowResult{Stopped: ops.FlowStepMergeDevelop, Conflicts: []string{"a.txt"}}, nil, []string{i18n.Tf("Operation.Log.MergeConflictPath", "a.txt"), i18n.Tf("Operation.Log.FeatureStopped", 1)}},
+		{ops.FlowKindHotfix, ops.FinishFlowResult{}, ops.ErrFlowBehind, []string{i18n.T("Operation.Log.FlowBehind")}},
+		{ops.FlowKindRelease, ops.FinishFlowResult{}, errors.New("boom"), nil},
 	} {
 		readOnDispatcher(t, a, func() bool {
 			a.RunOperation("finish", func(_ context.Context, reporter OperationReporter) error {
-				reportFinishRelease(reporter, "1.0", c.result, c.err)
+				reportFinishFlow(reporter, c.kind, "1.0", c.result, c.err)
 				return nil
 			})
 			return true
@@ -219,12 +310,12 @@ func TestFinishReleaseLogsEveryOutcome(t *testing.T) {
 
 func TestTheFlowStateFollowsAPendingFinishAndAnUnreadableRepository(t *testing.T) {
 	a, target := flowReadyApp(t, true)
-	if err := os.WriteFile(filepath.Join(target, ".git", "GOGIT_FLOW"), []byte("release\n2.0\n1\nfalse\nfalse\n"), 0o666); err != nil {
+	if err := os.WriteFile(filepath.Join(target, ".git", "GOGIT_FLOW"), []byte("hotfix\n2.0\n1\nfalse\nfalse\n"), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	readOnDispatcher(t, a, func() bool { a.RefreshRepository(); return true })
-	if got := readOnDispatcher(t, a, a.State).FlowPending; got != "2.0" {
-		t.Fatalf("pending finish = %q", got)
+	if got := readOnDispatcher(t, a, a.State).FlowPending; got != (FlowBranch{Kind: ops.FlowKindHotfix, Name: "2.0"}) {
+		t.Fatalf("pending finish = %+v", got)
 	}
 
 	prev := openGitRepository
@@ -232,33 +323,33 @@ func TestTheFlowStateFollowsAPendingFinishAndAnUnreadableRepository(t *testing.T
 	t.Cleanup(func() { openGitRepository = prev })
 	operations := captureOperationViews(t)
 	readOnDispatcher(t, a, func() bool { a.refreshFlowState(a.opened(), "release/1.0"); return true })
-	if got := readOnDispatcher(t, a, a.State); got.FlowPending != "" || got.FlowRelease != "" {
+	if got := readOnDispatcher(t, a, a.State); got.FlowPending != (FlowBranch{}) || got.FlowCurrent != (FlowBranch{}) {
 		t.Fatalf("flow state over an unreadable repository = %+v", got)
 	}
 	readOnDispatcher(t, a, func() bool {
-		a.openStartRelease()
-		a.openFinishRelease()
+		a.openStartFlow(ops.FlowKindRelease)
+		a.openFinishFlow(ops.FlowKindRelease)
 		a.openFlowConfig(nil)
 		return true
 	})
 	waitForStatusText(t, a, i18n.Tf("Status.FlowReadFailed", errors.New("gone")))
-	readOnDispatcher(t, a, func() bool { a.startRelease("1.0"); return true })
+	readOnDispatcher(t, a, func() bool { a.startFlow(ops.FlowKindRelease, "1.0"); return true })
 	operationLines(t, a, operations)
-	readOnDispatcher(t, a, func() bool { a.finishRelease("1.0", flow.FinishModel{}); return true })
+	readOnDispatcher(t, a, func() bool { a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{}); return true })
 	operationLines(t, a, operations)
 }
 
 func TestGitFlowCommandsNeedAnOpenRepository(t *testing.T) {
 	a := newTestApp(t)
-	starts := captureFlowViews(t, &newFlowStartView)
+	starts := captureKindViews(t, &newFlowStartView)
 	operations := captureOperationViews(t)
 
 	readOnDispatcher(t, a, func() bool {
-		a.openStartRelease()
-		a.openFinishRelease()
+		a.openStartFlow(ops.FlowKindRelease)
+		a.openFinishFlow(ops.FlowKindRelease)
 		a.openFlowConfig(nil)
-		a.startRelease("1.0")
-		a.finishRelease("1.0", flow.FinishModel{})
+		a.startFlow(ops.FlowKindRelease, "1.0")
+		a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{})
 		return true
 	})
 
@@ -269,17 +360,17 @@ func TestGitFlowCommandsNeedAnOpenRepository(t *testing.T) {
 
 func TestGitFlowDialogsThatCannotOpenAreLeftAlone(t *testing.T) {
 	a, _ := flowReadyApp(t, true)
-	failFlowView(t, &newFlowStartView)
-	failFlowView(t, &newFlowFinishView)
+	failKindView(t, &newFlowStartView)
+	failKindView(t, &newFlowFinishView)
 	failFlowView(t, &newFlowConfigView)
 	operations := captureOperationViews(t)
 
 	readOnDispatcher(t, a, func() bool {
-		a.setFlowState("", "")
-		a.openFinishRelease()
-		a.setFlowState("1.0", "")
-		a.openStartRelease()
-		a.openFinishRelease()
+		a.setFlowState(FlowBranch{}, FlowBranch{})
+		a.openFinishFlow(ops.FlowKindRelease)
+		a.setFlowState(FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}, FlowBranch{})
+		a.openStartFlow(ops.FlowKindRelease)
+		a.openFinishFlow(ops.FlowKindRelease)
 		a.openFlowConfig(nil)
 		return true
 	})
@@ -291,15 +382,15 @@ func TestGitFlowDialogsThatCannotOpenAreLeftAlone(t *testing.T) {
 
 func TestGitFlowDialogsCanBeCancelled(t *testing.T) {
 	a, _ := flowReadyApp(t, true)
-	starts := captureFlowViews(t, &newFlowStartView)
-	finishes := captureFlowViews(t, &newFlowFinishView)
+	starts := captureKindViews(t, &newFlowStartView)
+	finishes := captureKindViews(t, &newFlowFinishView)
 	configs := captureFlowViews(t, &newFlowConfigView)
 	operations := captureOperationViews(t)
 
 	readOnDispatcher(t, a, func() bool {
-		a.setFlowState("", "1.0")
-		a.openStartRelease()
-		a.openFinishRelease()
+		a.setFlowState(FlowBranch{}, FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"})
+		a.openStartFlow(ops.FlowKindRelease)
+		a.openFinishFlow(ops.FlowKindRelease)
 		a.Dispatch(CmdFlowConfigure)
 		(*starts)[0].OnCancel()
 		(*finishes)[0].OnCancel()
@@ -312,13 +403,20 @@ func TestGitFlowDialogsCanBeCancelled(t *testing.T) {
 	}
 }
 
-func TestFinishingWithoutSettingsAsksForThemFirst(t *testing.T) {
+func TestFinishingWithoutSettingsAsksForThemFirstAndReturns(t *testing.T) {
 	a, _ := flowReadyApp(t, false)
 	configs := captureFlowViews(t, &newFlowConfigView)
+	finishes := captureKindViews(t, &newFlowFinishView)
 
-	readOnDispatcher(t, a, func() bool { a.openFinishRelease(); return true })
+	readOnDispatcher(t, a, func() bool { a.openFinishFlow(ops.FlowKindFeature); return true })
+	config := waitForFlowView(t, a, configs)
+	readOnDispatcher(t, a, func() bool { config.OnOK(config.Model()); return true })
+	waitForStatusText(t, a, i18n.T("Status.FlowConfigSaved"))
+	waitForPostQueueDrain(t, a)
 
-	waitForFlowView(t, a, configs)
+	if n := readOnDispatcher(t, a, func() int { return len(*finishes) }); n != 0 {
+		t.Fatalf("a finish dialog opened without a feature branch: %d", n)
+	}
 }
 
 func TestAFailedSaveOfTheSettingsIsReported(t *testing.T) {

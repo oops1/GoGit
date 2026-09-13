@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,7 +55,7 @@ func commitFlowFile(t *testing.T, r *testRepo, rel, text, message string) hash.O
 
 func startFlowRelease(t *testing.T, r *testRepo, version string, net FlowNetwork) {
 	t.Helper()
-	if _, err := StartRelease(t.Context(), r.repo, version, StartReleaseOptions{Network: net}); err != nil {
+	if _, err := StartFlow(t.Context(), r.repo, FlowKindRelease, version, StartFlowOptions{Network: net}); err != nil {
 		t.Fatalf("StartRelease returned error %v", err)
 	}
 }
@@ -158,11 +159,11 @@ func TestWriteFlowConfigReportsASaveFailure(t *testing.T) {
 
 func TestStartReleaseNeedsGitFlowAndAName(t *testing.T) {
 	bare := newTestRepo(t)
-	if _, err := StartRelease(t.Context(), bare.repo, "1.0", StartReleaseOptions{}); !errors.Is(err, ErrFlowNotConfigured) {
+	if _, err := StartFlow(t.Context(), bare.repo, FlowKindRelease, "1.0", StartFlowOptions{}); !errors.Is(err, ErrFlowNotConfigured) {
 		t.Fatalf("StartRelease without git-flow returned %v", err)
 	}
 	r, _ := newFlowRepo(t)
-	if _, err := StartRelease(t.Context(), r.repo, "  ", StartReleaseOptions{}); !errors.Is(err, ErrFlowEmptyName) {
+	if _, err := StartFlow(t.Context(), r.repo, FlowKindRelease, "  ", StartFlowOptions{}); !errors.Is(err, ErrFlowEmptyName) {
 		t.Fatalf("StartRelease without a name returned %v", err)
 	}
 }
@@ -173,7 +174,7 @@ func TestStartReleaseBranchesFromDevelopWithoutTrackingAndSwitches(t *testing.T)
 	tip := commitFlowFile(t, r, "g.txt", "develop\n", "develop work")
 	switchFlowBranch(t, r, "main")
 
-	name, err := StartRelease(t.Context(), r.repo, "1.0", StartReleaseOptions{})
+	name, err := StartFlow(t.Context(), r.repo, FlowKindRelease, "1.0", StartFlowOptions{})
 	if err != nil {
 		t.Fatalf("StartRelease returned error %v", err)
 	}
@@ -195,7 +196,7 @@ func TestStartReleaseFailsBeforeTouchingTheRepository(t *testing.T) {
 	cfg.Develop = "de:v"
 	useFlowConfig(t, r, cfg)
 
-	if _, err := StartRelease(t.Context(), r.repo, "1.0", StartReleaseOptions{}); err == nil {
+	if _, err := StartFlow(t.Context(), r.repo, FlowKindRelease, "1.0", StartFlowOptions{}); err == nil {
 		t.Fatal("StartRelease accepted a develop name that is no refspec")
 	}
 	if !refMissing(t, r, refs.BranchName("release/1.0")) {
@@ -205,13 +206,13 @@ func TestStartReleaseFailsBeforeTouchingTheRepository(t *testing.T) {
 
 func TestStartReleaseReportsTheFailingStep(t *testing.T) {
 	missingRemote, _ := newFlowRepo(t)
-	if _, err := StartRelease(t.Context(), missingRemote.repo, "1.0", StartReleaseOptions{Network: FlowNetwork{Remote: "nowhere"}}); err == nil {
+	if _, err := StartFlow(t.Context(), missingRemote.repo, FlowKindRelease, "1.0", StartFlowOptions{Network: FlowNetwork{Remote: "nowhere"}}); err == nil {
 		t.Fatal("StartRelease fetched from a remote that does not exist")
 	}
 
 	taken, base := newFlowRepo(t)
 	taken.createBranch("release/1.0", base)
-	if _, err := StartRelease(t.Context(), taken.repo, "1.0", StartReleaseOptions{}); !errors.Is(err, ErrBranchExists) {
+	if _, err := StartFlow(t.Context(), taken.repo, FlowKindRelease, "1.0", StartFlowOptions{}); !errors.Is(err, ErrBranchExists) {
 		t.Fatalf("StartRelease over an existing branch returned %v", err)
 	}
 
@@ -220,7 +221,7 @@ func TestStartReleaseReportsTheFailingStep(t *testing.T) {
 	commitFlowFile(t, dirty, "a.txt", "develop\n", "develop work")
 	switchFlowBranch(t, dirty, "main")
 	dirty.writeFile("a.txt", "local\n")
-	if _, err := StartRelease(t.Context(), dirty.repo, "1.0", StartReleaseOptions{}); !errors.Is(err, ErrWouldOverwrite) {
+	if _, err := StartFlow(t.Context(), dirty.repo, FlowKindRelease, "1.0", StartFlowOptions{}); !errors.Is(err, ErrWouldOverwrite) {
 		t.Fatalf("StartRelease over local changes returned %v", err)
 	}
 }
@@ -239,11 +240,11 @@ func TestStartReleaseFetchesDevelopFromTheRemote(t *testing.T) {
 
 func TestFinishReleaseNeedsGitFlowAndAName(t *testing.T) {
 	bare := newTestRepo(t)
-	if _, err := FinishRelease(t.Context(), bare.repo, "1.0", FinishReleaseOptions{}); !errors.Is(err, ErrFlowNotConfigured) {
+	if _, err := FinishFlow(t.Context(), bare.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, ErrFlowNotConfigured) {
 		t.Fatalf("FinishRelease without git-flow returned %v", err)
 	}
 	r, _ := newFlowRepo(t)
-	if _, err := FinishRelease(t.Context(), r.repo, "", FinishReleaseOptions{}); !errors.Is(err, ErrFlowEmptyName) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "", FinishFlowOptions{}); !errors.Is(err, ErrFlowEmptyName) {
 		t.Fatalf("FinishRelease without a name returned %v", err)
 	}
 }
@@ -259,7 +260,7 @@ func TestFinishReleaseRejectsNamesThatAreNoRefspecs(t *testing.T) {
 		useFlowConfig(t, r, cfg)
 		main := r.branchTarget("main")
 
-		if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{}); err == nil {
+		if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); err == nil {
 			t.Fatalf("FinishRelease accepted %+v", cfg)
 		}
 		if r.branchTarget("main") != main {
@@ -275,7 +276,7 @@ func TestFinishReleaseMergesIntoMainTagsMergesTheTagIntoDevelopAndDeletesTheBran
 	release := r.branchTarget("release/1.0")
 	when := time.Unix(1700009000, 0).UTC()
 
-	result, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{TagMessage: "Release 1.0", Push: true, DeleteBranch: true, When: when})
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Message: "Release 1.0", Push: true, DeleteBranch: true, When: when})
 	if err != nil || !result.Finished() {
 		t.Fatalf("FinishRelease = %+v, %v", result, err)
 	}
@@ -308,7 +309,7 @@ func TestFinishReleaseMergesIntoMainTagsMergesTheTagIntoDevelopAndDeletesTheBran
 func TestFinishReleaseKeepsTheBranchAndNamesTheTagAfterTheFinishWhenAsked(t *testing.T) {
 	r := newReleaseRepo(t)
 
-	result, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{})
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{})
 	if err != nil || !result.Finished() {
 		t.Fatalf("FinishRelease = %+v, %v", result, err)
 	}
@@ -332,7 +333,7 @@ func TestFinishReleasePushesDevelopMainAndTheTag(t *testing.T) {
 	startFlowRelease(t, r, "1.0", originFlow)
 	commitFlowFile(t, r, "VERSION", "1.0\n", "bump")
 
-	result, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{Push: true, DeleteBranch: true, Network: originFlow})
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Push: true, DeleteBranch: true, Network: originFlow})
 	if err != nil || !result.Finished() {
 		t.Fatalf("FinishRelease = %+v, %v", result, err)
 	}
@@ -368,7 +369,7 @@ func TestFinishReleaseRefusesABranchBehindItsRemote(t *testing.T) {
 		t.Fatalf("Push returned error %v", err)
 	}
 
-	_, err = FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{Network: originFlow})
+	_, err = FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Network: originFlow})
 
 	if !errors.Is(err, ErrFlowBehind) {
 		t.Fatalf("FinishRelease returned %v, want %v", err, ErrFlowBehind)
@@ -378,7 +379,7 @@ func TestFinishReleaseRefusesABranchBehindItsRemote(t *testing.T) {
 func TestFinishReleaseReportsAFailedFetch(t *testing.T) {
 	r := newReleaseRepo(t)
 
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{Network: FlowNetwork{Remote: "nowhere"}}); err == nil {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Network: FlowNetwork{Remote: "nowhere"}}); err == nil {
 		t.Fatal("FinishRelease fetched from a remote that does not exist")
 	}
 }
@@ -403,7 +404,7 @@ func TestFinishReleaseNeedsTheLocalBranchesItChecks(t *testing.T) {
 		t.Fatalf("DeleteBranch returned error %v", err)
 	}
 
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{Network: originFlow}); !errors.Is(err, ErrBranchNotFound) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Network: originFlow}); !errors.Is(err, ErrBranchNotFound) {
 		t.Fatalf("FinishRelease returned %v, want %v", err, ErrBranchNotFound)
 	}
 }
@@ -416,7 +417,7 @@ func TestFinishReleaseStopsOnAConflictAndResumesAfterTheCommit(t *testing.T) {
 	commitFlowFile(t, r, "a.txt", "hotfix\n", "main change")
 	switchFlowBranch(t, r, "release/1.0")
 
-	stopped, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{DeleteBranch: true})
+	stopped, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{DeleteBranch: true})
 	if err != nil || stopped.Finished() || stopped.Stopped != FlowStepMergeMaster || !slices.Equal(stopped.Conflicts, []string{"a.txt"}) {
 		t.Fatalf("FinishRelease = %+v, %v; want a stop on a.txt while merging into main", stopped, err)
 	}
@@ -424,7 +425,7 @@ func TestFinishReleaseStopsOnAConflictAndResumesAfterTheCommit(t *testing.T) {
 	if err != nil || !found || pending != (FlowFinish{Kind: "release", Name: "1.0", Step: FlowStepMergeMaster}) {
 		t.Fatalf("PendingFlowFinish = %+v, %v, %v", pending, found, err)
 	}
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{}); !errors.Is(err, ErrMergeInProgress) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, ErrMergeInProgress) {
 		t.Fatalf("FinishRelease before the commit returned %v", err)
 	}
 
@@ -433,7 +434,7 @@ func TestFinishReleaseStopsOnAConflictAndResumesAfterTheCommit(t *testing.T) {
 	if _, err := Commit(t.Context(), r.repo, CommitOptions{Message: "Finish 1.0"}); err != nil {
 		t.Fatalf("Commit returned error %v", err)
 	}
-	resumed, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{})
+	resumed, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{})
 
 	if err != nil || !resumed.Finished() || !resumed.Tag.Annotated() {
 		t.Fatalf("resumed FinishRelease = %+v, %v", resumed, err)
@@ -451,7 +452,7 @@ func TestFinishReleaseStopsOnAConflictWithDevelop(t *testing.T) {
 	commitFlowFile(t, r, "a.txt", "develop\n", "develop change")
 	switchFlowBranch(t, r, "release/1.0")
 
-	result, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{})
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{})
 
 	if err != nil || result.Stopped != FlowStepMergeDevelop || !result.Tag.Annotated() {
 		t.Fatalf("FinishRelease = %+v, %v; want the tag and a stop at develop", result, err)
@@ -469,7 +470,7 @@ func TestFinishReleaseRefusesAnotherOrDamagedPendingFinish(t *testing.T) {
 			t.Fatalf("writeStateFile returned error %v", err)
 		}
 
-		if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{}); !errors.Is(err, want) {
+		if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, want) {
 			t.Fatalf("state %q: FinishRelease returned %v, want %v", text, err, want)
 		}
 	}
@@ -480,7 +481,7 @@ func TestFinishReleaseReportsUnreadableState(t *testing.T) {
 	if err := os.MkdirAll(flow.repo.GitPath(flowStateFile)+"/blocked", 0o777); err != nil {
 		t.Fatalf("MkdirAll returned error %v", err)
 	}
-	if _, err := FinishRelease(t.Context(), flow.repo, "1.0", FinishReleaseOptions{}); err == nil {
+	if _, err := FinishFlow(t.Context(), flow.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); err == nil {
 		t.Fatal("FinishRelease read a directory as its state")
 	}
 
@@ -491,8 +492,216 @@ func TestFinishReleaseReportsUnreadableState(t *testing.T) {
 	if err := os.MkdirAll(merge.repo.GitPath(mergeHeadFile)+"/blocked", 0o777); err != nil {
 		t.Fatalf("MkdirAll returned error %v", err)
 	}
-	if _, err := FinishRelease(t.Context(), merge.repo, "1.0", FinishReleaseOptions{}); err == nil {
+	if _, err := FinishFlow(t.Context(), merge.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); err == nil {
 		t.Fatal("FinishRelease resumed over an unreadable merge state")
+	}
+}
+
+func TestFlowConfigNamesTheBranchOfEveryKind(t *testing.T) {
+	cfg := mainFlowConfig()
+	for kind, want := range map[string]FlowBranch{
+		FlowKindFeature: {Prefix: "feature/", Base: "develop"},
+		FlowKindRelease: {Prefix: "release/", Base: "develop", Tagged: true},
+		FlowKindHotfix:  {Prefix: "hotfix/", Base: "main", Tagged: true},
+	} {
+		if got, err := cfg.Branch(kind); err != nil || got != want {
+			t.Errorf("Branch(%s) = %+v, %v; want %+v", kind, got, err, want)
+		}
+	}
+	if _, err := cfg.Branch("support"); !errors.Is(err, ErrFlowKind) {
+		t.Fatalf("Branch(support) returned %v, want %v", err, ErrFlowKind)
+	}
+}
+
+func TestFlowConfigRecognisesTheKindOfABranch(t *testing.T) {
+	noFeatures := mainFlowConfig()
+	noFeatures.FeaturePrefix = ""
+	for _, c := range []struct {
+		cfg        FlowConfig
+		branch     string
+		kind, name string
+		ok         bool
+	}{
+		{mainFlowConfig(), "feature/login", FlowKindFeature, "login", true},
+		{mainFlowConfig(), "release/1.0", FlowKindRelease, "1.0", true},
+		{mainFlowConfig(), "hotfix/1.0.1", FlowKindHotfix, "1.0.1", true},
+		{mainFlowConfig(), "hotfix/", "", "", false},
+		{mainFlowConfig(), "develop", "", "", false},
+		{noFeatures, "login", "", "", false},
+	} {
+		kind, name, ok := c.cfg.BranchKind(c.branch)
+		if kind != c.kind || name != c.name || ok != c.ok {
+			t.Errorf("BranchKind(%q) = %q, %q, %v", c.branch, kind, name, ok)
+		}
+	}
+}
+
+func TestFlowRefusesAnUnknownKind(t *testing.T) {
+	r, _ := newFlowRepo(t)
+
+	if _, err := StartFlow(t.Context(), r.repo, "support", "1.0", StartFlowOptions{}); !errors.Is(err, ErrFlowKind) {
+		t.Fatalf("StartFlow returned %v, want %v", err, ErrFlowKind)
+	}
+	if _, err := FinishFlow(t.Context(), r.repo, "support", "1.0", FinishFlowOptions{}); !errors.Is(err, ErrFlowKind) {
+		t.Fatalf("FinishFlow returned %v, want %v", err, ErrFlowKind)
+	}
+}
+
+func TestStartFlowBranchesFeaturesFromDevelopAndHotfixesFromMain(t *testing.T) {
+	r, _ := newFlowRepo(t)
+	switchFlowBranch(t, r, "develop")
+	develop := commitFlowFile(t, r, "g.txt", "develop\n", "develop work")
+	switchFlowBranch(t, r, "main")
+	main := commitFlowFile(t, r, "h.txt", "main\n", "main work")
+
+	for kind, want := range map[string]struct {
+		branch string
+		at     hash.ObjectID
+	}{
+		FlowKindFeature: {"feature/login", develop},
+		FlowKindHotfix:  {"hotfix/1.0.1", main},
+	} {
+		name := strings.TrimPrefix(strings.TrimPrefix(want.branch, "feature/"), "hotfix/")
+		got, err := StartFlow(t.Context(), r.repo, kind, name, StartFlowOptions{})
+		if err != nil || got != refs.BranchName(want.branch) || r.branchTarget(want.branch) != want.at {
+			t.Fatalf("StartFlow(%s) = %s, %v at %s; want %s at %s", kind, got, err, r.branchTarget(want.branch), want.branch, want.at)
+		}
+		if head, _ := r.headSymbolicTarget(); head != got {
+			t.Fatalf("HEAD = %s, want %s", head, got)
+		}
+	}
+}
+
+func newFeatureRepo(t *testing.T, net FlowNetwork) *testRepo {
+	t.Helper()
+	r, _ := newFlowRepo(t)
+	if net.enabled() {
+		flowServer(t, r)
+	}
+	if _, err := StartFlow(t.Context(), r.repo, FlowKindFeature, "login", StartFlowOptions{Network: net}); err != nil {
+		t.Fatalf("StartFlow returned error %v", err)
+	}
+	commitFlowFile(t, r, "login.txt", "login\n", "login")
+	return r
+}
+
+func TestFinishFeatureMergesIntoDevelopOnlyAndDeletesTheBranch(t *testing.T) {
+	r := newFeatureRepo(t, FlowNetwork{})
+	developBefore := r.branchTarget("develop")
+	mainBefore := r.branchTarget("main")
+	feature := r.branchTarget("feature/login")
+	when := time.Unix(1700009000, 0).UTC()
+
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindFeature, "login", FinishFlowOptions{DeleteBranch: true, When: when})
+	if err != nil || !result.Finished() || result.Tag != (TagResult{}) {
+		t.Fatalf("FinishFlow = %+v, %v", result, err)
+	}
+
+	develop := r.branchTarget("develop")
+	if got := flowParents(t, r, develop); !slices.Equal(got, []hash.ObjectID{developBefore, feature}) {
+		t.Fatalf("develop merge parents = %v, want %v and %v", got, developBefore, feature)
+	}
+	commit, err := r.db().Commit(develop)
+	if err != nil || commit.Message != "Finish login\n" || !commit.Committer.When.Equal(when) {
+		t.Fatalf("develop merge = %+v, %v", commit, err)
+	}
+	if r.branchTarget("main") != mainBefore {
+		t.Fatal("finishing a feature moved main")
+	}
+	if !refMissing(t, r, refs.BranchName("feature/login")) || !refMissing(t, r, refs.TagName("login")) {
+		t.Fatal("the feature branch survived or a tag appeared")
+	}
+	if head, _ := r.headSymbolicTarget(); head != refs.BranchName("develop") {
+		t.Fatalf("HEAD = %s, want develop", head)
+	}
+}
+
+func TestFinishFeatureUsesTheGivenMergeMessageAndPushesOnlyDevelop(t *testing.T) {
+	r := newFeatureRepo(t, originFlow)
+	mainBefore := r.branchTarget("main")
+
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindFeature, "login", FinishFlowOptions{Message: "Add login", Push: true, Network: originFlow})
+	if err != nil || !result.Finished() {
+		t.Fatalf("FinishFlow = %+v, %v", result, err)
+	}
+
+	commit, err := r.db().Commit(r.branchTarget("develop"))
+	if err != nil || commit.Message != "Add login\n" {
+		t.Fatalf("develop merge = %+v, %v", commit, err)
+	}
+	server, err := r.refs().Lookup(refs.RemoteBranchName("origin", "develop"))
+	if err != nil || server.Target != r.branchTarget("develop") {
+		t.Fatalf("origin/develop = %+v, %v", server, err)
+	}
+	if server, err := r.refs().Lookup(refs.RemoteBranchName("origin", "main")); err != nil || server.Target != mainBefore {
+		t.Fatalf("origin/main = %+v, %v; want it untouched at %s", server, err, mainBefore)
+	}
+	if refMissing(t, r, refs.BranchName("feature/login")) {
+		t.Fatal("the feature branch was deleted without being asked")
+	}
+}
+
+func TestFinishFeatureStopsOnAConflictAndResumesAfterTheCommit(t *testing.T) {
+	r, _ := newFlowRepo(t)
+	if _, err := StartFlow(t.Context(), r.repo, FlowKindFeature, "login", StartFlowOptions{}); err != nil {
+		t.Fatalf("StartFlow returned error %v", err)
+	}
+	commitFlowFile(t, r, "a.txt", "feature\n", "feature change")
+	switchFlowBranch(t, r, "develop")
+	commitFlowFile(t, r, "a.txt", "develop\n", "develop change")
+
+	stopped, err := FinishFlow(t.Context(), r.repo, FlowKindFeature, "login", FinishFlowOptions{DeleteBranch: true})
+	if err != nil || stopped.Stopped != FlowStepMergeDevelop || !slices.Equal(stopped.Conflicts, []string{"a.txt"}) {
+		t.Fatalf("FinishFlow = %+v, %v; want a stop on a.txt while merging into develop", stopped, err)
+	}
+	if pending, found, err := PendingFlowFinish(r.repo); err != nil || !found || pending != (FlowFinish{Kind: FlowKindFeature, Name: "login", Step: FlowStepMergeDevelop}) {
+		t.Fatalf("PendingFlowFinish = %+v, %v, %v", pending, found, err)
+	}
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "login", FinishFlowOptions{}); !errors.Is(err, ErrFlowPending) {
+		t.Fatalf("a release finish over a pending feature finish returned %v", err)
+	}
+
+	r.writeFile("a.txt", "resolved\n")
+	mustStage(t, r, "a.txt")
+	if _, err := Commit(t.Context(), r.repo, CommitOptions{Message: "Finish login"}); err != nil {
+		t.Fatalf("Commit returned error %v", err)
+	}
+	resumed, err := FinishFlow(t.Context(), r.repo, FlowKindFeature, "login", FinishFlowOptions{})
+
+	if err != nil || !resumed.Finished() || !refMissing(t, r, refs.BranchName("feature/login")) {
+		t.Fatalf("resumed FinishFlow = %+v, %v", resumed, err)
+	}
+}
+
+func TestFinishHotfixMergesIntoMainTagsAndMergesTheTagIntoDevelop(t *testing.T) {
+	r, _ := newFlowRepo(t)
+	switchFlowBranch(t, r, "develop")
+	commitFlowFile(t, r, "g.txt", "develop\n", "develop work")
+	if _, err := StartFlow(t.Context(), r.repo, FlowKindHotfix, "1.0.1", StartFlowOptions{}); err != nil {
+		t.Fatalf("StartFlow returned error %v", err)
+	}
+	commitFlowFile(t, r, "fix.txt", "fix\n", "fix")
+	developBefore := r.branchTarget("develop")
+	mainBefore := r.branchTarget("main")
+	hotfix := r.branchTarget("hotfix/1.0.1")
+
+	result, err := FinishFlow(t.Context(), r.repo, FlowKindHotfix, "1.0.1", FinishFlowOptions{Message: "Hotfix 1.0.1", DeleteBranch: true})
+	if err != nil || !result.Finished() {
+		t.Fatalf("FinishFlow = %+v, %v", result, err)
+	}
+
+	mainTip := r.branchTarget("main")
+	if got := flowParents(t, r, mainTip); !slices.Equal(got, []hash.ObjectID{mainBefore, hotfix}) {
+		t.Fatalf("main merge parents = %v, want %v and %v", got, mainBefore, hotfix)
+	}
+	if result.Tag.Name != "1.0.1" || result.Tag.Target != mainTip {
+		t.Fatalf("tag = %+v, want 1.0.1 on %s", result.Tag, mainTip)
+	}
+	if got := flowParents(t, r, r.branchTarget("develop")); !slices.Equal(got, []hash.ObjectID{developBefore, mainTip}) {
+		t.Fatalf("develop merge parents = %v, want %v and %v", got, developBefore, mainTip)
+	}
+	if !refMissing(t, r, refs.BranchName("hotfix/1.0.1")) {
+		t.Fatal("the hotfix branch is still there")
 	}
 }
 
@@ -508,13 +717,13 @@ func TestFinishReleaseReportsTheFailingStep(t *testing.T) {
 			cfg(&flow)
 			useFlowConfig(t, r, flow)
 
-			if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{}); err == nil {
+			if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); err == nil {
 				t.Fatal("FinishRelease reported success")
 			}
 		})
 	}
 	r, _ := newFlowRepo(t)
-	if _, err := FinishRelease(t.Context(), r.repo, "9.9", FinishReleaseOptions{}); !errors.Is(err, ErrTargetNotFound) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "9.9", FinishFlowOptions{}); !errors.Is(err, ErrTargetNotFound) {
 		t.Fatalf("FinishRelease without the release branch returned %v", err)
 	}
 }

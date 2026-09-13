@@ -12,45 +12,45 @@ import (
 )
 
 const (
-	startDialogName     = "flow_start_release"
-	hintVersionRequired = "Dialog.FlowStart.Hint.VersionRequired"
-	hintVersionInvalid  = "Dialog.FlowStart.Hint.VersionInvalid"
-	hintVersionTaken    = "Dialog.FlowStart.Hint.VersionTaken"
-	hintWillStart       = "Dialog.FlowStart.Hint.WillStart"
+	startDialogName = "flow_start"
+	hintNameInvalid = "Dialog.FlowStart.Hint.NameInvalid"
+	hintNameTaken   = "Dialog.FlowStart.Hint.NameTaken"
+	hintWillStart   = "Dialog.FlowStart.Hint.WillStart"
 )
 
 type StartKnown struct {
-	Develop string
-	Prefix  string
-	Taken   []string
+	Base   string
+	Prefix string
+	Taken  []string
 }
 
 type StartModel struct {
-	Version string
+	Name string
 }
 
-func ValidateStart(model StartModel, known StartKnown) Hint {
-	version := strings.TrimSpace(model.Version)
-	branch := known.Prefix + version
+func ValidateStart(kind string, model StartModel, known StartKnown) Hint {
+	name := strings.TrimSpace(model.Name)
+	branch := known.Prefix + name
 	switch {
-	case version == "":
-		return Hint{Key: hintVersionRequired}
+	case name == "":
+		return Hint{Key: kindKeys[kind].nameRequired}
 	case !validBranchName(branch):
-		return Hint{Key: hintVersionInvalid, Args: []any{version}}
+		return Hint{Key: hintNameInvalid, Args: []any{name}}
 	case slices.Contains(known.Taken, branch):
-		return Hint{Key: hintVersionTaken, Args: []any{branch}}
+		return Hint{Key: hintNameTaken, Args: []any{branch}}
 	}
-	return Hint{Key: hintWillStart, Args: []any{branch, known.Develop}, OK: true}
+	return Hint{Key: hintWillStart, Args: []any{branch, known.Base}, OK: true}
 }
 
 type StartView struct {
-	dlg          *widget.Dialog
-	versionLabel *widget.Label
-	versionBox   *widget.TextInput
-	hintLabel    *widget.Label
-	okBtn        *widget.Button
-	cancelBtn    *widget.Button
+	dlg       *widget.Dialog
+	nameLabel *widget.Label
+	nameBox   *widget.TextInput
+	hintLabel *widget.Label
+	okBtn     *widget.Button
+	cancelBtn *widget.Button
 
+	kind    string
 	known   StartKnown
 	current Hint
 
@@ -58,23 +58,25 @@ type StartView struct {
 	OnCancel func()
 }
 
-func NewStartView() (*StartView, error) {
-	dlg, named, err := loadDialog(startDialogName, i18n.T("Dialog.FlowStart.Title"))
+func NewStartView(kind string) (*StartView, error) {
+	texts := kindKeys[kind]
+	dlg, named, err := loadDialog(startDialogName, i18n.T(texts.startTitle))
 	if err != nil {
 		return nil, err
 	}
-	v := &StartView{dlg: dlg}
+	v := &StartView{dlg: dlg, kind: kind}
 	if err := errors.Join(
-		bindWidget(named, "versionLabel", &v.versionLabel),
-		bindWidget(named, "version", &v.versionBox),
+		bindWidget(named, "nameLabel", &v.nameLabel),
+		bindWidget(named, "name", &v.nameBox),
 		bindWidget(named, "hint", &v.hintLabel),
 		bindWidget(named, "ok", &v.okBtn),
 		bindWidget(named, "cancel", &v.cancelBtn),
 	); err != nil {
 		return nil, err
 	}
+	v.nameLabel.SetText(i18n.T(texts.nameLabel))
 	v.hintLabel.Muted = true
-	v.versionBox.OnChange = func(string) { v.refresh() }
+	v.nameBox.OnChange = func(string) { v.refresh() }
 	v.okBtn.OnClick = v.confirm
 	v.cancelBtn.OnClick = v.cancel
 	v.dlg.CancelAction = v.cancel
@@ -86,10 +88,10 @@ func (v *StartView) Dialog() *widget.Dialog { return v.dlg }
 
 func (v *StartView) Restyle(t *widget.Theme) {
 	p := style.Of(t)
-	p.Fields(v.versionBox)
+	p.Fields(v.nameBox)
 	p.Quiet(v.cancelBtn)
 	p.Primary(v.okBtn)
-	p.Body(v.versionLabel)
+	p.Body(v.nameLabel)
 	p.Hints(v.hintLabel)
 }
 
@@ -99,11 +101,11 @@ func (v *StartView) SetKnown(known StartKnown) {
 }
 
 func (v *StartView) Model() StartModel {
-	return StartModel{Version: strings.TrimSpace(v.versionBox.GetText())}
+	return StartModel{Name: strings.TrimSpace(v.nameBox.GetText())}
 }
 
 func (v *StartView) refresh() {
-	v.current = ValidateStart(v.Model(), v.known)
+	v.current = ValidateStart(v.kind, v.Model(), v.known)
 	v.hintLabel.SetText(i18n.Tf(v.current.Key, v.current.Args...))
 	v.okBtn.SetEnabled(v.current.OK)
 }

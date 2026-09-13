@@ -61,69 +61,110 @@ func fixedDateOracle(o *oracle) *oracle {
 	return &oracle{t: o.t, home: o.home, env: append(slices.Clone(o.env), "GIT_AUTHOR_DATE="+stamp, "GIT_COMMITTER_DATE="+stamp)}
 }
 
-func TestOracleStartReleaseBranchesLikeSmartGit(t *testing.T) {
-	o := newOracle(t)
-	gitSide := flowOracleSide(t, o)
-	ourSide := flowOracleSide(t, o)
+type flowOracleCase struct {
+	kind    string
+	branch  string
+	name    string
+	base    string
+	tagged  bool
+	message string
+}
 
-	fixed := fixedDateOracle(o)
-	fixed.run(gitSide.dir, "fetch", "--prune", "--force", "--recurse-submodules=no", "origin", "refs/heads/develop:refs/remotes/origin/develop")
-	fixed.run(gitSide.dir, "branch", "--no-track", "release/v1.0.0", "refs/heads/develop")
-	fixed.run(gitSide.dir, "checkout", "-q", "release/v1.0.0")
-	if _, err := StartRelease(t.Context(), o.openRepo(ourSide.dir), "v1.0.0", StartReleaseOptions{Network: FlowNetwork{Remote: "origin"}}); err != nil {
-		t.Fatalf("StartRelease returned error %v", err)
-	}
+var flowOracleCases = []flowOracleCase{
+	{kind: FlowKindFeature, branch: "feature/login", name: "login", base: "develop", message: "Add login"},
+	{kind: FlowKindRelease, branch: "release/v1.0.0", name: "v1.0.0", base: "develop", tagged: true, message: "Release v1.0.0"},
+	{kind: FlowKindHotfix, branch: "hotfix/v1.0.1", name: "v1.0.1", base: "master", tagged: true, message: "Hotfix v1.0.1"},
+}
 
-	if got, want := flowOracleState(ourSide), flowOracleState(gitSide); got != want {
-		t.Fatalf("repository differs from git: %s", sectionDiff(got, want))
+func TestOracleStartFlowBranchesLikeSmartGit(t *testing.T) {
+	for _, c := range flowOracleCases {
+		t.Run(c.kind, func(t *testing.T) {
+			o := newOracle(t)
+			gitSide := flowOracleSide(t, o)
+			ourSide := flowOracleSide(t, o)
+
+			fixed := fixedDateOracle(o)
+			fixed.run(gitSide.dir, "fetch", "--prune", "--force", "--recurse-submodules=no", "origin", "refs/heads/"+c.base+":refs/remotes/origin/"+c.base)
+			fixed.run(gitSide.dir, "branch", "--no-track", c.branch, "refs/heads/"+c.base)
+			fixed.run(gitSide.dir, "checkout", "-q", c.branch)
+			if _, err := StartFlow(t.Context(), o.openRepo(ourSide.dir), c.kind, c.name, StartFlowOptions{Network: FlowNetwork{Remote: "origin"}}); err != nil {
+				t.Fatalf("StartFlow returned error %v", err)
+			}
+
+			if got, want := flowOracleState(ourSide), flowOracleState(gitSide); got != want {
+				t.Fatalf("repository differs from git: %s", sectionDiff(got, want))
+			}
+		})
 	}
 }
 
-func TestOracleFinishReleaseMergesTagsAndPushesLikeSmartGit(t *testing.T) {
-	o := newOracle(t)
-	prepare := func(b *mergeBuilder) {
-		b.git("branch", "--no-track", "release/v1.0.0", "refs/heads/develop")
-		b.git("checkout", "-q", "release/v1.0.0")
-		b.commit("bump version", map[string]string{"VERSION": "1.0.0\n"})
+func flowOracleFinishCommands(c flowOracleCase, message string) [][]string {
+	fetch := func(branch string) []string {
+		return []string{"fetch", "--prune", "--force", "--recurse-submodules=no", "origin", "refs/heads/" + branch + ":refs/remotes/origin/" + branch}
 	}
-	gitSide := flowOracleSide(t, o)
-	prepare(gitSide)
-	ourSide := flowOracleSide(t, o)
-	prepare(ourSide)
-	message := filepath.Join(t.TempDir(), "tag.txt")
-	if err := os.WriteFile(message, []byte("Release v1.0.0\n"), 0o666); err != nil {
-		t.Fatalf("WriteFile returned error %v", err)
+	push := func(ref string) []string { return []string{"push", "--porcelain", "origin", ref + ":" + ref} }
+	finish := "Finish " + c.name
+	if !c.tagged {
+		return [][]string{
+			fetch("develop"),
+			{"checkout", "-q", "--ignore-other-worktrees", "develop"},
+			{"merge", "-q", "--no-ff", "-m", c.message, c.branch},
+			push("refs/heads/develop"),
+			{"branch", "-D", c.branch},
+		}
 	}
-
-	fixed := fixedDateOracle(o)
-	for _, args := range [][]string{
-		{"fetch", "--prune", "--force", "--recurse-submodules=no", "origin", "refs/heads/master:refs/remotes/origin/master"},
-		{"fetch", "--prune", "--force", "--recurse-submodules=no", "origin", "refs/heads/develop:refs/remotes/origin/develop"},
+	return [][]string{
+		fetch("master"),
+		fetch("develop"),
 		{"checkout", "-q", "--ignore-other-worktrees", "master"},
-		{"merge", "-q", "--no-ff", "-m", "Finish v1.0.0", "release/v1.0.0"},
-		{"tag", "-f", "-F", message, "v1.0.0", "refs/heads/master"},
+		{"merge", "-q", "--no-ff", "-m", finish, c.branch},
+		{"tag", "-f", "-F", message, c.name, "refs/heads/master"},
 		{"checkout", "-q", "--ignore-other-worktrees", "develop"},
-		{"merge", "-q", "--no-ff", "-m", "Finish v1.0.0", "v1.0.0"},
-		{"push", "--porcelain", "origin", "refs/heads/develop:refs/heads/develop"},
-		{"push", "--porcelain", "origin", "refs/heads/master:refs/heads/master"},
-		{"push", "--porcelain", "origin", "refs/tags/v1.0.0:refs/tags/v1.0.0"},
-		{"branch", "-D", "release/v1.0.0"},
-	} {
-		fixed.run(gitSide.dir, args...)
+		{"merge", "-q", "--no-ff", "-m", finish, c.name},
+		push("refs/heads/develop"),
+		push("refs/heads/master"),
+		push("refs/tags/" + c.name),
+		{"branch", "-D", c.branch},
 	}
-	result, err := FinishRelease(t.Context(), o.openRepo(ourSide.dir), "v1.0.0", FinishReleaseOptions{
-		TagMessage:   "Release v1.0.0",
-		Push:         true,
-		DeleteBranch: true,
-		When:         time.Unix(flowOracleStamp, 0).UTC(),
-		Network:      FlowNetwork{Remote: "origin"},
-	})
-	if err != nil || !result.Finished() {
-		t.Fatalf("FinishRelease = %+v, %v", result, err)
-	}
+}
 
-	if got, want := flowOracleState(ourSide), flowOracleState(gitSide); got != want {
-		t.Fatalf("repository differs from git: %s", sectionDiff(got, want))
+func TestOracleFinishFlowMergesTagsAndPushesLikeSmartGit(t *testing.T) {
+	for _, c := range flowOracleCases {
+		t.Run(c.kind, func(t *testing.T) {
+			o := newOracle(t)
+			prepare := func(b *mergeBuilder) {
+				b.git("branch", "--no-track", c.branch, "refs/heads/"+c.base)
+				b.git("checkout", "-q", c.branch)
+				b.commit("work on "+c.name, map[string]string{"VERSION": c.name + "\n"})
+			}
+			gitSide := flowOracleSide(t, o)
+			prepare(gitSide)
+			ourSide := flowOracleSide(t, o)
+			prepare(ourSide)
+			message := filepath.Join(t.TempDir(), "tag.txt")
+			if err := os.WriteFile(message, []byte(c.message+"\n"), 0o666); err != nil {
+				t.Fatalf("WriteFile returned error %v", err)
+			}
+
+			fixed := fixedDateOracle(o)
+			for _, args := range flowOracleFinishCommands(c, message) {
+				fixed.run(gitSide.dir, args...)
+			}
+			result, err := FinishFlow(t.Context(), o.openRepo(ourSide.dir), c.kind, c.name, FinishFlowOptions{
+				Message:      c.message,
+				Push:         true,
+				DeleteBranch: true,
+				When:         time.Unix(flowOracleStamp, 0).UTC(),
+				Network:      FlowNetwork{Remote: "origin"},
+			})
+			if err != nil || !result.Finished() {
+				t.Fatalf("FinishFlow = %+v, %v", result, err)
+			}
+
+			if got, want := flowOracleState(ourSide), flowOracleState(gitSide); got != want {
+				t.Fatalf("repository differs from git: %s", sectionDiff(got, want))
+			}
+			o.run(ourSide.dir, "fsck", "--strict")
+		})
 	}
-	o.run(ourSide.dir, "fsck", "--strict")
 }

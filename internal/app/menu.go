@@ -120,8 +120,12 @@ func buildBranchMenuTree() []menuTreeEntry {
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
 		{Separator: true},
 		{Group: &menuGroupEntry{Key: "Menu.Branch.GitFlow", Items: []menuLeafEntry{
+			{Key: "Menu.Branch.GitFlow.StartFeature", Command: CmdFlowStartFeature},
+			{Key: "Menu.Branch.GitFlow.FinishFeature", Command: CmdFlowFinishFeature},
 			{Key: "Menu.Branch.GitFlow.StartRelease", Command: CmdFlowStartRelease},
 			{Key: "Menu.Branch.GitFlow.FinishRelease", Command: CmdFlowFinishRelease},
+			{Key: "Menu.Branch.GitFlow.StartHotfix", Command: CmdFlowStartHotfix},
+			{Key: "Menu.Branch.GitFlow.FinishHotfix", Command: CmdFlowFinishHotfix},
 			{Key: "Menu.Branch.GitFlow.Configure", Command: CmdFlowConfigure},
 		}}},
 	}

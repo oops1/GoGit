@@ -42,8 +42,12 @@ const (
 	CmdContinue          CommandID = "branch.continue"
 	CmdSkip              CommandID = "branch.skip"
 	CmdAbortMerge        CommandID = "branch.abort-merge"
+	CmdFlowStartFeature  CommandID = "branch.flow.start-feature"
+	CmdFlowFinishFeature CommandID = "branch.flow.finish-feature"
 	CmdFlowStartRelease  CommandID = "branch.flow.start-release"
 	CmdFlowFinishRelease CommandID = "branch.flow.finish-release"
+	CmdFlowStartHotfix   CommandID = "branch.flow.start-hotfix"
+	CmdFlowFinishHotfix  CommandID = "branch.flow.finish-hotfix"
 	CmdFlowConfigure     CommandID = "branch.flow.configure"
 	CmdResetLayout       CommandID = "view.reset-layout"
 	CmdRefresh           CommandID = "view.refresh"
@@ -138,8 +142,20 @@ type State struct {
 	Merging          bool
 	Rebasing         bool
 	Rewording        bool
-	FlowRelease      string
-	FlowPending      string
+	FlowCurrent      FlowBranch
+	FlowPending      FlowBranch
+}
+
+type FlowBranch struct {
+	Kind string
+	Name string
+}
+
+func (s State) flowFinishTarget() FlowBranch {
+	if s.FlowPending.Name != "" {
+		return s.FlowPending
+	}
+	return s.FlowCurrent
 }
 
 func (s State) Enabled(id CommandID) bool {
@@ -154,10 +170,10 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.Merging)
-	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch, CmdFlowStartRelease:
+	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch, CmdFlowStartFeature, CmdFlowStartRelease, CmdFlowStartHotfix:
 		return s.ActiveRepository != "" && !s.Merging
-	case CmdFlowFinishRelease:
-		return s.ActiveRepository != "" && !s.Merging && (s.FlowRelease != "" || s.FlowPending != "")
+	case CmdFlowFinishFeature, CmdFlowFinishRelease, CmdFlowFinishHotfix:
+		return s.ActiveRepository != "" && !s.Merging && s.flowFinishTarget().Kind == flowFinishCommands[id]
 	case CmdReflog, CmdCompareRefs:
 		return s.ActiveRepository != ""
 	case CmdAbortMerge, CmdContinue:

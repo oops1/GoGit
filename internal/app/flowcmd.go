@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -16,16 +15,45 @@ var (
 	newFlowStartView   = flow.NewStartView
 	newFlowFinishView  = flow.NewFinishView
 	newFlowConfigView  = flow.NewConfigView
-	runStartRelease    = ops.StartRelease
-	runFinishRelease   = ops.FinishRelease
+	runStartFlow       = ops.StartFlow
+	runFinishFlow      = ops.FinishFlow
 	runWriteFlowConfig = ops.WriteFlowConfig
 )
 
 const flowMainBranch = "main"
 
+type flowOperationKeys struct {
+	start    string
+	finish   string
+	finished string
+	stopped  string
+}
+
+var flowOperationTexts = map[string]flowOperationKeys{
+	ops.FlowKindFeature: {"Operation.Title.StartFeature", "Operation.Title.FinishFeature", "Operation.Log.FeatureFinished", "Operation.Log.FeatureStopped"},
+	ops.FlowKindRelease: {"Operation.Title.StartRelease", "Operation.Title.FinishRelease", "Operation.Log.ReleaseFinished", "Operation.Log.ReleaseStopped"},
+	ops.FlowKindHotfix:  {"Operation.Title.StartHotfix", "Operation.Title.FinishHotfix", "Operation.Log.HotfixFinished", "Operation.Log.HotfixStopped"},
+}
+
+var flowStartCommands = map[CommandID]string{
+	CmdFlowStartFeature: ops.FlowKindFeature,
+	CmdFlowStartRelease: ops.FlowKindRelease,
+	CmdFlowStartHotfix:  ops.FlowKindHotfix,
+}
+
+var flowFinishCommands = map[CommandID]string{
+	CmdFlowFinishFeature: ops.FlowKindFeature,
+	CmdFlowFinishRelease: ops.FlowKindRelease,
+	CmdFlowFinishHotfix:  ops.FlowKindHotfix,
+}
+
 func (a *App) registerFlowHandlers() {
-	a.handlers[CmdFlowStartRelease] = a.openStartRelease
-	a.handlers[CmdFlowFinishRelease] = a.openFinishRelease
+	for id, kind := range flowStartCommands {
+		a.handlers[id] = func() { a.openStartFlow(kind) }
+	}
+	for id, kind := range flowFinishCommands {
+		a.handlers[id] = func() { a.openFinishFlow(kind) }
+	}
 	a.handlers[CmdFlowConfigure] = func() { a.openFlowConfig(nil) }
 }
 
@@ -54,132 +82,132 @@ func (a *App) localBranchNames(o *openedRepository) []string {
 	return names
 }
 
-func (a *App) openStartRelease() {
+func (a *App) configuredFlowFor(o *openedRepository, reopen func()) (ops.FlowConfig, bool) {
+	cfg, configured, ok := a.readFlowConfig(o)
+	if ok && !configured {
+		a.openFlowConfig(reopen)
+	}
+	return cfg, ok && configured
+}
+
+func (a *App) openStartFlow(kind string) {
 	o := a.opened()
 	if o == nil {
 		return
 	}
-	cfg, configured, ok := a.readFlowConfig(o)
+	cfg, ok := a.configuredFlowFor(o, func() { a.openStartFlow(kind) })
 	if !ok {
 		return
 	}
-	if !configured {
-		a.openFlowConfig(a.openStartRelease)
-		return
-	}
-	view, err := newFlowStartView()
+	view, err := newFlowStartView(kind)
 	if err != nil {
-		a.log.Warn("open start release dialog failed", "error", err)
+		a.log.Warn("open git-flow start dialog failed", "kind", kind, "error", err)
 		return
 	}
-	view.SetKnown(flow.StartKnown{Develop: cfg.Develop, Prefix: cfg.ReleasePrefix, Taken: a.localBranchNames(o)})
+	branch, _ := cfg.Branch(kind)
+	view.SetKnown(flow.StartKnown{Base: branch.Base, Prefix: branch.Prefix, Taken: a.localBranchNames(o)})
 	view.OnOK = func(model flow.StartModel) {
 		a.eng.CloseModal(view.Dialog())
-		a.startRelease(model.Version)
+		a.startFlow(kind, model.Name)
 	}
 	view.OnCancel = func() { a.eng.CloseModal(view.Dialog()) }
 	a.showModal(view.Dialog(), view)
 }
 
-func (a *App) startRelease(version string) {
+func (a *App) startFlow(kind, name string) {
 	o := a.opened()
 	if o == nil {
 		return
 	}
-	a.RunOperation(i18n.Tf("Operation.Title.StartRelease", version), func(ctx context.Context, reporter OperationReporter) error {
+	a.RunOperation(i18n.Tf(flowOperationTexts[kind].start, name), func(ctx context.Context, reporter OperationReporter) error {
 		defer a.Post(a.finishMerge)
 		r, err := a.freshRepo(o)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		branch, err := runStartRelease(ctx, r, version, ops.StartReleaseOptions{Network: a.flowNetwork(r, reporter)})
+		branch, err := runStartFlow(ctx, r, kind, name, ops.StartFlowOptions{Network: a.flowNetwork(r, reporter)})
 		if err != nil {
 			return err
 		}
-		reporter.Log(i18n.Tf("Operation.Log.ReleaseStarted", branch.Short()))
+		reporter.Log(i18n.Tf("Operation.Log.FlowStarted", branch.Short()))
 		return nil
 	})
 }
 
-func (a *App) openFinishRelease() {
+func (a *App) openFinishFlow(kind string) {
 	o := a.opened()
 	if o == nil {
 		return
 	}
-	cfg, configured, ok := a.readFlowConfig(o)
+	cfg, ok := a.configuredFlowFor(o, func() { a.openFinishFlow(kind) })
 	if !ok {
 		return
 	}
-	if !configured {
-		a.openFlowConfig(a.openFinishRelease)
-		return
-	}
 	state := a.State()
-	version, resuming := state.FlowPending, state.FlowPending != ""
-	if !resuming {
-		version = state.FlowRelease
-	}
-	if version == "" {
+	target := state.flowFinishTarget()
+	if target.Kind != kind {
 		return
 	}
-	view, err := newFlowFinishView()
+	view, err := newFlowFinishView(kind)
 	if err != nil {
-		a.log.Warn("open finish release dialog failed", "error", err)
+		a.log.Warn("open git-flow finish dialog failed", "kind", kind, "error", err)
 		return
 	}
+	branch, _ := cfg.Branch(kind)
 	view.SetKnown(flow.FinishKnown{
-		Version:  version,
-		Branch:   cfg.ReleasePrefix + version,
+		Name:     target.Name,
+		Branch:   branch.Prefix + target.Name,
 		Master:   cfg.Master,
 		Develop:  cfg.Develop,
-		Tag:      cfg.VersionTagPrefix + version,
+		Tag:      cfg.VersionTagPrefix + target.Name,
 		CanPush:  state.HasRemotes,
-		Resuming: resuming,
+		Resuming: state.FlowPending.Name != "",
 	})
 	view.OnOK = func(model flow.FinishModel) {
 		a.eng.CloseModal(view.Dialog())
-		a.finishRelease(version, model)
+		a.finishFlow(kind, target.Name, model)
 	}
 	view.OnCancel = func() { a.eng.CloseModal(view.Dialog()) }
 	a.showModal(view.Dialog(), view)
 }
 
-func (a *App) finishRelease(version string, model flow.FinishModel) {
+func (a *App) finishFlow(kind, name string, model flow.FinishModel) {
 	o := a.opened()
 	if o == nil {
 		return
 	}
-	a.RunOperation(i18n.Tf("Operation.Title.FinishRelease", version), func(ctx context.Context, reporter OperationReporter) error {
+	a.RunOperation(i18n.Tf(flowOperationTexts[kind].finish, name), func(ctx context.Context, reporter OperationReporter) error {
 		defer a.Post(a.finishMerge)
 		r, err := a.freshRepo(o)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		result, err := runFinishRelease(ctx, r, version, ops.FinishReleaseOptions{
-			TagMessage:   model.TagMessage,
+		result, err := runFinishFlow(ctx, r, kind, name, ops.FinishFlowOptions{
+			Message:      model.Message,
 			Push:         model.Push,
 			DeleteBranch: model.DeleteBranch,
 			Network:      a.flowNetwork(r, reporter),
 		})
-		reportFinishRelease(reporter, version, result, err)
+		reportFinishFlow(reporter, kind, name, result, err)
 		return err
 	})
 }
 
-func reportFinishRelease(reporter OperationReporter, version string, result ops.FinishReleaseResult, err error) {
+func reportFinishFlow(reporter OperationReporter, kind, name string, result ops.FinishFlowResult, err error) {
+	keys := flowOperationTexts[kind]
 	switch {
 	case errors.Is(err, ops.ErrFlowBehind):
-		reporter.Log(i18n.T("Operation.Log.ReleaseBehind"))
+		reporter.Log(i18n.T("Operation.Log.FlowBehind"))
 	case err != nil:
 	case result.Finished():
-		reporter.Log(i18n.Tf("Operation.Log.ReleaseFinished", version))
+		reporter.Log(i18n.Tf(keys.finished, name))
 	default:
 		for _, path := range result.Conflicts {
 			reporter.Log(i18n.Tf("Operation.Log.MergeConflictPath", path))
 		}
-		reporter.Log(i18n.Tf("Operation.Log.ReleaseStopped", len(result.Conflicts)))
+		reporter.Log(i18n.Tf(keys.stopped, len(result.Conflicts)))
 	}
 }
 
@@ -260,24 +288,25 @@ func (a *App) saveFlowConfig(model flow.ConfigModel, then func()) {
 }
 
 func (a *App) refreshFlowState(o *openedRepository, current string) {
-	release, pending := "", ""
+	var branch, pending FlowBranch
 	if r, err := a.freshRepo(o); err == nil {
-		cfg, configured := ops.ReadFlowConfig(r)
-		if name, cut := strings.CutPrefix(current, cfg.ReleasePrefix); configured && cut && cfg.ReleasePrefix != "" && name != "" {
-			release = name
+		if cfg, configured := ops.ReadFlowConfig(r); configured {
+			if kind, name, ok := cfg.BranchKind(current); ok {
+				branch = FlowBranch{Kind: kind, Name: name}
+			}
 		}
-		if finish, found, err := ops.PendingFlowFinish(r); err == nil && found && finish.Kind == ops.FlowKindRelease {
-			pending = finish.Name
+		if finish, found, err := ops.PendingFlowFinish(r); err == nil && found {
+			pending = FlowBranch{Kind: finish.Kind, Name: finish.Name}
 		}
 		_ = r.Close()
 	}
-	a.setFlowState(release, pending)
+	a.setFlowState(branch, pending)
 }
 
-func (a *App) setFlowState(release, pending string) {
+func (a *App) setFlowState(current, pending FlowBranch) {
 	a.mu.Lock()
-	changed := a.state.FlowRelease != release || a.state.FlowPending != pending
-	a.state.FlowRelease, a.state.FlowPending = release, pending
+	changed := a.state.FlowCurrent != current || a.state.FlowPending != pending
+	a.state.FlowCurrent, a.state.FlowPending = current, pending
 	a.mu.Unlock()
 	if changed {
 		a.refreshCommands()

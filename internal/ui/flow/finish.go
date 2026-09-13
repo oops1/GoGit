@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	finishDialogName = "flow_finish_release"
+	finishDialogName = "flow_finish"
 	hintWillFinish   = "Dialog.FlowFinish.Hint.WillFinish"
+	hintWillMerge    = "Dialog.FlowFinish.Hint.WillMerge"
 	hintWillResume   = "Dialog.FlowFinish.Hint.WillResume"
 )
 
 type FinishKnown struct {
-	Version  string
+	Name     string
 	Branch   string
 	Master   string
 	Develop  string
@@ -26,14 +27,14 @@ type FinishKnown struct {
 }
 
 type FinishModel struct {
-	TagMessage   string
+	Message      string
 	Push         bool
 	DeleteBranch bool
 }
 
 type FinishView struct {
 	dlg          *widget.Dialog
-	releaseLabel *widget.Label
+	branchLabel  *widget.Label
 	messageLabel *widget.Label
 	messageBox   *widget.TextBox
 	pushBox      *widget.CheckBox
@@ -42,20 +43,22 @@ type FinishView struct {
 	okBtn        *widget.Button
 	cancelBtn    *widget.Button
 
+	texts kindTexts
 	known FinishKnown
 
 	OnOK     func(FinishModel)
 	OnCancel func()
 }
 
-func NewFinishView() (*FinishView, error) {
-	dlg, named, err := loadDialog(finishDialogName, i18n.T("Dialog.FlowFinish.Title"))
+func NewFinishView(kind string) (*FinishView, error) {
+	texts := kindKeys[kind]
+	dlg, named, err := loadDialog(finishDialogName, i18n.T(texts.finishTitle))
 	if err != nil {
 		return nil, err
 	}
-	v := &FinishView{dlg: dlg}
+	v := &FinishView{dlg: dlg, texts: texts}
 	if err := errors.Join(
-		bindWidget(named, "releaseLabel", &v.releaseLabel),
+		bindWidget(named, "branchLabel", &v.branchLabel),
 		bindWidget(named, "messageLabel", &v.messageLabel),
 		bindWidget(named, "message", &v.messageBox),
 		bindWidget(named, "push", &v.pushBox),
@@ -81,28 +84,34 @@ func (v *FinishView) Restyle(t *widget.Theme) {
 	p.Areas(v.messageBox)
 	p.Quiet(v.cancelBtn)
 	p.Primary(v.okBtn)
-	p.Body(v.releaseLabel, v.messageLabel)
+	p.Body(v.branchLabel, v.messageLabel)
 	p.Hints(v.hintLabel)
 }
 
 func (v *FinishView) SetKnown(known FinishKnown) {
 	v.known = known
-	v.releaseLabel.SetText(i18n.Tf("Dialog.FlowFinish.Release", known.Branch))
-	v.messageBox.SetText(i18n.Tf("Dialog.FlowFinish.DefaultMessage", known.Version))
+	v.branchLabel.SetText(i18n.Tf(v.texts.branchLabel, known.Branch))
+	v.messageBox.SetText(i18n.Tf(v.texts.message, known.Name))
+	v.deleteBox.SetText(i18n.Tf("Dialog.FlowFinish.DeleteBranch", known.Branch))
 	v.pushBox.SetChecked(known.CanPush)
 	v.pushBox.SetEnabled(known.CanPush && !known.Resuming)
 	v.messageBox.SetEnabled(!known.Resuming)
 	v.deleteBox.SetEnabled(!known.Resuming)
-	if known.Resuming {
-		v.hintLabel.SetText(i18n.Tf(hintWillResume, known.Version))
-		return
+	messageKey, push, hint := "Dialog.FlowFinish.MessageLabel.Merge", i18n.Tf("Dialog.FlowFinish.Push.Branch", known.Develop), i18n.Tf(hintWillMerge, known.Branch, known.Develop)
+	if v.texts.tagged {
+		messageKey, push, hint = "Dialog.FlowFinish.MessageLabel.Tag", i18n.T("Dialog.FlowFinish.Push.Tagged"), i18n.Tf(hintWillFinish, known.Branch, known.Master, known.Tag, known.Develop)
 	}
-	v.hintLabel.SetText(i18n.Tf(hintWillFinish, known.Branch, known.Master, known.Tag, known.Develop))
+	if known.Resuming {
+		hint = i18n.Tf(hintWillResume, known.Branch)
+	}
+	v.messageLabel.SetText(i18n.T(messageKey))
+	v.pushBox.SetText(push)
+	v.hintLabel.SetText(hint)
 }
 
 func (v *FinishView) Model() FinishModel {
 	return FinishModel{
-		TagMessage:   v.messageBox.GetText(),
+		Message:      v.messageBox.GetText(),
 		Push:         v.known.CanPush && v.pushBox.IsChecked(),
 		DeleteBranch: v.deleteBox.IsChecked(),
 	}

@@ -24,7 +24,7 @@ func TestFinishReleaseReportsAFailedPush(t *testing.T) {
 		}
 	})
 
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{Push: true, Network: originFlow}); !errors.Is(err, errInjected) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Push: true, Network: originFlow}); !errors.Is(err, errInjected) {
 		t.Fatalf("FinishRelease returned %v, want the push failure", err)
 	}
 }
@@ -35,7 +35,7 @@ func TestFinishReleaseReportsAFailedBranchDeletion(t *testing.T) {
 		return func(context.Context, *repo.Repository, string, bool) error { return errInjected }
 	})
 
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{DeleteBranch: true}); !errors.Is(err, errInjected) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{DeleteBranch: true}); !errors.Is(err, errInjected) {
 		t.Fatalf("FinishRelease returned %v, want the deletion failure", err)
 	}
 }
@@ -60,7 +60,7 @@ func TestFinishReleaseReportsAStateThatCannotBeSaved(t *testing.T) {
 		}
 	})
 
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{}); !errors.Is(err, errInjected) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, errInjected) {
 		t.Fatalf("FinishRelease returned %v, want the state write failure", err)
 	}
 }
@@ -76,7 +76,7 @@ func TestFinishReleaseReportsAStateThatCannotBeCleared(t *testing.T) {
 		}
 	})
 
-	if _, err := FinishRelease(t.Context(), r.repo, "1.0", FinishReleaseOptions{}); !errors.Is(err, errInjected) {
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{}); !errors.Is(err, errInjected) {
 		t.Fatalf("FinishRelease returned %v, want the state removal failure", err)
 	}
 }
