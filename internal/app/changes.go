@@ -134,6 +134,9 @@ func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
 		first = a.commitTarget(db, files[0])
 	}
 	a.Post(func() {
+		if ctx.Err() != nil {
+			return
+		}
 		a.setFilesRows(rows)
 		if hasFirst {
 			a.showDiff(first)

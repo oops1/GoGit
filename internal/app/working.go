@@ -187,7 +187,11 @@ func (a *App) runWorkingDiff(ctx context.Context, o *openedRepository, entry wor
 		}
 		return
 	}
-	a.Post(func() { a.showDiff(target) })
+	a.Post(func() {
+		if ctx.Err() == nil {
+			a.showDiff(target)
+		}
+	})
 }
 
 func buildWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diffTarget, error) {
