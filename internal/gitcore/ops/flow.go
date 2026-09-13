@@ -439,8 +439,10 @@ func (f *flowFinisher) run() (FinishFlowResult, error) {
 	return f.result, removeStateFiles(f.r, flowStateFile)
 }
 
+func DefaultFlowMessage(name string) string { return flowFinishPrefix + name }
+
 func (f *flowFinisher) message() string {
-	return cmp.Or(f.state.message, flowFinishPrefix+f.state.name)
+	return cmp.Or(f.state.message, DefaultFlowMessage(f.state.name))
 }
 
 func (f *flowFinisher) do(step FlowStep) ([]string, error) {

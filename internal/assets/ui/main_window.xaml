@@ -50,11 +50,17 @@
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Branch.GitFlow}">
                     <MenuItem Header="{Loc Menu.Branch.GitFlow.StartFeature}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.IntegrateDevelop}" IsEnabled="False"/>
                     <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishFeature}" IsEnabled="False"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartRelease}" IsEnabled="False"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishRelease}" IsEnabled="False"/>
+                    <MenuItem Separator="True"/>
                     <MenuItem Header="{Loc Menu.Branch.GitFlow.StartHotfix}" IsEnabled="False"/>
                     <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishHotfix}" IsEnabled="False"/>
+                    <MenuItem Separator="True"/>
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartRelease}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishRelease}" IsEnabled="False"/>
+                    <MenuItem Separator="True"/>
+                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartSupport}" IsEnabled="False"/>
+                    <MenuItem Separator="True"/>
                     <MenuItem Header="{Loc Menu.Branch.GitFlow.Configure}" IsEnabled="False"/>
                 </MenuItem>
             </MenuItem>
@@ -109,6 +115,8 @@
                 <Button x:Name="btnPush" Content="{Loc Toolbar.Push}" ToolTip="{Loc Toolbar.Push.Tip}" Margin="2" IsEnabled="False"/>
                 <Separator x:Name="toolbarSep1" Width="8" Height="24" Margin="4,0"/>
                 <Button x:Name="btnCommit" Content="{Loc Toolbar.Commit}" ToolTip="{Loc Toolbar.Commit.Tip}" Margin="2" IsEnabled="False"/>
+                <Separator x:Name="toolbarSep2" Width="8" Height="24" Margin="4,0"/>
+                <MenuButton x:Name="btnGitFlow" Content="{Loc Toolbar.GitFlow}" ToolTip="{Loc Toolbar.GitFlow.Tip}" Margin="2" IsEnabled="False"/>
             </StackPanel>
 
             <DockManager x:Name="dock" Grid.Row="1" NativeFloating="True">

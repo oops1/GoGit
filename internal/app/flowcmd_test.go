@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oops1/headless-gui/v3/widget"
+
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -69,18 +71,28 @@ func failKindView[V any](t *testing.T, seam *func(string) (V, error)) {
 	t.Cleanup(func() { *seam = prev })
 }
 
-func waitForFlowView[V any](t *testing.T, a *App, views *[]V) V {
+func waitForFlowView[V any](t *testing.T, a *App, views *[]V, count int) V {
 	t.Helper()
 	deadline := time.Now().Add(testTimeout)
 	for {
-		if n := readOnDispatcher(t, a, func() int { return len(*views) }); n > 0 {
-			return readOnDispatcher(t, a, func() V { return (*views)[n-1] })
+		if n := readOnDispatcher(t, a, func() int { return len(*views) }); n >= count {
+			return readOnDispatcher(t, a, func() V { return (*views)[count-1] })
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("the dialog did not open")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func openRepoAt(t *testing.T, target string) *gitrepo.Repository {
+	t.Helper()
+	r, err := gitrepo.Open(target, gitrepo.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	return r
 }
 
 func flowReadyApp(t *testing.T, configure bool) (*App, string) {
@@ -93,17 +105,13 @@ func flowReadyApp(t *testing.T, configure bool) (*App, string) {
 		}
 		return snap.HeadID
 	})
-	r, err := gitrepo.Open(target, gitrepo.OpenOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = r.Close() }()
+	r := openRepoAt(t, target)
 	if err := ops.CreateBranch(t.Context(), r, "develop", head, ops.CreateBranchOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if configure {
 		cfg := ops.DefaultFlowConfig()
-		cfg.Master = "main"
+		cfg.Master, cfg.FeaturePrefix = "main", "topic/"
 		if err := ops.WriteFlowConfig(r, cfg); err != nil {
 			t.Fatal(err)
 		}
@@ -120,31 +128,58 @@ func operationLines(t *testing.T, a *App, views *[]*operation.View) []string {
 	return readOnDispatcher(t, a, view.Lines)
 }
 
-func TestGitFlowCommandsFollowTheRepositoryAndTheBranch(t *testing.T) {
-	release := FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}
-	feature := FlowBranch{Kind: ops.FlowKindFeature, Name: "login"}
-	hotfix := FlowBranch{Kind: ops.FlowKindHotfix, Name: "1.0.1"}
-	starts := []CommandID{CmdFlowStartFeature, CmdFlowStartRelease, CmdFlowStartHotfix}
-	finishes := []CommandID{CmdFlowFinishFeature, CmdFlowFinishRelease, CmdFlowFinishHotfix}
-	for _, c := range []struct {
-		state            State
-		start, configure bool
-		finish           []bool
+func runOnDispatcher(t *testing.T, a *App, fn func()) {
+	t.Helper()
+	readOnDispatcher(t, a, func() bool { fn(); return true })
+}
+
+func flowOn(current, pending FlowBranch) flowStatus {
+	return flowStatus{configured: true, current: current, pending: pending}
+}
+
+var (
+	releaseBranch = FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}
+	featureBranch = FlowBranch{Kind: ops.FlowKindFeature, Name: "login"}
+	hotfixBranch  = FlowBranch{Kind: ops.FlowKindHotfix, Name: "1.0.1"}
+)
+
+func TestGitFlowCommandsFollowTheSettingsAndTheBranch(t *testing.T) {
+	starts := []CommandID{CmdFlowStartFeature, CmdFlowStartHotfix, CmdFlowStartRelease, CmdFlowStartSupport}
+	finishes := []CommandID{CmdFlowFinishFeature, CmdFlowFinishHotfix, CmdFlowFinishRelease}
+	ready := State{ActiveRepository: "r", FlowConfigured: true}
+	with := func(change func(*State)) State {
+		s := ready
+		change(&s)
+		return s
+	}
+	for i, c := range []struct {
+		state     State
+		start     []bool
+		finish    []bool
+		integrate bool
+		configure bool
 	}{
-		{State{}, false, false, []bool{false, false, false}},
-		{State{ActiveRepository: "r"}, true, true, []bool{false, false, false}},
-		{State{ActiveRepository: "r", Merging: true, FlowCurrent: release}, false, true, []bool{false, false, false}},
-		{State{ActiveRepository: "r", FlowCurrent: release}, true, true, []bool{false, true, false}},
-		{State{ActiveRepository: "r", FlowCurrent: feature}, true, true, []bool{true, false, false}},
-		{State{ActiveRepository: "r", FlowCurrent: feature, FlowPending: hotfix}, true, true, []bool{false, false, true}},
+		{State{}, []bool{false, false, false, false}, []bool{false, false, false}, false, false},
+		{State{ActiveRepository: "r"}, []bool{false, false, false, false}, []bool{false, false, false}, false, true},
+		{ready, []bool{true, true, true, true}, []bool{false, false, false}, false, true},
+		{with(func(s *State) { s.FlowLight = true }), []bool{true, false, false, false}, []bool{false, false, false}, false, true},
+		{with(func(s *State) { s.Merging, s.FlowCurrent = true, releaseBranch }), []bool{false, false, false, false}, []bool{false, false, false}, false, true},
+		{with(func(s *State) { s.FlowCurrent = releaseBranch }), []bool{true, true, true, true}, []bool{false, false, true}, false, true},
+		{with(func(s *State) { s.FlowCurrent = featureBranch }), []bool{true, true, true, true}, []bool{true, false, false}, true, true},
+		{with(func(s *State) { s.FlowCurrent, s.FlowPending = featureBranch, hotfixBranch }), []bool{true, true, true, true}, []bool{false, true, false}, false, true},
 	} {
-		for i := range starts {
-			if c.state.Enabled(starts[i]) != c.start || c.state.Enabled(finishes[i]) != c.finish[i] {
-				t.Errorf("state %+v: %s or %s", c.state, starts[i], finishes[i])
+		for j, id := range starts {
+			if c.state.Enabled(id) != c.start[j] {
+				t.Errorf("case %d: %s enabled = %v", i, id, !c.start[j])
 			}
 		}
-		if c.state.Enabled(CmdFlowConfigure) != c.configure {
-			t.Errorf("state %+v: configure", c.state)
+		for j, id := range finishes {
+			if c.state.Enabled(id) != c.finish[j] {
+				t.Errorf("case %d: %s enabled = %v", i, id, !c.finish[j])
+			}
+		}
+		if c.state.Enabled(CmdFlowIntegrateDevelop) != c.integrate || c.state.Enabled(CmdFlowConfigure) != c.configure {
+			t.Errorf("case %d: integrate or configure", i)
 		}
 	}
 
@@ -158,67 +193,134 @@ func TestGitFlowCommandsFollowTheRepositoryAndTheBranch(t *testing.T) {
 		return off
 	})
 
-	if !slices.Equal(disabled, []bool{false, true, false, true, false, true, false}) {
-		t.Fatalf("git-flow items disabled = %v, want only the finishes off", disabled)
+	if want := []bool{false, true, true, false, false, true, false, false, true, false, false, false, false}; !slices.Equal(disabled, want) {
+		t.Fatalf("git-flow items disabled = %v, want %v", disabled, want)
 	}
 }
 
-func TestStartingAReleaseAsksForTheSettingsFirstAndCreatesTheBranch(t *testing.T) {
-	a, _ := flowReadyApp(t, false)
-	configs := captureFlowViews(t, &newFlowConfigView)
+func TestTheToolbarGitFlowMenuFollowsTheMode(t *testing.T) {
+	bare := newTestApp(t)
+	buttonOf := func(app *App) *widget.MenuButton {
+		return readOnDispatcher(t, app, func() *widget.MenuButton { btn, _ := app.flowButton(); return btn })
+	}
+	if btn := buttonOf(bare); btn == nil || readOnDispatcher(t, bare, btn.IsEnabled) {
+		t.Fatal("the git-flow button is missing or enabled without a repository")
+	}
+
+	a, _ := flowReadyApp(t, true)
 	starts := captureKindViews(t, &newFlowStartView)
+	btn := buttonOf(a)
+	if btn == nil || !readOnDispatcher(t, a, btn.IsEnabled) || readOnDispatcher(t, a, func() bool { return btn.Icon == nil }) {
+		t.Fatal("the git-flow button is missing, disabled or has no icon")
+	}
+	full := readOnDispatcher(t, a, func() []widget.MenuItem { btn.OnOpening(); return btn.Items })
+	runOnDispatcher(t, a, func() { a.setFlowState(flowStatus{configured: true, light: true}) })
+	light := readOnDispatcher(t, a, func() []widget.MenuItem { btn.OnOpening(); return btn.Items })
+	runOnDispatcher(t, a, func() { light[0].OnClick() })
+
+	if len(full) != len(flowMenuLeaves) || !full[3].Separator || full[0].Text != i18n.T("Menu.Branch.GitFlow.StartFeature") {
+		t.Fatalf("full menu = %+v", full)
+	}
+	if len(light) != 5 || light[4].Text != i18n.T("Menu.Branch.GitFlow.Configure") || light[1].Disabled != true {
+		t.Fatalf("light menu = %+v", light)
+	}
+	waitForFlowView(t, a, starts, 1)
+}
+
+func TestConfiguringGitFlowCreatesBranchesAndSwitchesOff(t *testing.T) {
+	a, target := flowReadyApp(t, false)
+	if err := ops.AddRemote(openRepoAt(t, target), "origin", "https://example.com/flow.git"); err != nil {
+		t.Fatal(err)
+	}
+	configs := captureFlowViews(t, &newFlowConfigView)
+	questions := captureFlowViews(t, &newFlowConfiguredView)
 	operations := captureOperationViews(t)
 
-	if !readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdFlowStartRelease) }) {
-		t.Fatal("Start Release did not dispatch")
-	}
-	config := waitForFlowView(t, a, configs)
+	runOnDispatcher(t, a, func() { a.Dispatch(CmdFlowConfigure) })
+	config := waitForFlowView(t, a, configs, 1)
 	model := readOnDispatcher(t, a, config.Model)
-	if model.Master != "main" || model.Develop != "develop" {
+	if model.Master != "main" || model.Develop != "develop" || model.Light || model.Remote != "origin" {
 		t.Fatalf("suggested settings = %+v", model)
 	}
-	readOnDispatcher(t, a, func() bool { config.OnOK(model); return true })
-	start := waitForFlowView(t, a, starts)
-	readOnDispatcher(t, a, func() bool { start.OnOK(flow.StartModel{Name: "1.0"}); return true })
-	lines := operationLines(t, a, operations)
-	waitForWorkingIdle(t, a)
+	runOnDispatcher(t, a, func() { config.OnOK(model) })
+	if lines := operationLines(t, a, operations); !slices.Contains(lines, i18n.T("Operation.Log.FlowConfigured")) {
+		t.Fatalf("configure log = %v", lines)
+	}
+	if got := readOnDispatcher(t, a, a.State); !got.FlowConfigured || got.FlowLight {
+		t.Fatalf("state after configuring = %+v", got)
+	}
 
-	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowStarted", "release/1.0")) {
-		t.Fatalf("operation log = %v", lines)
+	runOnDispatcher(t, a, func() { a.Dispatch(CmdFlowConfigure) })
+	question := waitForFlowView(t, a, questions, 1)
+	runOnDispatcher(t, a, func() { question.OnChange() })
+	light := waitForFlowView(t, a, configs, 2)
+	runOnDispatcher(t, a, func() { light.OnOK(flow.ConfigModel{Light: true, Develop: "trunk", Feature: "feature/"}) })
+	lines := operationLines(t, a, operations)
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowBranchCreated", "trunk")) || !readOnDispatcher(t, a, a.State).FlowLight {
+		t.Fatalf("light configure log = %v", lines)
 	}
-	if got := readOnDispatcher(t, a, a.currentBranchName); got != "release/1.0" {
-		t.Fatalf("current branch = %q", got)
+
+	runOnDispatcher(t, a, func() { a.Dispatch(CmdFlowConfigure) })
+	question = waitForFlowView(t, a, questions, 2)
+	runOnDispatcher(t, a, func() { question.OnSwitchOff() })
+	if lines := operationLines(t, a, operations); !slices.Contains(lines, i18n.T("Operation.Log.FlowSwitchedOff")) {
+		t.Fatalf("switch off log = %v", lines)
 	}
-	if got := readOnDispatcher(t, a, a.State).FlowCurrent; got != (FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}) {
-		t.Fatalf("flow branch = %+v", got)
+	if readOnDispatcher(t, a, a.State).FlowConfigured {
+		t.Fatal("git-flow is still configured")
 	}
 }
 
-func TestFinishingTheReleaseTagsItAndReturnsToDevelop(t *testing.T) {
-	a, _ := flowReadyApp(t, true)
+func TestAFailedConfigurationIsReported(t *testing.T) {
+	a, _ := flowReadyApp(t, false)
 	operations := captureOperationViews(t)
-	readOnDispatcher(t, a, func() bool { a.startFlow(ops.FlowKindRelease, "1.0"); return true })
-	operationLines(t, a, operations)
+	prevConfigure, prevOff := runConfigureFlow, runSwitchOffFlow
+	runConfigureFlow = func(context.Context, *gitrepo.Repository, ops.FlowConfig) ([]refs.Name, error) {
+		return []refs.Name{refs.BranchName("trunk")}, errors.New("locked")
+	}
+	runSwitchOffFlow = func(*gitrepo.Repository) error { return errors.New("locked") }
+	t.Cleanup(func() { runConfigureFlow, runSwitchOffFlow = prevConfigure, prevOff })
+
+	runOnDispatcher(t, a, func() { a.configureFlow(ops.DefaultFlowConfig()) })
+	lines := operationLines(t, a, operations)
+	runOnDispatcher(t, a, func() { a.switchOffFlow() })
+	off := operationLines(t, a, operations)
+
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowBranchCreated", "trunk")) || slices.Contains(lines, i18n.T("Operation.Log.FlowConfigured")) {
+		t.Fatalf("configure log = %v", lines)
+	}
+	if slices.Contains(off, i18n.T("Operation.Log.FlowSwitchedOff")) {
+		t.Fatalf("switch off log = %v", off)
+	}
+}
+
+func TestStartingAndFinishingAReleaseFromTheMenu(t *testing.T) {
+	a, _ := flowReadyApp(t, true)
+	starts := captureKindViews(t, &newFlowStartView)
+	finishes := captureKindViews(t, &newFlowFinishView)
+	operations := captureOperationViews(t)
+
+	runOnDispatcher(t, a, func() { a.Dispatch(CmdFlowStartRelease) })
+	start := waitForFlowView(t, a, starts, 1)
+	runOnDispatcher(t, a, func() { start.OnOK(flow.StartModel{Name: "1.0", Base: "develop"}) })
+	lines := operationLines(t, a, operations)
 	waitForWorkingIdle(t, a)
-	readOnDispatcher(t, a, func() bool { a.startFlow(ops.FlowKindRelease, "1.0"); return true })
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowStarted", "release/1.0")) || readOnDispatcher(t, a, a.State).FlowCurrent != releaseBranch {
+		t.Fatalf("start log = %v", lines)
+	}
+	runOnDispatcher(t, a, func() { a.startFlow(ops.FlowKindRelease, "1.0", "develop") })
 	if lines := operationLines(t, a, operations); slices.Contains(lines, i18n.Tf("Operation.Log.FlowStarted", "release/1.0")) {
 		t.Fatalf("a second start of the same release succeeded: %v", lines)
 	}
-	finishes := captureKindViews(t, &newFlowFinishView)
 
-	if !readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdFlowFinishRelease) }) {
-		t.Fatal("Finish Release did not dispatch")
-	}
-	view := waitForFlowView(t, a, finishes)
-	readOnDispatcher(t, a, func() bool { view.OnOK(view.Model()); return true })
-	lines := operationLines(t, a, operations)
+	runOnDispatcher(t, a, func() { a.Dispatch(CmdFlowFinishRelease) })
+	finish := waitForFlowView(t, a, finishes, 1)
+	runOnDispatcher(t, a, func() { finish.OnOK(finish.Model()) })
+	lines = operationLines(t, a, operations)
 	waitForWorkingIdle(t, a)
 
-	if !slices.Contains(lines, i18n.Tf("Operation.Log.ReleaseFinished", "1.0")) {
-		t.Fatalf("operation log = %v", lines)
-	}
-	if got := readOnDispatcher(t, a, a.currentBranchName); got != "develop" {
-		t.Fatalf("current branch = %q", got)
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.ReleaseFinished", "1.0")) || readOnDispatcher(t, a, a.currentBranchName) != "develop" {
+		t.Fatalf("finish log = %v", lines)
 	}
 	if !slices.Contains(readOnDispatcher(t, a, a.tagNames), "1.0") {
 		t.Fatal("the release tag is missing")
@@ -230,51 +332,75 @@ func TestFinishingTheReleaseTagsItAndReturnsToDevelop(t *testing.T) {
 
 func runFlowDialog[V any](t *testing.T, a *App, operations *[]*operation.View, views *[]V, id CommandID, confirm func(V)) []string {
 	t.Helper()
-	if !readOnDispatcher(t, a, func() bool { return a.Dispatch(id) }) {
-		t.Fatalf("%s did not dispatch", id)
-	}
-	view := waitForFlowView(t, a, views)
-	readOnDispatcher(t, a, func() bool { confirm(view); return true })
+	count := readOnDispatcher(t, a, func() int { return len(*views) }) + 1
+	runOnDispatcher(t, a, func() { a.Dispatch(id) })
+	view := waitForFlowView(t, a, views, count)
+	runOnDispatcher(t, a, func() { confirm(view) })
 	lines := operationLines(t, a, operations)
 	waitForWorkingIdle(t, a)
 	return lines
 }
 
-func TestFeaturesAndHotfixesStartAndFinishFromTheMenu(t *testing.T) {
-	a, target := flowReadyApp(t, true)
-	r, err := gitrepo.Open(target, gitrepo.OpenOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg := ops.DefaultFlowConfig()
-	cfg.Master, cfg.FeaturePrefix = "main", "topic/"
-	err = ops.WriteFlowConfig(r, cfg)
-	_ = r.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestFeaturesHotfixesAndSupportBranchesFromTheMenu(t *testing.T) {
+	a, _ := flowReadyApp(t, true)
 	operations := captureOperationViews(t)
 	starts := captureKindViews(t, &newFlowStartView)
 	finishes := captureKindViews(t, &newFlowFinishView)
+	integrations := captureFlowViews(t, &newFlowIntegrateView)
 	finishWithDefaults := func(v *flow.FinishView) { v.OnOK(v.Model()) }
 
-	lines := runFlowDialog(t, a, operations, starts, CmdFlowStartFeature, func(v *flow.StartView) { v.OnOK(flow.StartModel{Name: "login"}) })
-	if got := readOnDispatcher(t, a, a.State).FlowCurrent; got != (FlowBranch{Kind: ops.FlowKindFeature, Name: "login"}) {
+	lines := runFlowDialog(t, a, operations, starts, CmdFlowStartFeature, func(v *flow.StartView) { v.OnOK(flow.StartModel{Name: "login", Base: "develop"}) })
+	if got := readOnDispatcher(t, a, a.State).FlowCurrent; got != featureBranch {
 		t.Fatalf("flow branch = %+v, log = %v", got, lines)
+	}
+	lines = runFlowDialog(t, a, operations, integrations, CmdFlowIntegrateDevelop, func(v *flow.IntegrateView) { v.OnOK(false) })
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.DevelopIntegrated", "develop", "topic/login")) {
+		t.Fatalf("integrate log = %v", lines)
 	}
 	lines = runFlowDialog(t, a, operations, finishes, CmdFlowFinishFeature, finishWithDefaults)
 	if !slices.Contains(lines, i18n.Tf("Operation.Log.FeatureFinished", "login")) || readOnDispatcher(t, a, a.currentBranchName) != "develop" {
 		t.Fatalf("feature finish log = %v", lines)
 	}
 
-	runFlowDialog(t, a, operations, starts, CmdFlowStartHotfix, func(v *flow.StartView) { v.OnOK(flow.StartModel{Name: "1.0.1"}) })
-	if got := readOnDispatcher(t, a, a.currentBranchName); got != "hotfix/1.0.1" {
-		t.Fatalf("current branch = %q", got)
+	runFlowDialog(t, a, operations, starts, CmdFlowStartHotfix, func(v *flow.StartView) { v.OnOK(v.Model()) })
+	if got := readOnDispatcher(t, a, a.currentBranchName); got != "main" {
+		runOnDispatcher(t, a, func() { a.startFlow(ops.FlowKindHotfix, "1.0.1", "main") })
+		operationLines(t, a, operations)
+		waitForWorkingIdle(t, a)
 	}
 	lines = runFlowDialog(t, a, operations, finishes, CmdFlowFinishHotfix, finishWithDefaults)
-
 	if !slices.Contains(lines, i18n.Tf("Operation.Log.HotfixFinished", "1.0.1")) || !slices.Contains(readOnDispatcher(t, a, a.tagNames), "1.0.1") {
 		t.Fatalf("hotfix finish log = %v", lines)
+	}
+
+	runFlowDialog(t, a, operations, starts, CmdFlowStartSupport, func(v *flow.StartView) { v.OnOK(flow.StartModel{Name: "1.x", Base: "1.0.1"}) })
+	if got := readOnDispatcher(t, a, a.State).FlowCurrent; got != (FlowBranch{Kind: ops.FlowKindSupport, Name: "1.x"}) {
+		t.Fatalf("support branch = %+v", got)
+	}
+}
+
+func TestIntegrateDevelopLogsConflictsAndFailures(t *testing.T) {
+	a, _ := flowReadyApp(t, true)
+	operations := captureOperationViews(t)
+	prev := runIntegrateDevelop
+	t.Cleanup(func() { runIntegrateDevelop = prev })
+
+	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) ([]string, error) {
+		return []string{"a.txt"}, nil
+	}
+	runOnDispatcher(t, a, func() { a.integrateDevelop("login", "topic/login", "develop", true) })
+	lines := operationLines(t, a, operations)
+	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) ([]string, error) {
+		return nil, errors.New("boom")
+	}
+	runOnDispatcher(t, a, func() { a.integrateDevelop("login", "topic/login", "develop", false) })
+	failed := operationLines(t, a, operations)
+
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.MergeConflictPath", "a.txt")) || !slices.Contains(lines, i18n.Tf("Operation.Log.IntegrateStopped", 1)) {
+		t.Fatalf("conflict log = %v", lines)
+	}
+	if slices.Contains(failed, i18n.Tf("Operation.Log.DevelopIntegrated", "develop", "topic/login")) {
+		t.Fatalf("failure log = %v", failed)
 	}
 }
 
@@ -292,12 +418,11 @@ func TestFinishFlowLogsEveryOutcome(t *testing.T) {
 		{ops.FlowKindHotfix, ops.FinishFlowResult{}, ops.ErrFlowBehind, []string{i18n.T("Operation.Log.FlowBehind")}},
 		{ops.FlowKindRelease, ops.FinishFlowResult{}, errors.New("boom"), nil},
 	} {
-		readOnDispatcher(t, a, func() bool {
+		runOnDispatcher(t, a, func() {
 			a.RunOperation("finish", func(_ context.Context, reporter OperationReporter) error {
 				reportFinishFlow(reporter, c.kind, "1.0", c.result, c.err)
 				return nil
 			})
-			return true
 		})
 		lines := operationLines(t, a, operations)
 		for _, want := range c.want {
@@ -313,7 +438,7 @@ func TestTheFlowStateFollowsAPendingFinishAndAnUnreadableRepository(t *testing.T
 	if err := os.WriteFile(filepath.Join(target, ".git", "GOGIT_FLOW"), []byte("hotfix\n2.0\n1\nfalse\nfalse\n2.0\ntrue\n0\n"), 0o666); err != nil {
 		t.Fatal(err)
 	}
-	readOnDispatcher(t, a, func() bool { a.RefreshRepository(); return true })
+	runOnDispatcher(t, a, a.RefreshRepository)
 	if got := readOnDispatcher(t, a, a.State).FlowPending; got != (FlowBranch{Kind: ops.FlowKindHotfix, Name: "2.0"}) {
 		t.Fatalf("pending finish = %+v", got)
 	}
@@ -322,20 +447,20 @@ func TestTheFlowStateFollowsAPendingFinishAndAnUnreadableRepository(t *testing.T
 	openGitRepository = func(string, gitrepo.OpenOptions) (*gitrepo.Repository, error) { return nil, errors.New("gone") }
 	t.Cleanup(func() { openGitRepository = prev })
 	operations := captureOperationViews(t)
-	readOnDispatcher(t, a, func() bool { a.refreshFlowState(a.opened(), "release/1.0"); return true })
-	if got := readOnDispatcher(t, a, a.State); got.FlowPending != (FlowBranch{}) || got.FlowCurrent != (FlowBranch{}) {
+	runOnDispatcher(t, a, func() { a.refreshFlowState(a.opened(), "release/1.0") })
+	if got := readOnDispatcher(t, a, a.State); got.FlowConfigured || got.FlowPending != (FlowBranch{}) || got.FlowCurrent != (FlowBranch{}) {
 		t.Fatalf("flow state over an unreadable repository = %+v", got)
 	}
-	readOnDispatcher(t, a, func() bool {
+	runOnDispatcher(t, a, func() {
 		a.openStartFlow(ops.FlowKindRelease)
 		a.openFinishFlow(ops.FlowKindRelease)
-		a.openFlowConfig(nil)
-		return true
+		a.openIntegrateDevelop()
+		a.openFlowConfig()
 	})
 	waitForStatusText(t, a, i18n.Tf("Status.FlowReadFailed", errors.New("gone")))
-	readOnDispatcher(t, a, func() bool { a.startFlow(ops.FlowKindRelease, "1.0"); return true })
+	runOnDispatcher(t, a, func() { a.startFlow(ops.FlowKindRelease, "1.0", "develop") })
 	operationLines(t, a, operations)
-	readOnDispatcher(t, a, func() bool { a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{}); return true })
+	runOnDispatcher(t, a, func() { a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{}) })
 	operationLines(t, a, operations)
 }
 
@@ -344,17 +469,43 @@ func TestGitFlowCommandsNeedAnOpenRepository(t *testing.T) {
 	starts := captureKindViews(t, &newFlowStartView)
 	operations := captureOperationViews(t)
 
-	readOnDispatcher(t, a, func() bool {
+	runOnDispatcher(t, a, func() {
 		a.openStartFlow(ops.FlowKindRelease)
 		a.openFinishFlow(ops.FlowKindRelease)
-		a.openFlowConfig(nil)
-		a.startFlow(ops.FlowKindRelease, "1.0")
+		a.openIntegrateDevelop()
+		a.openFlowConfig()
+		a.startFlow(ops.FlowKindRelease, "1.0", "develop")
 		a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{})
-		return true
+		a.integrateDevelop("login", "feature/login", "develop", false)
+		a.configureFlow(ops.DefaultFlowConfig())
+		a.switchOffFlow()
 	})
 
 	if len(*starts) != 0 || len(*operations) != 0 {
 		t.Fatalf("views = %d, operations = %d without a repository", len(*starts), len(*operations))
+	}
+}
+
+func TestGitFlowDialogsOpenOnlyWhenTheyApply(t *testing.T) {
+	unconfigured, _ := flowReadyApp(t, false)
+	starts := captureKindViews(t, &newFlowStartView)
+	finishes := captureKindViews(t, &newFlowFinishView)
+	integrations := captureFlowViews(t, &newFlowIntegrateView)
+	runOnDispatcher(t, unconfigured, func() {
+		unconfigured.openStartFlow(ops.FlowKindFeature)
+		unconfigured.openIntegrateDevelop()
+	})
+
+	a, _ := flowReadyApp(t, true)
+	runOnDispatcher(t, a, func() {
+		a.setFlowState(flowOn(releaseBranch, FlowBranch{}))
+		a.openFinishFlow(ops.FlowKindHotfix)
+		a.openIntegrateDevelop()
+		a.openStartFlow("bugfix")
+	})
+
+	if len(*starts)+len(*finishes)+len(*integrations) != 0 {
+		t.Fatalf("dialogs opened: %d starts, %d finishes, %d integrations", len(*starts), len(*finishes), len(*integrations))
 	}
 }
 
@@ -363,16 +514,17 @@ func TestGitFlowDialogsThatCannotOpenAreLeftAlone(t *testing.T) {
 	failKindView(t, &newFlowStartView)
 	failKindView(t, &newFlowFinishView)
 	failFlowView(t, &newFlowConfigView)
+	failFlowView(t, &newFlowConfiguredView)
+	failFlowView(t, &newFlowIntegrateView)
 	operations := captureOperationViews(t)
 
-	readOnDispatcher(t, a, func() bool {
-		a.setFlowState(FlowBranch{}, FlowBranch{})
-		a.openFinishFlow(ops.FlowKindRelease)
-		a.setFlowState(FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"}, FlowBranch{})
+	runOnDispatcher(t, a, func() {
+		a.setFlowState(flowOn(featureBranch, FlowBranch{}))
 		a.openStartFlow(ops.FlowKindRelease)
-		a.openFinishFlow(ops.FlowKindRelease)
-		a.openFlowConfig(nil)
-		return true
+		a.openFinishFlow(ops.FlowKindFeature)
+		a.openIntegrateDevelop()
+		a.openFlowConfig()
+		a.showFlowConfig(ops.DefaultFlowConfig(), nil)
 	})
 
 	if len(*operations) != 0 {
@@ -385,17 +537,22 @@ func TestGitFlowDialogsCanBeCancelled(t *testing.T) {
 	starts := captureKindViews(t, &newFlowStartView)
 	finishes := captureKindViews(t, &newFlowFinishView)
 	configs := captureFlowViews(t, &newFlowConfigView)
+	questions := captureFlowViews(t, &newFlowConfiguredView)
+	integrations := captureFlowViews(t, &newFlowIntegrateView)
 	operations := captureOperationViews(t)
 
-	readOnDispatcher(t, a, func() bool {
-		a.setFlowState(FlowBranch{}, FlowBranch{Kind: ops.FlowKindRelease, Name: "1.0"})
+	runOnDispatcher(t, a, func() {
+		a.setFlowState(flowOn(featureBranch, FlowBranch{}))
 		a.openStartFlow(ops.FlowKindRelease)
-		a.openFinishFlow(ops.FlowKindRelease)
+		a.openFinishFlow(ops.FlowKindFeature)
+		a.openIntegrateDevelop()
 		a.Dispatch(CmdFlowConfigure)
+		a.showFlowConfig(ops.DefaultFlowConfig(), []string{"origin"})
 		(*starts)[0].OnCancel()
 		(*finishes)[0].OnCancel()
+		(*integrations)[0].OnCancel()
+		(*questions)[0].OnCancel()
 		(*configs)[0].OnCancel()
-		return true
 	})
 
 	if len(*operations) != 0 {
@@ -403,59 +560,64 @@ func TestGitFlowDialogsCanBeCancelled(t *testing.T) {
 	}
 }
 
-func TestFinishingWithoutSettingsAsksForThemFirstAndReturns(t *testing.T) {
-	a, _ := flowReadyApp(t, false)
-	configs := captureFlowViews(t, &newFlowConfigView)
-	finishes := captureKindViews(t, &newFlowFinishView)
-
-	readOnDispatcher(t, a, func() bool { a.openFinishFlow(ops.FlowKindFeature); return true })
-	config := waitForFlowView(t, a, configs)
-	readOnDispatcher(t, a, func() bool { config.OnOK(config.Model()); return true })
-	waitForStatusText(t, a, i18n.T("Status.FlowConfigSaved"))
-	waitForPostQueueDrain(t, a)
-
-	if n := readOnDispatcher(t, a, func() int { return len(*finishes) }); n != 0 {
-		t.Fatalf("a finish dialog opened without a feature branch: %d", n)
-	}
-}
-
-func TestAFailedSaveOfTheSettingsIsReported(t *testing.T) {
-	a, _ := flowReadyApp(t, false)
-	configs := captureFlowViews(t, &newFlowConfigView)
-	prev := runWriteFlowConfig
-	runWriteFlowConfig = func(*gitrepo.Repository, ops.FlowConfig) error { return errors.New("locked") }
-	t.Cleanup(func() { runWriteFlowConfig = prev })
-
-	readOnDispatcher(t, a, func() bool { a.openFlowConfig(nil); return true })
-	config := waitForFlowView(t, a, configs)
-	readOnDispatcher(t, a, func() bool { config.OnOK(config.Model()); return true })
-
-	waitForStatusText(t, a, i18n.Tf("Status.FlowConfigFailed", errors.New("locked")))
-}
-
-func TestTheFlowUsesTheDefaultRemoteOnlyWhenItExists(t *testing.T) {
-	a, target := flowReadyApp(t, true)
-	r, err := gitrepo.Open(target, gitrepo.OpenOptions{})
-	if err != nil {
+func writeTrackingRef(t *testing.T, target, remote, branch string, id hash.ObjectID) {
+	t.Helper()
+	path := filepath.Join(target, ".git", "refs", "remotes", remote, filepath.FromSlash(branch))
+	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = r.Close() })
+	if err := os.WriteFile(path, []byte(id.String()+"\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheFlowUsesTheConfiguredRemoteOrTheDefault(t *testing.T) {
+	a, target := flowReadyApp(t, true)
+	r := openRepoAt(t, target)
+	cfg, _ := ops.ReadFlowConfig(r)
 	if net := a.flowNetwork(r, OperationReporter{app: a}); net.Remote != "" {
 		t.Fatalf("network without a remote = %+v", net)
 	}
-	if err := ops.AddRemote(r, a.effectiveDefaultRemote(r), "https://example.com/flow.git"); err != nil {
+	if fetch, push := a.flowRemoteChoices(r, cfg, ops.FlowKindRelease, "release/1.0"); fetch || push {
+		t.Fatal("the finish offers the network without a remote")
+	}
+	if err := ops.AddRemote(r, "upstream", "https://example.com/flow.git"); err != nil {
 		t.Fatal(err)
 	}
-	withRemote, err := gitrepo.Open(target, gitrepo.OpenOptions{})
-	if err != nil {
+	cfg.Remote = "upstream"
+	if err := ops.WriteFlowConfig(r, cfg); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = withRemote.Close() })
+	head := readOnDispatcher(t, a, func() hash.ObjectID {
+		snap, err := loadBranchSnapshot(a.opened().store)
+		if err != nil {
+			t.Error(err)
+		}
+		return snap.HeadID
+	})
+	writeTrackingRef(t, target, "upstream", "release/1.0", head)
+	writeTrackingRef(t, target, "upstream", "topic/login", head)
+	withRemote := openRepoAt(t, target)
 
 	net := a.flowNetwork(withRemote, OperationReporter{app: a})
-
-	if net.Remote != a.effectiveDefaultRemote(withRemote) || net.Progress == nil {
+	if net.Remote != "upstream" || net.Progress == nil {
 		t.Fatalf("network = %+v", net)
+	}
+	for _, c := range []struct {
+		kind, branch string
+		fetch, push  bool
+	}{
+		{ops.FlowKindRelease, "release/1.0", false, true},
+		{ops.FlowKindFeature, "topic/login", true, true},
+		{ops.FlowKindFeature, "topic/other", false, false},
+	} {
+		if fetch, push := a.flowRemoteChoices(withRemote, cfg, c.kind, c.branch); fetch != c.fetch || push != c.push {
+			t.Errorf("%s %s: fetch %v push %v", c.kind, c.branch, fetch, push)
+		}
+	}
+	writeTrackingRef(t, target, "upstream", "develop", head)
+	if fetch, push := a.flowRemoteChoices(openRepoAt(t, target), cfg, ops.FlowKindHotfix, "hotfix/2.0"); !fetch || !push {
+		t.Fatal("a tracked develop does not offer fetch and push")
 	}
 }
 
