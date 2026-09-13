@@ -7,7 +7,6 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/ops"
-	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/tag"
@@ -23,13 +22,6 @@ func (a *App) tagItems(id hash.ObjectID) []widget.MenuItem {
 	item := menuItem("Menu.Context.CreateTag", func() { a.openTag(id) })
 	item.Disabled = a.State().ActiveRepository == ""
 	return []widget.MenuItem{item}
-}
-
-func (a *App) deleteTagItems(ref refs.Name) []widget.MenuItem {
-	if !ref.IsTag() {
-		return nil
-	}
-	return []widget.MenuItem{menuItem("Menu.Context.DeleteTag", func() { a.deleteTag(ref.Short()) })}
 }
 
 func (a *App) openTag(id hash.ObjectID) {

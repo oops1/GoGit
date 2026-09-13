@@ -66,32 +66,38 @@ func branchSnapshot(t *testing.T, a *App) branches.Snapshot {
 	return snap
 }
 
-func TestTheBranchMenuSwitchesToTheBranchUnderTheCursor(t *testing.T) {
+func TestADoubleClickChecksOutALocalBranchAtOnce(t *testing.T) {
 	a, _ := forkedApp(t, false)
 	views := captureSwitchViews(t)
 
-	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.switchItems(refs.BranchName("feature")) })
-	if len(items) != 1 || items[0].Text != i18n.T("Menu.Context.SwitchHere") || items[0].Disabled {
-		t.Fatalf("items = %+v", items)
+	readOnDispatcher(t, a, func() bool { a.checkOutRef(refs.BranchName("main")); return true })
+	lines := rebaseThrough(t, a, func() { a.checkOutRef(refs.BranchName("feature")) })
+
+	if !logHasPrefix(t, lines, "Operation.Log.Switched") || branchNow(t, a) != "feature" || len(*views) != 0 {
+		t.Fatalf("log = %v, branch = %q, dialogs = %d", lines, branchNow(t, a), len(*views))
 	}
-	readOnDispatcher(t, a, func() bool { items[0].OnClick(); return true })
+}
+
+func TestADoubleClickOnARemoteBranchOrATagAsksHowToCheckItOut(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	views := captureSwitchViews(t)
+
+	readOnDispatcher(t, a, func() bool { a.checkOutRef("refs/remotes/origin/main"); return true })
 
 	if len(*views) != 1 {
 		t.Fatal("the switch dialog did not open")
 	}
-	if choice := readOnDispatcher(t, a, (*views)[0].Choice); choice.Source != "feature" {
-		t.Fatalf("choice = %+v", choice)
-	}
 	readOnDispatcher(t, a, func() bool { (*views)[0].Dialog().CancelAction(); return true })
 }
 
-func TestTheCurrentBranchAndOtherRefsHaveNoSwitchEntry(t *testing.T) {
+func TestTheBranchMenuIsEmptyForAnythingButBranchesAndTags(t *testing.T) {
 	a, _ := forkedApp(t, false)
 
-	for _, ref := range []refs.Name{refs.BranchName("main"), refs.TagName("v1"), "refs/stash"} {
-		if items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.switchItems(ref) }); items != nil {
-			t.Fatalf("%s: items = %+v", ref, items)
-		}
+	if items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu("refs/stash") }); items != nil {
+		t.Fatalf("items = %v", menuTexts(items))
+	}
+	if item, _ := findMenuItem(readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("main")) }), i18n.T("Menu.Ref.CheckOut")); !item.Disabled {
+		t.Fatal("the current branch cannot be checked out again")
 	}
 }
 

@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/oops1/headless-gui/v3/widget"
-
 	"github.com/oops1/gogit/internal/gitcore/ops"
-	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/branches"
@@ -22,18 +19,6 @@ var runSwitchBranch = ops.Switch
 
 func (a *App) registerSwitchHandlers() {
 	a.handlers[CmdSwitch] = func() { a.openSwitch("") }
-}
-
-func (a *App) switchItems(ref refs.Name) []widget.MenuItem {
-	if !ref.IsBranch() && !ref.IsRemote() {
-		return nil
-	}
-	if ref == refs.BranchName(a.currentBranchName()) {
-		return nil
-	}
-	item := menuItem("Menu.Context.SwitchHere", func() { a.openSwitch(ref.Short()) })
-	item.Disabled = !a.State().Enabled(CmdSwitch)
-	return []widget.MenuItem{item}
 }
 
 func (a *App) openSwitch(selected string) {

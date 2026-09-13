@@ -356,14 +356,16 @@ func TestTheBranchMenuMergesAnotherBranchIntoTheCurrentOne(t *testing.T) {
 	if items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu("refs/stash") }); items != nil {
 		t.Fatalf("items = %+v", items)
 	}
-	if items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("main")) }); len(items) != 1 {
-		t.Fatalf("the current branch offers %+v", items)
+	mine := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("main")) })
+	if merge, _ := findMenuItem(mine, i18n.T("Menu.Ref.Merge")); !merge.Disabled {
+		t.Fatalf("the current branch offers a merge into itself: %v", menuTexts(mine))
 	}
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("feature")) })
-	if items[0].Text != i18n.T("Menu.Context.MergeIntoCurrent") || items[0].Disabled {
-		t.Fatalf("items = %+v", items)
+	merge, _ := findMenuItem(items, i18n.T("Menu.Ref.Merge"))
+	if merge.Disabled {
+		t.Fatalf("items = %v", menuTexts(items))
 	}
-	readOnDispatcher(t, a, func() bool { items[0].OnClick(); return true })
+	readOnDispatcher(t, a, func() bool { merge.OnClick(); return true })
 
 	if len(*views) != 1 || readOnDispatcher(t, a, func() string { return (*views)[0].Request().Source }) != "feature" {
 		t.Fatalf("views = %d", len(*views))

@@ -76,6 +76,7 @@ func TestTheTreeMenuOfARepositoryOffersThePathActions(t *testing.T) {
 	if len(*started) != 2 {
 		t.Fatalf("started = %v, want the file manager and the terminal", *started)
 	}
+	clickMenuItem(t, items, "Menu.Repository.RepoSettings")
 }
 
 func TestTheMenuOfTheOpenRepositoryOffersToCloseIt(t *testing.T) {

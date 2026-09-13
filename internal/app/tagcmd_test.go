@@ -110,8 +110,10 @@ func TestTheBranchMenuDeletesATag(t *testing.T) {
 	readOnDispatcher(t, a, func() bool { a.createTag(id, tag.Model{Name: "v1", Message: "tagged"}); return true })
 	waitForStatusText(t, a, i18n.Tf("Status.TagCreated", "v1"))
 
+	a.askConfirm = func(_, _ string, cb func(bool)) { cb(true) }
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.TagName("v1")) })
-	readOnDispatcher(t, a, func() bool { items[len(items)-1].OnClick(); return true })
+	remove, _ := findMenuItem(items, i18n.T("Menu.Ref.Delete"))
+	readOnDispatcher(t, a, func() bool { remove.OnClick(); return true })
 
 	waitForStatusText(t, a, i18n.Tf("Status.TagDeleted", "v1"))
 	if names := tagsOf(t, target); len(names) != 0 {
@@ -134,11 +136,11 @@ func TestTheBranchMenuKeepsItsMergeEntryForBranches(t *testing.T) {
 	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("feature")) })
 	mine := readOnDispatcher(t, a, func() []widget.MenuItem { return a.branchMenu(refs.BranchName("main")) })
 
-	if items[0].Text != i18n.T("Menu.Context.MergeIntoCurrent") || !hasMenuItem(items, i18n.T("Menu.Context.Reflog")) {
-		t.Fatalf("items = %+v", items)
+	if merge, _ := findMenuItem(items, i18n.T("Menu.Ref.Merge")); merge.Disabled || !hasMenuItem(items, i18n.T("Menu.Context.Reflog")) {
+		t.Fatalf("items = %v", menuTexts(items))
 	}
-	if hasMenuItem(mine, i18n.T("Menu.Context.MergeIntoCurrent")) || !hasMenuItem(mine, i18n.T("Menu.Context.Reflog")) {
-		t.Fatalf("mine = %+v", mine)
+	if merge, _ := findMenuItem(mine, i18n.T("Menu.Ref.Merge")); !merge.Disabled || !hasMenuItem(mine, i18n.T("Menu.Context.Reflog")) {
+		t.Fatalf("mine = %v", menuTexts(mine))
 	}
 }
 

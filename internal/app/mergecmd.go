@@ -66,27 +66,9 @@ func (a *App) registerMergeHandlers() {
 	a.handlers[CmdMerge] = func() { a.openMerge("") }
 	a.handlers[CmdAbortMerge] = a.confirmAbortMerge
 	a.branchesView.OnMenu = a.branchMenu
+	a.branchesView.OnActivate = a.checkOutRef
 	a.banner.commit.OnClick = func() { a.Dispatch(CmdContinue) }
 	a.banner.abort.OnClick = func() { a.Dispatch(CmdAbortMerge) }
-}
-
-func (a *App) branchMenu(ref refs.Name) []widget.MenuItem {
-	state := a.State()
-	current := a.currentBranchName()
-	var items []widget.MenuItem
-	if ref != refs.BranchName(current) && mergeable(ref) {
-		item := menuItem("Menu.Context.MergeIntoCurrent", func() { a.openMerge(ref.Short()) })
-		item.Disabled = !state.Enabled(CmdMerge)
-		items = append(items, item)
-	}
-	items = append(items, a.switchItems(ref)...)
-	items = append(items, a.compareItems(ref)...)
-	items = append(items, a.deleteTagItems(ref)...)
-	return append(items, a.reflogItems(ref)...)
-}
-
-func mergeable(ref refs.Name) bool {
-	return ref.IsBranch() || ref.IsRemote() || ref.IsTag()
 }
 
 func (a *App) currentBranchName() string {

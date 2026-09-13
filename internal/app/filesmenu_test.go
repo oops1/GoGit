@@ -71,6 +71,14 @@ func TestAConflictedFileOffersTheConflictSolverAndTheResolveMenu(t *testing.T) {
 	if resolve.SubItems[0].Text != i18n.T("Menu.Context.TakeOurs") {
 		t.Fatalf("resolve items = %v", menuTexts(resolve.SubItems))
 	}
+	solver.OnClick()
+	asked := false
+	a.askConfirm = func(_, _ string, cb func(bool)) { asked = true; cb(false) }
+	remove, _ := findMenuItem(items, i18n.T("Menu.Files.Delete"))
+	remove.OnClick()
+	if !asked {
+		t.Fatal("deleting from the menu must ask first")
+	}
 }
 
 func TestARowWithoutAPathHasNoHistoryItems(t *testing.T) {
