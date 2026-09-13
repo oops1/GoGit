@@ -239,10 +239,12 @@ func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bo
 	}
 	forced := forceSpec || p.opts.Force
 	if lease, ok := p.opts.ForceWithLease[dst]; ok {
-		tracking := refs.RemoteBranchName(p.rem.Name, refs.Name(dst).Short())
-		current, _, err := lookupCurrent(p.store, tracking)
-		if err != nil {
-			return err
+		var current hash.ObjectID
+		if tracking, tracked := trackingRefFor(p.rem, dst); tracked {
+			var err error
+			if current, _, err = lookupCurrent(p.store, tracking); err != nil {
+				return err
+			}
 		}
 		if current != lease {
 			p.rejected = append(p.rejected, transport.RefStatus{Name: dst, Message: "stale info"})
@@ -298,7 +300,10 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 			errs = append(errs, fmt.Errorf("%w: %s: %s", ErrRejected, status.Name, status.Message))
 			continue
 		}
-		tracking := refs.RemoteBranchName(rem.Name, refs.Name(status.Name).Short())
+		tracking, tracked := trackingRefFor(rem, status.Name)
+		if !tracked {
+			continue
+		}
 		current, existed, err := lookupCurrent(store, tracking)
 		if err != nil {
 			return nil, nil, nil, err
@@ -325,4 +330,17 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 		return nil, nil, nil, err
 	}
 	return changes, rejected, errs, nil
+}
+
+func trackingRefFor(rem Remote, dst string) (refs.Name, bool) {
+	specs := rem.Fetch
+	if len(specs) == 0 {
+		specs = []refspec.RefSpec{refspec.DefaultFetch(rem.Name)}
+	}
+	for _, spec := range specs {
+		if tracking, ok := spec.MatchSrc(dst); ok {
+			return refs.Name(tracking), true
+		}
+	}
+	return "", false
 }

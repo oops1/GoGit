@@ -197,13 +197,13 @@ func TestApplyReportStatusPropagatesUpdateConflicts(t *testing.T) {
 
 	pending := []pendingUpdate{
 		{name: "refs/heads/x", new: commitA},
-		{name: "refs/tags/x", new: commitB},
+		{name: "refs/heads/y", new: commitB},
 	}
 	resp := &transport.PushResult{Refs: []transport.RefStatus{
 		{Name: "refs/heads/x", OK: true},
-		{Name: "refs/tags/x", OK: true},
+		{Name: "refs/heads/y", OK: true},
 	}}
-	if _, _, _, err := applyReportStatus(store, Remote{Name: "origin"}, pending, resp); err == nil {
+	if _, _, _, err := applyReportStatus(store, collidingRemote(t), pending, resp); err == nil {
 		t.Fatal("applyReportStatus returned no error for two updates colliding on the same tracking ref")
 	}
 }
@@ -217,13 +217,13 @@ func TestApplyReportStatusPropagatesDeleteConflicts(t *testing.T) {
 
 	pending := []pendingUpdate{
 		{name: "refs/heads/x", old: head, deleted: true},
-		{name: "refs/tags/x", old: head, deleted: true},
+		{name: "refs/heads/y", old: head, deleted: true},
 	}
 	resp := &transport.PushResult{Refs: []transport.RefStatus{
 		{Name: "refs/heads/x", OK: true},
-		{Name: "refs/tags/x", OK: true},
+		{Name: "refs/heads/y", OK: true},
 	}}
-	if _, _, _, err := applyReportStatus(store, Remote{Name: "origin"}, pending, resp); err == nil {
+	if _, _, _, err := applyReportStatus(store, collidingRemote(t), pending, resp); err == nil {
 		t.Fatal("applyReportStatus returned no error for two deletes colliding on the same tracking ref")
 	}
 }
