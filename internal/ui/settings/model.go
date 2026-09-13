@@ -19,6 +19,7 @@ const (
 type Model struct {
 	Language              string
 	Theme                 string
+	Layout                string
 	ShowToolbar           bool
 	ToolbarCaptions       bool
 	ShowStatusBar         bool
@@ -39,6 +40,7 @@ func FromConfig(cfg *config.Config) Model {
 	m := Model{
 		Language:              cfg.Language,
 		Theme:                 cfg.Theme,
+		Layout:                cfg.UI.Layout,
 		ShowToolbar:           cfg.UI.ShowToolbar,
 		ToolbarCaptions:       cfg.UI.ToolbarCaptions,
 		ShowStatusBar:         cfg.UI.ShowStatusBar,
@@ -66,6 +68,9 @@ func (m Model) Normalized() Model {
 	default:
 		m.Theme = config.ThemeSystem
 	}
+	if m.Layout != config.LayoutSidebar {
+		m.Layout = config.LayoutDocks
+	}
 	m.LogMaxCount = clamp(m.LogMaxCount, MinLogMaxCount, MaxLogMaxCount)
 	m.FetchInterval = clamp(m.FetchInterval, MinFetchInterval, MaxFetchInterval)
 	m.WorkTreeDepth = clamp(m.WorkTreeDepth, MinWorkTreeDepth, MaxWorkTreeDepth)
@@ -90,6 +95,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	n := m.Normalized()
 	cfg.Language = n.Language
 	cfg.Theme = n.Theme
+	cfg.UI.Layout = n.Layout
 	cfg.UI.ShowToolbar = n.ShowToolbar
 	cfg.UI.ToolbarCaptions = n.ToolbarCaptions
 	cfg.UI.ShowStatusBar = n.ShowStatusBar

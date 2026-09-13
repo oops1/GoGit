@@ -234,3 +234,34 @@ func TestPreviewMergeInProgress(t *testing.T) {
 		a.Engine().Stop()
 	}
 }
+
+func TestPreviewSidebarLayout(t *testing.T) {
+	dir := os.Getenv("GOGIT_PREVIEW_DIR")
+	if dir == "" {
+		t.Skip("GOGIT_PREVIEW_DIR not set")
+	}
+	target := filepath.Join(t.TempDir(), "demo")
+	initTestRepoWithBranch(t, target, "main")
+	ids := seedJournalCommits(t, target, "main", 8)
+	addBranchAndTag(t, target, "feature/preview", "v1.0")
+	seedPreviewChangeCommits(t, target, "main", ids[len(ids)-1])
+	seedPreviewIndex(t, target)
+	seedPreviewWorkingTreeChanges(t, target)
+
+	cfg := config.Default()
+	cfg.UI.Layout = config.LayoutSidebar
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "demo", Path: target}}
+
+	for _, theme := range []string{config.ThemeDark, config.ThemeLight} {
+		a := newTestAppWithConfig(t, cfg)
+		a.SetTheme(theme)
+		a.ActivateRepository("r1")
+		waitForJournalRows(t, a, 10)
+		waitForWorkingRows(t, a, 5)
+		selectFilesRow(t, a, 0)
+		a.Engine().SaveFrames(dir + "/sidebar-" + theme)
+		a.Engine().Start()
+		time.Sleep(700 * time.Millisecond)
+		a.Engine().Stop()
+	}
+}

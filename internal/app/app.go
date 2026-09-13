@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/oops1/headless-gui/v3/engine"
@@ -19,6 +20,7 @@ import (
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/odb"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/i18n"
@@ -31,12 +33,13 @@ import (
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/commit"
 	"github.com/oops1/gogit/internal/ui/commitdetails"
-	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
+	"github.com/oops1/gogit/internal/ui/gitdiff"
 	"github.com/oops1/gogit/internal/ui/journal"
 	"github.com/oops1/gogit/internal/ui/panetitle"
 	"github.com/oops1/gogit/internal/ui/repos"
 	"github.com/oops1/gogit/internal/ui/settings"
+	"github.com/oops1/gogit/internal/ui/sidebar"
 	"github.com/oops1/gogit/internal/ui/style"
 	"github.com/oops1/gogit/internal/vault"
 )
@@ -61,6 +64,7 @@ type App struct {
 	handlers map[CommandID]func()
 	OnExit   func()
 	langID   int
+	scope    *widget.BindingScope
 	detect   func() systheme.Scheme
 	accentOf func() systheme.Accent
 	log      *slog.Logger
@@ -74,7 +78,7 @@ type App struct {
 	reposView        *repos.View
 	branchesView     *branches.View
 	journalView      *journal.View
-	diffView         *diffview.DiffView
+	diffView         *gitdiff.View
 	filesGrid        *filesgrid.Grid
 	filesFilterInput *widget.TextInput
 	filesFilterLabel *widget.Label
@@ -159,6 +163,7 @@ type App struct {
 	filesMu            sync.Mutex
 	filesMode          filesMode
 	currentFiles       []diff.File
+	currentFilesDB     *odb.DB
 	currentEntries     []worktree.Entry
 	mutedDirs          []string
 	commitSelected     bool
@@ -170,6 +175,10 @@ type App struct {
 	activeModified     bool
 	stagedCount        int
 
+	mainGrid       *widget.Grid
+	sidebar        *sidebar.View
+	sidebarMounted bool
+
 	branchMu    sync.Mutex
 	branchCache map[string]string
 
@@ -177,12 +186,8 @@ type App struct {
 	watchdogStall    time.Duration
 	commands         commandWatch
 
-	postMu     sync.Mutex
-	posted     []func()
-	postClosed bool
-	postWake   chan struct{}
-	postStop   chan struct{}
-	postWG     sync.WaitGroup
+	postClosed     atomic.Bool
+	stopPostDriver func()
 
 	netMu     sync.Mutex
 	netCancel context.CancelFunc
@@ -207,10 +212,10 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		return nil, err
 	}
 	i18n.Apply(cfg.Language)
-	diffview.Register()
+	gitdiff.Register()
 	filesgrid.Register()
 
-	rootWidget, named, err := widget.LoadUIFromXAML(xaml)
+	rootWidget, named, scope, err := widget.LoadUIFromXAMLBindings(xaml, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +331,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if !ok {
 		return nil, fmt.Errorf("%w: detailsTabs", ErrWidgetMissing)
 	}
-	diffWidget, ok := named["diffView"].(*diffview.DiffView)
+	diffWidget, ok := named["diffView"].(*gitdiff.View)
 	if !ok {
 		return nil, fmt.Errorf("%w: diffView", ErrWidgetMissing)
 	}
@@ -340,6 +345,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		paths:             paths,
 		root:              root,
 		named:             named,
+		scope:             scope,
 		menu:              menu,
 		handlers:          map[CommandID]func(){},
 		watchdogInterval:  defaultWatchdogInterval,
@@ -370,13 +376,13 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		journalPageSize: defaultJournalPageSize,
 		banner:          banner,
 	}
-	a.startPostQueue()
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
 	root.Title = i18n.T("App.Title")
 
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
 	a.eng.SetRoot(root)
+	a.startPostQueue()
 	a.askInput = func(title, prompt string, cb func(text string, ok bool)) {
 		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
 	}
@@ -400,6 +406,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.applyDockSizes()
 	a.defaultLayout = a.Dock().SaveLayout()
 	_ = a.RestoreLayout()
+	a.setupSidebar()
+	a.applyLayoutMode(cfg.UI.Layout)
 
 	a.reposView = repos.NewView()
 	a.reposView.Bind(reposTreeWidget)
@@ -479,7 +487,7 @@ func (a *App) Root() *widget.Window { return a.root }
 
 func (a *App) Widget(name string) widget.Widget { return a.named[name] }
 
-func (a *App) DiffView() *diffview.DiffView { return a.diffView }
+func (a *App) DiffView() *gitdiff.View { return a.diffView }
 
 func (a *App) Config() *config.Config { return a.cfg }
 
@@ -906,6 +914,7 @@ func (a *App) applyTheme() {
 	a.applyMergeBannerTheme(theme)
 	a.journalView.Restyle(theme)
 	a.detailsView.Restyle(theme)
+	a.restyleSidebar(theme)
 }
 
 func (a *App) applyWindowFrame() {
@@ -953,6 +962,7 @@ func (a *App) SetLanguage(code string) {
 	i18n.Apply(code)
 	a.detailsView.Retitle()
 	a.showJournalPeriods()
+	a.retitleSidebar()
 	a.log.Debug("language changed", "language", code)
 }
 
@@ -991,6 +1001,7 @@ func (a *App) Close() {
 		a.stopWrite()
 		a.closeOpenRepository()
 		widget.RemoveLanguageListener(a.langID)
+		a.scope.Dispose()
 	})
 }
 

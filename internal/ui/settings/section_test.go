@@ -180,6 +180,7 @@ func TestModifiedTrackingCoversEveryWiredWidget(t *testing.T) {
 	}{
 		{"language", func(v *View) { v.language.SetSelected(1); v.language.OnChange(1, "ru") }},
 		{"theme", func(v *View) { v.theme.SetSelected(themeIndex(config.ThemeDark)); v.theme.OnChange(0, "") }},
+		{"layoutMode", func(v *View) { v.layoutMode.SetSelected(1); v.layoutMode.OnChange(1, "") }},
 		{"showToolbar", func(v *View) { clickCheckBox(v.showToolbar) }},
 		{"toolbarCaptions", func(v *View) { clickCheckBox(v.toolbarCaptions) }},
 		{"showStatusBar", func(v *View) { clickCheckBox(v.showStatusBar) }},

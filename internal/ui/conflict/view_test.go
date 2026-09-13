@@ -85,12 +85,6 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 			t.Fatalf("without %q: err = %v, want ErrWidgetMissing", name, err)
 		}
 	}
-	loadDialog = func(title string, _ string) (*widget.Dialog, map[string]widget.Widget, error) {
-		return widget.NewDialog(title, 10, 10), full(), nil
-	}
-	if _, err := NewView(); !errors.Is(err, ErrWidgetMissing) {
-		t.Fatalf("without a content root: err = %v, want ErrWidgetMissing", err)
-	}
 }
 
 func TestTheWindowCanBeResizedButNotCrushed(t *testing.T) {

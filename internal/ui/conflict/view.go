@@ -53,11 +53,9 @@ type View struct {
 	unresolved   *widget.Label
 	position     *widget.Label
 	message      *widget.Label
-	notes        *paneNotes
 
-	path         string
-	finalNewline bool
-	saved        string
+	path  string
+	saved string
 
 	OnSave  func(content string, resolved bool)
 	OnClose func()
@@ -70,9 +68,6 @@ func NewView() (*View, error) {
 	}
 	v := &View{dlg: dlg}
 	if err := v.bind(named); err != nil {
-		return nil, err
-	}
-	if err := v.attachNotes(dlg); err != nil {
 		return nil, err
 	}
 	dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
@@ -155,18 +150,6 @@ func (v *View) wire() {
 	v.merge.OnSaveRequest = v.requestSave
 }
 
-func (v *View) attachNotes(dlg *widget.Dialog) error {
-	content := dlg.Content()
-	if content == nil {
-		return fmt.Errorf("%w: content", ErrWidgetMissing)
-	}
-	v.notes = newPaneNotes(v.merge, i18n.T("Dialog.Conflict.Note.Ours"), i18n.T("Dialog.Conflict.Note.Base"), i18n.T("Dialog.Conflict.Note.Theirs"))
-	v.notes.SetGridProps(v.merge.GetGridRow(), v.merge.GetGridColumn(), v.merge.GetGridRowSpan(), v.merge.GetGridColSpan())
-	content.AddChild(v.notes)
-	content.SetBounds(content.Bounds())
-	return nil
-}
-
 func (v *View) resolve(how widget.MergeResolution) {
 	v.merge.ResolveCurrent(how)
 	v.refresh()
@@ -174,14 +157,14 @@ func (v *View) resolve(how widget.MergeResolution) {
 
 func (v *View) Show(file File) {
 	v.path = file.Path
-	v.finalNewline = file.FinalNewline
 	v.dlg.Title = i18n.Tf("Dialog.Conflict.TitleFor", file.Path)
 	v.merge.SetStyle(styleOf(file.Style))
 	v.merge.SetSides(
-		widget.MergeSideInfo{Title: file.OursLabel, Note: file.Path},
-		widget.MergeSideInfo{Title: file.BaseLabel, Note: file.Path},
-		widget.MergeSideInfo{Title: file.TheirsLabel, Note: file.Path},
+		widget.MergeSideInfo{Title: file.OursLabel, Note: file.Path, Hint: i18n.T("Dialog.Conflict.Note.Ours")},
+		widget.MergeSideInfo{Title: file.BaseLabel, Note: file.Path, Hint: i18n.T("Dialog.Conflict.Note.Base")},
+		widget.MergeSideInfo{Title: file.TheirsLabel, Note: file.Path, Hint: i18n.T("Dialog.Conflict.Note.Theirs")},
 	)
+	v.merge.SetResultEOL("\n", false, file.FinalNewline)
 	v.merge.SetChunks(blocksOf(file.Blocks))
 	v.merge.GoToConflict(0)
 	v.say("")
@@ -226,11 +209,7 @@ func (v *View) Path() string { return v.path }
 func (v *View) Unresolved() int { return v.merge.Unresolved() }
 
 func (v *View) Result() string {
-	text := v.merge.Result()
-	if v.finalNewline && text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	return text
+	return v.merge.Result()
 }
 
 func (v *View) requestSave() {
@@ -279,5 +258,4 @@ func (v *View) Restyle(t *widget.Theme) {
 	v.nextConflict.Icon = icons.Toolbar(nextChangeIcon, navigationIconSize, p.Text)
 	p.Body(v.unresolved, v.position)
 	p.Hints(v.message)
-	v.notes.Restyle(t)
 }

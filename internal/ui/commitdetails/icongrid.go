@@ -52,7 +52,7 @@ func newIconGrid() *iconGrid {
 func (g *iconGrid) Restyle(t *widget.Theme) {
 	p := style.Of(t)
 	g.mu.Lock()
-	g.added, g.deleted, g.muted = p.Added(), p.Deleted(), p.Secondary
+	g.added, g.deleted, g.muted = p.AddedText, p.DeletedText, p.Secondary
 	g.mu.Unlock()
 }
 

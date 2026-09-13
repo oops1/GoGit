@@ -8,6 +8,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -17,7 +18,6 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/repo/watch"
 	"github.com/oops1/gogit/internal/ui/changes"
-	"github.com/oops1/gogit/internal/ui/diffview"
 )
 
 func TestOpenRepositoryAtFailsAndCleansUpWhenWorktreeOpenFails(t *testing.T) {
@@ -218,7 +218,7 @@ func TestSelectingAStagedWorkingRowShowsTheHeadVsIndexDiff(t *testing.T) {
 		t.Fatalf("doc = %+v, want an addition hunk", doc)
 	}
 	for _, line := range doc.Hunks[0].Lines {
-		if line.Kind != diffview.Added {
+		if line.Kind != diff.KindAdd {
 			t.Fatalf("line kind = %v, want an added line for a new file", line.Kind)
 		}
 	}

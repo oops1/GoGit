@@ -111,14 +111,12 @@ func TestATintLeansFromTheFieldTowardsTheAccent(t *testing.T) {
 	}
 }
 
-func TestLineCountsAreBrightOnBothLightAndDarkThemes(t *testing.T) {
-	light := Of(widget.Win11LightTheme())
-	dark := Of(widget.Win11DarkTheme())
+func TestLineCountsTakeTheDiffTextColoursOfTheTheme(t *testing.T) {
+	for _, theme := range []*widget.Theme{widget.Win11LightTheme(), widget.Win11DarkTheme()} {
+		p := Of(theme)
 
-	if light.Added() != addedOnLight || light.Deleted() != deletedOnLight {
-		t.Fatalf("light = %v %v", light.Added(), light.Deleted())
-	}
-	if dark.Added() != addedOnDark || dark.Deleted() != deletedOnDark {
-		t.Fatalf("dark = %v %v", dark.Added(), dark.Deleted())
+		if p.AddedText != theme.DiffAddText || p.DeletedText != theme.DiffDelText || p.AddedText.A == 0 || p.DeletedText.A == 0 {
+			t.Fatalf("palette = %v %v, theme = %v %v", p.AddedText, p.DeletedText, theme.DiffAddText, theme.DiffDelText)
+		}
 	}
 }

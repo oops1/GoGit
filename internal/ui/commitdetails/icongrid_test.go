@@ -93,7 +93,7 @@ func TestTheCountsTakeTheirColoursFromTheTheme(t *testing.T) {
 
 	v.changes.mu.Lock()
 	defer v.changes.mu.Unlock()
-	if v.changes.added != style.Of(dark).Added() || v.changes.deleted != style.Of(dark).Deleted() {
+	if v.changes.added != style.Of(dark).AddedText || v.changes.deleted != style.Of(dark).DeletedText {
 		t.Fatalf("colours = %v %v", v.changes.added, v.changes.deleted)
 	}
 }

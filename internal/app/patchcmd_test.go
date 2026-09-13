@@ -17,8 +17,7 @@ import (
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/i18n"
-	"github.com/oops1/gogit/internal/ui/changes"
-	"github.com/oops1/gogit/internal/ui/diffview"
+	"github.com/oops1/gogit/internal/ui/gitdiff"
 )
 
 const twelveLines = "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\n"
@@ -96,7 +95,7 @@ func TestStagingOneHunkLeavesTheOtherInTheWorkingCopy(t *testing.T) {
 	writeWorkingText(t, target, bothEndsChanged)
 	shown := shownDiffOf(t, a, worktree.Entry{Path: "f.txt", Unstaged: worktree.StatusModified}, 2)
 
-	readOnDispatcher(t, a, func() bool { a.stageLines(shown, changes.PickedHunks([]int{0})); return true })
+	readOnDispatcher(t, a, func() bool { a.stageLines(shown, pickHunks(map[int]bool{0: true})); return true })
 	waitForDiffHunks(t, a, 1)
 
 	if got := stagedContent(t, target); got != "L1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\n" {
@@ -115,7 +114,7 @@ func TestUnstagingOneHunkTakesItBackOutOfTheIndex(t *testing.T) {
 		t.Fatalf("shown = %+v, want the staged diff", shown)
 	}
 
-	readOnDispatcher(t, a, func() bool { a.unstageLines(shown, changes.PickedHunks([]int{0})); return true })
+	readOnDispatcher(t, a, func() bool { a.unstageLines(shown, pickHunks(map[int]bool{0: true})); return true })
 	waitForDiffHunks(t, a, 1)
 
 	if got := stagedContent(t, target); got != "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nL12\n" {
@@ -134,11 +133,11 @@ func TestDiscardingAHunkAsksFirst(t *testing.T) {
 		cb(answer)
 	}
 
-	readOnDispatcher(t, a, func() bool { a.discardLines(shown, changes.PickedHunks([]int{0})); return true })
+	readOnDispatcher(t, a, func() bool { a.discardLines(shown, pickHunks(map[int]bool{0: true})); return true })
 	if data, _ := os.ReadFile(filepath.Join(target, "f.txt")); string(data) != bothEndsChanged {
 		t.Fatalf("a refused discard changed the file: %q", data)
 	}
-	readOnDispatcher(t, a, func() bool { a.discardLines(shown, changes.PickedHunks([]int{0})); return true })
+	readOnDispatcher(t, a, func() bool { a.discardLines(shown, pickHunks(map[int]bool{0: true})); return true })
 	waitForDiffHunks(t, a, 1)
 
 	data, err := os.ReadFile(filepath.Join(target, "f.txt"))
@@ -177,7 +176,7 @@ func TestAFailedPatchIsReported(t *testing.T) {
 	patchIndex = func(context.Context, *gitrepo.Repository, string, []diff.Hunk) error { return errors.New("boom") }
 	t.Cleanup(func() { patchIndex = prev })
 
-	readOnDispatcher(t, a, func() bool { a.stageLines(shown, changes.PickedHunks([]int{0})); return true })
+	readOnDispatcher(t, a, func() bool { a.stageLines(shown, pickHunks(map[int]bool{0: true})); return true })
 
 	waitForStatusText(t, a, i18n.Tf("Status.PatchFailed", errors.New("boom")))
 }
@@ -193,40 +192,41 @@ func diffMenuTexts(items []widget.MenuItem) []string {
 func TestTheDiffMenuFollowsWhatTheDiffCompares(t *testing.T) {
 	a := newTestApp(t)
 	file := diff.File{Hunks: diff.Blobs([]byte("a\n"), []byte("b\n"), diff.Defaults())}
-	lines := []diffview.LineRef{{Hunk: 0, Line: 0}}
-	hunks := []int{0}
+	added := gitdiff.Spot{Side: widget.DiffRight, From: 0, To: 1}
 
-	if items := readOnDispatcher(t, a, a.diffMenu); items != nil {
+	if items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.diffMenu(added) }); items != nil {
 		t.Fatalf("nothing shown, yet the menu offers %v", diffMenuTexts(items))
 	}
-	if items := a.diffMenuFor(diffTarget{file: file}, lines, hunks); items != nil {
+	if items := a.diffMenuFor(diffTarget{file: file}, added); items != nil {
 		t.Fatalf("a commit diff offers %v", diffMenuTexts(items))
 	}
-	working := a.diffMenuFor(diffTarget{kind: diffKindWorktree, file: file}, lines, hunks)
+	working := a.diffMenuFor(diffTarget{kind: diffKindWorktree, file: file}, added)
 	if len(working) != 5 || working[0].Text != i18n.T("Menu.Diff.StageLines") || working[3].Text != i18n.T("Menu.Diff.DiscardLines") {
 		t.Fatalf("working copy menu = %v", diffMenuTexts(working))
 	}
-	staged := a.diffMenuFor(diffTarget{kind: diffKindIndex, file: file}, lines, hunks)
+	staged := a.diffMenuFor(diffTarget{kind: diffKindIndex, file: file}, added)
 	if len(staged) != 2 || staged[1].Text != i18n.T("Menu.Diff.UnstageHunk") {
 		t.Fatalf("staged menu = %v", diffMenuTexts(staged))
 	}
 	for _, item := range append(working, staged...) {
 		if item.OnClick != nil {
 			if item.Disabled {
-				t.Fatalf("%q is off with lines and a hunk selected", item.Text)
+				t.Fatalf("%q is off on a changed line", item.Text)
 			}
 			readOnDispatcher(t, a, func() bool { item.OnClick(); return true })
 		}
 	}
 }
 
-func TestTheDiffMenuTurnsItsItemsOffWithoutASelection(t *testing.T) {
+func TestTheDiffMenuTurnsItsItemsOffAwayFromAChange(t *testing.T) {
 	a := newTestApp(t)
 	file := diff.File{Hunks: diff.Blobs([]byte("a\n"), []byte("b\n"), diff.Defaults())}
 
-	for _, item := range a.diffMenuFor(diffTarget{kind: diffKindWorktree, file: file}, nil, nil) {
-		if item.OnClick != nil && !item.Disabled {
-			t.Fatalf("%q is on with nothing selected", item.Text)
+	for _, spot := range []gitdiff.Spot{{Side: widget.DiffRight, From: 7, To: 8}, {Side: widget.DiffLeft, From: -1, To: 0}} {
+		for _, item := range a.diffMenuFor(diffTarget{kind: diffKindWorktree, file: file}, spot) {
+			if item.OnClick != nil && !item.Disabled {
+				t.Fatalf("%q is on at %+v", item.Text, spot)
+			}
 		}
 	}
 }

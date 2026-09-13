@@ -460,3 +460,22 @@ func TestTheAttributionBanIsOnUntilItIsTurnedOff(t *testing.T) {
 		t.Fatal("the option must be able to turn the ban off")
 	}
 }
+
+func TestTheLayoutIsDocksUnlessTheSideBarIsAskedFor(t *testing.T) {
+	if Default().UI.Layout != LayoutDocks {
+		t.Fatalf("default layout = %q", Default().UI.Layout)
+	}
+	for text, want := range map[string]string{
+		"[ui]\nlayout = \"sidebar\"\n":  LayoutSidebar,
+		"[ui]\nlayout = \"floating\"\n": LayoutDocks,
+		"":                              LayoutDocks,
+	} {
+		cfg, err := Parse([]byte(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.UI.Layout != want {
+			t.Fatalf("layout from %q = %q, want %q", text, cfg.UI.Layout, want)
+		}
+	}
+}

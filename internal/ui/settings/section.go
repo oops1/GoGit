@@ -70,6 +70,7 @@ func (v *View) wireModifiedTracking() {
 	onAny := v.refreshSaveEnabled
 	v.language.OnChange = func(int, string) { onAny() }
 	v.theme.OnChange = func(int, string) { onAny() }
+	v.layoutMode.OnChange = func(int, string) { onAny() }
 	v.showToolbar.OnChange = func(bool) { onAny() }
 	v.toolbarCaptions.OnChange = func(bool) { onAny() }
 	v.showStatusBar.OnChange = func(bool) { onAny() }

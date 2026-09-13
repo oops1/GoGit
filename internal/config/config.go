@@ -21,6 +21,11 @@ const (
 )
 
 const (
+	LayoutDocks   = "docks"
+	LayoutSidebar = "sidebar"
+)
+
+const (
 	PullStrategyFF     = "ff"
 	PullStrategyMerge  = "merge"
 	PullStrategyRebase = "rebase"
@@ -33,8 +38,8 @@ const (
 )
 
 const (
-	MinWindowWidth  = 800
-	MinWindowHeight = 600
+	MinWindowWidth  = 1280
+	MinWindowHeight = 760
 )
 
 type Config struct {
@@ -82,6 +87,7 @@ type UI struct {
 	FilesSubdirectories   bool     `toml:"files_subdirectories"`
 	JournalFullAuthorName bool     `toml:"journal_full_author_name"`
 	CollapsedGroups       []string `toml:"collapsed_groups"`
+	Layout                string   `toml:"layout"`
 }
 
 type Updates struct {
@@ -112,7 +118,7 @@ func Default() *Config {
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
 		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true},
-		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
+		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true, Layout: LayoutDocks},
 	}
 }
 
@@ -146,6 +152,9 @@ func (c *Config) Normalize() {
 	}
 	if c.Theme != ThemeLight && c.Theme != ThemeDark {
 		c.Theme = ThemeSystem
+	}
+	if c.UI.Layout != LayoutSidebar {
+		c.UI.Layout = LayoutDocks
 	}
 	if c.Window.Width < MinWindowWidth {
 		c.Window.Width = MinWindowWidth

@@ -22,7 +22,6 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/ui/changes"
-	"github.com/oops1/gogit/internal/ui/diffview"
 	"github.com/oops1/gogit/internal/ui/filesgrid"
 )
 
@@ -121,16 +120,41 @@ func waitForWorkingRows(t *testing.T, a *App, want int) {
 	waitForFilesMode(t, a, filesModeWorking, want)
 }
 
-func diffDocumentOnDispatcher(t *testing.T, a *App) diffview.Document {
+type shownDocument struct {
+	OldName string
+	NewName string
+	Hunks   []diff.Hunk
+	Binary  bool
+	Left    string
+	Right   string
+}
+
+func (d shownDocument) IsEmpty() bool {
+	return !d.Binary && len(d.Hunks) == 0
+}
+
+func shownDocumentOf(a *App) shownDocument {
+	shown := a.currentShownDiff()
+	return shownDocument{
+		OldName: shown.file.OldPath,
+		NewName: shown.file.NewPath,
+		Hunks:   shown.file.Hunks,
+		Binary:  shown.file.Binary,
+		Left:    a.diffView.Text(widget.DiffLeft),
+		Right:   a.diffView.Text(widget.DiffRight),
+	}
+}
+
+func diffDocumentOnDispatcher(t *testing.T, a *App) shownDocument {
 	t.Helper()
-	result := make(chan diffview.Document, 1)
-	a.Post(func() { result <- a.diffView.Document() })
+	result := make(chan shownDocument, 1)
+	a.Post(func() { result <- shownDocumentOf(a) })
 	select {
 	case doc := <-result:
 		return doc
 	case <-time.After(testTimeout):
 		t.Fatal("post queue did not drain in time")
-		return diffview.Document{}
+		return shownDocument{}
 	}
 }
 
@@ -221,7 +245,7 @@ func TestSelectingASecondRowInFilesGridSwitchesTheDisplayedDiff(t *testing.T) {
 	selectFilesRow(t, a, 1)
 
 	doc := diffDocumentOnDispatcher(t, a)
-	if doc.OldName != "b.txt" {
+	if doc.OldName != "b.txt" || doc.Left != "line two\n" || doc.Right != "line TWO\n" {
 		t.Fatalf("diff document after selecting the second row = %+v, want it to describe b.txt", doc)
 	}
 }
@@ -321,11 +345,11 @@ func TestStartDiffIsANoOpWithoutAnOpenRepository(t *testing.T) {
 
 func TestOnFilesRowSelectedIgnoresANonRowSelection(t *testing.T) {
 	a := newTestApp(t)
-	before := a.diffView.Document()
+	before := shownDocumentOf(a)
 
 	a.onFilesRowSelected(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: "not a row"})
 
-	got := a.diffView.Document()
+	got := shownDocumentOf(a)
 	if got.OldName != before.OldName || len(got.Hunks) != len(before.Hunks) {
 		t.Fatalf("document changed for a non-Row selection: %+v", got)
 	}

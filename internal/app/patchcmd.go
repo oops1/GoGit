@@ -12,8 +12,7 @@ import (
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/i18n"
-	"github.com/oops1/gogit/internal/ui/changes"
-	"github.com/oops1/gogit/internal/ui/diffview"
+	"github.com/oops1/gogit/internal/ui/gitdiff"
 )
 
 type diffKind int
@@ -25,9 +24,11 @@ const (
 )
 
 type diffTarget struct {
-	kind diffKind
-	path string
-	file diff.File
+	kind    diffKind
+	path    string
+	file    diff.File
+	oldData []byte
+	newData []byte
 }
 
 type patchFunc func(context.Context, *gitrepo.Repository, string, []diff.Hunk) error
@@ -40,7 +41,17 @@ func (a *App) showDiff(target diffTarget) {
 	a.shownMu.Lock()
 	a.shownDiff = target
 	a.shownMu.Unlock()
-	a.diffView.SetDocument(changes.FromFile(target.file))
+	a.diffView.Show(diffSides(target))
+}
+
+func diffSides(target diffTarget) (gitdiff.Side, gitdiff.Side) {
+	left := gitdiff.Side{Title: target.file.OldPath, Text: string(target.oldData)}
+	right := gitdiff.Side{Title: target.file.NewPath, Text: string(target.newData)}
+	if target.file.Binary {
+		left.Text = i18n.T("Diff.Binary")
+		right.Text = left.Text
+	}
+	return left, right
 }
 
 func (a *App) clearDiff() {
@@ -56,29 +67,66 @@ func (a *App) currentShownDiff() diffTarget {
 	return a.shownDiff
 }
 
-func (a *App) diffMenu() []widget.MenuItem {
-	return a.diffMenuFor(a.currentShownDiff(), a.diffView.SelectedLines(), a.diffView.SelectedHunks())
+func (a *App) diffMenu(spot gitdiff.Spot) []widget.MenuItem {
+	return a.diffMenuFor(a.currentShownDiff(), spot)
 }
 
-func (a *App) diffMenuFor(target diffTarget, lines []diffview.LineRef, hunks []int) []widget.MenuItem {
-	byLines := changes.Picked(target.file, lines)
-	byHunks := changes.PickedHunks(hunks)
+func (a *App) diffMenuFor(target diffTarget, spot gitdiff.Spot) []widget.MenuItem {
+	lines, hunks := locateDiffLines(target.file, spot)
+	onLines, onHunks := len(lines) > 0, len(hunks) > 0
+	byLines, byHunks := pickLines(lines), pickHunks(hunks)
 	switch target.kind {
 	case diffKindWorktree:
 		return []widget.MenuItem{
-			patchItem("Menu.Diff.StageLines", len(lines) > 0, func() { a.stageLines(target, byLines) }),
-			patchItem("Menu.Diff.StageHunk", len(hunks) > 0, func() { a.stageLines(target, byHunks) }),
+			patchItem("Menu.Diff.StageLines", onLines, func() { a.stageLines(target, byLines) }),
+			patchItem("Menu.Diff.StageHunk", onHunks, func() { a.stageLines(target, byHunks) }),
 			menuSeparator(),
-			patchItem("Menu.Diff.DiscardLines", len(lines) > 0, func() { a.discardLines(target, byLines) }),
-			patchItem("Menu.Diff.DiscardHunk", len(hunks) > 0, func() { a.discardLines(target, byHunks) }),
+			patchItem("Menu.Diff.DiscardLines", onLines, func() { a.discardLines(target, byLines) }),
+			patchItem("Menu.Diff.DiscardHunk", onHunks, func() { a.discardLines(target, byHunks) }),
 		}
 	case diffKindIndex:
 		return []widget.MenuItem{
-			patchItem("Menu.Diff.UnstageLines", len(lines) > 0, func() { a.unstageLines(target, byLines) }),
-			patchItem("Menu.Diff.UnstageHunk", len(hunks) > 0, func() { a.unstageLines(target, byHunks) }),
+			patchItem("Menu.Diff.UnstageLines", onLines, func() { a.unstageLines(target, byLines) }),
+			patchItem("Menu.Diff.UnstageHunk", onHunks, func() { a.unstageLines(target, byHunks) }),
 		}
 	}
 	return nil
+}
+
+func locateDiffLines(f diff.File, spot gitdiff.Spot) (map[[2]int]bool, map[int]bool) {
+	left := spot.Side == widget.DiffLeft
+	lines, hunks := map[[2]int]bool{}, map[int]bool{}
+	for hunk, h := range f.Hunks {
+		oldAt, newAt := h.OldStart-1, h.NewStart-1
+		for line, l := range h.Lines {
+			at := newAt
+			if left {
+				at = oldAt
+			}
+			shown := l.Kind == diff.KindContext || (l.Kind == diff.KindDel) == left
+			if shown && at >= spot.From && at < spot.To {
+				hunks[hunk] = true
+				if l.Kind != diff.KindContext {
+					lines[[2]int{hunk, line}] = true
+				}
+			}
+			if l.Kind != diff.KindAdd {
+				oldAt++
+			}
+			if l.Kind != diff.KindDel {
+				newAt++
+			}
+		}
+	}
+	return lines, hunks
+}
+
+func pickHunks(hunks map[int]bool) patch.Picked {
+	return func(h, _ int) bool { return hunks[h] }
+}
+
+func pickLines(lines map[[2]int]bool) patch.Picked {
+	return func(h, l int) bool { return lines[[2]int{h, l}] }
 }
 
 func patchItem(key string, enabled bool, run func()) widget.MenuItem {

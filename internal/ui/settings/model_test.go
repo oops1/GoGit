@@ -42,6 +42,7 @@ func TestFromConfigCopiesFieldsAndNormalizes(t *testing.T) {
 		BanAttribution:        true,
 		ShallowDepth:          20,
 		CredentialSource:      config.CredentialSourceHelper,
+		Layout:                config.LayoutDocks,
 	}
 	if m != want {
 		t.Fatalf("model = %+v, want %+v", m, want)

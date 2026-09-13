@@ -19,6 +19,8 @@ var loadDialog = dialogs.Load
 
 var themeOrder = []string{config.ThemeSystem, config.ThemeDark, config.ThemeLight}
 
+var layoutOrder = []string{config.LayoutDocks, config.LayoutSidebar}
+
 var credentialSourceOrder = []string{
 	config.CredentialSourceVault,
 	config.CredentialSourceVaultThenHelper,
@@ -49,6 +51,7 @@ type View struct {
 
 	language              *widget.Dropdown
 	theme                 *widget.Dropdown
+	layoutMode            *widget.Dropdown
 	showToolbar           *widget.CheckBox
 	toolbarCaptions       *widget.CheckBox
 	showStatusBar         *widget.CheckBox
@@ -226,6 +229,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.theme, ok = named["theme"].(*widget.Dropdown); !ok {
 		return fmt.Errorf("%w: theme", ErrWidgetMissing)
 	}
+	if v.layoutMode, ok = named["layoutMode"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: layoutMode", ErrWidgetMissing)
+	}
 	if v.showToolbar, ok = named["showToolbar"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showToolbar", ErrWidgetMissing)
 	}
@@ -321,6 +327,7 @@ func languageLabel(code string) string {
 func (v *View) apply(m Model) {
 	v.setLanguageSelection(m.Language)
 	v.theme.SetSelected(themeIndex(m.Theme))
+	v.layoutMode.SetSelected(layoutIndex(m.Layout))
 	v.showToolbar.SetChecked(m.ShowToolbar)
 	v.toolbarCaptions.SetChecked(m.ToolbarCaptions)
 	v.showStatusBar.SetChecked(m.ShowStatusBar)
@@ -362,6 +369,20 @@ func themeAt(idx int) string {
 	return themeOrder[idx]
 }
 
+func layoutIndex(layout string) int {
+	if layout == config.LayoutSidebar {
+		return 1
+	}
+	return 0
+}
+
+func layoutAt(idx int) string {
+	if idx < 0 || idx >= len(layoutOrder) {
+		return config.LayoutDocks
+	}
+	return layoutOrder[idx]
+}
+
 func credentialSourceIndex(source string) int {
 	for i, s := range credentialSourceOrder {
 		if s == source {
@@ -386,6 +407,7 @@ func (v *View) request() Model {
 	return Model{
 		Language:              code,
 		Theme:                 themeAt(v.theme.Selected()),
+		Layout:                layoutAt(v.layoutMode.Selected()),
 		ShowToolbar:           v.showToolbar.IsChecked(),
 		ToolbarCaptions:       v.toolbarCaptions.IsChecked(),
 		ShowStatusBar:         v.showStatusBar.IsChecked(),

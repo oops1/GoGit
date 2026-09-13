@@ -49,6 +49,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 
 		"language":              widget.NewDropdown(),
 		"theme":                 widget.NewDropdown(),
+		"layoutMode":            widget.NewDropdown(),
 		"showToolbar":           widget.NewCheckBox(""),
 		"toolbarCaptions":       widget.NewCheckBox(""),
 		"showStatusBar":         widget.NewCheckBox(""),
@@ -146,7 +147,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	keys := []string{
 		"root", "search", "sectionArea", "sectionHost", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
-		"language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
+		"language", "theme", "layoutMode", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
 		"banAttribution",
 		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
@@ -215,6 +216,7 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		PruneOnFetch:          true,
 		ShallowDepth:          15,
 		CredentialSource:      config.CredentialSourceHelper,
+		Layout:                config.LayoutSidebar,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -360,6 +362,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	v.defaultRemote.SetText("upstream")
 	v.shallowDepth.SetValue(15)
 	v.credentialSource.SetSelected(credentialSourceIndex(config.CredentialSourceHelper))
+	v.layoutMode.SetSelected(layoutIndex(config.LayoutSidebar))
 
 	got := v.request()
 	want := Model{
@@ -377,6 +380,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		PruneOnFetch:          true,
 		ShallowDepth:          15,
 		CredentialSource:      config.CredentialSourceHelper,
+		Layout:                config.LayoutSidebar,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)
@@ -504,5 +508,16 @@ func TestNewViewPropagatesAFailureLoadingTheEditors(t *testing.T) {
 		if !errors.Is(err, wantErr) {
 			t.Fatalf("loading %q: err = %v, want %v", failing, err, wantErr)
 		}
+	}
+}
+
+func TestLayoutChoicesMapToTheirPositions(t *testing.T) {
+	for i, layout := range layoutOrder {
+		if layoutIndex(layout) != i || layoutAt(i) != layout {
+			t.Fatalf("layout %q at %d maps to %d and back to %q", layout, i, layoutIndex(layout), layoutAt(i))
+		}
+	}
+	if layoutIndex("floating") != 0 || layoutAt(-1) != config.LayoutDocks || layoutAt(len(layoutOrder)) != config.LayoutDocks {
+		t.Fatal("an unknown layout does not fall back to the dock panes")
 	}
 }

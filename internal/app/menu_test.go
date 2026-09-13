@@ -369,6 +369,26 @@ func TestDockPaneTitlesRetranslateOnLanguageChange(t *testing.T) {
 	}
 }
 
+func TestClosedAppNoLongerFollowsLanguageChanges(t *testing.T) {
+	a := newTestApp(t)
+	a.SetLanguage("en")
+	titles := map[string]string{}
+	for _, pane := range a.Dock().Panes() {
+		titles[pane.ID] = pane.Title
+	}
+	menuText := a.menu.Items()[0].Items[0].Text
+	a.Close()
+	widget.SetLanguage("ru")
+	for _, pane := range a.Dock().Panes() {
+		if pane.Title != titles[pane.ID] {
+			t.Fatalf("closed app pane %q title = %q, want it to stay %q", pane.ID, pane.Title, titles[pane.ID])
+		}
+	}
+	if got := a.menu.Items()[0].Items[0].Text; got != menuText {
+		t.Fatalf("closed app menu item = %q, want it to stay %q", got, menuText)
+	}
+}
+
 func TestDockPaneTitlesIgnoreAPaneWithNoKnownKey(t *testing.T) {
 	a := newTestApp(t)
 	bogus := widget.NewDockPane("bogus-pane", "Bogus", nil)

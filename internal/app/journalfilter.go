@@ -104,6 +104,7 @@ func (a *App) showJournalBranches(snap branches.Snapshot) {
 	chosen := a.journalFilterBranch.SelectedText()
 	a.journalFilterBranch.SetItems(names)
 	a.journalFilterBranch.SetSelected(max(slices.Index(names, chosen), 0))
+	a.showSidebarBranchCounts(snap)
 }
 
 func (a *App) showJournalFilterCount(shown int, filtered bool) {

@@ -5,7 +5,7 @@
         x:Name="mainWindow"
         Title="{Loc App.Title}"
         Width="1280" Height="800"
-        MinWidth="800" MinHeight="600"
+        MinWidth="1280" MinHeight="760"
         ShowLocaleIndicator="False">
 
     <DockPanel>
@@ -86,7 +86,7 @@
             </MenuItem>
         </Menu>
 
-        <Grid>
+        <Grid x:Name="mainGrid">
             <Grid.RowDefinitions>
                 <RowDefinition Height="64"/>
                 <RowDefinition Height="*"/>
@@ -121,7 +121,7 @@
                             <TextBox x:Name="filesFilter" DockPanel.Dock="Left" Width="150" Margin="0,0,6,0"
                                      Placeholder="{Loc Files.Filter.Placeholder}"/>
                             <Button x:Name="filesFilterSubdirs" DockPanel.Dock="Left" Width="26" Height="24" Margin="0,0,6,0"/>
-                            <Button x:Name="filesWorkingCopy" DockPanel.Dock="Left" Width="132" Height="24" Margin="0,0,6,0"
+                            <Button x:Name="filesWorkingCopy" DockPanel.Dock="Left" Height="24" Margin="0,0,6,0"
                                     Visibility="Collapsed" Content="{Loc Files.BackToWorkingCopy}"/>
                             <StackPanel x:Name="filesFilterButtons" DockPanel.Dock="Right"
                                         Orientation="Horizontal" Width="270">
@@ -180,7 +180,7 @@
                     <TabControl x:Name="detailsTabs"/>
                 </DockPane>
                 <DockContent>
-                    <GitDiffView x:Name="diffView" Mode="SideBySide" FontFamily="Consolas"/>
+                    <GitDiffView x:Name="diffView"/>
                 </DockContent>
             </DockManager>
 

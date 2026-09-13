@@ -63,7 +63,4 @@ func TestPostAfterCloseIsDropped(t *testing.T) {
 		t.Fatal("a callback posted after Close must not run")
 	case <-time.After(50 * time.Millisecond):
 	}
-	if posted := a.takePosted(); len(posted) != 0 {
-		t.Fatalf("queue kept %d callbacks after Close", len(posted))
-	}
 }
