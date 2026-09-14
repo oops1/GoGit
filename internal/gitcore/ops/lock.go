@@ -66,9 +66,15 @@ func (l *indexLock) commit() error {
 		_ = fsRootRemove(l.root, indexLockName)
 		return fmt.Errorf("ops: close %s: %w", indexLockName, err)
 	}
+	written, err := fsRootLstat(l.root, indexLockName)
+	if err != nil {
+		_ = fsRootRemove(l.root, indexLockName)
+		return fmt.Errorf("ops: stat %s: %w", indexLockName, err)
+	}
 	if err := fsRootRename(l.root, indexLockName, indexFileName); err != nil {
 		_ = fsRootRemove(l.root, indexLockName)
 		return fmt.Errorf("ops: rename %s: %w", indexLockName, err)
 	}
+	l.idx.Timestamp = written.ModTime()
 	return nil
 }
