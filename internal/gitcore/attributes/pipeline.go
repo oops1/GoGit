@@ -22,53 +22,69 @@ const (
 
 const lfsExtensionPrefix = "extension."
 
-var lfsCleanCommands = []string{"git-lfs filter-process", "git-lfs clean -- %f"}
+var (
+	lfsProcessCommands = map[string]bool{"git-lfs filter-process": false, "git-lfs filter-process --skip": true}
+	lfsCleanCommands   = map[string]bool{"git-lfs clean -- %f": false}
+	lfsSmudgeCommands  = map[string]bool{"git-lfs smudge -- %f": false, "git-lfs smudge --skip -- %f": true}
+)
 
 type Policy struct {
-	Path     string
-	Text     TextPolicy
-	Ident    bool
-	Encoding Value
-	Filter   string
-	Clean    FilterKind
-	format   hash.Format
+	Path       string
+	Text       TextPolicy
+	Ident      bool
+	Encoding   Value
+	Filter     string
+	Clean      FilterKind
+	Smudge     FilterKind
+	SkipSmudge bool
+	format     hash.Format
 }
 
 func (a *Attributes) Policy(path string) Policy {
 	values := a.Get(path, "ident", "filter", "working-tree-encoding")
 	filter := driverName(values["filter"])
+	clean, _ := a.filterDriver(filter, "clean", lfsCleanCommands)
+	smudge, skip := a.filterDriver(filter, "smudge", lfsSmudgeCommands)
 	return Policy{
-		Path:     path,
-		Text:     a.Text(path),
-		Ident:    values["ident"].IsSet(),
-		Encoding: values["working-tree-encoding"],
-		Filter:   filter,
-		Clean:    a.cleanFilter(filter),
-		format:   a.opts.ObjectFormat,
+		Path:       path,
+		Text:       a.Text(path),
+		Ident:      values["ident"].IsSet(),
+		Encoding:   values["working-tree-encoding"],
+		Filter:     filter,
+		Clean:      clean,
+		Smudge:     smudge,
+		SkipSmudge: skip,
+		format:     a.opts.ObjectFormat,
 	}
 }
 
-func (a *Attributes) cleanFilter(name string) FilterKind {
+func (a *Attributes) filterDriver(name, capability string, single map[string]bool) (FilterKind, bool) {
 	cfg := a.opts.Config
 	if name == "" || cfg == nil {
-		return FilterNone
+		return FilterNone, false
 	}
+	known := lfsProcessCommands
 	command, hasProcess := cfg.Get("filter." + name + ".process")
 	if !hasProcess {
-		command, _ = cfg.Get("filter." + name + ".clean")
+		command, _ = cfg.Get("filter." + name + "." + capability)
+		known = single
 	}
+	skip, lfs := known[command]
 	switch {
 	case command == "":
-		return FilterNone
-	case !slices.Contains(lfsCleanCommands, command):
-		return FilterExternal
+		return FilterNone, false
+	case !lfs || slices.ContainsFunc(cfg.Subsections("lfs"), isLFSExtension):
+		return FilterExternal, false
 	}
-	for _, sub := range cfg.Subsections("lfs") {
-		if strings.HasPrefix(sub, lfsExtensionPrefix) {
-			return FilterExternal
-		}
-	}
-	return FilterLFS
+	return FilterLFS, skip
+}
+
+func isLFSExtension(subsection string) bool {
+	return strings.HasPrefix(subsection, lfsExtensionPrefix)
+}
+
+func (p Policy) FilterUnsupported() bool {
+	return p.Clean == FilterExternal || p.Smudge == FilterExternal
 }
 
 func (p Policy) filterError() error {
