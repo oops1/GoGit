@@ -287,7 +287,7 @@ func formatAuthorScript(sig object.Signature) string {
 }
 
 func writeRebaseState(r *repo.Repository, s RebaseState) error {
-	if err := fsRootMkdirAll(r.Root(), rebaseDir, 0o777); err != nil {
+	if err := ensureDirectories(r.Root(), rebaseDir); err != nil {
 		return fmt.Errorf("ops: create %s: %w", rebaseDir, err)
 	}
 	files := []stateFile{

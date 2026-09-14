@@ -20,7 +20,6 @@ var (
 	fsRootRemove    = (*os.Root).Remove
 	fsRootSymlink   = (*os.Root).Symlink
 	fsRootChmod     = (*os.Root).Chmod
-	fsRootMkdirAll  = (*os.Root).MkdirAll
 	fsRootMkdir     = (*os.Root).Mkdir
 	fsRootRename    = (*os.Root).Rename
 	fsRootWriteFile = (*os.Root).WriteFile

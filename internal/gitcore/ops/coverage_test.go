@@ -619,18 +619,6 @@ func swapRootSymlinkSucceeds(t testing.TB) {
 	t.Cleanup(func() { fsRootSymlink = original })
 }
 
-func swapRootMkdirAllFailForPath(t testing.TB, failPath string) {
-	t.Helper()
-	original := fsRootMkdirAll
-	fsRootMkdirAll = func(root *os.Root, name string, perm fs.FileMode) error {
-		if filepath.ToSlash(name) == failPath {
-			return errInjected
-		}
-		return original(root, name, perm)
-	}
-	t.Cleanup(func() { fsRootMkdirAll = original })
-}
-
 func TestDiscardFailsWhenIndexFileIsCorrupt(t *testing.T) {
 	r := newTestRepo(t)
 	r.corruptIndexFile()

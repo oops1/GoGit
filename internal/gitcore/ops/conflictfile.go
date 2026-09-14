@@ -3,9 +3,6 @@ package ops
 import (
 	"context"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/index"
@@ -132,13 +129,11 @@ func writeWorkingFile(r *repo.Repository, rel string, content []byte) error {
 		return err
 	}
 	defer func() { _ = wt.close() }()
-	if dir := parentOf(rel); dir != "" {
-		if err := fsRootMkdirAll(wt.root, filepath.FromSlash(dir), 0o777); err != nil {
-			return err
-		}
+	name, err := prepareWorktreeWrite(wt, rel, object.ModeBlob)
+	if err != nil {
+		return err
 	}
-	perm := fs.FileMode(0o666)
-	file, err := fsRootOpenFile(wt.root, filepath.FromSlash(rel), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	file, err := openRegularWorktreeFile(wt, name, 0o666)
 	if err != nil {
 		return err
 	}
