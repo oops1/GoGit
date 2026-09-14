@@ -877,6 +877,8 @@
   "Operation.Log.FlowPushed": "%s is sent to the server",
   "Operation.Log.FlowStarted": "Created %s and switched to it",
   "Operation.Log.FlowSwitchedOff": "Git-Flow is switched off",
+  "Operation.Log.FlowTagExists": "Tag %s already exists. Choose another version name",
+  "Operation.Log.FlowTagKept": "Tag %s already exists on another commit and was left unchanged",
   "Operation.Log.HotfixFinished": "Hotfix %s is finished",
   "Operation.Log.HotfixStopped": "Unresolved conflicts: %d. Resolve them, commit, then choose Finish Hotfix again",
   "Operation.Log.Initializing": "Initializing…",

@@ -877,6 +877,8 @@
   "Operation.Log.FlowPushed": "«%s» отправлен на сервер",
   "Operation.Log.FlowStarted": "Создана ветка %s, она стала текущей",
   "Operation.Log.FlowSwitchedOff": "Git-Flow отключён",
+  "Operation.Log.FlowTagExists": "Тег %s уже существует. Выберите другое имя версии",
+  "Operation.Log.FlowTagKept": "Тег %s уже стоит на другом коммите и оставлен без изменений",
   "Operation.Log.HotfixFinished": "Исправление %s завершено",
   "Operation.Log.HotfixStopped": "Неразрешённых конфликтов: %d. Разрешите их, сделайте коммит и снова выберите «Завершить исправление»",
   "Operation.Log.Initializing": "Инициализация…",
