@@ -46,6 +46,50 @@ func fullWidgetSet() map[string]widget.Widget {
 	}
 }
 
+func TestEnterScansWhileThereAreNoResults(t *testing.T) {
+	v := newTestView(t)
+	scans, adds := 0, 0
+	v.OnScan = func(string, bool) { scans++ }
+	v.OnAdd = func([]string) { adds++ }
+
+	v.Dialog().DefaultAction()
+
+	if scans != 1 || adds != 0 {
+		t.Fatalf("scans = %d, adds = %d, want Enter to start a scan", scans, adds)
+	}
+}
+
+func TestEnterAddsTheFoundRepositories(t *testing.T) {
+	v := newTestView(t)
+	scans := 0
+	var added []string
+	v.OnScan = func(string, bool) { scans++ }
+	v.OnAdd = func(paths []string) { added = paths }
+	v.SetResults([]Found{{Path: "a"}})
+
+	v.Dialog().DefaultAction()
+
+	if scans != 0 || len(added) != 1 || added[0] != "a" {
+		t.Fatalf("scans = %d, added = %v", scans, added)
+	}
+}
+
+func TestEnterDoesNothingWhileAScanRuns(t *testing.T) {
+	v := newTestView(t)
+	calls := 0
+	v.OnScan = func(string, bool) { calls++ }
+	v.OnAdd = func([]string) { calls++ }
+	v.SetScanning(true)
+
+	v.Dialog().DefaultAction()
+	v.SetResults([]Found{{Path: "a"}})
+	v.Dialog().DefaultAction()
+
+	if calls != 0 {
+		t.Fatalf("calls = %d, want Enter ignored during a scan", calls)
+	}
+}
+
 func TestNewViewPropagatesLoadDialogError(t *testing.T) {
 	widget.ClearStrings()
 	defer widget.ClearStrings()
