@@ -364,13 +364,16 @@ func (m *merger) unstageApplied(ours merge.Snapshot, to outcome) error {
 	if err != nil {
 		return err
 	}
+	var paths []string
+	var entries []index.Entry
 	for _, path := range to.changedFrom(ours) {
 		entry, had := ours[path]
 		if !had {
 			continue
 		}
-		lock.idx.Remove(path)
-		lock.idx.Add(index.Entry{Path: path, Mode: entry.Mode, ID: entry.ID, Stage: index.StageMerged})
+		paths = append(paths, path)
+		entries = append(entries, index.Entry{Path: path, Mode: entry.Mode, ID: entry.ID, Stage: index.StageMerged})
 	}
+	lock.idx.Replace(paths, entries)
 	return lock.commit()
 }

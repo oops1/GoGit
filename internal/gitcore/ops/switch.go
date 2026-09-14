@@ -423,12 +423,12 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if err := sw.removeTracked(rel, currentIndex[rel]); err != nil {
 			return err
 		}
-		idx.Remove(rel)
 		removedDirs = append(removedDirs, rel)
 	}
 	for _, rel := range removedDirs {
 		sw.pruneEmptyDirs(parentOf(rel))
 	}
+	entries := make([]index.Entry, 0, len(sw.target))
 	for rel, tgt := range sw.target {
 		if err := sw.ctx.Err(); err != nil {
 			return err
@@ -440,8 +440,9 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if err != nil {
 			return err
 		}
-		idx.Add(entry)
+		entries = append(entries, entry)
 	}
+	idx.Replace(removedDirs, entries)
 	return sw.sparsifyKept(idx, currentIndex)
 }
 

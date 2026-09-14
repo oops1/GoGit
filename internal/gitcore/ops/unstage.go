@@ -70,19 +70,25 @@ func unstagePath(sw *switcher, idx *index.Index, headTree map[string]treeEntry, 
 		return err
 	}
 	prefix := rel + "/"
+	var paths []string
+	var entries []index.Entry
 	for _, path := range slices.Sorted(maps.Keys(headTree)) {
 		if !hasPrefix(path, prefix) {
 			continue
 		}
-		if err := resetEntry(sw, idx, path, headTree[path]); err != nil {
+		entry, err := headEntry(sw, idx, path, headTree[path])
+		if err != nil {
 			return err
 		}
+		paths = append(paths, path)
+		entries = append(entries, entry)
 	}
 	for _, tracked := range collectPaths(idx, prefix) {
 		if _, ok := headTree[tracked]; !ok {
-			idx.Remove(tracked)
+			paths = append(paths, tracked)
 		}
 	}
+	idx.Replace(paths, entries)
 	return nil
 }
 
@@ -96,18 +102,16 @@ func resetSingle(sw *switcher, idx *index.Index, headTree map[string]treeEntry, 
 		idx.Remove(rel)
 		return true, nil
 	}
-	return true, resetEntry(sw, idx, rel, he)
+	entry, err := headEntry(sw, idx, rel, he)
+	if err == nil {
+		idx.Replace([]string{rel}, []index.Entry{entry})
+	}
+	return true, err
 }
 
-func resetEntry(sw *switcher, idx *index.Index, rel string, he treeEntry) error {
+func headEntry(sw *switcher, idx *index.Index, rel string, he treeEntry) (index.Entry, error) {
 	previous, _ := idx.Get(rel, index.StageMerged)
-	entry, err := sw.mergedEntry(rel, he.mode, he.id, previous)
-	if err != nil {
-		return err
-	}
-	idx.Remove(rel)
-	idx.Add(entry)
-	return nil
+	return sw.mergedEntry(rel, he.mode, he.id, previous)
 }
 
 func hasPrefix(path, prefix string) bool {

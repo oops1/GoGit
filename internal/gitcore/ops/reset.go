@@ -115,6 +115,8 @@ func (m *merger) stageOnly(to merge.Snapshot) error {
 		return err
 	}
 	sw := &switcher{ctx: m.ctx, wt: m.wt, db: m.rc.db, format: m.rc.db.Format()}
+	var paths []string
+	var entries []index.Entry
 	for _, path := range slices.Sorted(maps.Keys(unionKeys(to, indexPaths(lock.idx), map[string]bool{}))) {
 		if err := m.ctx.Err(); err != nil {
 			lock.abort()
@@ -124,18 +126,19 @@ func (m *merger) stageOnly(to merge.Snapshot) error {
 		if indexHolds(lock.idx, path, want, has) {
 			continue
 		}
-		previous, _ := lock.idx.Get(path, index.StageMerged)
-		lock.idx.Remove(path)
+		paths = append(paths, path)
 		if !has {
 			continue
 		}
+		previous, _ := lock.idx.Get(path, index.StageMerged)
 		entry, err := sw.mergedEntry(path, want.Mode, want.ID, previous)
 		if err != nil {
 			lock.abort()
 			return err
 		}
-		lock.idx.Add(entry)
+		entries = append(entries, entry)
 	}
+	lock.idx.Replace(paths, entries)
 	return lock.commit()
 }
 

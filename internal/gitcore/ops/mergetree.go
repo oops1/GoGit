@@ -170,12 +170,12 @@ func applyOutcome(sw *switcher, idx *index.Index, to outcome, changed []string) 
 	for _, path := range removed {
 		sw.pruneEmptyDirs(parentOf(path))
 	}
+	entries := make([]index.Entry, 0, len(changed))
 	for _, path := range changed {
 		if err := sw.ctx.Err(); err != nil {
 			return err
 		}
 		previous, _ := idx.Get(path, index.StageMerged)
-		idx.Remove(path)
 		entry, keep := to.tree[path]
 		stages, conflicted := to.stages[path]
 		switch {
@@ -188,12 +188,11 @@ func applyOutcome(sw *switcher, idx *index.Index, to outcome, changed []string) 
 			if err != nil {
 				return err
 			}
-			idx.Add(merged)
+			entries = append(entries, merged)
 		}
-		for _, staged := range stages {
-			idx.Add(staged)
-		}
+		entries = append(entries, stages...)
 	}
+	idx.Replace(changed, entries)
 	return nil
 }
 
