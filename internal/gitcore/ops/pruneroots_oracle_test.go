@@ -9,8 +9,20 @@ import (
 	"time"
 )
 
+func gitPruneKeepsRebaseAutostash(o *oracle) bool {
+	dir := o.repoDir("autostash-probe")
+	newOracleRepo(o, dir)
+	o.write(dir, "probe.txt", "probe\n")
+	o.run(dir, "add", "probe.txt")
+	o.run(dir, "commit", "-q", "-m", "probe")
+	stash := strings.TrimSpace(o.run(dir, "commit-tree", "-m", "probe autostash", "HEAD^{tree}"))
+	o.write(dir, ".git/rebase-merge/autostash", stash+"\n")
+	return !slices.Contains(gitObjectSet(o.run(dir, "prune", "-n", "--expire=now")), stash)
+}
+
 func TestOraclePruneKeepsResolveUndoAndAutostashObjectsLikeGit(t *testing.T) {
 	o := newOracle(t)
+	keepsAutostash := gitPruneKeepsRebaseAutostash(o)
 	dir := o.repoDir("undo")
 	newOracleRepo(o, dir)
 	o.write(dir, "f.txt", "base\n")
@@ -47,7 +59,14 @@ func TestOraclePruneKeepsResolveUndoAndAutostashObjectsLikeGit(t *testing.T) {
 		ours = append(ours, id.String())
 	}
 	slices.Sort(ours)
+	if slices.Contains(ours, stash) {
+		t.Fatalf("our prune takes the rebase autostash commit %s", stash)
+	}
 	theirsSet := gitObjectSet(o.run(dir, "prune", "-n", "--expire=12.hours.ago"))
+	if !keepsAutostash {
+		t.Logf("the installed git predates rebase autostash roots and prunes %s, so it is left out of the comparison", stash)
+		theirsSet = slices.DeleteFunc(theirsSet, func(id string) bool { return id == stash })
+	}
 	if len(ours) == 0 || !slices.Equal(ours, theirsSet) {
 		t.Fatalf("pruned objects differ:\nours   %v\ntheirs %v", ours, theirsSet)
 	}
