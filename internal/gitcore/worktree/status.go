@@ -48,6 +48,8 @@ type Entry struct {
 	IsDir    bool
 	Size     int64
 	ModTime  time.Time
+
+	FilterUnsupported bool
 }
 
 type Status struct {
@@ -139,6 +141,7 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	result := Status{HeadBranch: branch, Detached: detached, Entries: make([]Entry, 0, len(combined))}
 	for _, entry := range combined {
 		w.fillWorkingInfo(entry)
+		entry.FilterUnsupported = !entry.IsDir && w.policy(entry.Path).FilterUnsupported()
 		result.Entries = append(result.Entries, *entry)
 	}
 	slices.SortFunc(result.Entries, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })
