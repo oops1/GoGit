@@ -7,6 +7,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/gitcore/wildmatch"
 )
 
 type ranger struct {
@@ -128,7 +129,11 @@ func (r *ranger) option(spec string) error {
 		if !hasValue {
 			return fmt.Errorf("%w: %q needs a pattern", ErrSyntax, spec)
 		}
-		return r.glob(refs.RefsPrefix, value, true)
+		pattern := value
+		if !strings.HasPrefix(pattern, refs.RefsPrefix) {
+			pattern = refs.RefsPrefix + pattern
+		}
+		return r.matching(refs.RefsPrefix, globPattern(pattern, value))
 	}
 	return fmt.Errorf("%w: unknown option %q", ErrSyntax, spec)
 }
@@ -149,15 +154,17 @@ func (r *ranger) glob(prefix, value string, hasValue bool) error {
 	if !hasValue {
 		return r.matching(prefix, "")
 	}
-	pattern := value
-	if strings.HasPrefix(pattern, refs.RefsPrefix) {
-		prefix = refs.RefsPrefix
-		pattern = strings.TrimPrefix(pattern, refs.RefsPrefix)
+	return r.matching(prefix, globPattern(prefix+value, value))
+}
+
+func globPattern(pattern, value string) string {
+	if strings.ContainsAny(value, "*?[") {
+		return pattern
 	}
-	if !strings.ContainsAny(pattern, "*?[") {
-		pattern += "/*"
+	if !strings.HasSuffix(pattern, "/") {
+		pattern += "/"
 	}
-	return r.matching(prefix, pattern)
+	return pattern + "*"
 }
 
 func (r *ranger) matching(prefix, pattern string) error {
@@ -165,8 +172,7 @@ func (r *ranger) matching(prefix, pattern string) error {
 		if err != nil {
 			return err
 		}
-		short := strings.TrimPrefix(string(ref.Name), prefix)
-		if pattern != "" && !globMatch(pattern, short) {
+		if pattern != "" && !wildmatch.Match(pattern, string(ref.Name), 0) {
 			continue
 		}
 		id, ok, err := r.parser.peelCommit(ref.Target)
@@ -178,33 +184,4 @@ func (r *ranger) matching(prefix, pattern string) error {
 		}
 	}
 	return nil
-}
-
-func globMatch(pattern, text string) bool {
-	switch {
-	case pattern == "":
-		return text == ""
-	case pattern[0] == '*':
-		return globStar(pattern, text)
-	case text == "":
-		return false
-	case pattern[0] == '?':
-		return text[0] != '/' && globMatch(pattern[1:], text[1:])
-	default:
-		return pattern[0] == text[0] && globMatch(pattern[1:], text[1:])
-	}
-}
-
-func globStar(pattern, text string) bool {
-	crossing := strings.HasPrefix(pattern, "**")
-	rest := strings.TrimLeft(pattern, "*")
-	for index := 0; index <= len(text); index++ {
-		if globMatch(rest, text[index:]) {
-			return true
-		}
-		if !crossing && index < len(text) && text[index] == '/' {
-			return false
-		}
-	}
-	return false
 }

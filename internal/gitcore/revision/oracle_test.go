@@ -282,6 +282,9 @@ func TestOracleParseMatchesRevParse(t *testing.T) {
 
 func TestOracleWalkMatchesRevList(t *testing.T) {
 	o := buildOracleRepository(t)
+	o.git("branch", "feature/one", "v1")
+	o.git("branch", "feature/a/b", "topic")
+	o.git("branch", "feat", "side")
 	ctx := o.open()
 	tests := []struct {
 		name  string
@@ -326,6 +329,15 @@ func TestOracleWalkMatchesRevList(t *testing.T) {
 		{"exclusion", []string{"main", "^topic"}, []string{"main", "^topic"}, nil},
 		{"branches", []string{"--branches"}, []string{"--branches"}, nil},
 		{"tags", []string{"--tags"}, []string{"--tags"}, nil},
+		{"branches under a directory with a slash", []string{"--branches=feature/"}, []string{"--branches=feature/"}, nil},
+		{"branches under a directory", []string{"--branches=feature"}, []string{"--branches=feature"}, nil},
+		{"branches with a star crossing slashes", []string{"--branches=feat*"}, []string{"--branches=feat*"}, nil},
+		{"branches with a nested star", []string{"--branches=*/b"}, []string{"--branches=*/b"}, nil},
+		{"branches with an empty pattern", []string{"--branches="}, []string{"--branches="}, nil},
+		{"tags with a bracket class", []string{"--tags=v[12]*"}, []string{"--tags=v[12]*"}, nil},
+		{"remotes under a remote", []string{"--remotes=origin"}, []string{"--remotes=origin"}, nil},
+		{"glob without refs prefix", []string{"--glob=heads/feature"}, []string{"--glob=heads/feature"}, nil},
+		{"glob with a trailing slash", []string{"--glob=refs/heads/feature/"}, []string{"--glob=refs/heads/feature/"}, nil},
 		{
 			"path limit",
 			[]string{"HEAD", "--", "dir/nested.txt"},
