@@ -522,11 +522,14 @@ func TestRetranslateSkipsWorkingRefreshWhileACommitIsSelected(t *testing.T) {
 	})
 	readOnDispatcher(t, a, func() bool { a.onJournalRowSelected(first); return true })
 	waitForFilesMode(t, a, filesModeCommit, 1)
+	a.diffWG.Wait()
+	waitForPostQueueDrain(t, a)
 	before := filesRowOnDispatcher(t, a, 0)
 
 	a.SetLanguage("ru")
 	a.SetLanguage("en")
 	a.diffWG.Wait()
+	waitForPostQueueDrain(t, a)
 
 	if got := filesModeOnDispatcher(a); got != filesModeCommit {
 		t.Fatalf("files grid mode = %v after a language change with a commit selected, want %v", got, filesModeCommit)
