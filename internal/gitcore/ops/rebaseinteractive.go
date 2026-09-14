@@ -67,6 +67,13 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	if err != nil {
 		return false, err
 	}
+	if plan.parentCommit == head.old {
+		if _, err := m.fastForward(head, step.Commit, m.rebaseName()+": fast-forward", MergeResult{}); err != nil {
+			return false, err
+		}
+		state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
+		return m.recordRebaseStep(state, result, step, step.Commit, plan)
+	}
 	plan.reflog = m.rebaseNote(actionPick) + firstLine(plan.message)
 	picked, err := m.mergePick(head, plan)
 	if err != nil {
@@ -83,6 +90,10 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	if err != nil {
 		return false, err
 	}
+	return m.recordRebaseStep(state, result, step, commit, plan)
+}
+
+func (m *merger) recordRebaseStep(state *RebaseState, result *RebaseResult, step RebaseStep, commit hash.ObjectID, plan pickPlan) (bool, error) {
 	result.Applied++
 	if step.Action == actionPick {
 		state.Rewritten += step.Commit.String() + " " + commit.String() + "\n"
