@@ -83,7 +83,10 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	if len(picked.conflicts) > 0 {
 		return true, m.stopForConflicts(state, result, step.Commit, plan, picked.conflicts)
 	}
-	if picked.empty {
+	if picked.empty && !plan.startedEmpty() {
+		if step.Action == actionEdit {
+			return true, m.stopForAmending(state, result, step.Commit, head.old, plan)
+		}
 		return false, writeRebaseState(m.r, *state)
 	}
 	commit, err := m.commitPick(head, plan, picked.tree)
@@ -92,6 +95,8 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	}
 	return m.recordRebaseStep(state, result, step, commit, plan)
 }
+
+func (p pickPlan) startedEmpty() bool { return p.base == p.theirs }
 
 func (m *merger) recordRebaseStep(state *RebaseState, result *RebaseResult, step RebaseStep, commit hash.ObjectID, plan pickPlan) (bool, error) {
 	result.Applied++
