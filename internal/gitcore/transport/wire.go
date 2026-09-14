@@ -23,10 +23,6 @@ func agentValue(opts Options) string {
 	return defaultAgent
 }
 
-func resourceOf(endpoint Endpoint) string {
-	return endpoint.Host + endpoint.Path
-}
-
 type ackStatus int
 
 const (

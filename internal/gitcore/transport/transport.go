@@ -40,6 +40,11 @@ type CredentialSource interface {
 	Credentials(ctx context.Context, resource string, retry bool) (Credentials, error)
 }
 
+type CredentialFeedback interface {
+	Approve(ctx context.Context, resource string, creds Credentials)
+	Reject(ctx context.Context, resource string, creds Credentials)
+}
+
 type Ref struct {
 	Name   string
 	ID     hash.ObjectID

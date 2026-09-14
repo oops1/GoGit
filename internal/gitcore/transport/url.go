@@ -28,6 +28,21 @@ func (e Endpoint) IsLocal() bool {
 	return e.Scheme == SchemeFile
 }
 
+func CredentialResource(e Endpoint) string {
+	host := e.Host
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if e.Port != "" {
+		host += ":" + e.Port
+	}
+	u := stdurl.URL{Scheme: string(e.Scheme), Host: host, Path: strings.TrimSuffix(e.Path, "/")}
+	if e.User != "" {
+		u.User = stdurl.User(e.User)
+	}
+	return u.String()
+}
+
 const redactedPassword = "transport.Password{REDACTED}"
 
 type Password []byte

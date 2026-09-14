@@ -88,10 +88,11 @@ func TestHTTPKeepsTalkingToTheAddressDiscoveryWasRedirectedTo(t *testing.T) {
 
 func TestHTTPAsksForCredentialsOfTheHostItWasRedirectedTo(t *testing.T) {
 	moved := uploadPackServer(t, "/new.git", true)
-	old := redirectingServer(t, strings.Replace(moved.URL, "127.0.0.1", "localhost", 1)+"/new.git")
+	target := strings.Replace(moved.URL, "127.0.0.1", "localhost", 1) + "/new.git"
+	old := redirectingServer(t, target)
 	creds := &resourceRecorder{}
 	fetchThrough(t, old.URL+"/old.git", Options{Credentials: creds})
-	if len(creds.resources) != 1 || creds.resources[0] != "localhost/new.git" {
+	if len(creds.resources) != 1 || creds.resources[0] != target {
 		t.Fatalf("credentials were asked for %v, want the redirected host", creds.resources)
 	}
 }
