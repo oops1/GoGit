@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	ErrNoRebaseInProgress    = errors.New("ops: there is no rebase in progress")
-	ErrRebaseStepUnsupported = errors.New("ops: the rebase step is not supported")
+	ErrNoRebaseInProgress       = errors.New("ops: there is no rebase in progress")
+	ErrRebaseStepUnsupported    = errors.New("ops: the rebase step is not supported")
+	ErrRebaseUncommittedChanges = errors.New("ops: commit the staged changes before continuing the rebase")
 )
 
 func joinErrors(errs ...error) error { return errors.Join(errs...) }

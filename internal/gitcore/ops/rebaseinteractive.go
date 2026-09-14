@@ -83,9 +83,9 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	if err != nil {
 		return false, err
 	}
-	state.Rewritten += step.Commit.String() + " " + commit.String() + "\n"
 	result.Applied++
 	if step.Action == actionPick {
+		state.Rewritten += step.Commit.String() + " " + commit.String() + "\n"
 		return false, writeRebaseState(m.r, *state)
 	}
 	return true, m.stopForAmending(state, result, step.Commit, commit, plan)
@@ -184,25 +184,44 @@ func (m *merger) continueAmending(state *RebaseState, result *RebaseResult, mess
 	if err != nil {
 		return err
 	}
-	amended, err := dbCommit(m.rc.db, head.old)
-	if err != nil {
-		return err
-	}
 	tree, err := m.stagedTree()
 	if err != nil {
 		return err
 	}
-	message = cmp.Or(message, state.Message, amended.Message)
-	plan := pickPlan{message: message, author: &amended.Author}
-	plan.reflog = m.rebaseNote("continue") + firstLine(plan.message)
-	commit, err := m.amendHead(head, amended, tree, plan)
+	amended, err := dbCommit(m.rc.db, head.old)
 	if err != nil {
 		return err
 	}
-	state.Rewritten = rewrittenAfterFold(state.Rewritten, head.old, state.Stopped, commit)
+	final, err := m.finishAmending(state, head, amended, tree, message)
+	if err != nil {
+		return err
+	}
+	state.Rewritten = rewrittenAfterFold(state.Rewritten, state.Amend, state.Stopped, final)
 	state.Stopped, state.Amend, state.Message, state.Author = hash.Zero, hash.Zero, "", nil
 	result.Applied++
 	return joinErrors(writeRebaseState(m.r, *state), removeStateFiles(m.r, mergeMsgFile))
+}
+
+func (m *merger) finishAmending(state *RebaseState, head headTarget, amended *object.Commit, tree hash.ObjectID, message string) (hash.ObjectID, error) {
+	clean := tree == amended.Tree
+	switch {
+	case head.old != state.Amend && !clean:
+		return hash.Zero, ErrRebaseUncommittedChanges
+	case head.old != state.Amend:
+		return head.old, nil
+	case clean && lastRebaseAction(*state) == actionEdit && (message == "" || normalizeMessage(message) == normalizeMessage(state.Message)):
+		return head.old, nil
+	}
+	plan := pickPlan{message: cmp.Or(message, state.Message, amended.Message), author: &amended.Author}
+	plan.reflog = m.rebaseNote("continue") + firstLine(plan.message)
+	return m.amendHead(head, amended, tree, plan)
+}
+
+func lastRebaseAction(state RebaseState) string {
+	if len(state.Done) == 0 {
+		return ""
+	}
+	return state.Done[len(state.Done)-1].Action
 }
 
 func (m *merger) stagedTree() (hash.ObjectID, error) {
