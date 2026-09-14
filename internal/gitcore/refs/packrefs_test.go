@@ -83,6 +83,35 @@ func TestPackRefsPeelsTagsWithPeeler(t *testing.T) {
 	}
 }
 
+func TestPackRefsPeelsReferencesOutsideTagsWhenClaimingFullyPeeled(t *testing.T) {
+	dir := newGitDir(t)
+	writeAt(t, dir, "refs/remotes/origin/v1", oidFrom(t, "11").String()+"\n")
+	writeAt(t, dir, "refs/heads/main", oidFrom(t, "22").String()+"\n")
+	writeAt(t, dir, packedRefsFile, "# pack-refs with: peeled sorted \n"+
+		oidFrom(t, "33").String()+" refs/notes/old\n"+
+		oidFrom(t, "66").String()+" refs/tags/trusted\n")
+	peeler := fakePeeler{tags: map[hash.ObjectID]hash.ObjectID{
+		oidFrom(t, "11"): oidFrom(t, "44"),
+		oidFrom(t, "33"): oidFrom(t, "55"),
+		oidFrom(t, "66"): oidFrom(t, "77"),
+	}}
+	store := openStoreWith(t, Options{GitDir: dir, Peeler: peeler, Committer: testCommitter()})
+
+	if err := store.PackRefs(true); err != nil {
+		t.Fatalf("PackRefs returned error %v", err)
+	}
+	want := packedHeaderFull +
+		oidFrom(t, "22").String() + " refs/heads/main\n" +
+		oidFrom(t, "33").String() + " refs/notes/old\n" +
+		"^" + oidFrom(t, "55").String() + "\n" +
+		oidFrom(t, "11").String() + " refs/remotes/origin/v1\n" +
+		"^" + oidFrom(t, "44").String() + "\n" +
+		oidFrom(t, "66").String() + " refs/tags/trusted\n"
+	if got := readAt(t, dir, packedRefsFile); got != want {
+		t.Fatalf("packed-refs is\n%q\nwant\n%q", got, want)
+	}
+}
+
 func TestPackRefsPrefersLooseValueOverPackedOne(t *testing.T) {
 	dir := newGitDir(t)
 	writeAt(t, dir, "refs/heads/main", oidFrom(t, "11").String()+"\n")

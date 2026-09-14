@@ -127,7 +127,14 @@ func (s *Store) Peel(name Name) (hash.ObjectID, error) {
 }
 
 func (s *Store) fillPeeled(ref Ref, known bool) (Ref, error) {
-	if known || !ref.Peeled.IsZero() || s.opts.Peeler == nil || !ref.Name.IsTag() || ref.Target.IsZero() {
+	if !ref.Name.IsTag() {
+		return ref, nil
+	}
+	return s.peelForPacking(ref, known)
+}
+
+func (s *Store) peelForPacking(ref Ref, known bool) (Ref, error) {
+	if known || !ref.Peeled.IsZero() || s.opts.Peeler == nil || ref.Target.IsZero() {
 		return ref, nil
 	}
 	target, isTag, err := s.opts.Peeler.PeelTag(ref.Target)

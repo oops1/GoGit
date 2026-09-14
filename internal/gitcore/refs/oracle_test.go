@@ -289,6 +289,71 @@ func TestOraclePackRefsMatchesGit(t *testing.T) {
 	}
 }
 
+func (o *oracle) showRefDereferenced() []string {
+	o.t.Helper()
+	var records []string
+	for _, line := range strings.Split(o.git2("show-ref", "-d"), "\n") {
+		if line = strings.TrimRight(line, "\r"); line != "" {
+			records = append(records, line)
+		}
+	}
+	return records
+}
+
+func TestOraclePackRefsPeelsReferencesOutsideTags(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(o *oracle)
+	}{
+		{"loose references", func(o *oracle) {}},
+		{"packed file that is not fully peeled", func(o *oracle) {
+			o.git2("pack-refs", "--all")
+			packed := filepath.Join(o.git, "packed-refs")
+			data, err := os.ReadFile(packed)
+			if err != nil {
+				t.Fatalf("ReadFile returned error %v", err)
+			}
+			var kept []string
+			previous := ""
+			for _, line := range strings.SplitAfter(string(data), "\n") {
+				switch {
+				case strings.HasPrefix(line, "#"):
+					kept = append(kept, "# pack-refs with: peeled sorted \n")
+				case strings.HasPrefix(line, "^"):
+					if strings.Contains(previous, " refs/tags/") {
+						kept = append(kept, line)
+					}
+				default:
+					previous = line
+					kept = append(kept, line)
+				}
+			}
+			if err := os.WriteFile(packed, []byte(strings.Join(kept, "")), 0o666); err != nil {
+				t.Fatalf("WriteFile returned error %v", err)
+			}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			o := newOracle(t)
+			o.populate()
+			o.git2("update-ref", "refs/remotes/origin/v1", "refs/tags/v1")
+			o.git2("update-ref", "refs/remotes/origin/v2", "refs/tags/v2")
+			o.git2("update-ref", "refs/notes/tagged", "refs/tags/v2")
+			test.setup(o)
+			before := o.showRefDereferenced()
+
+			if err := o.store().PackRefs(true); err != nil {
+				t.Fatalf("PackRefs returned error %v", err)
+			}
+			if got := o.showRefDereferenced(); !slices.Equal(got, before) {
+				t.Fatalf("git show-ref -d returned\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(before, "\n"))
+			}
+			o.fsck()
+		})
+	}
+}
+
 func TestOracleReadsRepositoryWrittenByGit(t *testing.T) {
 	o := newOracle(t)
 	o.populate()

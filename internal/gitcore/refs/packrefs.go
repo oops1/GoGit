@@ -22,7 +22,7 @@ func (s *Store) PackRefs(prune bool) error {
 		position[ref.Name] = index
 	}
 	for index, ref := range packed {
-		peeled, err := s.fillPeeled(ref, snapshot.fullyPeeled)
+		peeled, err := s.peelForPacking(ref, snapshot.knowsPeeled(ref.Name))
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func (s *Store) looseForPacking() ([]Ref, error) {
 		if ref.IsSymbolic() {
 			continue
 		}
-		ref, err = s.fillPeeled(ref, false)
+		ref, err = s.peelForPacking(ref, false)
 		if err != nil {
 			return nil, err
 		}
