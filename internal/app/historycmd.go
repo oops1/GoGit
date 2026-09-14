@@ -38,7 +38,7 @@ func (a *App) openFileHistory(path string) {
 		return
 	}
 	var entries []ops.HistoryEntry
-	a.startRead(func(ctx context.Context, r *gitrepo.Repository) error {
+	a.startKeyedRead("history:"+path, func(ctx context.Context, r *gitrepo.Repository) error {
 		read, err := readFileHistory(ctx, r, "HEAD", path, ops.HistoryOptions{Follow: true})
 		entries = read
 		return err
@@ -89,7 +89,7 @@ func (a *App) openBlame(rev, path string) {
 		return
 	}
 	var result blame.Result
-	a.startRead(func(ctx context.Context, r *gitrepo.Repository) error {
+	a.startKeyedRead("blame:"+rev+":"+path, func(ctx context.Context, r *gitrepo.Repository) error {
 		read, err := readBlame(ctx, r, rev, path, ops.BlameOptions{Follow: true})
 		result = read
 		return err
@@ -134,14 +134,62 @@ func blameRows(result blame.Result) []blameview.Line {
 type readFunc func(ctx context.Context, r *gitrepo.Repository) error
 
 func (a *App) startRead(fn readFunc, onDone func(error)) bool {
+	return a.startKeyedRead("", fn, onDone)
+}
+
+func (a *App) startKeyedRead(key string, fn readFunc, onDone func(error)) bool {
 	o := a.opened()
 	if o == nil {
 		return false
 	}
+	ctx, ok := a.claimRead(key)
+	if !ok {
+		return false
+	}
 	r := o.repo
 	a.readWG.Go(func() {
-		err := fn(context.Background(), r)
-		a.Post(func() { onDone(err) })
+		err := fn(ctx, r)
+		a.Post(func() {
+			a.releaseRead(key)
+			if ctx.Err() != nil {
+				return
+			}
+			onDone(err)
+		})
 	})
 	return true
+}
+
+func (a *App) claimRead(key string) (context.Context, bool) {
+	a.readMu.Lock()
+	defer a.readMu.Unlock()
+	if a.readKeys[key] {
+		return nil, false
+	}
+	if a.readKeys == nil {
+		a.readKeys = map[string]bool{}
+	}
+	if key != "" {
+		a.readKeys[key] = true
+	}
+	if a.readCtx == nil {
+		a.readCtx, a.readCancel = context.WithCancel(context.Background())
+	}
+	return a.readCtx, true
+}
+
+func (a *App) releaseRead(key string) {
+	a.readMu.Lock()
+	delete(a.readKeys, key)
+	a.readMu.Unlock()
+}
+
+func (a *App) cancelReads() {
+	a.readMu.Lock()
+	cancel := a.readCancel
+	a.readCtx, a.readCancel = nil, nil
+	a.readMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }

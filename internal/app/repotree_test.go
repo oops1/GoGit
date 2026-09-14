@@ -184,6 +184,7 @@ func TestApplyingTheThemeDoesNotRereadBranchesFromDisk(t *testing.T) {
 	initTestRepoWithBranch(t, target, "main")
 	a := activatedWorkingApp(t, target)
 	waitForWorkingRows(t, a, 0)
+	waitForBranchCache(t, a)
 
 	calls := 0
 	prev := currentBranch

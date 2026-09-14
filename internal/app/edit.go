@@ -116,6 +116,7 @@ func (a *App) stopWrite() {
 		cancel()
 	}
 	a.writeWG.Wait()
+	a.cancelReads()
 	a.readWG.Wait()
 }
 
