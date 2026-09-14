@@ -387,10 +387,37 @@ func TestCloneOfEmptyRepositoryWithSingleBranchSucceeds(t *testing.T) {
 	_ = r.Close()
 }
 
+func TestCloneFromRepositoryWithDetachedHeadChecksOutTheBranchAtThatCommit(t *testing.T) {
+	src := newCloneSource(t)
+	tip := src.branchTarget("main")
+	src.writeRawHead(tip.String() + "\n")
+
+	for _, single := range []bool{false, true} {
+		r, err := Clone(t.Context(), src.dir, mustCloneDest(t), CloneOptions{SingleBranch: single})
+		if err != nil {
+			t.Fatalf("Clone returned error %v", err)
+		}
+		headRef, ok := lookupCloneRef(t, r, refs.HEAD)
+		if !ok || !headRef.IsSymbolic() || headRef.SymbolicTarget != refs.BranchName("main") {
+			t.Fatalf("HEAD = %+v ok=%v, want symbolic refs/heads/main", headRef, ok)
+		}
+		if branch, ok := lookupCloneRef(t, r, refs.BranchName("main")); !ok || branch.Target != tip {
+			t.Fatalf("main = %+v ok=%v, want %s", branch, ok, tip)
+		}
+		if _, fetched := lookupCloneRef(t, r, refs.RemoteBranchName("origin", "feature")); fetched == single {
+			t.Fatalf("origin/feature fetched = %v with a single branch = %v", fetched, single)
+		}
+		_ = r.Close()
+	}
+}
+
 func TestCloneFromRepositoryWithDetachedHead(t *testing.T) {
 	src := newCloneSource(t)
-	first := src.branchTarget("main")
+	first := src.branchTarget("feature")
 	src.writeRawHead(first.String() + "\n")
+	if err := DeleteBranch(t.Context(), src.repo, "feature", true); err != nil {
+		t.Fatalf("DeleteBranch returned error %v", err)
+	}
 	dest := mustCloneDest(t)
 
 	r, err := Clone(t.Context(), src.dir, dest, CloneOptions{})
@@ -599,8 +626,11 @@ func TestCloneCommitterFallsBackWhenIdentityIsNotConfigured(t *testing.T) {
 func TestFinishCloneRefsFailsWhenTxDetachFails(t *testing.T) {
 	swapTxDetach(t, func(*refs.Transaction, refs.Name, hash.ObjectID) error { return errInjected })
 	src := newCloneSource(t)
-	first := src.branchTarget("main")
+	first := src.branchTarget("feature")
 	src.writeRawHead(first.String() + "\n")
+	if err := DeleteBranch(t.Context(), src.repo, "feature", true); err != nil {
+		t.Fatalf("DeleteBranch returned error %v", err)
+	}
 	dest := mustCloneDest(t)
 	_, err := Clone(t.Context(), src.dir, dest, CloneOptions{})
 	if !errors.Is(err, errInjected) {

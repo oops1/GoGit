@@ -27,6 +27,8 @@ var (
 
 const (
 	defaultCloneRemoteName = "origin"
+	cloneDefaultBranchKey  = "init.defaultbranch"
+	cloneFallbackBranch    = "master"
 	cloneCommitterName     = "gogit"
 	cloneCommitterEmail    = "gogit@localhost"
 	directoryMode          = 0o777
@@ -126,7 +128,8 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 		return nil, err
 	}
 
-	spec, explicitBranch, err := planCloneFetch(ctx, url, remoteName, opts)
+	defaultBranch, _ := r.Config().Get(cloneDefaultBranchKey)
+	spec, explicitBranch, err := planCloneFetch(ctx, url, remoteName, defaultBranch, opts)
 	if err != nil {
 		return failClone(r, err)
 	}
@@ -149,7 +152,7 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 		return failClone(r, err)
 	}
 
-	target, err := resolveCloneTarget(opts, remoteName, explicitBranch, result)
+	target, err := resolveCloneTarget(opts, remoteName, explicitBranch, defaultBranch, result)
 	if err != nil {
 		return failClone(r, err)
 	}
@@ -194,7 +197,7 @@ func fetchCloneObjects(ctx context.Context, r *repo.Repository, rem remote.Remot
 	return result, nil
 }
 
-func planCloneFetch(ctx context.Context, url, remoteName string, opts CloneOptions) (refspec.RefSpec, string, error) {
+func planCloneFetch(ctx context.Context, url, remoteName, defaultBranch string, opts CloneOptions) (refspec.RefSpec, string, error) {
 	if !opts.SingleBranch {
 		return wildcardCloneRefspec(remoteName, opts.Bare), "", nil
 	}
@@ -204,7 +207,7 @@ func planCloneFetch(ctx context.Context, url, remoteName string, opts CloneOptio
 		if err != nil {
 			return refspec.RefSpec{}, "", err
 		}
-		branch = defaultBranchFrom(refsList)
+		branch = guessRemoteHead(refsList, defaultBranch)
 	}
 	if branch == "" {
 		return wildcardCloneRefspec(remoteName, opts.Bare), "", nil
@@ -212,10 +215,22 @@ func planCloneFetch(ctx context.Context, url, remoteName string, opts CloneOptio
 	return singleCloneRefspec(remoteName, branch, opts.Bare), branch, nil
 }
 
-func defaultBranchFrom(refsList []transport.Ref) string {
+func guessRemoteHead(refsList []transport.Ref, defaultBranch string) string {
+	head, ok := findAdvertisedRef(refsList, string(refs.HEAD))
+	if !ok {
+		return ""
+	}
+	if refs.Name(head.Symref).IsBranch() {
+		return refs.Name(head.Symref).Short()
+	}
+	for _, name := range []string{defaultBranch, cloneFallbackBranch} {
+		if ref, found := findAdvertisedRef(refsList, refs.BranchName(name).String()); found && ref.ID == head.ID {
+			return name
+		}
+	}
 	for _, ref := range refsList {
-		if ref.Name == string(refs.HEAD) && refs.Name(ref.Symref).IsBranch() {
-			return refs.Name(ref.Symref).Short()
+		if refs.Name(ref.Name).IsBranch() && ref.ID == head.ID {
+			return refs.Name(ref.Name).Short()
 		}
 	}
 	return ""
@@ -262,7 +277,7 @@ func findAdvertisedRef(refsList []transport.Ref, name string) (transport.Ref, bo
 	return transport.Ref{}, false
 }
 
-func resolveCloneTarget(opts CloneOptions, remoteName, explicitBranch string, result remote.FetchResult) (cloneTarget, error) {
+func resolveCloneTarget(opts CloneOptions, remoteName, explicitBranch, defaultBranch string, result remote.FetchResult) (cloneTarget, error) {
 	branch := opts.Branch
 	explicit := branch != ""
 	if branch == "" {
@@ -271,6 +286,9 @@ func resolveCloneTarget(opts CloneOptions, remoteName, explicitBranch string, re
 	}
 	if branch == "" && refs.Name(result.Head).IsBranch() {
 		branch = refs.Name(result.Head).Short()
+	}
+	if branch == "" {
+		branch = guessRemoteHead(result.Refs, defaultBranch)
 	}
 	if branch != "" {
 		dst := remoteTrackingName(remoteName, branch, opts.Bare)
