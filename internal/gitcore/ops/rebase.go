@@ -200,6 +200,10 @@ func (m *merger) requireCleanWorkTree() error {
 }
 
 func (m *merger) rebaseTodo(base, head hash.ObjectID) ([]RebaseStep, error) {
+	upstream, err := m.upstreamPatchIDs(base, head)
+	if err != nil {
+		return nil, err
+	}
 	var todo []RebaseStep
 	walk := revision.Walk(m.ctx, revision.Options{
 		Context: revision.Context{Objects: m.store()},
@@ -215,7 +219,13 @@ func (m *merger) rebaseTodo(base, head hash.ObjectID) ([]RebaseStep, error) {
 		if len(commit.Parents) > 1 {
 			continue
 		}
-		todo = append(todo, RebaseStep{Action: actionPick, Commit: commit.ID, Subject: firstLine(commit.Message)})
+		applied, err := m.appliedUpstream(commit, upstream)
+		if err != nil {
+			return nil, err
+		}
+		if !applied {
+			todo = append(todo, RebaseStep{Action: actionPick, Commit: commit.ID, Subject: firstLine(commit.Message)})
+		}
 	}
 	return todo, nil
 }
