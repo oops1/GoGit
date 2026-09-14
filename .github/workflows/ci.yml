@@ -13,8 +13,30 @@ env:
   CGO_ENABLED: "0"
 
 jobs:
-  suites-ubuntu:
+  changes:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.tree.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: tree
+        run: |
+          suites=true
+          if [ "${{ github.event_name }}" = push ] && [ "${{ github.ref }}" = refs/heads/main ]; then
+            tree=$(git rev-parse 'HEAD^{tree}')
+            if git log origin/develop --format=%T | grep -qx "$tree"; then
+              suites=false
+              echo "::notice::main holds a tree already tested on develop; test suites are skipped"
+            fi
+          fi
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
+  suites-ubuntu:
+    needs: changes
+    if: needs.changes.outputs.suites == 'true'
     name: ${{ matrix.suite }} (ubuntu-latest)
     runs-on: ubuntu-latest
     strategy:
@@ -45,7 +67,8 @@ jobs:
       - run: bash .github/ci/suite.sh ${{ matrix.suite }}
 
   suites-windows:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    needs: changes
+    if: needs.changes.outputs.suites == 'true'
     name: ${{ matrix.suite }} (windows-latest)
     runs-on: windows-latest
     strategy:
@@ -76,25 +99,25 @@ jobs:
       - run: bash .github/ci/suite.sh ${{ matrix.suite }}
 
   test-ubuntu:
-    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    needs: [changes, suites-ubuntu]
+    if: ${{ !cancelled() && needs.changes.result == 'success' }}
     name: test (ubuntu-latest)
-    needs: suites-ubuntu
     runs-on: ubuntu-latest
     steps:
       - run: |
-          if [ "${{ needs.suites-ubuntu.result }}" != "success" ]; then
+          if [ "${{ needs.changes.outputs.suites }}" = true ] && [ "${{ needs.suites-ubuntu.result }}" != success ]; then
             echo "::error::ubuntu suites ended with ${{ needs.suites-ubuntu.result }}"
             exit 1
           fi
 
   test-windows:
-    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    needs: [changes, suites-windows]
+    if: ${{ !cancelled() && needs.changes.result == 'success' }}
     name: test (windows-latest)
-    needs: suites-windows
     runs-on: ubuntu-latest
     steps:
       - run: |
-          if [ "${{ needs.suites-windows.result }}" != "success" ]; then
+          if [ "${{ needs.changes.outputs.suites }}" = true ] && [ "${{ needs.suites-windows.result }}" != success ]; then
             echo "::error::windows suites ended with ${{ needs.suites-windows.result }}"
             exit 1
           fi
