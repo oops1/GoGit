@@ -155,7 +155,7 @@ func TestBlameFollowsARename(t *testing.T) {
 	tr := newTestRepo(t)
 	base, _ := tr.movedHistory()
 
-	result, err := Blame(t.Context(), tr.repo, "HEAD", "moved", BlameOptions{Follow: true})
+	result, err := Blame(t.Context(), tr.repo, "HEAD", "moved", BlameOptions{})
 
 	if err != nil {
 		t.Fatalf("Blame returned error %v", err)

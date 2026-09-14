@@ -121,7 +121,7 @@ func gitBlame(t *testing.T, r *repo, path string, follow bool) []string {
 
 func ourBlame(t *testing.T, r *repo, path string, follow bool) []string {
 	t.Helper()
-	result, err := File(t.Context(), r.objects(), r.head(), path, Options{FollowRenames: follow})
+	result, err := File(t.Context(), r.objects(), r.head(), path, Options{NoFollowRenames: !follow})
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
 	}
@@ -200,6 +200,48 @@ func blameCases() []blameCase {
 			r.clock += 60
 			r.git("commit", "-q", "-m", "move")
 			r.commit("edit", map[string]string{"moved": editLine(f, 6, "EDITED")})
+		}},
+		{name: "a merge whose result is one side", path: "f", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": "a\n"})
+			r.git("branch", "feature")
+			r.commit("main side", map[string]string{"f": "a\nb\nX\n"})
+			r.git("checkout", "-q", "feature")
+			r.commit("feature side", map[string]string{"f": "a\nb\n"})
+			r.git("checkout", "-q", "main")
+			r.clock += 60
+			r.git("merge", "-q", "-s", "ours", "--no-edit", "feature")
+			r.write("f", "a\nb\n")
+			r.git("add", "f")
+			r.git("commit", "-q", "--amend", "--no-edit")
+		}},
+		{name: "a merge whose sides hold the same blob", path: "f", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f})
+			r.git("branch", "feature")
+			r.commit("main side", map[string]string{"f": editLine(f, 2, "SAME")})
+			r.git("checkout", "-q", "feature")
+			r.commit("feature side", map[string]string{"f": editLine(f, 2, "SAME")})
+			r.git("checkout", "-q", "main")
+			r.clock += 60
+			r.git("merge", "-q", "--no-edit", "feature")
+			r.commit("top", map[string]string{"f": editLine(editLine(f, 2, "SAME"), 7, "TOP")})
+		}},
+		{name: "a rename on one side of a merge", path: "moved", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f})
+			r.git("branch", "feature")
+			r.git("mv", "f", "moved")
+			r.clock += 60
+			r.git("commit", "-q", "-m", "move")
+			r.git("checkout", "-q", "feature")
+			r.commit("feature edit", map[string]string{"f": editLine(f, 5, "FEATURE")})
+			r.git("checkout", "-q", "main")
+			r.clock += 60
+			r.git("merge", "-q", "--no-edit", "feature")
+		}},
+		{name: "a renamed file without following", path: "moved", build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f})
+			r.git("mv", "f", "moved")
+			r.clock += 60
+			r.git("commit", "-q", "-m", "move")
 		}},
 		{name: "a rename that also changed the file", path: "moved", follow: true, build: func(r *repo) {
 			r.commit("base", map[string]string{"f": f})

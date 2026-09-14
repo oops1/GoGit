@@ -1,6 +1,7 @@
 package blame
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,8 +20,8 @@ type Objects interface {
 }
 
 type Options struct {
-	Diff          diff.Options
-	FollowRenames bool
+	Diff            diff.Options
+	NoFollowRenames bool
 }
 
 type Line struct {
@@ -117,31 +118,63 @@ func (b *blamer) take() *work {
 	return item
 }
 
+type version struct {
+	commit *object.Commit
+	id     hash.ObjectID
+	path   string
+	data   []byte
+}
+
 func (b *blamer) step(item *work) error {
+	versions := make([]*version, len(item.commit.Parents))
+	for pass := range b.passes() {
+		for at, id := range item.commit.Parents {
+			if versions[at] != nil {
+				continue
+			}
+			parent, err := b.commit(id)
+			if err != nil {
+				return err
+			}
+			path, older, found, err := b.parentVersion(parent, item.commit.Tree, item.path, pass == 1)
+			if err != nil {
+				return err
+			}
+			if !found {
+				continue
+			}
+			if bytes.Equal(older, item.data) {
+				b.push(parent, id, path, older, item.spans)
+				return nil
+			}
+			if !slices.ContainsFunc(versions[:at], func(v *version) bool { return v != nil && bytes.Equal(v.data, older) }) {
+				versions[at] = &version{commit: parent, id: id, path: path, data: older}
+			}
+		}
+	}
 	left := item.spans
-	for _, id := range item.commit.Parents {
-		if len(left) == 0 {
-			break
-		}
-		parent, err := b.commit(id)
-		if err != nil {
-			return err
-		}
-		path, older, found, err := b.parentVersion(parent, item.commit.Tree, item.path)
-		if err != nil {
-			return err
-		}
-		if !found {
+	for _, v := range versions {
+		if v == nil {
 			continue
 		}
-		passed, kept := splitSpans(left, lineMap(older, item.data, b.opts.Diff))
+		passed, kept := splitSpans(left, lineMap(v.data, item.data, b.opts.Diff))
 		if len(passed) > 0 {
-			b.push(parent, id, path, older, passed)
+			b.push(v.commit, v.id, v.path, v.data, passed)
 		}
 		left = kept
+		if len(left) == 0 {
+			return nil
+		}
 	}
 	b.assign(item.commit, item.id, item.path, left)
 	return nil
+}
+
+func (b *blamer) passes() int {
+	if b.opts.NoFollowRenames {
+		return 1
+	}
+	return 2
 }
 
 func (b *blamer) assign(commit *object.Commit, id hash.ObjectID, path string, spans []span) {
@@ -166,21 +199,23 @@ func summaryOf(message string) string {
 	return line
 }
 
-func (b *blamer) parentVersion(parent *object.Commit, childTree hash.ObjectID, path string) (string, []byte, bool, error) {
-	data, err := b.blobAt(parent.Tree, path)
-	switch {
-	case err == nil:
-		return path, data, true, nil
-	case !errors.Is(err, ErrPathNotFound):
-		return "", nil, false, err
-	case !b.opts.FollowRenames:
-		return "", nil, false, nil
+func (b *blamer) parentVersion(parent *object.Commit, childTree hash.ObjectID, path string, renamed bool) (string, []byte, bool, error) {
+	if !renamed {
+		data, err := b.blobAt(parent.Tree, path)
+		switch {
+		case err == nil:
+			return path, data, true, nil
+		case errors.Is(err, ErrPathNotFound):
+			return "", nil, false, nil
+		default:
+			return "", nil, false, err
+		}
 	}
 	older, err := b.renamedFrom(parent.Tree, childTree, path)
 	if err != nil || older == "" {
 		return "", nil, false, err
 	}
-	data, err = b.blobAt(parent.Tree, older)
+	data, err := b.blobAt(parent.Tree, older)
 	if err != nil {
 		return "", nil, false, err
 	}

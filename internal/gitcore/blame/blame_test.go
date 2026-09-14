@@ -202,11 +202,11 @@ func TestWithoutFollowingRenamesTheMoveTakesTheBlame(t *testing.T) {
 	first := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob(text)}), 1000)
 	second := s.commit("move", s.tree(map[string]hash.ObjectID{"moved": s.blob(text)}), 2000, first)
 
-	plain, err := File(t.Context(), s, second, "moved", Options{})
+	plain, err := File(t.Context(), s, second, "moved", Options{NoFollowRenames: true})
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
 	}
-	followed, err := File(t.Context(), s, second, "moved", Options{FollowRenames: true})
+	followed, err := File(t.Context(), s, second, "moved", Options{})
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
 	}
@@ -235,6 +235,40 @@ func TestAMergeKeepsTheBlameOfEachSide(t *testing.T) {
 		t.Fatalf("File returned error %v", err)
 	}
 	if got := blamedOn(t, result); strings.Join(got, " ") != "ours:1 base:2 theirs:3" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestAMergeHandsEverythingToTheParentWithTheSameBlob(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("a\n")}), 1000)
+	main := s.commit("main", s.tree(map[string]hash.ObjectID{"f": s.blob("a\nb\nX\n")}), 2000, base)
+	feature := s.commit("feature", s.tree(map[string]hash.ObjectID{"f": s.blob("a\nb\n")}), 2000, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob("a\nb\n")}), 3000, main, feature)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "base:1 feature:2" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestAMergeDiffsOnlyOnceAgainstParentsWithTheSameBlob(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 1000)
+	left := s.commit("left", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nTWO\n")}), 2000, base)
+	right := s.commit("right", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nTWO\n")}), 2500, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob("ONE\nTWO\n")}), 3000, left, right)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "merge:1 left:2" {
 		t.Fatalf("blame = %v", got)
 	}
 }
@@ -356,7 +390,7 @@ func TestFollowingRenamesKeepsTheCommitThatAddedTheFile(t *testing.T) {
 	base := s.commit("base", s.tree(map[string]hash.ObjectID{"keep": s.blob("keep\n")}), 1000)
 	head := s.commit("add", s.tree(map[string]hash.ObjectID{"keep": s.blob("keep\n"), "f": s.blob("one\ntwo\n")}), 2000, base)
 
-	result, err := File(t.Context(), s, head, "f", Options{FollowRenames: true})
+	result, err := File(t.Context(), s, head, "f", Options{})
 
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
@@ -373,7 +407,7 @@ func TestFollowingRenamesReportsATreeItCannotWalk(t *testing.T) {
 	parent := s.commit("base", bogus, 1000)
 	head := s.commit("move", s.tree(map[string]hash.ObjectID{"moved": s.blob(text)}), 2000, parent)
 
-	if _, err := File(t.Context(), s, head, "moved", Options{FollowRenames: true}); err == nil {
+	if _, err := File(t.Context(), s, head, "moved", Options{}); err == nil {
 		t.Fatal("a broken tree was walked for renames")
 	}
 }

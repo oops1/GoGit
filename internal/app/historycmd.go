@@ -90,7 +90,7 @@ func (a *App) openBlame(rev, path string) {
 	}
 	var result blame.Result
 	a.startKeyedRead("blame:"+rev+":"+path, func(ctx context.Context, r *gitrepo.Repository) error {
-		read, err := readBlame(ctx, r, rev, path, ops.BlameOptions{Follow: true})
+		read, err := readBlame(ctx, r, rev, path, ops.BlameOptions{})
 		result = read
 		return err
 	}, func(err error) {
