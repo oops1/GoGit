@@ -45,14 +45,18 @@ func Prune(ctx context.Context, r *repo.Repository, opts PruneOptions) (PruneRes
 	if err != nil {
 		return PruneResult{}, err
 	}
+	return pruneWith(ctx, db, walk, expire, opts.DryRun)
+}
+
+func pruneWith(ctx context.Context, db *odb.DB, walk *objectWalk, expire time.Time, dryRun bool) (PruneResult, error) {
 	var result PruneResult
-	if err := pruneLoose(ctx, db, walk, expire, opts.DryRun, &result); err != nil {
+	if err := pruneLoose(ctx, db, walk, expire, dryRun, &result); err != nil {
 		return result, err
 	}
-	if err := pruneTemps(db, expire, opts.DryRun, &result); err != nil {
+	if err := pruneTemps(db, expire, dryRun, &result); err != nil {
 		return result, err
 	}
-	if opts.DryRun {
+	if dryRun {
 		return result, nil
 	}
 	return result, dbRemoveEmptyFanouts(db)

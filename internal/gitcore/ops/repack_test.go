@@ -262,15 +262,12 @@ func TestRepackReportsEveryFailure(t *testing.T) {
 			packUnreachableOnly(t, r, h)
 			swapMaint(t, &dbPutLoose, func(*odb.DB, object.Type, []byte, time.Time) (hash.ObjectID, error) { return hash.Zero, boom })
 		}},
-		{"reopening the database to drop loose copies", false, func(t *testing.T, r *testRepo, _ maintHistory, _ context.CancelFunc) {
-			real, calls := odbOpen, 0
-			swapMaint(t, &odbOpen, func(dir string, opts odb.Options) (*odb.DB, error) {
-				calls++
-				if calls == 2 {
-					return nil, boom
-				}
-				return real(dir, opts)
-			})
+		{"reloading the packs to drop loose copies", false, func(t *testing.T, r *testRepo, _ maintHistory, _ context.CancelFunc) {
+			swapMaint(t, &dbReloadPacks, func(*odb.DB) (bool, error) { return false, boom })
+		}},
+		{"reading the big file threshold", false, func(t *testing.T, r *testRepo, _ maintHistory, _ context.CancelFunc) {
+			r.appendConfig("[core]\n\tbigFileThreshold = lots\n")
+			r.repo = r.reopen()
 		}},
 		{"listing loose copies", false, func(t *testing.T, r *testRepo, _ maintHistory, _ context.CancelFunc) {
 			real, calls := dbLooseObjects, 0

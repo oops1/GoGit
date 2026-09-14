@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -36,25 +37,35 @@ func GC(ctx context.Context, r *repo.Repository) (GCResult, error) {
 	if err != nil {
 		return GCResult{}, err
 	}
-	if err := packRefs(r); err != nil {
+	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	if err != nil {
 		return GCResult{}, err
 	}
+	defer func() { _ = db.Close() }()
+	if err := packRefs(r, db); err != nil {
+		return GCResult{}, err
+	}
+	walk, err := reachableObjects(ctx, r, db)
+	if err != nil {
+		return GCResult{}, err
+	}
+	commits := slices.Clip(walk.commits)
 	var result GCResult
 	repackOpts := RepackOptions{}
 	if expires {
 		repackOpts.Expire = expire
 	}
-	if result.Repack, err = Repack(ctx, r, repackOpts); err != nil {
+	if result.Repack, err = repackWith(ctx, r, db, walk, repackOpts); err != nil {
 		return result, err
 	}
 	if expires {
-		if result.Prune, err = Prune(ctx, r, PruneOptions{Expire: expire}); err != nil {
+		if result.Prune, err = pruneWith(ctx, db, walk, expire, false); err != nil {
 			return result, err
 		}
 		result.Pruned = true
 	}
-	if writeGraph {
-		result.CommitGraph, err = WriteCommitGraph(ctx, r)
+	if writeGraph && len(walk.shallow) == 0 {
+		result.CommitGraph, err = writeCommitGraph(r, commits)
 	}
 	return result, err
 }
@@ -74,12 +85,7 @@ func gcWritesCommitGraph(r *repo.Repository) (bool, error) {
 	return r.Config().GetBool(gcWriteCommitGraphKey)
 }
 
-func packRefs(r *repo.Repository) error {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = db.Close() }()
+func packRefs(r *repo.Repository, db *odb.DB) error {
 	store, err := refsOpen(refs.Options{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: r.IsBare(), Peeler: db})
 	if err != nil {
 		return err

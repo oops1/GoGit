@@ -10,6 +10,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/pack"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -119,6 +120,9 @@ func TestGCReportsEveryFailingStep(t *testing.T) {
 		{"packing refs", func(t *testing.T) {
 			swapMaint(t, &storePackRefs, func(*refs.Store, bool) error { return boom })
 		}},
+		{"walking the history", func(t *testing.T) {
+			swapMaint(t, &reachReadIndex, func(string) (*index.Index, error) { return nil, boom })
+		}},
 		{"repacking", func(t *testing.T) {
 			swapMaint(t, &dbWritePack, func(*odb.DB, context.Context, []hash.ObjectID, pack.WriteOptions) (pack.IndexResult, error) {
 				return pack.IndexResult{}, boom
@@ -152,5 +156,45 @@ func TestGCTakesTheCurrentMomentForItsExpiry(t *testing.T) {
 
 	if looseExists(r, old) {
 		t.Fatal("an object a year older than the expiry survived")
+	}
+}
+
+func TestGCOpensOneDatabaseAndWalksTheHistoryOnce(t *testing.T) {
+	r, _, _, _ := gcRepo(t, "")
+	realOpen, opens := odbOpen, 0
+	swapMaint(t, &odbOpen, func(dir string, opts odb.Options) (*odb.DB, error) {
+		opens++
+		return realOpen(dir, opts)
+	})
+	realRead, walks := reachReadIndex, 0
+	swapMaint(t, &reachReadIndex, func(path string) (*index.Index, error) {
+		walks++
+		return realRead(path)
+	})
+
+	result, err := GC(t.Context(), r.repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if opens != 1 || walks != 1 || !result.Pruned || result.CommitGraph != 2 {
+		t.Fatalf("opens = %d, walks = %d, result = %+v", opens, walks, result)
+	}
+}
+
+func TestGCLeavesTheCommitGraphOfAShallowRepositoryUnwritten(t *testing.T) {
+	r, h, _, _ := gcRepo(t, "")
+	writeGitFile(t, r.repo.CommonDir(), "shallow", h.first.String()+"\n")
+
+	result, err := GC(t.Context(), r.repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.CommitGraph != 0 || result.Repack.Pack == "" {
+		t.Fatalf("result = %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(r.repo.ObjectsDir(), "info", commitgraph.FileName)); err == nil {
+		t.Fatal("a commit graph was written for a shallow repository")
 	}
 }

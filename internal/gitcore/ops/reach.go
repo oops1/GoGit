@@ -14,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
+	"github.com/oops1/gogit/internal/gitcore/pack"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
@@ -42,6 +43,7 @@ var ErrWrongObjectType = errors.New("ops: object has another type than the link 
 type walkItem struct {
 	id   hash.ObjectID
 	kind object.Type
+	base uint32
 }
 
 type objectWalk struct {
@@ -49,6 +51,7 @@ type objectWalk struct {
 	db      *odb.DB
 	shallow map[hash.ObjectID]struct{}
 	seen    map[hash.ObjectID]struct{}
+	names   map[hash.ObjectID]uint32
 	commits []commitgraph.Commit
 	stack   []walkItem
 	strict  bool
@@ -65,6 +68,7 @@ func newObjectWalk(ctx context.Context, r *repo.Repository, db *odb.DB) (*object
 		db:      db,
 		shallow: shallow,
 		seen:    make(map[hash.ObjectID]struct{}),
+		names:   make(map[hash.ObjectID]uint32),
 		broken:  func(_ hash.ObjectID, _ walkTrouble, err error) error { return err },
 	}, nil
 }
@@ -97,6 +101,16 @@ func (w *objectWalk) push(id hash.ObjectID, kind object.Type) {
 	}
 	w.seen[id] = struct{}{}
 	w.stack = append(w.stack, walkItem{id: id, kind: kind})
+}
+
+func (w *objectWalk) pushNamed(id hash.ObjectID, kind object.Type, name uint32) {
+	pending := len(w.stack)
+	w.push(id, kind)
+	if len(w.stack) == pending {
+		return
+	}
+	w.names[id] = name
+	w.stack[pending].base = pack.AppendNameHash(name, "/")
 }
 
 func (w *objectWalk) pushPresent(id hash.ObjectID, kind object.Type) error {
@@ -286,7 +300,7 @@ func (w *objectWalk) visit(item walkItem) error {
 	if w.strict && item.kind != 0 && kind != item.kind {
 		return w.broken(item.id, troubleWrongType, fmt.Errorf("%w: %s is a %s, not a %s", ErrWrongObjectType, item.id, kind, item.kind))
 	}
-	if err := w.expand(item.id, kind, data); err != nil {
+	if err := w.expand(item, kind, data); err != nil {
 		return w.broken(item.id, troubleMalformed, err)
 	}
 	return nil
@@ -313,7 +327,8 @@ func (w *objectWalk) visitBlob(id hash.ObjectID) error {
 	return nil
 }
 
-func (w *objectWalk) expand(id hash.ObjectID, kind object.Type, data []byte) error {
+func (w *objectWalk) expand(item walkItem, kind object.Type, data []byte) error {
+	id := item.id
 	switch kind {
 	case object.TypeCommit:
 		commit, err := object.ParseCommit(data)
@@ -338,7 +353,7 @@ func (w *objectWalk) expand(id hash.ObjectID, kind object.Type, data []byte) err
 			if entry.Mode.IsSubmodule() {
 				continue
 			}
-			w.push(entry.ID, entry.Mode.ObjectType())
+			w.pushNamed(entry.ID, entry.Mode.ObjectType(), pack.AppendNameHash(item.base, entry.Name))
 		}
 		if w.strict && !tree.IsSorted() {
 			return fmt.Errorf("%w: the entries of tree %s are out of order", object.ErrMalformed, id)

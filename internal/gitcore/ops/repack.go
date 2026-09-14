@@ -15,15 +15,17 @@ import (
 )
 
 const (
-	repackWindow = 10
-	repackDepth  = 50
-	packFileExt  = ".pack"
+	repackWindow            = 10
+	repackDepth             = 50
+	packFileExt             = ".pack"
+	coreBigFileThresholdKey = "core.bigFileThreshold"
 )
 
 var (
 	dbWritePack     = (*odb.DB).WritePack
 	dbPackObjects   = (*odb.DB).PackObjects
 	dbPutLoose      = (*odb.DB).PutLoose
+	dbReloadPacks   = (*odb.DB).Reload
 	removePackFiles = odb.RemovePackFiles
 )
 
@@ -59,13 +61,30 @@ func Repack(ctx context.Context, r *repo.Repository, opts RepackOptions) (Repack
 		return RepackResult{}, err
 	}
 	defer func() { _ = db.Close() }()
-	plan, err := planRepack(ctx, r, db, opts.Expire)
+	walk, err := reachableObjects(ctx, r, db)
+	if err != nil {
+		return RepackResult{}, err
+	}
+	return repackWith(ctx, r, db, walk, opts)
+}
+
+func repackWith(ctx context.Context, r *repo.Repository, db *odb.DB, walk *objectWalk, opts RepackOptions) (RepackResult, error) {
+	threshold, err := bigFileThreshold(r)
+	if err != nil {
+		return RepackResult{}, err
+	}
+	plan, err := planRepack(walk, db, opts.Expire)
 	if err != nil {
 		return RepackResult{}, err
 	}
 	var result RepackResult
 	if len(plan.ids) > 0 {
-		written, err := dbWritePack(db, ctx, plan.ids, pack.WriteOptions{Window: positiveOr(opts.Window, repackWindow), Depth: positiveOr(opts.Depth, repackDepth)})
+		written, err := dbWritePack(db, ctx, plan.ids, pack.WriteOptions{
+			Window:           positiveOr(opts.Window, repackWindow),
+			Depth:            positiveOr(opts.Depth, repackDepth),
+			NameHashes:       walk.names,
+			BigFileThreshold: threshold,
+		})
 		if err != nil {
 			return RepackResult{}, err
 		}
@@ -76,27 +95,36 @@ func Repack(ctx context.Context, r *repo.Repository, opts RepackOptions) (Repack
 	if err := loosenUnreachable(db, plan, opts.Expire, &result); err != nil {
 		return result, err
 	}
-	_ = db.Close()
+	replaced := make([]string, 0, len(plan.old))
 	for _, old := range plan.old {
-		if old.Name == result.Pack {
-			continue
+		if old.Name != result.Pack {
+			replaced = append(replaced, old.Name)
 		}
-		if err := removePackFiles(r.PackDir(), old.Name); err != nil {
-			result.Busy = append(result.Busy, old.Name)
-			continue
-		}
-		result.Removed = append(result.Removed, old.Name)
 	}
-	unpacked, err := removePackedLoose(ctx, r)
+	_ = db.ForgetPacks(replaced...)
+	for _, name := range replaced {
+		if err := removePackFiles(r.PackDir(), name); err != nil {
+			result.Busy = append(result.Busy, name)
+			continue
+		}
+		result.Removed = append(result.Removed, name)
+	}
+	if _, err := dbReloadPacks(db); err != nil {
+		return result, err
+	}
+	unpacked, err := removePackedLoose(ctx, db)
 	result.Unpacked = unpacked
 	return result, err
 }
 
-func planRepack(ctx context.Context, r *repo.Repository, db *odb.DB, expire time.Time) (repackPlan, error) {
-	walk, err := reachableObjects(ctx, r, db)
-	if err != nil {
-		return repackPlan{}, err
+func bigFileThreshold(r *repo.Repository) (int64, error) {
+	if !r.Config().Has(coreBigFileThresholdKey) {
+		return pack.DefaultBigFileThreshold, nil
 	}
+	return r.Config().GetInt(coreBigFileThresholdKey)
+}
+
+func planRepack(walk *objectWalk, db *odb.DB, expire time.Time) (repackPlan, error) {
 	plan := repackPlan{
 		reachable: maps.Clone(walk.seen),
 		loose:     make(map[hash.ObjectID]struct{}),
@@ -179,12 +207,7 @@ func (p repackPlan) stays(id hash.ObjectID, done map[hash.ObjectID]struct{}) boo
 	return false
 }
 
-func removePackedLoose(ctx context.Context, r *repo.Repository) (int, error) {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = db.Close() }()
+func removePackedLoose(ctx context.Context, db *odb.DB) (int, error) {
 	removed := 0
 	for loose, err := range dbLooseObjects(db) {
 		if err != nil {

@@ -15,11 +15,8 @@ var writeCommitGraphFile = commitgraph.WriteFile
 
 func WriteCommitGraph(ctx context.Context, r *repo.Repository) (int, error) {
 	shallow, err := r.IsShallow()
-	if err != nil {
+	if err != nil || shallow {
 		return 0, err
-	}
-	if shallow {
-		return 0, nil
 	}
 	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
 	if err != nil {
@@ -30,11 +27,15 @@ func WriteCommitGraph(ctx context.Context, r *repo.Repository) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if len(walk.commits) == 0 {
+	return writeCommitGraph(r, walk.commits)
+}
+
+func writeCommitGraph(r *repo.Repository, commits []commitgraph.Commit) (int, error) {
+	if len(commits) == 0 {
 		return 0, nil
 	}
-	if err := writeCommitGraphFile(filepath.Join(r.ObjectsDir(), objectsInfoDir), r.ObjectFormat, walk.commits); err != nil {
+	if err := writeCommitGraphFile(filepath.Join(r.ObjectsDir(), objectsInfoDir), r.ObjectFormat, commits); err != nil {
 		return 0, err
 	}
-	return len(walk.commits), nil
+	return len(commits), nil
 }
