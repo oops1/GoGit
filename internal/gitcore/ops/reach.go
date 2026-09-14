@@ -56,6 +56,8 @@ type objectWalk struct {
 	stack   []walkItem
 	strict  bool
 	broken  func(id hash.ObjectID, trouble walkTrouble, err error) error
+
+	inspectTree func(id hash.ObjectID, entries []object.TreeEntry)
 }
 
 func newObjectWalk(ctx context.Context, r *repo.Repository, db *odb.DB) (*objectWalk, error) {
@@ -348,6 +350,9 @@ func (w *objectWalk) expand(item walkItem, kind object.Type, data []byte) error 
 		tree, err := object.ParseTree(data)
 		if err != nil {
 			return err
+		}
+		if w.inspectTree != nil {
+			w.inspectTree(id, tree.Entries)
 		}
 		for _, entry := range tree.Entries {
 			if entry.Mode.IsSubmodule() {

@@ -17,6 +17,7 @@ const (
 	FsckCorrupt
 	FsckMalformed
 	FsckWrongType
+	FsckBadGitmodules
 )
 
 var (
@@ -25,10 +26,11 @@ var (
 )
 
 type FsckProblem struct {
-	Kind FsckKind
-	ID   hash.ObjectID
-	Pack string
-	Err  error
+	Kind  FsckKind
+	ID    hash.ObjectID
+	Pack  string
+	Check string
+	Err   error
 }
 
 type FsckReport struct {
@@ -61,6 +63,8 @@ func Fsck(ctx context.Context, r *repo.Repository) (FsckReport, error) {
 		report.Problems = append(report.Problems, FsckProblem{Kind: fsckKindOf(trouble, err), ID: id, Err: err})
 		return nil
 	}
+	modules := newGitmodulesCheck()
+	walk.inspectTree = modules.inspectTree
 	if err := walk.gatherRoots(r); err != nil {
 		return report, err
 	}
@@ -73,6 +77,8 @@ func Fsck(ctx context.Context, r *repo.Repository) (FsckReport, error) {
 		}
 	}
 	slices.SortFunc(report.Unreachable, func(a, b hash.ObjectID) int { return a.Compare(b) })
+	modules.inspectUnreachable(db, report.Unreachable)
+	report.Problems = append(report.Problems, modules.finish(db)...)
 	return report, nil
 }
 
