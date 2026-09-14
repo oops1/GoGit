@@ -153,6 +153,9 @@ func TestWriteWorktreeBlobReportsAFailingChmodOrStat(t *testing.T) {
 	tr := newTestRepo(t)
 	wt := openTestWorkingTree(t, tr)
 	wt.fileMode = true
+	if err := writeWorktreeBlob(wt, "run.sh", object.ModeBlob, []byte("echo\n")); err != nil {
+		t.Fatalf("writeWorktreeBlob returned error %v", err)
+	}
 	swapSeam(t, &fsRootChmod, func(func(*os.Root, string, fs.FileMode) error) func(*os.Root, string, fs.FileMode) error {
 		return func(*os.Root, string, fs.FileMode) error { return errInjected }
 	})
