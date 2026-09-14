@@ -7,6 +7,11 @@ import (
 )
 
 func (s *Store) PackRefs(prune bool) error {
+	lock, err := s.lockPacked()
+	if err != nil {
+		return err
+	}
+	defer lock.release()
 	snapshot, err := s.loadPacked()
 	if err != nil {
 		return err
@@ -38,7 +43,7 @@ func (s *Store) PackRefs(prune bool) error {
 	slices.SortFunc(packed, func(a, b Ref) int {
 		return strings.Compare(string(a.Name), string(b.Name))
 	})
-	if err := s.writePacked(packed, s.opts.Peeler != nil); err != nil {
+	if err := commitPacked(lock, packed, s.opts.Peeler != nil); err != nil {
 		return err
 	}
 	if !prune {

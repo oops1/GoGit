@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 )
@@ -111,6 +112,13 @@ func (t *Transaction) Commit() error {
 			entry.lock.release()
 		}
 	}()
+	var packedLock *lockFile
+	if slices.ContainsFunc(plan, func(entry *update) bool { return entry.kind == kindDelete }) {
+		if packedLock, err = t.store.lockPacked(); err != nil {
+			return err
+		}
+	}
+	defer packedLock.release()
 	snapshot, err := t.store.loadPacked()
 	if err != nil {
 		return err
@@ -143,7 +151,7 @@ func (t *Transaction) Commit() error {
 			return err
 		}
 	}
-	return t.finish(plan, snapshot)
+	return t.finish(plan, snapshot, packedLock)
 }
 
 func (t *Transaction) plan() ([]*update, error) {
@@ -280,7 +288,7 @@ func (t *Transaction) writeLock(entry *update) error {
 	return nil
 }
 
-func (t *Transaction) finish(plan []*update, snapshot *packedSnapshot) error {
+func (t *Transaction) finish(plan []*update, snapshot *packedSnapshot, packedLock *lockFile) error {
 	for _, entry := range plan {
 		if entry.kind == kindDelete || entry.skip {
 			continue
@@ -295,7 +303,7 @@ func (t *Transaction) finish(plan []*update, snapshot *packedSnapshot) error {
 			return err
 		}
 	}
-	if err := t.store.unpack(plan, snapshot); err != nil {
+	if err := t.store.unpack(plan, snapshot, packedLock); err != nil {
 		return err
 	}
 	for _, entry := range plan {
@@ -337,7 +345,7 @@ func (t *Transaction) writeReflog(entry *update) error {
 	return t.store.appendReflog(entry.name, old, value, t.message)
 }
 
-func (s *Store) unpack(plan []*update, snapshot *packedSnapshot) error {
+func (s *Store) unpack(plan []*update, snapshot *packedSnapshot, lock *lockFile) error {
 	var removed []Name
 	for _, entry := range plan {
 		if entry.kind != kindDelete || entry.skip {
@@ -353,15 +361,23 @@ func (s *Store) unpack(plan []*update, snapshot *packedSnapshot) error {
 	kept := slices.DeleteFunc(slices.Clone(snapshot.refs), func(ref Ref) bool {
 		return slices.Contains(removed, ref.Name)
 	})
-	return s.writePacked(kept, snapshot.fullyPeeled)
+	return commitPacked(lock, kept, snapshot.fullyPeeled)
 }
 
-func (s *Store) writePacked(refs []Ref, peeled bool) error {
-	lock, err := newLock(s.common, packedRefsFile)
-	if err != nil {
-		return err
+var packedLockTimeout = time.Second
+
+func (s *Store) lockPacked() (*lockFile, error) {
+	deadline := time.Now().Add(packedLockTimeout)
+	for {
+		lock, err := newLock(s.common, packedRefsFile)
+		if !errors.Is(err, ErrLocked) || time.Now().After(deadline) {
+			return lock, err
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	defer lock.release()
+}
+
+func commitPacked(lock *lockFile, refs []Ref, peeled bool) error {
 	if err := lock.write(encodePackedRefs(refs, peeled)); err != nil {
 		return err
 	}

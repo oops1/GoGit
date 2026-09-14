@@ -185,6 +185,9 @@ func (l *lockFile) commit() error {
 }
 
 func (l *lockFile) release() {
+	if l == nil {
+		return
+	}
 	_ = l.file.Close()
 	if l.done {
 		return
