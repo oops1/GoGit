@@ -466,6 +466,16 @@ func TestOracleStatusMatchesGitStatusPorcelainV2(t *testing.T) {
 		}},
 	}
 
+	tests = append(tests, struct {
+		name  string
+		setup func(o *oracle, dir string)
+	}{"sparse checkout leaves skipped files out", func(o *oracle, dir string) {
+		o.write(dir, "a/y", "one\n")
+		o.write(dir, "b/x", "one\n")
+		o.run(dir, "add", ".")
+		o.run(dir, "commit", "-q", "-m", "initial")
+		o.run(dir, "sparse-checkout", "set", "--no-cone", "/a/")
+	}})
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			o := newOracle(t)

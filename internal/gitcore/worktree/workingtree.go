@@ -63,6 +63,9 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry)
 }
 
 func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
+	if entry.SkipWorktree {
+		return StatusUnmodified, nil
+	}
 	name := filepath.FromSlash(entry.Path)
 	fi, err := fsLstatFile(w.root, name)
 	if errors.Is(err, fs.ErrNotExist) {
