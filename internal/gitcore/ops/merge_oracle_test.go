@@ -125,6 +125,19 @@ func mergeScenarios() []mergeScenario {
 			b.commit("next", map[string]string{"g": g})
 			b.git("checkout", "-q", "main")
 		}},
+		{name: "empty file renamed against its deletion", target: "feature", setup: func(b *mergeBuilder) {
+			b.o.write(b.dir, "old/__init__.py", "")
+			b.git("add", "--", "old/__init__.py")
+			b.commit("base", map[string]string{"keep": "keep\n"})
+			b.git("branch", "feature")
+			b.git("rm", "-q", "--", "old/__init__.py")
+			b.o.write(b.dir, "new/__init__.py", "")
+			b.git("add", "--", "new/__init__.py")
+			b.commit("ours", nil)
+			b.git("checkout", "-q", "feature")
+			b.commit("theirs", map[string]string{"old/__init__.py": ""})
+			b.git("checkout", "-q", "main")
+		}},
 		{name: "squash", target: "feature", args: []string{"--squash"}, opts: MergeOptions{Mode: MergeSquash}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "squash with a conflict", target: "feature", args: []string{"--squash"}, opts: MergeOptions{Mode: MergeSquash}, setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")})},
 		{name: "no commit", target: "feature", args: []string{"--no-commit"}, opts: MergeOptions{NoCommit: true}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},

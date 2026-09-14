@@ -362,10 +362,7 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 		opts.File.MarkerSize = virtualMarkerSize
 	}
 	var err error
-	if opts.OurRenames, err = merge.DetectRenames(m.ctx, m.store(), base, ours); err != nil {
-		return merge.TreeResult{}, err
-	}
-	if opts.TheirRenames, err = merge.DetectRenames(m.ctx, m.store(), base, theirs); err != nil {
+	if opts.OurRenames, opts.TheirRenames, err = merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs); err != nil {
 		return merge.TreeResult{}, err
 	}
 	return merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
