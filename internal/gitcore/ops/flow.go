@@ -351,6 +351,15 @@ func FinishFlow(ctx context.Context, r *repo.Repository, kind, name string, opts
 		state = newFlowState(cfg, branch, kind, name, opts)
 	}
 	f := &flowFinisher{ctx: ctx, r: r, cfg: cfg, net: opts.Network, when: opts.When, state: state, branch: branch.Prefix + name}
+	if resumed {
+		done, err := f.stopCompleted(f.state.step - 1)
+		if err != nil {
+			return FinishFlowResult{}, err
+		}
+		if !done {
+			f.state.step--
+		}
+	}
 	if f.push, err = refspec.ParseAll(f.pushTexts()); err != nil {
 		return FinishFlowResult{}, err
 	}
@@ -702,6 +711,45 @@ func resumeFlow(r *repo.Repository, kind, name string) (flowState, bool, error) 
 	if merge.InProgress() {
 		return state, false, ErrMergeInProgress
 	}
+	if squash, _ := readStateFile(r, squashMsgFile); squash != "" {
+		return state, false, ErrMergeInProgress
+	}
+	idx, err := readIndex(r)
+	if err != nil {
+		return state, false, err
+	}
+	if idx.HasConflicts() {
+		return state, false, ErrUnmergedPaths
+	}
 	state.step++
 	return state, true, nil
+}
+
+func (f *flowFinisher) stopCompleted(step FlowStep) (bool, error) {
+	var source, target string
+	switch {
+	case step == FlowStepMergeMaster:
+		source, target = refs.BranchName(f.branch).String(), refs.BranchName(f.cfg.Master).String()
+	case step == FlowStepMergeDevelop && f.state.integration != FlowSquash:
+		source, target = refs.BranchName(f.branch).String(), refs.BranchName(f.cfg.Develop).String()
+		if f.state.tag != "" {
+			source = refs.TagName(f.state.tag).String()
+		}
+	default:
+		return true, nil
+	}
+	rc, err := openRepoContext(f.r)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rc.close() }()
+	from, err := resolveCommittish(rc, source)
+	if err != nil {
+		return false, err
+	}
+	to, err := resolveCommittish(rc, target)
+	if err != nil {
+		return false, err
+	}
+	return revision.IsAncestor(revision.Context{Objects: rc.db}, from, to)
 }

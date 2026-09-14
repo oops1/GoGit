@@ -164,7 +164,7 @@ func (x *Index) WriteTree(objects Writer) (hash.ObjectID, error) {
 	if x.CacheTree == nil {
 		x.CacheTree = &CacheTree{EntryCount: -1}
 	}
-	id, used, err := x.updateTree(objects, x.CacheTree, 0, "")
+	id, used, _, err := x.updateTree(objects, x.CacheTree, 0, "")
 	if err != nil {
 		return hash.Zero, err
 	}
@@ -175,16 +175,17 @@ func (x *Index) WriteTree(objects Writer) (hash.ObjectID, error) {
 	return id, nil
 }
 
-func (x *Index) updateTree(objects Writer, node *CacheTree, start int, prefix string) (hash.ObjectID, int, error) {
+func (x *Index) updateTree(objects Writer, node *CacheTree, start int, prefix string) (hash.ObjectID, int, bool, error) {
 	if node.Valid() {
 		if start+node.EntryCount > len(x.entries) {
-			return hash.Zero, 0, fmt.Errorf("%w: the cache tree of %q claims %d entries", ErrMalformed, prefix, node.EntryCount)
+			return hash.Zero, 0, false, fmt.Errorf("%w: the cache tree of %q claims %d entries", ErrMalformed, prefix, node.EntryCount)
 		}
-		return node.ID, node.EntryCount, nil
+		return node.ID, node.EntryCount, false, nil
 	}
 	tree := &object.Tree{}
 	subtrees := make([]*CacheTree, 0, len(node.Subtrees))
 	used := 0
+	complete := true
 	for start+used < len(x.entries) {
 		entry := x.entries[start+used]
 		if !strings.HasPrefix(entry.Path, prefix) {
@@ -193,38 +194,51 @@ func (x *Index) updateTree(objects Writer, node *CacheTree, start int, prefix st
 		rest := entry.Path[len(prefix):]
 		name, _, nested := strings.Cut(rest, "/")
 		if !nested {
-			tree.Entries = append(tree.Entries, object.TreeEntry{Mode: entry.Mode, Name: rest, ID: entry.ID})
 			used++
+			if entry.IntentToAdd {
+				complete = false
+				continue
+			}
+			tree.Entries = append(tree.Entries, object.TreeEntry{Mode: entry.Mode, Name: rest, ID: entry.ID})
 			continue
 		}
 		sub := node.Find(name)
 		if sub == nil {
 			sub = &CacheTree{Path: name, EntryCount: -1}
 		}
-		id, count, err := x.updateTree(objects, sub, start+used, prefix+name+"/")
+		id, count, empty, err := x.updateTree(objects, sub, start+used, prefix+name+"/")
 		if err != nil {
-			return hash.Zero, 0, err
+			return hash.Zero, 0, false, err
 		}
 		if count == 0 {
-			return hash.Zero, 0, fmt.Errorf("%w: the cache tree of %q covers no entries", ErrMalformed, prefix+name)
+			return hash.Zero, 0, false, fmt.Errorf("%w: the cache tree of %q covers no entries", ErrMalformed, prefix+name)
 		}
 		used += count
 		subtrees = append(subtrees, sub)
+		if !sub.Valid() {
+			complete = false
+		}
+		if empty {
+			continue
+		}
 		tree.Entries = append(tree.Entries, object.TreeEntry{Mode: object.ModeTree, Name: name, ID: id})
 	}
 	tree.Sort()
 	for at := 1; at < len(tree.Entries); at++ {
 		if tree.Entries[at].Name == tree.Entries[at-1].Name {
-			return hash.Zero, 0, fmt.Errorf("%w: %q appears twice under %q", ErrMalformed, tree.Entries[at].Name, prefix)
+			return hash.Zero, 0, false, fmt.Errorf("%w: %q appears twice under %q", ErrMalformed, tree.Entries[at].Name, prefix)
 		}
 	}
 	id, err := objects.Put(object.TypeTree, tree.Encode())
 	if err != nil {
-		return hash.Zero, 0, fmt.Errorf("index: store the tree of %q: %w", prefix, err)
+		return hash.Zero, 0, false, fmt.Errorf("index: store the tree of %q: %w", prefix, err)
 	}
 	node.ID = id
 	node.EntryCount = used
+	if !complete {
+		node.EntryCount = -1
+	}
 	node.Subtrees = subtrees
 	node.sortSubtrees()
-	return id, used, nil
+	return id, used, len(tree.Entries) == 0, nil
 }

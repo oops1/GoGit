@@ -221,10 +221,19 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	_, err = file.Write(data)
+	err = errors.Join(err, file.Sync(), file.Close())
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		return errors.Join(err, os.Remove(tmp))
+	}
+	return nil
 }
 
 func (c *Config) FindRepository(id string) (Repository, bool) {

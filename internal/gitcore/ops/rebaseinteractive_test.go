@@ -3,6 +3,7 @@ package ops
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -231,8 +232,24 @@ func TestAConflictDuringAFoldStopsTheRebase(t *testing.T) {
 	if err != nil || result.Finished() || len(result.Conflicts) != 1 {
 		t.Fatalf("result = %+v, %v", result, err)
 	}
-	if state := tr.rebaseState(); state.Amending() || state.Stopped != second {
+	if state := tr.rebaseState(); !state.Amending() || state.Stopped != second {
 		t.Fatalf("state = %+v", state)
+	}
+
+	tr.writeFile("f", changeLine(f, 4, "RESOLVED"))
+	if err := Stage(t.Context(), tr.repo, []string{"f"}, StageOptions{}); err != nil {
+		t.Fatalf("Stage returned error %v", err)
+	}
+	done, err := ContinueRebase(t.Context(), tr.repo, RebaseOptions{When: mergeTime})
+	if err != nil || !done.Finished() {
+		t.Fatalf("ContinueRebase = %+v, %v", done, err)
+	}
+	history := tr.linearHistory(tr.branchTarget("topic"), 2)
+	if got := firstLine(history[1].Message); got != "main f" {
+		t.Fatalf("the folded commit sits on %q, want main f directly", got)
+	}
+	if !strings.Contains(history[0].Message, "topic a") || !strings.Contains(history[0].Message, "topic f") {
+		t.Fatalf("the folded message = %q", history[0].Message)
 	}
 }
 

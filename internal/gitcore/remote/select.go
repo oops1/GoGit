@@ -127,6 +127,9 @@ func pruneStale(store *refs.Store, specs []refspec.RefSpec, matched []matchedRef
 			if err != nil {
 				return nil, err
 			}
+			if ref.IsSymbolic() {
+				continue
+			}
 			if _, ok := spec.MatchDst(ref.Name.String()); !ok {
 				continue
 			}

@@ -70,7 +70,7 @@ func (d *DB) Put(kind object.Type, data []byte) (hash.ObjectID, error) {
 		return hash.Zero, fmt.Errorf("%w: %d", object.ErrUnknownType, uint8(kind))
 	}
 	id := hash.SumSHA1(kind.String(), data)
-	known, err := d.Has(id)
+	known, err := d.has(id)
 	if err != nil {
 		return hash.Zero, err
 	}

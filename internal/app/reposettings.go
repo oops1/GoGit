@@ -55,7 +55,7 @@ func (a *App) openRepoSettings(id string) {
 	view.SetRemotes(remoteNames(cfg))
 	view.SetInherited(a.inheritedSettings(cfg))
 	view.Apply(a.localSettings(node, cfg))
-	a.wireRepoSettingsView(view, node.ID, r.GitDir())
+	a.wireRepoSettingsView(view, node.ID, r.CommonDir())
 	view.FitHeight(a.root.Bounds().Dy())
 	a.showModal(view.Dialog(), view)
 }

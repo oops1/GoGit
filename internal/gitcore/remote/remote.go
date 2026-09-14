@@ -46,6 +46,33 @@ type Change struct {
 	Created bool
 	Deleted bool
 	Forced  bool
+	Source  refs.Name
+	Pushed  refs.Name
+}
+
+func (r Remote) fetchSpecs() []refspec.RefSpec {
+	if len(r.Fetch) == 0 {
+		return []refspec.RefSpec{refspec.DefaultFetch(r.Name)}
+	}
+	return r.Fetch
+}
+
+func (r Remote) TrackingRef(name refs.Name) (refs.Name, bool) {
+	for _, spec := range r.fetchSpecs() {
+		if tracking, ok := spec.MatchSrc(name.String()); ok {
+			return refs.Name(tracking), true
+		}
+	}
+	return "", false
+}
+
+func (r Remote) UpstreamOf(tracking refs.Name) (refs.Name, bool) {
+	for _, spec := range r.fetchSpecs() {
+		if source, ok := spec.MatchDst(tracking.String()); ok {
+			return refs.Name(source), true
+		}
+	}
+	return "", false
 }
 
 func Load(cfg *config.Config, name string) (Remote, error) {

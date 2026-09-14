@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
@@ -182,5 +183,15 @@ func RenameBranch(ctx context.Context, r *repo.Repository, from, to string, forc
 		}
 		return err
 	}
-	return nil
+	return moveBranchConfig(r, from, to)
+}
+
+func moveBranchConfig(r *repo.Repository, from, to string) error {
+	file, ok := r.Config().File(config.LevelLocal)
+	if !ok || !hasConfigSubsection(file, "branch", from) {
+		return nil
+	}
+	_ = file.RemoveSection("branch." + to)
+	_ = file.RenameSection("branch."+from, "branch."+to)
+	return file.Save(file.Path())
 }

@@ -457,7 +457,7 @@ func TestOracleRejectsTheSplitIndexGitWrites(t *testing.T) {
 	}
 }
 
-func TestOracleUntrackedCacheSurvivesOurRewrite(t *testing.T) {
+func TestOracleGitRebuildsTheUntrackedCacheWeDrop(t *testing.T) {
 	o := newOracle(t)
 	o.write("a.txt", "alpha\n")
 	o.write("sub/b.txt", "beta\n")
@@ -468,17 +468,13 @@ func TestOracleUntrackedCacheSurvivesOurRewrite(t *testing.T) {
 	if out, err := o.tryGit("update-index", "--untracked-cache"); err != nil {
 		t.Skipf("the untracked cache is not available here: %v: %s", err, out)
 	}
-	o.git("status", "--porcelain")
-	raw, err := os.ReadFile(o.indexPath())
-	if err != nil {
-		t.Fatalf("ReadFile returned error %v", err)
-	}
+	want := o.git("status", "--porcelain")
 	idx := o.readIndex()
 	if idx.Untracked == nil {
 		t.Skip("git did not store an untracked cache")
 	}
-	if got := encodeIndex(t, idx, idx.Version); !bytes.Equal(got, raw) {
-		t.Fatal("our rewrite of an index with an untracked cache differs from the file git wrote")
+	if got := encodeIndex(t, idx, idx.Version); bytes.Contains(got, []byte(extUntracked)) {
+		t.Fatal("our rewrite kept an untracked cache it does not keep current")
 	}
 	if err := os.Remove(o.indexPath()); err != nil {
 		t.Fatalf("Remove returned error %v", err)
@@ -486,8 +482,9 @@ func TestOracleUntrackedCacheSurvivesOurRewrite(t *testing.T) {
 	if err := idx.WriteFile(o.indexPath(), Version2); err != nil {
 		t.Fatalf("WriteFile returned error %v", err)
 	}
-	if out, err := o.tryGit("status", "--porcelain"); err != nil {
-		t.Fatalf("git status returned error %v: %s", err, out)
+	out, err := o.tryGit("status", "--porcelain")
+	if err != nil || out != want {
+		t.Fatalf("git status after our rewrite = %q, %v; want %q", out, err, want)
 	}
 }
 

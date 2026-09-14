@@ -126,6 +126,9 @@ func TestAPreimageGoesIntoTheFirstVariantWithoutAResolution(t *testing.T) {
 	if got := cache.VariantForAPreimage(testID); got != 1 {
 		t.Fatalf("a resolved variant was reused: %d", got)
 	}
+	if got := cache.VariantForAPreimage(testID, 1); got != 2 {
+		t.Fatalf("a variant busy with another path of the same merge was reused: %d", got)
+	}
 }
 
 func TestRemoveVariantTakesEveryImageWithIt(t *testing.T) {

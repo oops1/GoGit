@@ -117,7 +117,15 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 
 	result := FetchResult{Refs: adv.Refs, Head: adv.Head}
 	if len(matched) == 0 {
-		return result, nil
+		if !opts.Prune {
+			return result, nil
+		}
+		stale, err := pruneStale(store, specs, nil)
+		if err != nil {
+			return FetchResult{}, err
+		}
+		_, result.Changes, err = commitRefUpdates(store, db, shallow, nil, stale, opts)
+		return result, err
 	}
 
 	neg, err := newNegotiator(ctx, store, db, shallow)

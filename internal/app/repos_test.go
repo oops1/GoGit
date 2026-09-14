@@ -309,8 +309,11 @@ func TestRestoreActiveRepositoryFromConfigOnStartup(t *testing.T) {
 	cfg.ActiveRepository = "r1"
 	a := newTestAppWithConfig(t, cfg)
 
-	if a.State().ActiveRepository != "r1" {
-		t.Fatalf("state = %+v", a.State())
+	if a.State().ActiveRepository != "" || a.State().Enabled(CmdRefresh) {
+		t.Fatalf("a repository that could not be opened enabled its commands: %+v", a.State())
+	}
+	if a.cfg.ActiveRepository != "r1" {
+		t.Fatalf("the remembered repository was forgotten: %q", a.cfg.ActiveRepository)
 	}
 	if got := a.Widget("statusText").(*widget.Label).Text(); !strings.HasPrefix(got, "Main"+statusPathSeparator) {
 		t.Fatalf("status text = %q, want the repository name and its path", got)

@@ -196,7 +196,8 @@ func matchesSearchField(query string, f searchField) bool {
 func (v *View) applySearch(text string) {
 	query := strings.ToLower(strings.TrimSpace(text))
 	searching := query != ""
-	if searching && !v.searchActive {
+	wasSearching := v.searchActive
+	if searching && !wasSearching {
 		v.searchAdvancedExpandedBefore = v.gitAdvanced.IsExpanded
 	}
 	v.searchActive = searching
@@ -249,7 +250,7 @@ func (v *View) applySearch(text string) {
 			hide(v.sectionGit, []int{gitAdvancedRow})
 		}
 		v.gitAdvanced.SetExpanded(advancedMatches > 0)
-	} else {
+	} else if wasSearching {
 		v.gitAdvanced.SetExpanded(v.searchAdvancedExpandedBefore)
 	}
 

@@ -229,11 +229,6 @@ func (x *Index) extensionPayload(ext extension, offsets []int, entriesEnd int, d
 			return nil, false
 		}
 		return encodeResolveUndo(x.ResolveUndo), true
-	case extUntracked:
-		if x.Untracked == nil {
-			return nil, false
-		}
-		return x.Untracked.Raw, true
 	case extOffsetTable:
 		if x.OffsetTable == nil || !x.OffsetTable.covers(len(offsets)) {
 			return nil, false
@@ -245,6 +240,6 @@ func (x *Index) extensionPayload(ext extension, offsets []int, entriesEnd int, d
 		}
 		return digest.Sum(binary.BigEndian.AppendUint32(nil, uint32(entriesEnd))), true
 	default:
-		return ext.data, true
+		return nil, false
 	}
 }

@@ -45,10 +45,7 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 	}
 	defer func() { _ = db.Close() }()
 
-	sig, err := identityOf(r, time.Now())
-	if err != nil {
-		return err
-	}
+	sig := reflogIdentity(r, time.Now())
 	store, err := refsOpen(refs.Options{
 		GitDir:    r.GitDir(),
 		CommonDir: r.CommonDir(),
@@ -375,30 +372,10 @@ func (sw *switcher) checkout(rel string, tgt treeEntry) error {
 	if kind != object.TypeBlob {
 		return nil
 	}
-	name := filepath.FromSlash(rel)
-	if dir := parentOf(rel); dir != "" {
-		if err := fsRootMkdirAll(sw.wt.root, filepath.FromSlash(dir), 0o777); err != nil {
-			return err
-		}
+	if !tgt.mode.IsSymlink() {
+		data = sw.wt.checkoutConvert(rel, data)
 	}
-	if tgt.mode.IsSymlink() {
-		_ = fsRootRemove(sw.wt.root, name)
-		return fsRootSymlink(sw.wt.root, string(data), name)
-	}
-	data = sw.wt.checkoutConvert(rel, data)
-	perm := fs.FileMode(0o666)
-	if tgt.mode == object.ModeExecutable {
-		perm = 0o777
-	}
-	file, err := fsRootOpenFile(sw.wt.root, name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		return err
-	}
-	return file.Close()
+	return writeWorktreeBlob(sw.wt, rel, tgt.mode, data)
 }
 
 func (sw *switcher) pruneEmptyDirs(dir string) {

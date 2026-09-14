@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
@@ -86,8 +87,9 @@ func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (Tree
 }
 
 func moveFilesOutOfTheWay(result *TreeResult, ours Snapshot, labels Labels) {
+	directories := directoriesOf(result.Tree)
 	for _, path := range slices.Sorted(maps.Keys(result.Tree)) {
-		if !isDirectoryIn(result.Tree, path) {
+		if !directories[path] {
 			continue
 		}
 		entry := result.Tree[path]
@@ -99,21 +101,36 @@ func moveFilesOutOfTheWay(result *TreeResult, ours Snapshot, labels Labels) {
 		} else {
 			conflict.Theirs = &entry
 		}
-		conflict.Path = path + "~" + label
+		conflict.Path = asidePath(result.Tree, path, label)
 		delete(result.Tree, path)
 		result.Tree[conflict.Path] = entry
 		result.Conflicts = append(result.Conflicts, conflict)
 	}
 }
 
-func isDirectoryIn(tree Snapshot, path string) bool {
-	prefix := path + "/"
-	for other := range tree {
-		if strings.HasPrefix(other, prefix) {
-			return true
+func asidePath(tree Snapshot, path, label string) string {
+	base := path + "~" + strings.ReplaceAll(label, "/", "_")
+	candidate := base
+	for suffix := 0; ; suffix++ {
+		if _, taken := tree[candidate]; !taken {
+			return candidate
+		}
+		candidate = base + "_" + strconv.Itoa(suffix)
+	}
+}
+
+func directoriesOf(tree Snapshot) map[string]bool {
+	directories := map[string]bool{}
+	for path := range tree {
+		for at := strings.LastIndexByte(path, '/'); at > 0; at = strings.LastIndexByte(path[:at], '/') {
+			parent := path[:at]
+			if directories[parent] {
+				break
+			}
+			directories[parent] = true
 		}
 	}
-	return false
+	return directories
 }
 
 func unionPaths(snapshots ...Snapshot) []string {

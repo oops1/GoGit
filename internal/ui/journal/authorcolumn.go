@@ -96,8 +96,11 @@ func (v *View) resizeAuthorColumnLocked() {
 	if authorColumnIndex >= len(cols) {
 		return
 	}
-	width := authorColumnWidth(v.grid.Grid.RowHeight, v.mostCreditedVisible())
-	cols[authorColumnIndex].SetWidth(datagrid.PixelWidth(float64(width)))
+	width := datagrid.PixelWidth(float64(authorColumnWidth(v.grid.Grid.RowHeight, v.mostCreditedVisible())))
+	if cols[authorColumnIndex].Width() == width {
+		return
+	}
+	cols[authorColumnIndex].SetWidth(width)
 	v.grid.Grid.SetColumns(cols)
 }
 

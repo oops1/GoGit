@@ -231,6 +231,14 @@ func (c *Config) Extensions() (Extensions, error) {
 			} else {
 				ext.PreciousObjects = on
 			}
+		case "noop", "noop-v1", "relativeworktrees":
+			if _, err := entryBool(e); err != nil {
+				return Extensions{}, fmt.Errorf("extensions.%s: %w", e.Key, err)
+			}
+		case "refstorage":
+			if !strings.EqualFold(e.Value, "files") {
+				return Extensions{}, fmt.Errorf("%w: extensions.refstorage=%s", ErrUnknownExtension, e.Value)
+			}
 		default:
 			return Extensions{}, fmt.Errorf("%w: extensions.%s", ErrUnknownExtension, e.Key)
 		}

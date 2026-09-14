@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/gitcore/remote"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
@@ -97,10 +97,9 @@ func resolveStart(rc *repoContext, start string) (hash.ObjectID, refs.Name, erro
 }
 
 func upstreamParts(r *repo.Repository, upstream refs.Name) (string, string, bool) {
-	short := strings.TrimPrefix(string(upstream), refs.RemotesPrefix)
-	for _, known := range r.Config().Remotes() {
-		if head, found := strings.CutPrefix(short, known.Name+"/"); found {
-			return known.Name, refs.BranchName(head).String(), true
+	for _, known := range remote.List(r.Config()) {
+		if source, found := known.UpstreamOf(upstream); found && source.IsBranch() {
+			return known.Name, source.String(), true
 		}
 	}
 	return "", "", false

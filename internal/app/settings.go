@@ -19,6 +19,7 @@ func (a *App) applySettings(m settings.Model, ok bool) {
 	if !ok {
 		return
 	}
+	a.stopAutoFetch()
 	m.ApplyTo(a.cfg)
 	a.SetLanguage(a.cfg.Language)
 	a.SetTheme(a.cfg.Theme)

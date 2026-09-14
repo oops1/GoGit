@@ -43,7 +43,8 @@ func TestModeChangedIsAlwaysFalseWhenFileModeIsNotHonored(t *testing.T) {
 
 func TestConvertForCheckin(t *testing.T) {
 	tr := newTestRepo(t)
-	tr.writeFile(".gitattributes", "auto.txt text=auto\nbin.bin binary\n")
+	tr.writeFile(".gitattributes", "auto.txt text=auto\nbin.bin binary\nkept.txt text=auto\n")
+	tr.stage("kept.txt", "committed\r\nwith crlf\r\n")
 	w := tr.open()
 
 	tests := []struct {
@@ -57,6 +58,9 @@ func TestConvertForCheckin(t *testing.T) {
 		{"text without crlf is left untouched", "auto.txt", "already lf\n", "already lf\n"},
 		{"text with crlf is normalized to lf", "auto.txt", "line1\r\nline2\r\n", "line1\nline2\n"},
 		{"unspecified attribute leaves crlf untouched", "plain.txt", "line1\r\nline2\r\n", "line1\r\nline2\r\n"},
+		{"crlf already in the index is kept", "kept.txt", "committed\r\nwith crlf\r\n", "committed\r\nwith crlf\r\n"},
+		{"a lone carriage return counts as binary", "auto.txt", "old\rmac\r\nmixed\r\n", "old\rmac\r\nmixed\r\n"},
+		{"a carriage return at the very end counts as binary", "auto.txt", "line\r\nend\r", "line\r\nend\r"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

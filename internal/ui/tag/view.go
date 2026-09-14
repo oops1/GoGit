@@ -8,6 +8,7 @@ import (
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
 	"github.com/oops1/gogit/internal/ui/style"
@@ -59,10 +60,7 @@ func Validate(model Model, known Known) Hint {
 }
 
 func validName(name string) bool {
-	if strings.Contains(name, "..") || strings.HasPrefix(name, "-") || strings.HasSuffix(name, ".") || strings.HasSuffix(name, ".lock") {
-		return false
-	}
-	return !strings.ContainsAny(name, " ~^:?*[\\\t")
+	return !strings.HasPrefix(name, "-") && refs.CheckFormat(refs.TagsPrefix+name, 0) == nil
 }
 
 type View struct {

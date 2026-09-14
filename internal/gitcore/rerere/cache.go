@@ -154,9 +154,12 @@ func (c *Cache) RemoveVariant(id string, index int) error {
 	return errors.Join(errs...)
 }
 
-func (c *Cache) VariantForAPreimage(id string) int {
+func (c *Cache) VariantForAPreimage(id string, busy ...int) int {
 	variants := c.Variants(id)
 	for index := 0; ; index++ {
+		if slices.Contains(busy, index) {
+			continue
+		}
 		taken := slices.IndexFunc(variants, func(v Variant) bool { return v.Index == index })
 		if taken < 0 || !variants[taken].HasPostimage {
 			return index

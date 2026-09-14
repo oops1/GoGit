@@ -190,11 +190,11 @@ func buildLayout(gitDir, commonDir, hintWorkTree string, opts DiscoverOptions) (
 		return Layout{}, err
 	}
 	bare, bareSet := localBool(local, "core.bare")
-	if bareSet && bare {
+	if bareSet && bare && !layout.IsWorktree {
 		layout.Bare = true
 		return layout, nil
 	}
-	if worktree := localPath(local, "core.worktree"); worktree != "" {
+	if worktree := localPath(local, "core.worktree"); worktree != "" && !layout.IsWorktree {
 		layout.WorkTree = resolveFrom(gitDir, worktree)
 		return layout, nil
 	}

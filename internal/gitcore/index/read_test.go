@@ -489,17 +489,18 @@ func TestReadRejectsExtensionLongerThanTheFile(t *testing.T) {
 	}
 }
 
-func TestReadKeepsUnknownOptionalExtension(t *testing.T) {
-	data := withExtension(t, readFixture(t, basicV2), "ZZZZ", []byte("payload"))
+func TestReadAcceptsAnUnknownOptionalExtensionButWriteDropsIt(t *testing.T) {
+	plain := readFixture(t, basicV2)
+	data := withExtension(t, plain, "ZZZZ", []byte("payload"))
 	idx, err := Read(bytes.NewReader(data))
 	if err != nil {
 		t.Fatalf("Read returned error %v", err)
 	}
 	if at := idx.extensionAt("ZZZZ"); at < 0 {
-		t.Fatal("the unknown extension was dropped")
+		t.Fatal("the unknown extension was not read")
 	}
-	if got := encodeIndex(t, idx, 0); !bytes.Equal(got, data) {
-		t.Fatal("an unknown optional extension is not written back unchanged")
+	if got := encodeIndex(t, idx, 0); !bytes.Equal(got, plain) {
+		t.Fatal("an unknown optional extension was written back although its content may no longer match the entries")
 	}
 }
 

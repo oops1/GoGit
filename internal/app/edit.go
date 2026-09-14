@@ -86,7 +86,7 @@ func (a *App) reloadWorktree() {
 	if o == nil || o.currentWorktree() == nil {
 		return
 	}
-	fresh, err := openWorktree(o.repo, worktree.Options{DB: o.db, Refs: o.store, MaxFiles: worktreeMaxFiles})
+	fresh, err := openWorktree(o.repo, worktree.Options{DB: o.db, Refs: o.store, MaxFiles: worktreeMaxFiles, IncludeUnmodified: true})
 	if err != nil {
 		a.log.Warn("reload working tree failed", "error", err)
 		return

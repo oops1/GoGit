@@ -211,7 +211,7 @@ func (v *FinishView) refresh() {
 		v.current = Hint{Key: hintWillResume, Args: []any{v.known.Branch}, OK: true}
 	case v.tagged() && !model.SkipTag && model.TagName == "":
 		v.current = Hint{Key: hintTagRequired}
-	case v.tagged() && !model.SkipTag && !validBranchName(model.TagName):
+	case v.tagged() && !model.SkipTag && !validTagName(model.TagName):
 		v.current = Hint{Key: hintTagInvalid, Args: []any{model.TagName}}
 	default:
 		v.current = Hint{OK: true}

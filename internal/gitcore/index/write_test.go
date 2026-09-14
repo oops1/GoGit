@@ -17,6 +17,9 @@ import (
 
 func TestWriteReproducesEveryFixtureByteForByte(t *testing.T) {
 	for _, name := range fixtureNames() {
+		if name == untrackedV2 {
+			continue
+		}
 		t.Run(name, func(t *testing.T) {
 			raw := readFixture(t, name)
 			idx := loadFixture(t, name)
@@ -24,6 +27,17 @@ func TestWriteReproducesEveryFixtureByteForByte(t *testing.T) {
 				t.Fatalf("the rewritten index holds %d bytes, the fixture holds %d", len(got), len(raw))
 			}
 		})
+	}
+}
+
+func TestWriteDropsTheUntrackedCacheItCannotKeepCurrent(t *testing.T) {
+	idx := loadFixture(t, untrackedV2)
+	got := encodeIndex(t, idx, idx.Version)
+	if bytes.Contains(got, []byte(extUntracked)) {
+		t.Fatal("the untracked cache was written back although the entries may have changed")
+	}
+	if !slices.Equal(paths(reread(t, got)), paths(idx)) {
+		t.Fatal("dropping the untracked cache lost entries")
 	}
 }
 

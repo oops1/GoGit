@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -78,6 +79,9 @@ func ListWorktrees(r *repo.Repository) ([]Worktree, error) {
 
 func mainWorktree(r *repo.Repository) (Worktree, error) {
 	wt := Worktree{Path: r.WorkTree(), Main: true, Bare: r.IsBare()}
+	if r.IsWorktree() {
+		wt.Path, wt.Bare = mainWorktreePath(r.CommonDir())
+	}
 	if wt.Bare {
 		wt.Path = r.CommonDir()
 	}
@@ -88,6 +92,13 @@ func mainWorktree(r *repo.Repository) (Worktree, error) {
 	wt.Head, wt.Branch = head, branch
 	wt.Detached = branch == ""
 	return wt, nil
+}
+
+func mainWorktreePath(commonDir string) (string, bool) {
+	if filepath.Base(commonDir) == ".git" {
+		return filepath.Dir(commonDir), false
+	}
+	return commonDir, true
 }
 
 func linkedWorktrees(r *repo.Repository) ([]Worktree, error) {
@@ -193,11 +204,17 @@ func cleanWorktreePath(path string) string {
 	return filepath.Clean(abs)
 }
 
+var caseInsensitivePaths = runtime.GOOS == "windows"
+
 func samePath(a, b string) bool {
-	if strings.EqualFold(filepath.Clean(a), filepath.Clean(b)) {
-		return true
+	return equalPath(filepath.Clean(a), filepath.Clean(b)) || equalPath(resolvedPath(a), resolvedPath(b))
+}
+
+func equalPath(a, b string) bool {
+	if caseInsensitivePaths {
+		return strings.EqualFold(a, b)
 	}
-	return strings.EqualFold(resolvedPath(a), resolvedPath(b))
+	return a == b
 }
 
 func resolvedPath(path string) string {

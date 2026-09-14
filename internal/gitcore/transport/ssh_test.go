@@ -80,6 +80,7 @@ func sshKnownHostsLine(addr string, key ssh.PublicKey) string {
 
 type sshServerConfig struct {
 	hostKey       ssh.Signer
+	extraHostKeys []ssh.Signer
 	allowedKeys   []ssh.PublicKey
 	handle        func(t *testing.T, ch ssh.Channel, cmd string)
 	rejectSession bool
@@ -104,6 +105,9 @@ func startFakeSSHServer(t *testing.T, cfg sshServerConfig) string {
 		},
 	}
 	config.AddHostKey(cfg.hostKey)
+	for _, extra := range cfg.extraHostKeys {
+		config.AddHostKey(extra)
+	}
 
 	done := make(chan struct{})
 	go func() {

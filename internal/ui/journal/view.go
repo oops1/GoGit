@@ -121,7 +121,11 @@ func (v *View) resizeGraphColumnLocked() {
 	if graphColumnIndex >= len(cols) {
 		return
 	}
-	cols[graphColumnIndex].SetWidth(datagrid.PixelWidth(float64(graphColumnWidth(v.visibleLanes()))))
+	width := datagrid.PixelWidth(float64(graphColumnWidth(v.visibleLanes())))
+	if cols[graphColumnIndex].Width() == width {
+		return
+	}
+	cols[graphColumnIndex].SetWidth(width)
 	v.grid.Grid.SetColumns(cols)
 }
 
@@ -147,10 +151,12 @@ func (v *View) ClearSelection() {
 }
 
 func (v *View) Append(rows []Row) {
+	items := v.items.Items()
 	for _, row := range rows {
 		row.Graph = v.lanes.Add(graph.Commit{ID: row.ID, Parents: row.Parents})
-		v.items.Add(row)
+		items = append(items, row)
 	}
+	v.items.SetItems(items)
 	v.resizeToVisibleRows()
 }
 

@@ -77,7 +77,13 @@ func readReflog(source Refs, name refs.Name) ([]refs.ReflogEntry, error) {
 
 func (p *parser) reflogRev(name string, num int) (Rev, error) {
 	short := name
-	if short == "" || short == "@" {
+	switch name {
+	case "":
+		short = string(refs.HEAD)
+		if branch, err := p.ctx.Refs.ResolveName(refs.HEAD); err == nil {
+			short = string(branch)
+		}
+	case "@":
 		short = string(refs.HEAD)
 	}
 	full, entries, err := p.reflogFor(short)
@@ -97,13 +103,11 @@ func (p *parser) reflogRev(name string, num int) (Rev, error) {
 }
 
 func reflogValue(name refs.Name, entries []refs.ReflogEntry, num int) (hash.ObjectID, error) {
-	if num == 0 {
-		return entries[len(entries)-1].New, nil
-	}
-	if num <= len(entries) {
-		if old := entries[len(entries)-num].Old; !old.IsZero() {
-			return old, nil
-		}
+	switch {
+	case num < len(entries):
+		return entries[len(entries)-1-num].New, nil
+	case num == len(entries) && !entries[0].Old.IsZero():
+		return entries[0].Old, nil
 	}
 	return hash.Zero, fmt.Errorf("%w: reflog of %s has only %d entries", ErrNotFound, name, len(entries))
 }

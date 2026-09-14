@@ -1207,14 +1207,6 @@ func putCommit(t testing.TB, r *testRepo, treeID hash.ObjectID, parents ...hash.
 	return id
 }
 
-func TestSwitchMissingIdentityReturnsError(t *testing.T) {
-	r := newTestRepoNoIdentity(t)
-	err := Switch(t.Context(), r.repo, "main", SwitchOptions{})
-	if !errors.Is(err, ErrMissingIdentity) {
-		t.Fatalf("err = %v, want ErrMissingIdentity", err)
-	}
-}
-
 func TestSwitchFailsWhenRefsOpenFails(t *testing.T) {
 	r := newTestRepo(t)
 	swapRefsOpen(t, func(refs.Options) (*refs.Store, error) { return nil, errInjected })

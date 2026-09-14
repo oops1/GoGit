@@ -179,9 +179,8 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 	}
 	v.attachContent()
 	v.populateLanguages()
-	norm := initial.Normalized()
-	v.apply(norm)
-	v.initial = norm
+	v.apply(initial.Normalized())
+	v.initial = v.request()
 	v.wire()
 	v.buildSecretsColumns()
 	v.wireSecrets()

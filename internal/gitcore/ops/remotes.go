@@ -3,9 +3,11 @@ package ops
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/config"
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/refspec"
 	"github.com/oops1/gogit/internal/gitcore/remote"
@@ -119,16 +121,15 @@ func setBranchUpstream(r *repo.Repository, branch, remoteName, mergeRef string) 
 }
 
 func setPushedUpstreams(r *repo.Repository, cfg *config.Config, remoteName string, changes []remote.Change) error {
-	prefix := remoteName + "/"
 	for _, change := range changes {
-		if change.Deleted || !change.Created {
+		if !change.Created || !change.Source.IsBranch() || !change.Pushed.IsBranch() {
 			continue
 		}
-		branch := strings.TrimPrefix(change.Name.Short(), prefix)
+		branch := change.Source.Short()
 		if existing, has := cfg.Branch(branch); has && existing.Remote != "" {
 			continue
 		}
-		if err := setBranchUpstream(r, branch, remoteName, refs.BranchName(branch).String()); err != nil {
+		if err := setBranchUpstream(r, branch, remoteName, change.Pushed.String()); err != nil {
 			return err
 		}
 	}
@@ -163,10 +164,61 @@ func RemoveRemote(r *repo.Repository, name string) error {
 	if !hasConfigSubsection(file, "remote", name) {
 		return fmt.Errorf("%w: %s", remote.ErrNoRemote, name)
 	}
-	if err := file.RemoveSection("remote." + name); err != nil {
+	fetch := file.GetAll("remote." + name + ".fetch")
+	for _, key := range keysNamingRemote(file, name) {
+		_ = file.UnsetAll(key)
+	}
+	_ = file.RemoveSection("remote." + name)
+	err = file.Save(file.Path())
+	if err == nil {
+		err = removeTrackingRefs(r, fetch)
+	}
+	return err
+}
+
+func keysNamingRemote(file *config.File, name string) []string {
+	var keys []string
+	for v := range file.Variables() {
+		if v.Value != name {
+			continue
+		}
+		switch {
+		case v.Section == "branch" && v.HasSubsection && strings.EqualFold(v.Key, "remote"):
+			keys = append(keys, "branch."+v.Subsection+".remote", "branch."+v.Subsection+".merge")
+		case v.Section == "branch" && v.HasSubsection && strings.EqualFold(v.Key, "pushRemote"):
+			keys = append(keys, "branch."+v.Subsection+".pushRemote")
+		case v.Section == "remote" && !v.HasSubsection && strings.EqualFold(v.Key, "pushDefault"):
+			keys = append(keys, "remote.pushDefault")
+		}
+	}
+	return keys
+}
+
+func removeTrackingRefs(r *repo.Repository, fetch []string) error {
+	specs, err := refspec.ParseAll(fetch)
+	if err != nil {
+		return nil
+	}
+	rc, err := openRepoContext(r)
+	if err != nil {
 		return err
 	}
-	return file.Save(file.Path())
+	defer func() { _ = rc.close() }()
+	tx := rc.refs.Begin()
+	for ref, err := range rc.refs.All() {
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		tracked := slices.ContainsFunc(specs, func(spec refspec.RefSpec) bool {
+			_, ok := spec.MatchDst(ref.Name.String())
+			return ok
+		})
+		if tracked {
+			_ = tx.Delete(ref.Name, hash.Zero)
+		}
+	}
+	return tx.Commit()
 }
 
 func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
