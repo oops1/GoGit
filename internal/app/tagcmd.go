@@ -36,11 +36,11 @@ func (a *App) openTag(id hash.ObjectID) {
 	}
 	view.SetKnown(tag.Known{Commit: shortHash(id), Taken: a.tagNames()})
 	view.OnOK = func(model tag.Model) {
-		a.eng.CloseModal(view.Dialog())
+		a.eng.CloseModal(view.Modal())
 		a.createTag(id, model)
 	}
-	view.OnCancel = func() { a.eng.CloseModal(view.Dialog()) }
-	a.showModal(view.Dialog(), view)
+	view.OnCancel = func() { a.eng.CloseModal(view.Modal()) }
+	a.showModal(view.Modal(), view)
 }
 
 func (a *App) tagNames() []string {
