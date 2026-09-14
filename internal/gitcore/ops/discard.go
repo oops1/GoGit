@@ -2,8 +2,6 @@ package ops
 
 import (
 	"context"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"slices"
 
@@ -91,30 +89,10 @@ func (d *discarder) restoreEntry(entry *index.Entry) error {
 	if kind != object.TypeBlob {
 		return nil
 	}
-	name := filepath.FromSlash(entry.Path)
-	if entry.Mode.IsSymlink() {
-		_ = fsRootRemove(d.wt.root, name)
-		return fsRootSymlink(d.wt.root, string(data), name)
+	if !entry.Mode.IsSymlink() {
+		data = d.wt.checkoutConvert(entry.Path, data)
 	}
-	data = d.wt.checkoutConvert(entry.Path, data)
-	if dir := parentOf(entry.Path); dir != "" {
-		if err := fsRootMkdirAll(d.wt.root, filepath.FromSlash(dir), 0o777); err != nil {
-			return err
-		}
-	}
-	perm := fs.FileMode(0o666)
-	if entry.Mode == object.ModeExecutable {
-		perm = 0o777
-	}
-	file, err := fsRootOpenFile(d.wt.root, name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	if _, err := file.Write(data); err != nil {
-		_ = file.Close()
-		return err
-	}
-	return file.Close()
+	return writeWorktreeBlob(d.wt, entry.Path, entry.Mode, data)
 }
 
 func parentOf(rel string) string {
@@ -136,7 +114,7 @@ func (d *discarder) removeUntracked(rel string) error {
 		return err
 	}
 	if !info.IsDir() {
-		if _, tracked := d.idx.Get(rel, index.StageMerged); tracked {
+		if _, tracked := d.idx.Get(rel, index.StageMerged); tracked || len(d.idx.Conflicts(rel)) > 0 {
 			return nil
 		}
 		if d.wt.isIgnored(rel, false) {
@@ -150,6 +128,9 @@ func (d *discarder) removeUntracked(rel string) error {
 	entries, err := readDirRoot(d.wt.root, rel)
 	if err != nil {
 		return err
+	}
+	if holdsRepository(entries) {
+		return nil
 	}
 	for _, entry := range entries {
 		if err := d.removeUntracked(joinRel(rel, entry.Name())); err != nil {

@@ -100,6 +100,9 @@ func (s *stager) stageDir(rel string) error {
 	if err != nil {
 		return err
 	}
+	if holdsRepository(entries) {
+		return nil
+	}
 	s.idx.Remove(rel)
 	present := map[string]bool{}
 	for _, entry := range entries {
