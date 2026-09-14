@@ -141,9 +141,12 @@ func releasePayload(buffer *payload) {
 }
 
 func EncodeDelta(base, target []byte) []byte {
+	return encodeDelta(buildDeltaIndex(base), base, target)
+}
+
+func encodeDelta(index map[uint32][]int, base, target []byte) []byte {
 	out := appendDeltaSize(nil, int64(len(base)))
 	out = appendDeltaSize(out, int64(len(target)))
-	index := buildDeltaIndex(base)
 	var pending []byte
 	position := 0
 	for position < len(target) {

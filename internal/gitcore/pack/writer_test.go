@@ -505,18 +505,18 @@ func TestChooseEncodingIgnoresDifferentTypeCandidates(t *testing.T) {
 
 func TestSortForDeltaGroupsByTypeThenDecreasingSize(t *testing.T) {
 	objects := []writeObject{
-		{kind: object.TypeBlob, data: make([]byte, 10)},
-		{kind: object.TypeTree, data: make([]byte, 5)},
-		{kind: object.TypeBlob, data: make([]byte, 30)},
-		{kind: object.TypeTree, data: make([]byte, 40)},
+		{kind: object.TypeBlob, size: 10},
+		{kind: object.TypeTree, size: 5},
+		{kind: object.TypeBlob, size: 30},
+		{kind: object.TypeTree, size: 40},
 	}
 	order := sortForDelta(objects)
 	for i := 1; i < len(order); i++ {
 		if order[i-1].kind > order[i].kind {
 			t.Fatalf("order[%d].kind = %s came after order[%d].kind = %s", i-1, order[i-1].kind, i, order[i].kind)
 		}
-		if order[i-1].kind == order[i].kind && len(order[i-1].data) < len(order[i].data) {
-			t.Fatalf("within kind %s, size %d came before %d", order[i].kind, len(order[i-1].data), len(order[i].data))
+		if order[i-1].kind == order[i].kind && order[i-1].size < order[i].size {
+			t.Fatalf("within kind %s, size %d came before %d", order[i].kind, order[i-1].size, order[i].size)
 		}
 	}
 }

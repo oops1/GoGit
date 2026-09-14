@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"cmp"
 	"compress/zlib"
 	"context"
 	"crypto/sha1"
@@ -20,6 +21,10 @@ type ObjectSource interface {
 	Get(id hash.ObjectID) (object.Type, []byte, error)
 }
 
+type objectInfoSource interface {
+	Info(id hash.ObjectID) (object.Type, int64, error)
+}
+
 type WriteOptions struct {
 	Window   int
 	Depth    int
@@ -35,9 +40,11 @@ type WriteResult struct {
 }
 
 type writeObject struct {
-	id   hash.ObjectID
-	kind object.Type
-	data []byte
+	id    hash.ObjectID
+	kind  object.Type
+	size  int64
+	data  []byte
+	index map[uint32][]int
 }
 
 type writeChoice struct {
@@ -54,13 +61,14 @@ type packedObject struct {
 }
 
 type thinBase struct {
-	id   hash.ObjectID
-	kind object.Type
-	data []byte
+	id    hash.ObjectID
+	kind  object.Type
+	data  []byte
+	index map[uint32][]int
 }
 
 func WritePack(ctx context.Context, dst io.Writer, src ObjectSource, ids []hash.ObjectID, opts WriteOptions) (WriteResult, error) {
-	objects, err := fetchObjects(src, ids)
+	objects, err := describeObjects(src, ids)
 	if err != nil {
 		return WriteResult{}, err
 	}
@@ -80,6 +88,11 @@ func WritePack(ctx context.Context, dst io.Writer, src ObjectSource, ids []hash.
 		if err := ctx.Err(); err != nil {
 			return WriteResult{}, err
 		}
+		if obj.data == nil {
+			if _, obj.data, err = src.Get(obj.id); err != nil {
+				return WriteResult{}, fmt.Errorf("pack: get %s: %w", obj.id, err)
+			}
+		}
 		offset := writer.position
 		choice := chooseEncoding(obj, offset, written, thins, opts)
 		opts.Progress.Count(progress.PhaseCompressing, int64(i)+1, total)
@@ -89,6 +102,9 @@ func WritePack(ctx context.Context, dst io.Writer, src ObjectSource, ids []hash.
 		}
 		result.Entries = append(result.Entries, entry)
 		written = append(written, packedObject{writeObject: obj, offset: entry.Offset, depth: choice.depth})
+		if old := len(written) - 1 - max(opts.Window, 0); old >= 0 {
+			written[old].data, written[old].index = nil, nil
+		}
 		opts.Progress.Count(progress.PhaseWriting, int64(i)+1, total)
 	}
 	checksum, err := writer.finish()
@@ -100,14 +116,22 @@ func WritePack(ctx context.Context, dst io.Writer, src ObjectSource, ids []hash.
 	return result, nil
 }
 
-func fetchObjects(src ObjectSource, ids []hash.ObjectID) ([]writeObject, error) {
+func describeObjects(src ObjectSource, ids []hash.ObjectID) ([]writeObject, error) {
+	info, lazy := src.(objectInfoSource)
 	objects := make([]writeObject, 0, len(ids))
 	for _, id := range ids {
-		kind, data, err := src.Get(id)
+		obj := writeObject{id: id}
+		var err error
+		if lazy {
+			obj.kind, obj.size, err = info.Info(id)
+		} else {
+			obj.kind, obj.data, err = src.Get(id)
+			obj.size = int64(len(obj.data))
+		}
 		if err != nil {
 			return nil, fmt.Errorf("pack: get %s: %w", id, err)
 		}
-		objects = append(objects, writeObject{id: id, kind: kind, data: data})
+		objects = append(objects, obj)
 	}
 	return objects, nil
 }
@@ -138,7 +162,7 @@ func sortForDelta(objects []writeObject) []writeObject {
 		if a.kind != b.kind {
 			return int(a.kind) - int(b.kind)
 		}
-		return len(b.data) - len(a.data)
+		return cmp.Compare(b.size, a.size)
 	})
 	return order
 }
@@ -162,15 +186,18 @@ func searchOffsetDelta(obj writeObject, offset int64, written []packedObject, op
 	var best *writeChoice
 	count := 0
 	for i := len(written) - 1; i >= 0 && count < opts.Window; i-- {
-		candidate := written[i]
+		candidate := &written[i]
 		if candidate.kind != obj.kind {
-			continue
+			break
 		}
 		count++
 		if candidate.depth+1 > opts.Depth {
 			continue
 		}
-		delta := EncodeDelta(candidate.data, obj.data)
+		if candidate.index == nil {
+			candidate.index = buildDeltaIndex(candidate.data)
+		}
+		delta := encodeDelta(candidate.index, candidate.data, obj.data)
 		if best == nil || len(delta) < len(best.payload) {
 			best = &writeChoice{
 				kind:    KindOffsetDelta,
@@ -185,11 +212,15 @@ func searchOffsetDelta(obj writeObject, offset int64, written []packedObject, op
 
 func searchRefDelta(obj writeObject, thins []thinBase) *writeChoice {
 	var best *writeChoice
-	for _, candidate := range thins {
+	for i := range thins {
+		candidate := &thins[i]
 		if candidate.kind != obj.kind {
 			continue
 		}
-		delta := EncodeDelta(candidate.data, obj.data)
+		if candidate.index == nil {
+			candidate.index = buildDeltaIndex(candidate.data)
+		}
+		delta := encodeDelta(candidate.index, candidate.data, obj.data)
 		if best == nil || len(delta) < len(best.payload) {
 			id := candidate.id
 			best = &writeChoice{kind: KindRefDelta, payload: delta, base: id[:], depth: 1}
@@ -228,10 +259,13 @@ type packWriter struct {
 	sum      stdhash.Hash32
 	summing  bool
 	position int64
+	deflate  *zlib.Writer
 }
 
 func newPackWriter(dst io.Writer) *packWriter {
-	return &packWriter{dst: dst, digest: sha1.New(), sum: crc32.NewIEEE()}
+	w := &packWriter{dst: dst, digest: sha1.New(), sum: crc32.NewIEEE()}
+	w.deflate = zlib.NewWriter(w)
+	return w
 }
 
 func (w *packWriter) Write(chunk []byte) (int, error) {
@@ -276,11 +310,11 @@ func (w *packWriter) writeObject(id hash.ObjectID, choice writeChoice) (Entry, e
 	if _, err := w.Write(head); err != nil {
 		return Entry{}, err
 	}
-	deflate := zlib.NewWriter(w)
-	if _, err := deflate.Write(choice.payload); err != nil {
+	w.deflate.Reset(w)
+	if _, err := w.deflate.Write(choice.payload); err != nil {
 		return Entry{}, err
 	}
-	if err := deflate.Close(); err != nil {
+	if err := w.deflate.Close(); err != nil {
 		return Entry{}, err
 	}
 	return Entry{ID: id, Offset: offset, CRC32: w.stopSum()}, nil
