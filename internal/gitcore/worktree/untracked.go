@@ -60,6 +60,9 @@ func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFil
 				mu.Unlock()
 				continue
 			}
+			if trackedFiles[rel] {
+				continue
+			}
 			if trackedDirs[rel] {
 				recurse(rel)
 				continue

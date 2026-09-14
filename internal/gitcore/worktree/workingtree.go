@@ -140,11 +140,33 @@ func (w *Worktree) convertForCheckin(path string, data []byte) []byte {
 	if policy.Convert.OnCheckin != attributes.ConvertLF {
 		return data
 	}
-	if policy.Convert.Detect && attributes.IsBinaryContent(data) {
+	if policy.Convert.Detect && (attributes.IsBinaryContent(data) || hasLoneCR(data)) {
 		return data
 	}
 	if !bytes.Contains(data, []byte("\r\n")) {
 		return data
 	}
+	if policy.Convert.Detect && w.indexHoldsCR(path) {
+		return data
+	}
 	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+}
+
+func hasLoneCR(data []byte) bool {
+	for at := bytes.IndexByte(data, '\r'); at >= 0; at = bytes.IndexByte(data, '\r') {
+		if at+1 == len(data) || data[at+1] != '\n' {
+			return true
+		}
+		data = data[at+1:]
+	}
+	return false
+}
+
+func (w *Worktree) indexHoldsCR(path string) bool {
+	entry, ok := w.index.Get(path, index.StageMerged)
+	if !ok {
+		return false
+	}
+	_, blob, err := w.db.Get(entry.ID)
+	return err == nil && bytes.IndexByte(blob, '\r') >= 0
 }
