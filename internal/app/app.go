@@ -137,6 +137,10 @@ type App struct {
 	refreshFlagMu sync.Mutex
 	refreshQueued bool
 
+	journalFilterMu    sync.Mutex
+	journalFilterTimer *time.Timer
+	journalFilterWG    sync.WaitGroup
+
 	journalRunMu    sync.Mutex
 	journalMu       sync.Mutex
 	journalCancel   context.CancelFunc
@@ -1070,6 +1074,7 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		a.stopJournalFilterDelay()
 		a.stopAutoFetch()
 		a.stopNetOperations()
 		a.closePostQueue()
