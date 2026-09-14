@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -24,6 +26,7 @@ func (a *App) startJournal() {
 	a.journalRunMu.Lock()
 	defer a.journalRunMu.Unlock()
 	a.stopJournalLocked()
+	reselect, _ := a.shownCommit()
 	a.journalView.Reset()
 	o := a.opened()
 	if o == nil {
@@ -31,7 +34,7 @@ func (a *App) startJournal() {
 	}
 	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
 	filter := a.journalFilter()
-	opts, err := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.hasRemotes()))
+	opts, err := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.State().HasRemotes))
 	if err != nil {
 		a.journalFilterLabel.SetText(i18n.T("Journal.Filter.BadPattern"))
 		return
@@ -45,10 +48,10 @@ func (a *App) startJournal() {
 	a.journalMore = more
 	more <- struct{}{}
 	a.journalMu.Unlock()
-	a.journalWG.Go(func() { a.runJournal(ctx, pager, more, !filter.Empty()) })
+	a.journalWG.Go(func() { a.runJournal(ctx, pager, more, !filter.Empty(), reselect) })
 }
 
-func (a *App) runJournal(ctx context.Context, pager journalPager, more chan struct{}, filtered bool) {
+func (a *App) runJournal(ctx context.Context, pager journalPager, more chan struct{}, filtered bool, reselect hash.ObjectID) {
 	defer pager.Cancel()
 	for range more {
 		rows, done, err := pager.Next(a.journalPageSize)
@@ -62,6 +65,7 @@ func (a *App) runJournal(ctx context.Context, pager journalPager, more chan stru
 				}
 				a.journalView.Append(rows)
 				a.showJournalFilterCount(a.journalView.Count(), filtered)
+				a.reselectJournalCommit(reselect, rows)
 			})
 		}
 		if done {
@@ -104,8 +108,21 @@ func (a *App) stopJournalLocked() {
 	a.journalWG.Wait()
 }
 
+func (a *App) reselectJournalCommit(id hash.ObjectID, rows []journal.Row) {
+	shown, ok := a.shownCommit()
+	if !ok || shown != id {
+		return
+	}
+	if slices.ContainsFunc(rows, func(row journal.Row) bool { return row.ID == id }) {
+		a.selectJournalCommit(id)
+	}
+}
+
 func (a *App) onJournalRowSelected(row journal.Row) {
-	a.selectedCommit = row.ID
+	if shown, ok := a.shownCommit(); ok && shown == row.ID {
+		return
+	}
+	a.setSelectedCommit(row.ID)
 	a.setCommitSelected(true)
 	a.setFilesSelected(false)
 	a.statusLabel.SetText(i18n.Tf("Status.CommitSelected", row.ShortHash, row.Message))

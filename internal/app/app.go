@@ -134,6 +134,9 @@ type App struct {
 	watchWG     sync.WaitGroup
 	watcher     watcherIface
 
+	refreshFlagMu sync.Mutex
+	refreshQueued bool
+
 	journalRunMu    sync.Mutex
 	journalMu       sync.Mutex
 	journalCancel   context.CancelFunc
@@ -670,6 +673,24 @@ func (a *App) commitIsSelected() bool {
 	return a.commitSelected
 }
 
+func (a *App) selectedCommitID() hash.ObjectID {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.selectedCommit
+}
+
+func (a *App) setSelectedCommit(id hash.ObjectID) {
+	a.stateMu.Lock()
+	a.selectedCommit = id
+	a.stateMu.Unlock()
+}
+
+func (a *App) shownCommit() (hash.ObjectID, bool) {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.selectedCommit, a.commitSelected && !a.selectedCommit.IsZero()
+}
+
 func (a *App) setCommitSelected(v bool) {
 	a.stateMu.Lock()
 	a.commitSelected = v
@@ -730,6 +751,33 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.requestWorking()
+}
+
+func (a *App) requestRefresh() {
+	a.refreshFlagMu.Lock()
+	queued := a.refreshQueued
+	a.refreshQueued = true
+	a.refreshFlagMu.Unlock()
+	if !queued {
+		a.Post(a.runQueuedRefresh)
+	}
+}
+
+func (a *App) runQueuedRefresh() {
+	a.refreshFlagMu.Lock()
+	queued := a.refreshQueued
+	a.refreshQueued = false
+	a.refreshFlagMu.Unlock()
+	if queued {
+		a.RefreshRepository()
+	}
+}
+
+func (a *App) refreshAtOnce() {
+	a.refreshFlagMu.Lock()
+	a.refreshQueued = false
+	a.refreshFlagMu.Unlock()
+	a.RefreshRepository()
 }
 
 func branchStatusText(snap branches.Snapshot) string {

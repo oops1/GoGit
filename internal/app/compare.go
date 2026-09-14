@@ -57,7 +57,7 @@ func (a *App) compareCommitFiles(picked []diff.File) {
 		a.openCompareFiles("", "")
 		return
 	}
-	commit := a.selectedCommit.String()
+	commit := a.selectedCommitID().String()
 	var left, right compareSide
 	var err error
 	if len(picked) == 1 {
@@ -177,7 +177,7 @@ func (a *App) onFilesRowActivated(_ int, item any) {
 		if !found {
 			return
 		}
-		left, right, err = commitSides(o, file, a.selectedCommit.String())
+		left, right, err = commitSides(o, file, a.selectedCommitID().String())
 	default:
 		entry, found := entryOf(entries, row)
 		if !found {

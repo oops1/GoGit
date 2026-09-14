@@ -68,7 +68,7 @@ func (a *App) runWatcher(ctx context.Context, w watcherIface) {
 
 func (a *App) handleChangeSet(set watch.ChangeSet) {
 	if set.Has(watch.Head) || set.Has(watch.Refs) || set.Has(watch.State) {
-		a.Post(a.RefreshRepository)
+		a.requestRefresh()
 	}
 	if set.Has(watch.Index) || set.Has(watch.WorkTree) {
 		a.Post(a.refreshWorkingStatus)

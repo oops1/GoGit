@@ -197,7 +197,7 @@ func overwriteList(overwrite *ops.OverwriteError) string {
 
 func (a *App) finishMerge() {
 	a.reloadWorktree()
-	a.RefreshRepository()
+	a.refreshAtOnce()
 }
 
 func (a *App) confirmAbortMerge() {

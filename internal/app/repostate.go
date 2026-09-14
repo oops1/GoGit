@@ -77,7 +77,7 @@ func (a *App) leaveCommitView() {
 		return
 	}
 	a.stopDiff()
-	a.selectedCommit = hash.ObjectID{}
+	a.setSelectedCommit(hash.ObjectID{})
 	a.setCommitSelected(false)
 	a.journalView.ClearSelection()
 	a.clearDiff()

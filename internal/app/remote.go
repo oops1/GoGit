@@ -82,8 +82,7 @@ func (a *App) finishRemoteOperation(reloadTree bool) {
 		if reloadTree {
 			a.reloadWorktree()
 		}
-		a.refreshRemoteState()
-		a.RefreshRepository()
+		a.refreshAtOnce()
 	})
 }
 
