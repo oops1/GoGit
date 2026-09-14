@@ -14,11 +14,12 @@ import (
 )
 
 type stager struct {
-	ctx  context.Context
-	wt   *workingTree
-	db   *odb.DB
-	idx  *index.Index
-	opts StageOptions
+	ctx   context.Context
+	wt    *workingTree
+	db    *odb.DB
+	idx   *index.Index
+	opts  StageOptions
+	rules index.PathRules
 }
 
 func Stage(ctx context.Context, r *repo.Repository, paths []string, opts StageOptions) error {
@@ -37,12 +38,16 @@ func Stage(ctx context.Context, r *repo.Repository, paths []string, opts StageOp
 	}
 	defer func() { _ = db.Close() }()
 
+	rules, err := pathRulesOf(r)
+	if err != nil {
+		return err
+	}
 	lock, err := lockIndex(r)
 	if err != nil {
 		return err
 	}
 
-	s := &stager{ctx: ctx, wt: wt, db: db, idx: lock.idx, opts: opts}
+	s := &stager{ctx: ctx, wt: wt, db: db, idx: lock.idx, opts: opts, rules: rules}
 	for _, p := range paths {
 		clean, err := cleanRepoPath(p)
 		if err != nil {
@@ -84,12 +89,23 @@ func (s *stager) stage(rel string) error {
 }
 
 func (s *stager) stageMissing(rel string) error {
-	s.idx.Remove(rel)
+	s.removeUnlessSparse(rel)
 	prefix := rel + "/"
 	for _, p := range slices.Collect(s.idx.Paths(prefix)) {
-		s.idx.Remove(p)
+		s.removeUnlessSparse(p)
 	}
 	return nil
+}
+
+func (s *stager) sparse(rel string) bool {
+	entry, ok := s.idx.Get(rel, index.StageMerged)
+	return ok && entry.SkipWorktree
+}
+
+func (s *stager) removeUnlessSparse(rel string) {
+	if !s.sparse(rel) {
+		s.idx.Remove(rel)
+	}
 }
 
 func (s *stager) stageDir(rel string) error {
@@ -132,7 +148,7 @@ func (s *stager) stageDir(rel string) error {
 	for _, tracked := range slices.Collect(s.idx.Paths(prefix)) {
 		if !present[tracked] {
 			if _, err := fsRootLstat(s.wt.root, filepath.FromSlash(tracked)); missingPath(err) {
-				s.idx.Remove(tracked)
+				s.removeUnlessSparse(tracked)
 			}
 		}
 	}
@@ -140,6 +156,9 @@ func (s *stager) stageDir(rel string) error {
 }
 
 func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
+	if s.sparse(rel) {
+		return nil
+	}
 	mode, data, err := s.readWorktreeObject(rel, info)
 	if err != nil {
 		return err
@@ -153,7 +172,7 @@ func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
 		Mode:  mode,
 		ID:    id,
 		Stage: index.StageMerged,
-		Stat:  statOf(info, len(data)),
+		Stat:  statOf(info),
 	}
 	if len(s.idx.Conflicts(rel)) > 0 {
 		s.idx.Remove(rel)
@@ -161,7 +180,10 @@ func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
 	for _, inside := range slices.Collect(s.idx.Paths(rel + "/")) {
 		s.idx.Remove(inside)
 	}
-	s.idx.Add(entry)
+	if err := index.VerifyPath(entry.Path, entry.Mode, s.rules); err != nil {
+		return err
+	}
+	s.idx.AddUpToDate(entry)
 	return nil
 }
 
@@ -178,17 +200,31 @@ func (s *stager) readWorktreeObject(rel string, info fs.FileInfo) (object.Mode, 
 	if err != nil {
 		return 0, nil, err
 	}
-	data = s.wt.checkinConvert(rel, data)
+	data, err = s.wt.stageConvert(rel, data)
+	if err != nil {
+		return 0, nil, err
+	}
+	if s.keepsSymlinkMode(rel) {
+		return object.ModeSymlink, data, nil
+	}
 	if s.wt.fileMode && info.Mode().Perm()&0o111 != 0 {
 		return object.ModeExecutable, data, nil
 	}
 	return object.ModeBlob, data, nil
 }
 
-func statOf(info fs.FileInfo, size int) index.Stat {
+func (s *stager) keepsSymlinkMode(rel string) bool {
+	if s.wt.symlinks {
+		return false
+	}
+	entry, ok := s.idx.Get(rel, index.StageMerged)
+	return ok && entry.Mode.IsSymlink()
+}
+
+func statOf(info fs.FileInfo) index.Stat {
 	return index.Stat{
 		CTime: info.ModTime(),
 		MTime: info.ModTime(),
-		Size:  uint32(size),
+		Size:  uint32(info.Size()),
 	}
 }

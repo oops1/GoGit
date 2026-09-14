@@ -354,3 +354,44 @@ func TestOracleAgreesOnConditionalIncludes(t *testing.T) {
 		}
 	}
 }
+
+func TestOracleAgreesOnConditionalIncludesInLinkedWorktree(t *testing.T) {
+	o := newOracle(t)
+	o.run(o.dir, "init", "-q", "-b", "main", "work")
+	main := filepath.Join(o.dir, "work")
+	o.run(main, "commit", "-q", "--allow-empty", "-m", "base")
+	second := filepath.Join(o.dir, "second")
+	o.run(main, "worktree", "add", "-q", second, "-b", "second")
+	global := writeFile(t, filepath.Join(o.dir, "gitconfig"),
+		"[includeIf \"onbranch:second\"]\n\tpath = second.config\n"+
+			"[includeIf \"onbranch:main\"]\n\tpath = main.config\n"+
+			"[includeIf \"gitdir:**/work/.git\"]\n\tpath = common.config\n"+
+			"[includeIf \"gitdir:**/worktrees/second\"]\n\tpath = worktree.config\n"+
+			"[includeIf \"gitdir/i:**/WORKTREES/SECOND\"]\n\tpath = icase.config\n"+
+			"[includeIf \"gitdir:**/work/\"]\n\tpath = under.config\n")
+	for _, name := range []string{"second", "main", "common", "worktree", "icase", "under"} {
+		writeFile(t, filepath.Join(o.dir, name+".config"), "["+name+"cond]\n\tok = yes\n")
+	}
+	o.env = append(o.env, "GIT_CONFIG_GLOBAL="+global)
+
+	for _, dir := range []string{main, second} {
+		t.Run(filepath.Base(dir), func(t *testing.T) {
+			gitSaw := o.records(dir, "config", "--list")
+			gitDir := strings.TrimSpace(o.run(dir, "rev-parse", "--absolute-git-dir"))
+			commonDir := strings.TrimSpace(o.run(dir, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+
+			isolateEnv(t)
+			cfg, err := Load(Options{GlobalFile: global, GitDir: commonDir, WorktreeDir: gitDir, NoSystem: true})
+			if err != nil {
+				t.Fatalf("Load returned error %v", err)
+			}
+			for _, name := range []string{"second", "main", "common", "worktree", "icase", "under"} {
+				key := name + "cond.ok"
+				want := slices.Contains(gitSaw, key+"=yes")
+				if got := cfg.Has(key); got != want {
+					t.Errorf("%s: git=%v, we=%v (git saw %q)", key, want, got, gitSaw)
+				}
+			}
+		})
+	}
+}

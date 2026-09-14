@@ -309,6 +309,10 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	return v.bindSecrets(named)
 }
 
+func (v *View) OwnedDialogs() []*widget.Dialog {
+	return []*widget.Dialog{v.credentialEditor, v.keyEditor}
+}
+
 func (v *View) attachContent() {
 	v.dlg.RemoveChild(v.root)
 	v.root.RemoveChild(v.search)

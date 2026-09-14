@@ -47,8 +47,7 @@ func hashChars(data []byte) []spanEntry {
 	return spans
 }
 
-func countChanges(srcData, dstData []byte) (copied, added int) {
-	src, dst := hashChars(srcData), hashChars(dstData)
+func countChanges(src, dst []spanEntry) (copied, added int) {
 	at := 0
 	for _, entry := range src {
 		for at < len(dst) && dst[at].hashval < entry.hashval {
@@ -73,20 +72,36 @@ func countChanges(srcData, dstData []byte) (copied, added int) {
 	return copied, added
 }
 
-func estimateSimilarity(src, dst pair, minScore int) int {
-	if !src.file.OldMode.IsRegular() || !dst.file.NewMode.IsRegular() {
-		return 0
+func (s *renameState) estimateSimilarity(src, dst, minScore int) (int, error) {
+	source, target := &s.pairs[src], &s.pairs[dst]
+	if !source.file.OldMode.IsRegular() || !target.file.NewMode.IsRegular() {
+		return 0, nil
 	}
-	srcSize, dstSize := len(src.oldData), len(dst.newData)
+	srcData, err := source.oldContent(s.source)
+	if err != nil {
+		return 0, err
+	}
+	dstData, err := target.newContent(s.source)
+	if err != nil {
+		return 0, err
+	}
+	srcSize, dstSize := len(srcData), len(dstData)
 	maxSize, baseSize := max(srcSize, dstSize), min(srcSize, dstSize)
 	if float64(maxSize)*(maxScore-float64(minScore)) < float64(maxSize-baseSize)*maxScore {
-		return 0
+		return 0, nil
 	}
 	if dstSize == 0 {
-		return 0
+		return 0, nil
 	}
-	copied, _ := countChanges(src.oldData, dst.newData)
-	return int(float64(copied) * maxScore / float64(maxSize))
+	copied, _ := countChanges(s.spansOf(src, srcData), s.spansOf(dst, dstData))
+	return int(float64(copied) * maxScore / float64(maxSize)), nil
+}
+
+func (s *renameState) spansOf(at int, data []byte) []spanEntry {
+	if s.spans[at] == nil {
+		s.spans[at] = hashChars(data)
+	}
+	return s.spans[at]
 }
 
 func basenameSame(srcPath, dstPath string) int {
@@ -141,7 +156,9 @@ func candidateCompare(a, b candidate) int {
 }
 
 type renameState struct {
+	source   Objects
 	pairs    []pair
+	spans    [][]spanEntry
 	srcs     []int
 	dsts     []int
 	used     []int
@@ -152,9 +169,13 @@ type renameState struct {
 	copies   bool
 }
 
-func detectRenames(pairs []pair, opts Options) []pair {
+var emptyBlobID = hash.SumSHA1("blob", nil)
+
+func detectRenames(pairs []pair, source Objects, opts Options) ([]pair, error) {
 	state := &renameState{
+		source:   source,
 		pairs:    pairs,
+		spans:    make([][]spanEntry, len(pairs)),
 		used:     make([]int, len(pairs)),
 		matched:  make([]int, len(pairs)),
 		scores:   make([]int, len(pairs)),
@@ -163,10 +184,13 @@ func detectRenames(pairs []pair, opts Options) []pair {
 		copies:   opts.DetectCopies,
 	}
 	for at := range pairs {
+		file := pairs[at].file
 		switch {
-		case pairs[at].file.Status == StatusAdded:
+		case file.Status == StatusAdded && opts.NoRenameEmpty && file.NewID == emptyBlobID:
+		case file.Status == StatusAdded:
 			state.dsts = append(state.dsts, at)
-		case pairs[at].file.Status == StatusDeleted:
+		case opts.NoRenameEmpty && file.OldID == emptyBlobID:
+		case file.Status == StatusDeleted:
 			state.srcs = append(state.srcs, at)
 		case state.copies:
 			state.used[at]++
@@ -174,19 +198,23 @@ func detectRenames(pairs []pair, opts Options) []pair {
 		}
 	}
 	if len(state.dsts) == 0 || len(state.srcs) == 0 {
-		return pairs
+		return pairs, nil
 	}
 
 	state.exactRenames()
 	if state.minScore < int(maxScore) {
 		if !state.copies {
 			state.cullSources()
-			state.basenameMatches(state.minScore + int(0.5*(maxScore-float64(state.minScore))))
+			if err := state.basenameMatches(state.minScore + int(0.5*(maxScore-float64(state.minScore)))); err != nil {
+				return nil, err
+			}
 			state.cullSources()
 		}
-		state.inexactRenames(opts.RenameLimit)
+		if err := state.inexactRenames(opts.RenameLimit); err != nil {
+			return nil, err
+		}
 	}
-	return state.rebuild()
+	return state.rebuild(), nil
 }
 
 func (s *renameState) record(dst, src, score int) {
@@ -248,7 +276,7 @@ func uniqueByBaseName(paths map[string]int, name string, index int) {
 	paths[name] = index
 }
 
-func (s *renameState) basenameMatches(minBasenameScore int) {
+func (s *renameState) basenameMatches(minBasenameScore int) error {
 	sources := make(map[string]int, len(s.srcs))
 	dests := make(map[string]int, len(s.dsts))
 	for _, src := range s.srcs {
@@ -269,15 +297,19 @@ func (s *renameState) basenameMatches(minBasenameScore int) {
 		if sources[base] == -1 || dst == -1 {
 			continue
 		}
-		score := estimateSimilarity(s.pairs[src], s.pairs[dst], minBasenameScore)
+		score, err := s.estimateSimilarity(src, dst, minBasenameScore)
+		if err != nil {
+			return err
+		}
 		if score < minBasenameScore {
 			continue
 		}
 		s.record(dst, src, score)
 	}
+	return nil
 }
 
-func (s *renameState) inexactRenames(limit int) {
+func (s *renameState) inexactRenames(limit int) error {
 	var targets []int
 	for _, dst := range s.dsts {
 		if !s.isRename[dst] {
@@ -285,10 +317,10 @@ func (s *renameState) inexactRenames(limit int) {
 		}
 	}
 	if len(targets) == 0 || len(s.srcs) == 0 {
-		return
+		return nil
 	}
 	if limit > 0 && len(targets)*len(s.srcs) > limit*limit {
-		return
+		return nil
 	}
 
 	matrix := make([]candidate, 0, len(targets)*numCandidatePerDst)
@@ -298,10 +330,14 @@ func (s *renameState) inexactRenames(limit int) {
 			slots[at] = candidate{dst: -1}
 		}
 		for _, src := range s.srcs {
+			score, err := s.estimateSimilarity(src, dst, s.minScore)
+			if err != nil {
+				return err
+			}
 			entry := candidate{
 				src:       src,
 				dst:       dst,
-				score:     estimateSimilarity(s.pairs[src], s.pairs[dst], s.minScore),
+				score:     score,
 				nameScore: basenameSame(s.pairs[src].file.OldPath, s.pairs[dst].file.NewPath),
 			}
 			recordIfBetter(slots, entry)
@@ -314,6 +350,7 @@ func (s *renameState) inexactRenames(limit int) {
 	if s.copies {
 		s.takeRenames(matrix, true)
 	}
+	return nil
 }
 
 func recordIfBetter(slots []candidate, entry candidate) {
@@ -363,7 +400,7 @@ func (s *renameState) renamed(dst int) pair {
 	src := s.matched[dst]
 	result := s.pairs[dst]
 	source := s.pairs[src]
-	result.oldData = source.oldData
+	result.oldData, result.oldRead = source.oldData, source.oldRead
 	result.file.OldPath = source.file.OldPath
 	result.file.OldMode = source.file.OldMode
 	result.file.OldID = source.file.OldID

@@ -97,7 +97,8 @@ func TestSavingAResolutionStopsWhenTheDirectoryCannotBeMade(t *testing.T) {
 	if _, err := tr.merge("feature", MergeOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	swapRootMkdirAllFailForPath(t, "dir")
+	tr.remove("dir")
+	swapRootMkdirFailForPath(t, "dir")
 
 	err := SaveResolution(t.Context(), tr.repo, "dir/f", []byte("resolved\n"), ResolutionOptions{})
 

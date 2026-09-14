@@ -66,7 +66,7 @@ func TestKindOfInfoClassifiesEachFileKind(t *testing.T) {
 	}
 }
 
-func TestStatusDetectsTypeChangeFromFileToDirectory(t *testing.T) {
+func TestStatusReportsAFileReplacedByADirectoryAsDeleted(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage("thing.txt", "content\n")
 	tr.commit("initial")
@@ -78,8 +78,8 @@ func TestStatusDetectsTypeChangeFromFileToDirectory(t *testing.T) {
 		t.Fatalf("Status returned error %v", err)
 	}
 	entry, ok := entryMap(status.Entries)["thing.txt"]
-	if !ok || entry.Unstaged != StatusTypeChanged {
-		t.Fatalf("thing.txt entry = %#v, want Unstaged=TypeChanged", entry)
+	if !ok || entry.Unstaged != StatusDeleted {
+		t.Fatalf("thing.txt entry = %#v, want Unstaged=Deleted", entry)
 	}
 }
 
@@ -403,7 +403,7 @@ func TestCompareToWorktreeDetectsSymlinkChangesUsingFaultInjection(t *testing.T)
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   oldID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 
@@ -437,7 +437,7 @@ func TestCompareToWorktreeIsUnmodifiedWhenTheSymlinkTargetIsUnchanged(t *testing
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   oldID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 
@@ -471,7 +471,7 @@ func TestCompareToWorktreeFailsWhenReadlinkFails(t *testing.T) {
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   oldID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 

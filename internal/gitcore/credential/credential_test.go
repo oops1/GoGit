@@ -28,7 +28,7 @@ func (s *stubHelper) Store(context.Context, Query, Answer) error {
 	return s.storeErr
 }
 
-func (s *stubHelper) Erase(context.Context, Query) error {
+func (s *stubHelper) Erase(context.Context, Query, Answer) error {
 	s.eraseCalls++
 	return s.eraseErr
 }
@@ -88,7 +88,7 @@ func TestChainEraseCallsEveryHelperAndJoinsErrors(t *testing.T) {
 	a := &stubHelper{name: "a", eraseErr: errA}
 	b := &stubHelper{name: "b"}
 	chain := Chain{a, b}
-	err := chain.Erase(context.Background(), Query{})
+	err := chain.Erase(context.Background(), Query{}, Answer{})
 	if !errors.Is(err, errA) {
 		t.Fatalf("Erase returned %v, want errA", err)
 	}

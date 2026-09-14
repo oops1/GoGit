@@ -62,6 +62,7 @@ func (a *App) defaultSearchRoot() string {
 }
 
 func (a *App) wireSearchView(view *search.View) {
+	ctx, cancel := context.WithCancel(context.Background())
 	view.OnBrowse = func() {
 		showPickFolderDialog(a.eng, widget.FileDialogOptions{StartDir: view.Root()}, func(path string, ok bool) {
 			if !ok {
@@ -71,23 +72,31 @@ func (a *App) wireSearchView(view *search.View) {
 		})
 	}
 	view.OnScan = func(root string, includeBare bool) {
-		a.startRepositorySearch(view, root, includeBare)
+		a.startRepositorySearch(ctx, view, root, includeBare)
 	}
 	view.OnAdd = func(paths []string) {
+		cancel()
 		a.eng.CloseModal(view.Dialog())
 		a.addFoundRepositories(paths)
 	}
 	view.OnCancel = func() {
+		cancel()
 		a.eng.CloseModal(view.Dialog())
 	}
 }
 
-func (a *App) startRepositorySearch(view *search.View, root string, includeBare bool) {
+func (a *App) startRepositorySearch(ctx context.Context, view *search.View, root string, includeBare bool) {
 	view.SetScanning(true)
 	view.SetStatus(i18n.T("Dialog.Search.Scanning"), a.theme().LabelText)
 	searchWG.Go(func() {
-		found, err := scanRepositories(context.Background(), root, includeBare)
+		found, err := scanRepositories(ctx, root, includeBare)
+		if ctx.Err() != nil {
+			return
+		}
 		a.Post(func() {
+			if ctx.Err() != nil {
+				return
+			}
 			view.SetScanning(false)
 			view.SetResults(found)
 			view.SetStatus(searchStatusText(found, err), a.searchStatusColor(err))

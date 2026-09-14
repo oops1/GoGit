@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,10 +28,16 @@ const (
 )
 
 var (
-	dial     = dialAny
-	odbOpen  = odb.Open
-	refsOpen = refs.Open
+	dial       = dialAny
+	odbOpen    = odb.Open
+	refsOpen   = refs.Open
+	unlockPack = func(keepPath string) { _ = os.Remove(keepPath) }
 )
+
+func fetchKeepMessage() string {
+	host, _ := os.Hostname()
+	return fmt.Sprintf("fetch-pack %d on %s\n", os.Getpid(), host)
+}
 
 type FetchOptions struct {
 	Refspecs    []refspec.RefSpec
@@ -41,6 +49,7 @@ type FetchOptions struct {
 	Tags        TagMode
 	Prune       bool
 	Force       bool
+	WantHead    bool
 	Progress    progress.Func
 	Transport   transport.Options
 }
@@ -116,7 +125,8 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	}
 
 	result := FetchResult{Refs: adv.Refs, Head: adv.Head}
-	if len(matched) == 0 {
+	headWant, wantHead := advertisedHead(adv, opts.WantHead)
+	if len(matched) == 0 && !wantHead {
 		if !opts.Prune {
 			return result, nil
 		}
@@ -134,6 +144,9 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	}
 
 	req := buildFetchRequest(matched, opts, shallow, prog)
+	if wantHead && !slices.Contains(req.Wants, headWant) {
+		req.Wants = append(req.Wants, headWant)
+	}
 	prog.Phase("negotiating")
 	resp, err := session.Fetch(ctx, req, neg)
 	if err != nil {
@@ -142,10 +155,11 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	defer resp.Pack.Close()
 
 	prog.Phase("receiving")
-	indexed, err := pack.IndexPack(ctx, resp.Pack, r.PackDir(), pack.IndexOptions{Bases: db, FixThin: true, Progress: prog})
+	indexed, err := pack.IndexPack(ctx, resp.Pack, r.PackDir(), pack.IndexOptions{Bases: db, FixThin: true, Progress: prog, KeepName: fetchKeepMessage()})
 	if err != nil {
 		return FetchResult{}, err
 	}
+	defer unlockPack(indexed.KeepPath)
 	result.Objects, result.Bytes = indexed.Objects, indexed.Bytes
 	result.Shallow, result.Unshallow = resp.Shallow, resp.Unshallow
 	if _, err := db.Reload(); err != nil {
@@ -175,6 +189,18 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 		errs = append(errs, err)
 	}
 	return result, errors.Join(errs...)
+}
+
+func advertisedHead(adv transport.Advertisement, wanted bool) (hash.ObjectID, bool) {
+	if !wanted {
+		return hash.Zero, false
+	}
+	for _, ref := range adv.Refs {
+		if ref.Name == refs.HEAD.String() && !ref.ID.IsZero() {
+			return ref.ID, true
+		}
+	}
+	return hash.Zero, false
 }
 
 func buildFetchRequest(matched []matchedRef, opts FetchOptions, shallow map[hash.ObjectID]struct{}, prog progress.Func) transport.FetchRequest {

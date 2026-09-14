@@ -235,6 +235,39 @@ func TestAddClickedValidatesDuplicateName(t *testing.T) {
 	}
 }
 
+func TestAddClickedRefusesANameGitCannotUseForARemote(t *testing.T) {
+	for _, name := range []string{"my origin", "a..b", "x.lock", "bad~name", "a:b", "trailing/", "/leading"} {
+		v := newTestView(t, nil)
+		v.nameInput.SetText(name)
+		v.urlInput.SetText("https://example.com/a.git")
+		called := 0
+		v.OnAdd = func(string, string) { called++ }
+
+		clickButton(v.addBtn)
+
+		if called != 0 {
+			t.Fatalf("%q: OnAdd must not fire", name)
+		}
+		if v.errorLabel.Text() != i18n.T("Dialog.Remotes.Error.InvalidName") {
+			t.Fatalf("%q: error = %q", name, v.errorLabel.Text())
+		}
+	}
+}
+
+func TestAddClickedAcceptsANestedRemoteName(t *testing.T) {
+	v := newTestView(t, nil)
+	v.nameInput.SetText("team/upstream")
+	v.urlInput.SetText("https://example.com/a.git")
+	var got string
+	v.OnAdd = func(name, _ string) { got = name }
+
+	clickButton(v.addBtn)
+
+	if got != "team/upstream" {
+		t.Fatalf("OnAdd got %q, error = %q", got, v.errorLabel.Text())
+	}
+}
+
 func TestAddClickedCallsOnAddAndClearsError(t *testing.T) {
 	v := newTestView(t, nil)
 	v.SetError("stale error")

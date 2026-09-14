@@ -130,15 +130,9 @@ func (a *App) runAutoFetch(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (a *App) autoFetchBusy() bool {
-	a.netMu.Lock()
-	defer a.netMu.Unlock()
-	return a.netCancel != nil
-}
-
 func (a *App) performAutoFetch(ctx context.Context) {
 	o := a.opened()
-	if o == nil || a.autoFetchBusy() {
+	if o == nil || a.busy() {
 		return
 	}
 	r, err := a.freshRepo(o)

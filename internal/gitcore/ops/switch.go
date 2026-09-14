@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -27,6 +29,11 @@ type switcher struct {
 	head   map[string]treeEntry
 	target map[string]treeEntry
 	force  bool
+	folded map[string]*index.Entry
+
+	sparse     *attributes.Sparse
+	leftSparse []string
+	report     *CheckoutReport
 }
 
 func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchOptions) error {
@@ -62,7 +69,11 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 	if err != nil {
 		return err
 	}
-	targetTree, err := commitTreeEntries(db, commitID)
+	rules, err := pathRulesOf(r)
+	if err != nil {
+		return err
+	}
+	targetTree, err := verifiedTreeEntries(db, commitID, rules)
 	if err != nil {
 		return err
 	}
@@ -76,21 +87,29 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		return err
 	}
 
-	if err := layoutWorkingTree(ctx, r, wt, db, headTree, targetTree, opts.Force); err != nil {
+	if err := layoutWorkingTree(ctx, r, wt, db, headTree, targetTree, opts.Force, opts.Report); err != nil {
 		return err
 	}
 
 	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
 }
 
-func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool) error {
+func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool, report *CheckoutReport) error {
+	sparse, err := sparseCheckoutOf(r)
+	if err != nil {
+		return err
+	}
 	lock, err := lockIndex(r)
 	if err != nil {
 		return err
 	}
 
-	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format(), head: headTree, target: targetTree, force: force}
+	sparse.clearPresentSkipWorktree(wt.root, lock.idx)
+	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format(), head: headTree, target: targetTree, force: force, sparse: sparse.patterns, report: report}
 	currentIndex := indexByPath(lock.idx)
+	if r.Core().IgnoreCase {
+		sw.folded = foldPaths(currentIndex)
+	}
 
 	conflicts, err := sw.computeOverwrites(currentIndex)
 	if err != nil {
@@ -106,6 +125,7 @@ func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree,
 		lock.abort()
 		return err
 	}
+	report.sort()
 	return lock.commit()
 }
 
@@ -229,6 +249,9 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry) ([]s
 			conflicts = append(conflicts, rel)
 			return nil
 		}
+		if sw.addedOutsideSparse(rel, currentIndex) {
+			return nil
+		}
 		dirty, err := sw.isDirty(rel, cur, func(path string) bool { _, ok := currentIndex[path]; return ok })
 		if err != nil {
 			return err
@@ -247,9 +270,64 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry) ([]s
 		if err := check(rel); err != nil {
 			return nil, err
 		}
+		if sw.addedOutsideSparse(rel, currentIndex) {
+			continue
+		}
+		blocker, err := sw.blockingLeadingPath(rel, currentIndex)
+		if err != nil {
+			return nil, err
+		}
+		if blocker != "" && !seen[blocker] {
+			seen[blocker] = true
+			conflicts = append(conflicts, blocker)
+		}
 	}
 	slices.Sort(conflicts)
 	return conflicts, nil
+}
+
+func foldPaths(entries map[string]*index.Entry) map[string]*index.Entry {
+	out := make(map[string]*index.Entry, len(entries))
+	for rel, entry := range entries {
+		out[strings.ToLower(rel)] = entry
+	}
+	return out
+}
+
+func (sw *switcher) caseTwin(rel string) (*index.Entry, bool) {
+	twin, ok := sw.folded[strings.ToLower(rel)]
+	return twin, ok && twin.Path != rel
+}
+
+func (sw *switcher) blockingLeadingPath(rel string, currentIndex map[string]*index.Entry) (string, error) {
+	if _, tracked := currentIndex[rel]; tracked {
+		return "", nil
+	}
+	dir := parentOf(rel)
+	if dir == "" {
+		return "", nil
+	}
+	built := ""
+	for part := range strings.SplitSeq(dir, "/") {
+		built = joinRel(built, part)
+		info, err := fsRootLstat(sw.wt.root, filepath.FromSlash(built))
+		switch {
+		case missingPath(err):
+			return "", nil
+		case err != nil:
+			return "", err
+		case info.Mode().Type() == fs.ModeDir:
+			continue
+		}
+		if _, tracked := currentIndex[built]; tracked {
+			return "", nil
+		}
+		if _, twin := sw.caseTwin(built); twin {
+			return "", nil
+		}
+		return built, nil
+	}
+	return "", nil
 }
 
 func (sw *switcher) isDirty(rel string, idxEntry *index.Entry, tracked func(string) bool) (bool, error) {
@@ -264,7 +342,12 @@ func (sw *switcher) isDirty(rel string, idxEntry *index.Entry, tracked func(stri
 	case idxEntry == nil && info.IsDir():
 		return sw.holdsUntracked(rel, tracked)
 	case idxEntry == nil:
+		if twin, ok := sw.caseTwin(rel); ok {
+			return sw.isDirty(twin.Path, twin, tracked)
+		}
 		return true, nil
+	case idxEntry.SkipWorktree:
+		return false, nil
 	case notExist:
 		return true, nil
 	case idxEntry.Mode.IsSubmodule():
@@ -337,15 +420,15 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if err := sw.ctx.Err(); err != nil {
 			return err
 		}
-		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !missingPath(err) {
+		if err := sw.removeTracked(rel, currentIndex[rel]); err != nil {
 			return err
 		}
-		idx.Remove(rel)
 		removedDirs = append(removedDirs, rel)
 	}
 	for _, rel := range removedDirs {
 		sw.pruneEmptyDirs(parentOf(rel))
 	}
+	entries := make([]index.Entry, 0, len(sw.target))
 	for rel, tgt := range sw.target {
 		if err := sw.ctx.Err(); err != nil {
 			return err
@@ -353,29 +436,90 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if sw.carried(rel) || sw.head != nil && !sw.force && sw.indexHoldsTarget(rel, currentIndex) {
 			continue
 		}
-		if err := sw.checkout(rel, tgt); err != nil {
+		entry, err := sw.layoutEntry(rel, tgt, currentIndex[rel])
+		if err != nil {
 			return err
 		}
-		idx.Add(index.Entry{Path: rel, Mode: tgt.mode, ID: tgt.id, Stage: index.StageMerged})
+		entries = append(entries, entry)
 	}
-	return nil
+	idx.Replace(removedDirs, entries)
+	return sw.sparsifyKept(idx, currentIndex)
 }
 
-func (sw *switcher) checkout(rel string, tgt treeEntry) error {
-	if tgt.mode.IsSubmodule() {
+func (sw *switcher) checkoutEntry(rel string, tgt treeEntry, previous *index.Entry) (index.Entry, error) {
+	entry := index.Entry{Path: rel, Mode: tgt.mode, ID: tgt.id, Stage: index.StageMerged}
+	if previous != nil && previous.SkipWorktree {
+		entry.SkipWorktree = true
+		return entry, nil
+	}
+	stat, err := sw.checkout(rel, tgt)
+	entry.Stat = stat
+	return entry, err
+}
+
+func (sw *switcher) removeTracked(rel string, entry *index.Entry) error {
+	if entry != nil && entry.SkipWorktree {
 		return nil
+	}
+	err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel))
+	if err == nil || missingPath(err) || entry != nil && entry.Mode.IsSubmodule() {
+		return nil
+	}
+	return err
+}
+
+func (sw *switcher) checkout(rel string, tgt treeEntry) (index.Stat, error) {
+	if tgt.mode.IsSubmodule() {
+		return index.Stat{}, nil
 	}
 	kind, data, err := sw.db.Get(tgt.id)
 	if err != nil {
-		return err
+		return index.Stat{}, err
 	}
 	if kind != object.TypeBlob {
-		return nil
+		return index.Stat{}, nil
 	}
-	if !tgt.mode.IsSymlink() {
-		data = sw.wt.checkoutConvert(rel, data)
+	if err := sw.wt.writeCheckedOut(rel, tgt.mode, data, sw.report); err != nil {
+		return index.Stat{}, err
 	}
-	return writeWorktreeBlob(sw.wt, rel, tgt.mode, data)
+	return checkedOutStat(sw.wt.root, rel)
+}
+
+func checkedOutStat(root *os.Root, rel string) (index.Stat, error) {
+	info, err := fsRootLstat(root, filepath.FromSlash(rel))
+	if err != nil {
+		return index.Stat{}, err
+	}
+	return statOf(info), nil
+}
+
+func (sw *switcher) statIfClean(rel string, mode object.Mode, id hash.ObjectID) (index.Stat, error) {
+	if mode.IsSubmodule() {
+		return index.Stat{}, nil
+	}
+	info, err := fsRootLstat(sw.wt.root, filepath.FromSlash(rel))
+	if missingPath(err) || err == nil && info.IsDir() {
+		return index.Stat{}, nil
+	}
+	if err != nil {
+		return index.Stat{}, err
+	}
+	dirty, err := sw.isDirty(rel, &index.Entry{Path: rel, Mode: mode, ID: id}, nil)
+	if err != nil || dirty {
+		return index.Stat{}, err
+	}
+	return statOf(info), nil
+}
+
+func (sw *switcher) mergedEntry(rel string, mode object.Mode, id hash.ObjectID, previous *index.Entry) (index.Entry, error) {
+	entry := index.Entry{Path: rel, Mode: mode, ID: id, Stage: index.StageMerged}
+	if previous != nil && previous.SkipWorktree {
+		entry.SkipWorktree = true
+		return entry, nil
+	}
+	stat, err := sw.statIfClean(rel, mode, id)
+	entry.Stat = stat
+	return entry, err
 }
 
 func (sw *switcher) pruneEmptyDirs(dir string) {

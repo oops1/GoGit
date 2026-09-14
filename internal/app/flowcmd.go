@@ -146,6 +146,10 @@ func (a *App) runFlowOperation(title string, fn func(ctx context.Context, r *git
 func (a *App) startFlow(kind, name, base string) {
 	a.runFlowOperation(i18n.Tf(flowOperationTexts[kind].start, name), func(ctx context.Context, r *gitrepo.Repository, reporter OperationReporter) error {
 		branch, err := runStartFlow(ctx, r, kind, name, ops.StartFlowOptions{Base: base, Network: a.flowNetwork(r, reporter)})
+		if errors.Is(err, ops.ErrFlowTagExists) {
+			cfg, _ := ops.ReadFlowConfig(r)
+			reporter.Log(i18n.Tf("Operation.Log.FlowTagExists", cfg.VersionTagPrefix+name))
+		}
 		if err != nil {
 			return err
 		}
@@ -261,9 +265,10 @@ func (a *App) finishFlow(kind, name string, model flow.FinishModel) {
 		}
 		result, err := runFinishFlow(ctx, r, kind, name, opts)
 		reportFinishFlow(reporter, kind, name, result, err)
+		opts.SkipTag = opts.SkipTag || result.KeptTag != ""
 		if err == nil && result.Finished() && !result.Pushed && opts.Network.Remote != "" {
 			reporter.Log(i18n.Tf("Operation.Log.FlowNotPushed", name))
-			a.Post(func() { a.offerFlowPush(kind, name, opts) })
+			reporter.Then(func() { a.offerFlowPush(kind, name, opts) })
 		}
 		return err
 	})
@@ -287,6 +292,9 @@ func (a *App) offerFlowPush(kind, name string, opts ops.FinishFlowOptions) {
 
 func reportFinishFlow(reporter OperationReporter, kind, name string, result ops.FinishFlowResult, err error) {
 	keys := flowOperationTexts[kind]
+	if result.KeptTag != "" {
+		reporter.Log(i18n.Tf("Operation.Log.FlowTagKept", result.KeptTag))
+	}
 	switch {
 	case errors.Is(err, ops.ErrFlowBehind):
 		reporter.Log(i18n.T("Operation.Log.FlowBehind"))

@@ -30,7 +30,7 @@ func (a *App) showCommitDetails(id hash.ObjectID) {
 			a.statusLabel.SetText(i18n.Tf("Status.DetailsFailed", err))
 			return
 		}
-		if a.selectedCommit == details.Commit {
+		if a.selectedCommitID() == details.Commit {
 			a.detailsView.SetCopyHandler(a.copyToClipboard)
 			a.detailsView.SetParentHandler(a.selectJournalCommit)
 			a.detailsView.Show(detailsModel(details))

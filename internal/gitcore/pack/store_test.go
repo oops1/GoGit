@@ -95,7 +95,7 @@ func TestStoreSearchesTheNewestPackfileFirst(t *testing.T) {
 	names := fixtureNames(t)
 	dir := copyFixtureDir(t, names...)
 	oldest := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(filepath.Join(dir, names[0]+indexSuffix), oldest, oldest); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, names[0]+packSuffix), oldest, oldest); err != nil {
 		t.Fatalf("Chtimes returned error %v", err)
 	}
 	store := openStore(t, dir)
@@ -154,7 +154,7 @@ func TestStoreReloadReopensRewrittenPackfiles(t *testing.T) {
 	dir := copyFixtureDir(t, name)
 	store := openStore(t, dir)
 	later := time.Now().Add(time.Hour)
-	if err := os.Chtimes(filepath.Join(dir, name+indexSuffix), later, later); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, name+packSuffix), later, later); err != nil {
 		t.Fatalf("Chtimes returned error %v", err)
 	}
 	if changed, err := store.Reload(); !changed || err != nil {
@@ -179,58 +179,64 @@ func TestOpenStoreReportsMissingDirectory(t *testing.T) {
 	}
 }
 
-func TestOpenStoreReportsBrokenPairs(t *testing.T) {
+func TestOpenStoreSkipsBrokenPairsAndServesTheRest(t *testing.T) {
 	names := fixtureNames(t)
-	t.Run("brokenIndex", func(t *testing.T) {
-		dir := copyFixtureDir(t, names[0])
-		writeTemp(t, filepath.Join(dir, names[0]+indexSuffix), []byte("not an index"))
-		if _, err := Open(dir); !errors.Is(err, ErrTruncated) {
-			t.Fatalf("Open returned %v, want %v", err, ErrTruncated)
-		}
-	})
-	t.Run("brokenPack", func(t *testing.T) {
-		dir := copyFixtureDir(t, names[0])
-		writeTemp(t, filepath.Join(dir, names[0]+packSuffix), []byte("not a packfile"))
-		if _, err := Open(dir); !errors.Is(err, ErrTruncated) {
-			t.Fatalf("Open returned %v, want %v", err, ErrTruncated)
-		}
-	})
-	t.Run("mismatchedPair", func(t *testing.T) {
-		dir := copyFixtureDir(t, names[0])
-		writeTemp(t, filepath.Join(dir, names[0]+packSuffix),
-			readFixture(t, filepath.Join(packsDir, names[1]+packSuffix)))
-		if _, err := Open(dir); !errors.Is(err, ErrPackMismatch) {
-			t.Fatalf("Open returned %v, want %v", err, ErrPackMismatch)
-		}
-	})
+	for _, tc := range []struct {
+		name  string
+		pack  []byte
+		index []byte
+	}{
+		{"brokenIndex", readFixture(t, fixturePackPath(t, names[1])), []byte("not an index")},
+		{"brokenPack", []byte("not a packfile"), readFixture(t, fixtureIndexPath(t, names[1]))},
+		{"mismatchedPair", readFixture(t, fixturePackPath(t, names[0])), readFixture(t, fixtureIndexPath(t, names[1]))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := copyFixtureDir(t, names[0])
+			writeTemp(t, filepath.Join(dir, names[1]+packSuffix), tc.pack)
+			writeTemp(t, filepath.Join(dir, names[1]+indexSuffix), tc.index)
+			store := openStore(t, dir)
+			files := store.Files()
+			if len(files) != 1 || files[0].Name != names[0] {
+				t.Fatalf("the store lists %d packfiles, want only %s", len(files), names[0])
+			}
+			if _, _, ok, err := store.Get(objectTypesFirstID(t)); !ok || err != nil {
+				t.Fatalf("Get returned (%v, %v), want the object from the healthy packfile", ok, err)
+			}
+		})
+	}
 }
 
-func TestStoreReloadKeepsTheOldStateWhenAPackfileIsBroken(t *testing.T) {
+func TestStoreReloadIgnoresABrokenNewPackfile(t *testing.T) {
 	names := fixtureNames(t)
 	dir := copyFixtureDir(t, names[0])
 	store := openStore(t, dir)
 	for _, suffix := range []string{packSuffix, indexSuffix} {
 		writeTemp(t, filepath.Join(dir, names[1]+suffix), []byte("broken"))
 	}
-	if _, err := store.Reload(); !errors.Is(err, ErrTruncated) {
-		t.Fatalf("Reload returned %v, want %v", err, ErrTruncated)
+	if changed, err := store.Reload(); changed || err != nil {
+		t.Fatalf("Reload returned (%v, %v), want (false, nil)", changed, err)
 	}
 	if len(store.Files()) != 1 {
-		t.Fatalf("Files listed %d packfiles after a failed reload, want 1", len(store.Files()))
+		t.Fatalf("Files listed %d packfiles after the reload, want 1", len(store.Files()))
 	}
 }
 
-func TestStoreReloadClosesFilesItOpenedBeforeAFailure(t *testing.T) {
-	names := fixtureNames(t)
-	dir := copyFixtureDir(t, names...)
-	writeTemp(t, filepath.Join(dir, "zzz"+packSuffix), []byte("broken"))
-	broken := writeTemp(t, filepath.Join(dir, "zzz"+indexSuffix), []byte("broken"))
-	oldest := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(broken, oldest, oldest); err != nil {
-		t.Fatalf("Chtimes returned error %v", err)
+func TestStoreReloadKeepsAPackfileWhoseReopenFails(t *testing.T) {
+	name := fixtureNames(t)[0]
+	store := openStore(t, copyFixtureDir(t, name))
+	broken := copyFixtureDir(t, name)
+	writeTemp(t, filepath.Join(broken, name+indexSuffix), []byte("broken"))
+	held := store.Files()[0]
+	held.ModTime = time.Time{}
+	store.dir = broken
+	if changed, err := store.Reload(); changed || err != nil {
+		t.Fatalf("Reload returned (%v, %v), want (false, nil)", changed, err)
 	}
-	if _, err := Open(dir); !errors.Is(err, ErrTruncated) {
-		t.Fatalf("Open returned %v, want %v", err, ErrTruncated)
+	if files := store.Files(); len(files) != 1 || files[0] != held {
+		t.Fatalf("the store lists %v, want the packfile it already had open", files)
+	}
+	if _, _, ok, err := store.Get(objectTypesFirstID(t)); !ok || err != nil {
+		t.Fatalf("Get returned (%v, %v) after the failed reopen", ok, err)
 	}
 }
 
@@ -239,7 +245,7 @@ func TestStoreSortsPackfilesOfTheSameAgeByName(t *testing.T) {
 	dir := copyFixtureDir(t, names...)
 	stamp := time.Now().Add(-time.Minute)
 	for _, name := range names {
-		if err := os.Chtimes(filepath.Join(dir, name+indexSuffix), stamp, stamp); err != nil {
+		if err := os.Chtimes(filepath.Join(dir, name+packSuffix), stamp, stamp); err != nil {
 			t.Fatalf("Chtimes returned error %v", err)
 		}
 	}

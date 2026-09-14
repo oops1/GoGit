@@ -9,15 +9,52 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
 var ErrUnknownRename = errors.New("merge: rename names a path the trees do not have")
 
 type Renames map[string]string
 
+type cachedObject struct {
+	kind object.Type
+	data []byte
+}
+
+type cachedObjects struct {
+	objects diff.Objects
+	loaded  map[hash.ObjectID]cachedObject
+}
+
+func (c *cachedObjects) Get(id hash.ObjectID) (object.Type, []byte, error) {
+	if obj, ok := c.loaded[id]; ok {
+		return obj.kind, obj.data, nil
+	}
+	kind, data, err := c.objects.Get(id)
+	if err != nil {
+		return 0, nil, err
+	}
+	c.loaded[id] = cachedObject{kind: kind, data: data}
+	return kind, data, nil
+}
+
+func DetectSideRenames(ctx context.Context, objects diff.Objects, base, ours, theirs hash.ObjectID) (Renames, Renames, error) {
+	cached := &cachedObjects{objects: objects, loaded: map[hash.ObjectID]cachedObject{}}
+	ourRenames, err := DetectRenames(ctx, cached, base, ours)
+	if err != nil {
+		return nil, nil, err
+	}
+	theirRenames, err := DetectRenames(ctx, cached, base, theirs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ourRenames, theirRenames, nil
+}
+
 func DetectRenames(ctx context.Context, objects diff.Objects, base, side hash.ObjectID) (Renames, error) {
-	files, err := diff.Trees(ctx, objects, base, side, diff.Options{
+	files, err := diff.TreeChanges(ctx, objects, base, side, diff.Options{
 		DetectRenames:   true,
+		NoRenameEmpty:   true,
 		RenameThreshold: diff.DefaultRenameThreshold,
 		RenameLimit:     diff.DefaultRenameLimit,
 	})

@@ -51,14 +51,14 @@ func (e *Entry) Conflicted() bool {
 	return e.Stage != StageMerged
 }
 
-func (e *Entry) Matches(fi os.FileInfo, racy bool) bool {
+func (e *Entry) Matches(fi os.FileInfo, racy, symlinks bool) bool {
 	if fi == nil || e.IntentToAdd {
 		return false
 	}
 	if e.SkipWorktree || e.AssumeValid {
 		return true
 	}
-	if !e.typeMatches(fi) {
+	if !e.typeMatches(fi, symlinks) {
 		return false
 	}
 	if e.Mode.IsSubmodule() {
@@ -70,12 +70,12 @@ func (e *Entry) Matches(fi os.FileInfo, racy bool) bool {
 	return !racy || e.Stat.Size == 0
 }
 
-func (e *Entry) typeMatches(fi os.FileInfo) bool {
+func (e *Entry) typeMatches(fi os.FileInfo, symlinks bool) bool {
 	switch {
 	case e.Mode.IsSubmodule():
 		return fi.IsDir()
 	case e.Mode.IsSymlink():
-		return fi.Mode()&os.ModeSymlink != 0
+		return fi.Mode()&os.ModeSymlink != 0 || !symlinks && fi.Mode().IsRegular()
 	default:
 		return fi.Mode().IsRegular()
 	}

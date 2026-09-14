@@ -434,6 +434,7 @@ func TestFinishFlowLogsEveryOutcome(t *testing.T) {
 		{ops.FlowKindFeature, ops.FinishFlowResult{Stopped: ops.FlowStepMergeDevelop, Conflicts: []string{"a.txt"}}, nil, []string{i18n.Tf("Operation.Log.MergeConflictPath", "a.txt"), i18n.Tf("Operation.Log.FeatureStopped", 1)}},
 		{ops.FlowKindHotfix, ops.FinishFlowResult{}, ops.ErrFlowBehind, []string{i18n.T("Operation.Log.FlowBehind")}},
 		{ops.FlowKindRelease, ops.FinishFlowResult{}, errors.New("boom"), nil},
+		{ops.FlowKindRelease, ops.FinishFlowResult{KeptTag: "1.0"}, nil, []string{i18n.Tf("Operation.Log.FlowTagKept", "1.0"), i18n.Tf("Operation.Log.ReleaseFinished", "1.0")}},
 	} {
 		runOnDispatcher(t, a, func() {
 			a.RunOperation("finish", func(_ context.Context, reporter OperationReporter) error {
@@ -447,6 +448,20 @@ func TestFinishFlowLogsEveryOutcome(t *testing.T) {
 				t.Fatalf("%+v, %v: log = %v, want %q", c.result, c.err, lines, want)
 			}
 		}
+	}
+}
+
+func TestStartingAReleaseOverAnExistingTagNamesTheTag(t *testing.T) {
+	a, target := flowReadyApp(t, true)
+	operations := captureOperationViews(t)
+	if _, err := ops.CreateTag(t.Context(), openRepoAt(t, target), "1.0", "main", ops.CreateTagOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	runOnDispatcher(t, a, func() { a.startFlow(ops.FlowKindRelease, "1.0", "develop") })
+
+	if lines := operationLines(t, a, operations); !slices.Contains(lines, i18n.Tf("Operation.Log.FlowTagExists", "1.0")) {
+		t.Fatalf("start log = %v", lines)
 	}
 }
 

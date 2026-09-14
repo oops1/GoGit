@@ -161,6 +161,74 @@ func TestCallbacksAreOptional(t *testing.T) {
 	v.cancelBtn.OnClick()
 }
 
+func namedTagView(t *testing.T) (*View, *Model) {
+	t.Helper()
+	v := newTestView(t)
+	v.SetKnown(Known{Commit: "1234567"})
+	got := &Model{}
+	v.OnOK = func(model Model) { *got = model }
+	v.nameBox.SetText("v2")
+	v.nameBox.OnChange("v2")
+	return v, got
+}
+
+func TestEnterInTheNameBoxCreatesTheTag(t *testing.T) {
+	v, got := namedTagView(t)
+	v.nameBox.SetFocused(true)
+
+	handled := v.modal.HandleInputBinding(widget.KeyEnter, 0)
+
+	if !handled || got.Name != "v2" {
+		t.Fatalf("handled = %v, model = %+v", handled, *got)
+	}
+	if v.Modal() != v.modal {
+		t.Fatal("the dialog is shown through the modal that knows about Enter")
+	}
+}
+
+func TestEnterInTheMessageBoxStartsANewLine(t *testing.T) {
+	v, got := namedTagView(t)
+	v.messageBox.SetFocused(true)
+
+	handled := v.modal.HandleInputBinding(widget.KeyEnter, 0)
+
+	if handled || got.Name != "" {
+		t.Fatalf("handled = %v, model = %+v, want Enter left to the message box", handled, *got)
+	}
+}
+
+func TestCtrlEnterInTheMessageBoxCreatesTheTag(t *testing.T) {
+	v, got := namedTagView(t)
+	v.messageBox.SetFocused(true)
+
+	handled := v.modal.HandleInputBinding(widget.KeyEnter, widget.ModCtrl)
+
+	if !handled || got.Name != "v2" {
+		t.Fatalf("handled = %v, model = %+v", handled, *got)
+	}
+}
+
+func TestEnterWithoutAValidNameCreatesNothing(t *testing.T) {
+	v := newTestView(t)
+	v.SetKnown(Known{Commit: "1234567"})
+	confirmed := false
+	v.OnOK = func(Model) { confirmed = true }
+
+	handled := v.modal.HandleInputBinding(widget.KeyEnter, 0)
+
+	if !handled || confirmed {
+		t.Fatalf("handled = %v, confirmed = %v", handled, confirmed)
+	}
+}
+
+func TestOtherKeysReachTheDialog(t *testing.T) {
+	v, got := namedTagView(t)
+
+	if v.modal.HandleInputBinding(widget.KeyA, 0) || got.Name != "" {
+		t.Fatal("a plain key was taken for a confirmation")
+	}
+}
+
 func TestRestyleAcceptsBothThemes(t *testing.T) {
 	v := newTestView(t)
 	for _, theme := range []*widget.Theme{widget.Win11DarkTheme(), widget.Win11LightTheme()} {

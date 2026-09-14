@@ -16,6 +16,7 @@ const (
 	extResolveUndo    = "REUC"
 	extUntracked      = "UNTR"
 	extSplitIndex     = "link"
+	extSparseIndex    = "sdir"
 	extEndOfEntries   = "EOIE"
 	extOffsetTable    = "IEOT"
 	extensionHeader   = 8

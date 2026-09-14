@@ -33,6 +33,10 @@ func (p *packedSnapshot) find(name Name) (Ref, bool) {
 	return p.refs[index], true
 }
 
+func (p *packedSnapshot) knowsPeeled(name Name) bool {
+	return p.fullyPeeled || p.peeled && name.IsTag()
+}
+
 func (p *packedSnapshot) hasPrefix(prefix string) bool {
 	for _, ref := range p.refs {
 		if strings.HasPrefix(string(ref.Name), prefix) {

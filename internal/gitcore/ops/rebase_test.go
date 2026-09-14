@@ -422,7 +422,7 @@ func TestSkippingWithAnUnreadableHeadFails(t *testing.T) {
 
 func TestTheRebaseStateNeedsItsDirectory(t *testing.T) {
 	tr := newTestRepo(t)
-	swapRootMkdirAllFailForPath(t, rebaseDir)
+	swapRootMkdirFailForPath(t, rebaseDir)
 
 	if err := writeRebaseState(tr.repo, RebaseState{HeadName: "refs/heads/topic"}); !errors.Is(err, errInjected) {
 		t.Fatalf("err = %v", err)

@@ -63,8 +63,22 @@ func validName(name string) bool {
 	return !strings.HasPrefix(name, "-") && refs.CheckFormat(refs.TagsPrefix+name, 0) == nil
 }
 
+type enterModal struct {
+	*widget.Dialog
+	view *View
+}
+
+func (m *enterModal) HandleInputBinding(code widget.KeyCode, mod widget.KeyMod) bool {
+	if code == widget.KeyEnter && (mod&widget.ModCtrl != 0 || !m.view.messageBox.IsFocused()) {
+		m.view.confirm()
+		return true
+	}
+	return m.Dialog.HandleInputBinding(code, mod)
+}
+
 type View struct {
 	dlg          *widget.Dialog
+	modal        *enterModal
 	nameLabel    *widget.Label
 	nameBox      *widget.TextInput
 	messageLabel *widget.Label
@@ -89,6 +103,7 @@ func NewView() (*View, error) {
 	if err := v.bind(named); err != nil {
 		return nil, err
 	}
+	v.modal = &enterModal{Dialog: dlg, view: v}
 	v.hintLabel.Muted = true
 	v.wire()
 	v.refresh()
@@ -96,6 +111,8 @@ func NewView() (*View, error) {
 }
 
 func (v *View) Dialog() *widget.Dialog { return v.dlg }
+
+func (v *View) Modal() widget.ModalWidget { return v.modal }
 
 func (v *View) Restyle(t *widget.Theme) {
 	p := style.Of(t)

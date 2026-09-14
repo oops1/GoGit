@@ -54,6 +54,7 @@ func (h *storeHelper) Get(_ context.Context, q Query) (Answer, bool, error) {
 }
 
 func (h *storeHelper) Store(_ context.Context, q Query, a Answer) error {
+	q = q.withAnswer(a)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	entries, err := readStoreFile(h.path)
@@ -79,7 +80,8 @@ func (h *storeHelper) Store(_ context.Context, q Query, a Answer) error {
 	return writeStoreFile(h.path, kept)
 }
 
-func (h *storeHelper) Erase(_ context.Context, q Query) error {
+func (h *storeHelper) Erase(_ context.Context, q Query, a Answer) error {
+	q = q.withAnswer(a)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	entries, err := readStoreFile(h.path)
@@ -88,7 +90,7 @@ func (h *storeHelper) Erase(_ context.Context, q Query) error {
 	}
 	kept := make([]storeEntry, 0, len(entries))
 	for _, e := range entries {
-		if e.parsed && storeEntryMatches(&e, q) {
+		if e.parsed && storeEntryMatches(&e, q) && (len(a.Password) == 0 || e.password == string(a.Password)) {
 			continue
 		}
 		kept = append(kept, e)

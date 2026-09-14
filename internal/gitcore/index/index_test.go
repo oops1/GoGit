@@ -198,11 +198,11 @@ func TestMatchesFileCombinesTheStatCheckWithTheRaceWindow(t *testing.T) {
 	idx.Add(Entry{Path: "a", Mode: object.ModeBlob, Stat: Stat{Size: 4, MTime: time.Unix(1000, 0)}})
 	entry := idx.At(0)
 	info := fakeInfo{size: 4, modified: time.Unix(1000, 0)}
-	if !idx.MatchesFile(entry, info) {
+	if !idx.MatchesFile(entry, info, true) {
 		t.Fatal("MatchesFile reported a change for an untouched file")
 	}
 	idx.Timestamp = time.Unix(1000, 0)
-	if idx.MatchesFile(entry, info) {
+	if idx.MatchesFile(entry, info, true) {
 		t.Fatal("MatchesFile trusted the stat data inside the race window")
 	}
 }

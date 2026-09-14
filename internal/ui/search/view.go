@@ -103,7 +103,7 @@ func (v *View) wire() {
 	v.scanBtn.OnClick = v.scan
 	v.cancelBtn.OnClick = v.cancel
 	v.addBtn.OnClick = v.add
-	v.dlg.DefaultAction = v.add
+	v.dlg.DefaultAction = v.submit
 	v.dlg.CancelAction = v.cancel
 }
 
@@ -113,8 +113,16 @@ func (v *View) browse() {
 	}
 }
 
+func (v *View) submit() {
+	if len(v.found) == 0 {
+		v.scan()
+		return
+	}
+	v.add()
+}
+
 func (v *View) scan() {
-	if v.OnScan != nil {
+	if v.OnScan != nil && v.scanBtn.IsEnabled() {
 		v.OnScan(v.Root(), v.includeBare.IsChecked())
 	}
 }
@@ -126,7 +134,7 @@ func (v *View) cancel() {
 }
 
 func (v *View) add() {
-	if v.OnAdd != nil {
+	if v.OnAdd != nil && v.addBtn.IsEnabled() {
 		v.OnAdd(v.selectedOrAllPaths())
 	}
 }

@@ -356,7 +356,7 @@ func TestAppCloseStopsTheWatcherAndThePostQueue(t *testing.T) {
 	}
 }
 
-func TestPauseWatchAndResumeWatchDelegateToTheActiveWatcher(t *testing.T) {
+func TestHoldWatchPausesTheActiveWatcherAndResumesAndPokesItOnRelease(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "main")
 	initTestRepo(t, target)
@@ -368,18 +368,20 @@ func TestPauseWatchAndResumeWatchDelegateToTheActiveWatcher(t *testing.T) {
 	a.ActivateRepository("r1")
 	<-fw.started
 
-	a.pauseWatch()
-	a.resumeWatch()
+	resume := a.holdWatch()
+	if fw.pauses.Load() != 1 || fw.resumes.Load() != 0 {
+		t.Fatalf("pauses = %d, resumes = %d, want the watcher paused while held", fw.pauses.Load(), fw.resumes.Load())
+	}
+	resume()
 
-	if fw.pauses.Load() != 1 || fw.resumes.Load() != 1 {
-		t.Fatalf("pauses = %d, resumes = %d, want 1 and 1", fw.pauses.Load(), fw.resumes.Load())
+	if fw.resumes.Load() != 1 || fw.pokes.Load() != 1 {
+		t.Fatalf("resumes = %d, pokes = %d, want 1 and 1", fw.resumes.Load(), fw.pokes.Load())
 	}
 }
 
-func TestPauseWatchAndResumeWatchAreNoOpsWithoutAnActiveWatcher(t *testing.T) {
+func TestHoldWatchIsANoOpWithoutAnActiveWatcher(t *testing.T) {
 	a := newTestApp(t)
-	a.pauseWatch()
-	a.resumeWatch()
+	a.holdWatch()()
 }
 
 func TestStopWatcherIsANoOpWithoutAnActiveWatcher(t *testing.T) {

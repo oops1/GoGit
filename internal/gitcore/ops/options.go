@@ -27,5 +27,6 @@ type CreateBranchOptions struct {
 }
 
 type SwitchOptions struct {
-	Force bool
+	Force  bool
+	Report *CheckoutReport
 }

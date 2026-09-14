@@ -10,6 +10,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/pack"
 )
 
 func makeObjectsDir(t testing.TB, parent, name string) string {
@@ -153,10 +154,16 @@ func TestOpenReportsFailuresInsideAlternates(t *testing.T) {
 	root := t.TempDir()
 	main := makeObjectsDir(t, root, "main")
 	shared := makeObjectsDir(t, root, "shared")
-	writeFile(t, filepath.Join(shared, packDirName, "pack-broken.pack"), []byte("not a packfile"))
-	writeFile(t, filepath.Join(shared, packDirName, "pack-broken.idx"), []byte("not an index"))
+	copyFixturePacks(t, shared)
 	writeAlternates(t, main, shared)
-	if _, err := Open(main, Options{}); err == nil {
+	real := packOpen
+	swapMaintain(t, &packOpen, func(dir string, opts ...pack.Option) (*pack.Store, error) {
+		if strings.HasPrefix(dir, shared) {
+			return nil, errInjected
+		}
+		return real(dir, opts...)
+	})
+	if _, err := Open(main, Options{}); !errors.Is(err, errInjected) {
 		t.Fatal("Open accepted a damaged alternate")
 	}
 }
@@ -214,10 +221,16 @@ func TestReloadReportsAlternateFailures(t *testing.T) {
 	main := makeObjectsDir(t, root, "main")
 	shared := makeObjectsDir(t, root, "shared")
 	writeAlternates(t, main, shared)
+	copyFixturePacks(t, shared)
 	db := openDB(t, main, Options{})
-	writeFile(t, filepath.Join(shared, packDirName, "pack-broken.pack"), []byte("not a packfile"))
-	writeFile(t, filepath.Join(shared, packDirName, "pack-broken.idx"), []byte("not an index"))
-	if _, err := db.Reload(); err == nil {
+	real := packReload
+	swapMaintain(t, &packReload, func(store *pack.Store) (bool, error) {
+		if strings.HasPrefix(store.Dir(), shared) {
+			return false, errInjected
+		}
+		return real(store)
+	})
+	if _, err := db.Reload(); !errors.Is(err, errInjected) {
 		t.Fatal("Reload accepted a damaged alternate")
 	}
 }

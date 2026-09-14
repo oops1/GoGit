@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -70,17 +72,44 @@ func (d *DB) Put(kind object.Type, data []byte) (hash.ObjectID, error) {
 		return hash.Zero, fmt.Errorf("%w: %d", object.ErrUnknownType, uint8(kind))
 	}
 	id := hash.SumSHA1(kind.String(), data)
-	known, err := d.has(id)
+	fresh, err := d.freshen(id)
 	if err != nil {
 		return hash.Zero, err
 	}
-	if known {
+	if fresh {
 		return id, nil
 	}
 	if err := d.writeLoose(id, kind, data); err != nil {
 		return hash.Zero, err
 	}
 	return id, nil
+}
+
+func (d *DB) freshen(id hash.ObjectID) (bool, error) {
+	if store := d.store(); store != nil {
+		name, packed, err := store.Holder(id)
+		if err != nil {
+			return false, err
+		}
+		if packed && d.touchNow(filepath.Join(packDirName, name+packDataSuffix)) {
+			return true, nil
+		}
+	}
+	if d.touchNow(looseName(id)) {
+		return true, nil
+	}
+	for _, alternate := range d.alternates {
+		fresh, err := alternate.freshen(id)
+		if fresh || err != nil {
+			return fresh, err
+		}
+	}
+	return false, nil
+}
+
+func (d *DB) touchNow(name string) bool {
+	now := time.Now()
+	return rootChtimes(d.root, name, now, now) == nil
 }
 
 func (d *DB) PutObject(obj object.Object) (hash.ObjectID, error) {
@@ -157,12 +186,12 @@ func (w *ObjectWriter) Close() error {
 		return fmt.Errorf("odb: store object in %s: %w", w.db.dir, err)
 	}
 	w.id = id
-	known, err := w.db.Has(id)
+	fresh, err := w.db.freshen(id)
 	if err != nil {
 		w.temp.abort()
 		return err
 	}
-	if known {
+	if fresh {
 		w.temp.abort()
 		return nil
 	}

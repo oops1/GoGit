@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -163,6 +164,37 @@ func (p *rerereRun) replay(cache *rerere.Cache, conflict rerere.Conflict, varian
 		return nil, nil
 	}
 	return result.Content, nil
+}
+
+func (p *rerereRun) record() error {
+	if !rerereActive(p.r) {
+		return nil
+	}
+	return p.recordResolutions()
+}
+
+func (p *rerereRun) clear() error {
+	if !rerereActive(p.r) {
+		return nil
+	}
+	known, err := readMergeRR(p.r)
+	if err != nil {
+		return err
+	}
+	cache, err := rerere.OpenCache(p.r.GitDir())
+	if err != nil {
+		return err
+	}
+	for _, entry := range known {
+		resolved := slices.ContainsFunc(cache.Variants(entry.ID), func(v rerere.Variant) bool {
+			return v.Index == entry.Variant && v.HasPostimage
+		})
+		if !resolved {
+			_ = cache.RemoveVariant(entry.ID, entry.Variant)
+			_ = os.Remove(filepath.Join(cache.Dir(), entry.ID))
+		}
+	}
+	return forgetMergeRR(p.r)
 }
 
 func (p *rerereRun) recordResolutions() error {

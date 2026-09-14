@@ -11,6 +11,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/compare"
@@ -31,6 +32,7 @@ func activate(t *testing.T, a *App, relPath string) {
 		a.onFilesRowActivated(0, changes.Row{RelPath: relPath})
 		return true
 	})
+	waitForReadJobs(t, a)
 }
 
 func TestDoubleClickingAModifiedFileComparesItWithTheRepository(t *testing.T) {
@@ -284,6 +286,7 @@ func TestCompareFilesOnOneFileOfACommitComparesItWithTheParent(t *testing.T) {
 	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(0); return true })
 
 	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+	waitForReadJobs(t, a)
 
 	view := *captured
 	if view.Diff().Text(widget.DiffLeft) != "before\n" || view.Diff().Text(widget.DiffRight) != "after\n" {
@@ -313,6 +316,7 @@ func TestCompareFilesOnTwoFilesOfACommitPutsTheirVersionsSideBySide(t *testing.T
 	})
 
 	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+	waitForReadJobs(t, a)
 
 	view := *captured
 	if view.Diff().Text(widget.DiffLeft) != "first\n" || view.Diff().Text(widget.DiffRight) != "" {
@@ -326,6 +330,7 @@ func TestCompareFilesOnACommitWithNothingSelectedOpensAnEmptyWindow(t *testing.T
 	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(-1); return true })
 
 	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+	waitForReadJobs(t, a)
 
 	if *captured == nil || (*captured).Diff().FilePath(widget.DiffLeft) != "" {
 		t.Fatal("the window must open empty")
@@ -339,6 +344,7 @@ func TestCompareFilesOnABrokenCommitFileIsLogged(t *testing.T) {
 	readOnDispatcher(t, a, func() bool { a.filesGrid.Data().Grid.SetSelectedIndex(0); return true })
 
 	readOnDispatcher(t, a, func() bool { return a.Dispatch(CmdCompareFiles) })
+	waitForReadJobs(t, a)
 
 	if *captured != nil {
 		t.Fatal("a file whose objects cannot be read must not open")
@@ -362,10 +368,38 @@ func TestTwoBrokenCommitFilesAreLoggedToo(t *testing.T) {
 			a.compareCommitFiles(files)
 			return true
 		})
+		waitForReadJobs(t, a)
 	}
 
 	if *captured != nil {
 		t.Fatal("a pair with an unreadable file must not open")
+	}
+}
+
+func TestOpeningACompareReadsTheFileOffTheDispatcher(t *testing.T) {
+	a, _, captured := workingCompareApp(t)
+	release := make(chan struct{})
+	prev := compareBlobData
+	compareBlobData = func(db *odb.DB, id hash.ObjectID) ([]byte, bool, error) {
+		<-release
+		return prev(db, id)
+	}
+	t.Cleanup(func() { compareBlobData = prev })
+
+	readOnDispatcher(t, a, func() bool {
+		a.onFilesRowActivated(0, changes.Row{RelPath: "modified.txt"})
+		a.onFilesRowActivated(0, changes.Row{RelPath: "modified.txt"})
+		return true
+	})
+	openedEarly := readOnDispatcher(t, a, func() bool { return *captured != nil })
+	close(release)
+	waitForReadJobs(t, a)
+
+	if openedEarly {
+		t.Fatal("the compare window opened before its sides were read")
+	}
+	if *captured == nil || (*captured).Diff().Text(widget.DiffLeft) != "old\n" {
+		t.Fatal("the compare window must open once the sides are read")
 	}
 }
 

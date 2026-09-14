@@ -42,15 +42,15 @@ func (h *execHelper) Get(ctx context.Context, q Query) (Answer, bool, error) {
 }
 
 func (h *execHelper) Store(ctx context.Context, q Query, a Answer) error {
-	request := encodeRequest(q, a.Password)
+	request := encodeRequest(q.withAnswer(a), a.Password)
 	out, err := h.run(ctx, "store", request)
 	clear(request)
 	clear(out)
 	return err
 }
 
-func (h *execHelper) Erase(ctx context.Context, q Query) error {
-	request := encodeRequest(q, nil)
+func (h *execHelper) Erase(ctx context.Context, q Query, a Answer) error {
+	request := encodeRequest(q.withAnswer(a), a.Password)
 	out, err := h.run(ctx, "erase", request)
 	clear(request)
 	clear(out)
@@ -90,7 +90,7 @@ func encodeRequest(q Query, password []byte) []byte {
 	writeField(&buf, "host", q.Host)
 	writeField(&buf, "path", q.Path)
 	writeField(&buf, "username", q.Username)
-	if password != nil {
+	if len(password) > 0 {
 		buf.WriteString("password=")
 		buf.Write(password)
 		buf.WriteByte('\n')

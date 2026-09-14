@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"io/fs"
+	"sync"
 	"time"
 
 	"github.com/oops1/gogit/internal/config"
@@ -25,27 +27,62 @@ var (
 	buildCredentialChain = defaultCredentialChainAndQuery
 )
 
+type credentialOrigin int
+
+const (
+	credentialFromDialog credentialOrigin = iota
+	credentialFromVault
+	credentialFromHelper
+)
+
+type suppliedCredential struct {
+	origin       credentialOrigin
+	vaultEntry   string
+	legacyEntry  bool
+	username     string
+	secret       []byte
+	saveToVault  bool
+	saveToHelper bool
+	chain        credential.Chain
+	query        credential.Query
+}
+
+func (c *suppliedCredential) wipe() {
+	clear(c.secret)
+	c.secret = nil
+}
+
 type appCredentialSource struct {
-	app *App
+	app           *App
+	mu            sync.Mutex
+	supplied      map[string]*suppliedCredential
+	rejectedUsers map[string]string
 }
 
 func (a *App) credentialSource() transport.CredentialSource {
-	return appCredentialSource{app: a}
+	return &appCredentialSource{
+		app:           a,
+		supplied:      map[string]*suppliedCredential{},
+		rejectedUsers: map[string]string{},
+	}
 }
 
-func (s appCredentialSource) Credentials(ctx context.Context, resource string, retry bool) (transport.Credentials, error) {
+func (s *appCredentialSource) Credentials(ctx context.Context, resource string, retry bool) (transport.Credentials, error) {
 	a := s.app
 	mode := a.cfg.Git.CredentialSource
-	username := ""
 
-	if mode != config.CredentialSourceHelper {
-		if !retry {
-			if cred, ok := a.vaultCredential(resource); ok {
-				return transport.Credentials{Username: cred.Username, Password: cred.Secret}, nil
-			}
-		} else if cred, ok := a.vaultCredential(resource); ok {
-			username = cred.Username
+	if !retry && mode != config.CredentialSourceHelper {
+		if cred, legacy, ok := a.vaultCredentialFor(resource); ok {
+			s.record(resource, &suppliedCredential{
+				origin:      credentialFromVault,
+				vaultEntry:  cred.Resource,
+				legacyEntry: legacy,
+				username:    cred.Username,
+				secret:      cred.Secret,
+			})
+			creds := transport.Credentials{Username: cred.Username, Password: append([]byte(nil), cred.Secret...)}
 			cred.Wipe()
+			return creds, nil
 		}
 	}
 
@@ -54,37 +91,112 @@ func (s appCredentialSource) Credentials(ctx context.Context, resource string, r
 	if mode == config.CredentialSourceVaultThenHelper || mode == config.CredentialSourceHelper {
 		chain, q = buildCredentialChain(a, resource)
 		if !retry {
-			if ans, ok, err := chain.Get(ctx, q); err == nil && ok {
-				helperUsername := ans.Username
-				password := append([]byte(nil), ans.Password...)
-				ans.Wipe()
-				return transport.Credentials{Username: helperUsername, Password: password}, nil
+			ans, ok, err := chain.Get(ctx, q)
+			if err != nil {
+				a.log.Warn("query credential helpers failed", "resource", resource, "error", err)
 			}
-		} else {
-			if ans, ok, err := chain.Get(ctx, q); err == nil && ok {
-				if username == "" {
-					username = ans.Username
-				}
+			if ok {
+				s.record(resource, &suppliedCredential{
+					origin:       credentialFromHelper,
+					username:     ans.Username,
+					secret:       ans.Password,
+					saveToHelper: true,
+					chain:        chain,
+					query:        q,
+				})
+				creds := transport.Credentials{Username: ans.Username, Password: append([]byte(nil), ans.Password...)}
 				ans.Wipe()
-			}
-			if err := chain.Erase(ctx, q); err != nil {
-				a.log.Warn("erase stale credential from helper failed", "resource", resource, "error", err)
+				return creds, nil
 			}
 		}
 	}
 
-	result, ok := a.askCredentials(ctx, resource, username, retry, rememberTargetLabel(mode))
+	result, ok := a.askCredentials(ctx, resource, s.promptUsername(resource, retry), retry, rememberTargetLabel(mode))
 	if !ok {
 		return transport.Credentials{}, transport.ErrNoCredentials
 	}
-	if result.Remember {
-		if mode == config.CredentialSourceHelper {
-			a.rememberCredentialToHelper(ctx, chain, q, result.Username, result.Secret)
-		} else {
-			a.rememberCredential(ctx, resource, result.Username, result.Secret)
+	s.record(resource, &suppliedCredential{
+		origin:       credentialFromDialog,
+		username:     result.Username,
+		secret:       result.Secret,
+		saveToVault:  result.Remember && mode != config.CredentialSourceHelper,
+		saveToHelper: result.Remember && mode == config.CredentialSourceHelper,
+		chain:        chain,
+		query:        q,
+	})
+	return transport.Credentials{Username: result.Username, Password: result.Secret}, nil
+}
+
+func (s *appCredentialSource) Approve(ctx context.Context, resource string, creds transport.Credentials) {
+	supplied := s.take(resource, creds)
+	if supplied == nil {
+		return
+	}
+	defer supplied.wipe()
+	a := s.app
+	if supplied.legacyEntry {
+		a.migrateLegacyCredential(supplied.vaultEntry, supplied.username, supplied.secret)
+	}
+	if supplied.saveToHelper {
+		a.storeCredentialToHelper(ctx, supplied.chain, supplied.query, supplied.username, supplied.secret)
+	}
+	if supplied.saveToVault {
+		a.rememberCredential(ctx, resource, supplied.username, supplied.secret)
+	}
+}
+
+func (s *appCredentialSource) Reject(ctx context.Context, resource string, creds transport.Credentials) {
+	supplied := s.take(resource, creds)
+	if supplied == nil {
+		return
+	}
+	defer supplied.wipe()
+	s.mu.Lock()
+	s.rejectedUsers[resource] = supplied.username
+	s.mu.Unlock()
+	a := s.app
+	switch supplied.origin {
+	case credentialFromVault:
+		a.forgetVaultCredential(supplied.vaultEntry, supplied.secret)
+	case credentialFromHelper:
+		ans := credential.Answer{Username: supplied.username, Password: supplied.secret}
+		if err := supplied.chain.Erase(ctx, supplied.query, ans); err != nil {
+			a.log.Warn("erase rejected credential from helper failed", "resource", resource, "error", err)
 		}
 	}
-	return transport.Credentials{Username: result.Username, Password: result.Secret}, nil
+}
+
+func (s *appCredentialSource) record(resource string, supplied *suppliedCredential) {
+	supplied.secret = append([]byte(nil), supplied.secret...)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if previous := s.supplied[resource]; previous != nil {
+		previous.wipe()
+	}
+	s.supplied[resource] = supplied
+}
+
+func (s *appCredentialSource) take(resource string, creds transport.Credentials) *suppliedCredential {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	supplied := s.supplied[resource]
+	if supplied == nil || supplied.username != creds.Username || subtle.ConstantTimeCompare(supplied.secret, creds.Password) != 1 {
+		return nil
+	}
+	delete(s.supplied, resource)
+	return supplied
+}
+
+func (s *appCredentialSource) promptUsername(resource string, retry bool) string {
+	if endpoint, _, _ := transport.ParseURL(resource); endpoint.User != "" {
+		return endpoint.User
+	}
+	if !retry {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rejectedUsers[resource]
 }
 
 func rememberTargetLabel(mode string) string {
@@ -96,9 +208,8 @@ func rememberTargetLabel(mode string) string {
 
 func defaultCredentialChainAndQuery(a *App, resource string) (credential.Chain, credential.Query) {
 	cfg := a.repositoryConfigForCredentials()
-	rawURL := "https://" + resource
-	q := credentialQueryFor(cfg, rawURL)
-	chain, _, err := credential.FromConfig(cfg, rawURL)
+	q := credentialQueryFor(cfg, resource)
+	chain, _, err := credential.FromConfig(cfg, resource)
 	if err != nil {
 		a.log.Warn("resolve credential helpers failed", "resource", resource, "error", err)
 		return nil, q
@@ -136,7 +247,7 @@ func (a *App) repositoryConfigForCredentials() *gitconfig.Config {
 	return r.Config()
 }
 
-func (a *App) rememberCredentialToHelper(ctx context.Context, chain credential.Chain, q credential.Query, username string, secret []byte) {
+func (a *App) storeCredentialToHelper(ctx context.Context, chain credential.Chain, q credential.Query, username string, secret []byte) {
 	ans := credential.Answer{Username: username, Password: append([]byte(nil), secret...)}
 	if err := chain.Store(ctx, q, ans); err != nil {
 		a.log.Warn("save credential to helper failed", "error", err)
@@ -144,12 +255,80 @@ func (a *App) rememberCredentialToHelper(ctx context.Context, chain credential.C
 	ans.Wipe()
 }
 
-func (a *App) vaultCredential(resource string) (vault.Credential, bool) {
+func credentialResourceKey(typed string) string {
+	endpoint, password, err := transport.ParseURL(typed)
+	password.Wipe()
+	if err != nil || (endpoint.Scheme != transport.SchemeHTTP && endpoint.Scheme != transport.SchemeHTTPS) {
+		return typed
+	}
+	return transport.CredentialResource(endpoint)
+}
+
+type vaultLookup struct {
+	key    string
+	user   string
+	legacy bool
+}
+
+func vaultLookupsFor(resource string) []vaultLookup {
+	lookups := []vaultLookup{{key: resource}}
+	endpoint, _, _ := transport.ParseURL(resource)
+	if endpoint.User != "" {
+		anonymous := endpoint
+		anonymous.User = ""
+		lookups = append(lookups, vaultLookup{key: transport.CredentialResource(anonymous), user: endpoint.User})
+	}
+	if endpoint.Scheme == transport.SchemeHTTPS && endpoint.Port == "" && endpoint.User == "" {
+		lookups = append(lookups, vaultLookup{key: endpoint.Host + endpoint.Path, legacy: true})
+	}
+	return lookups
+}
+
+func (a *App) vaultCredentialFor(resource string) (vault.Credential, bool, bool) {
 	v := a.vaultIfOpen()
 	if v == nil {
-		return vault.Credential{}, false
+		return vault.Credential{}, false, false
 	}
-	return v.Credential(resource)
+	for _, lookup := range vaultLookupsFor(resource) {
+		cred, ok := v.Credential(lookup.key)
+		if ok && (lookup.user == "" || cred.Username == lookup.user) {
+			return cred, lookup.legacy, true
+		}
+		cred.Wipe()
+	}
+	return vault.Credential{}, false, false
+}
+
+func (a *App) migrateLegacyCredential(entry, username string, secret []byte) {
+	v := a.vaultIfOpen()
+	if v == nil {
+		return
+	}
+	migrated := vault.Credential{Resource: "https://" + entry, Username: username, Secret: append([]byte(nil), secret...)}
+	err := v.SetCredential(migrated)
+	migrated.Wipe()
+	if err == nil {
+		err = v.DeleteCredential(entry)
+	}
+	if err != nil {
+		a.log.Warn("move saved credential to the url key failed", "resource", entry, "error", err)
+	}
+}
+
+func (a *App) forgetVaultCredential(entry string, secret []byte) {
+	v := a.vaultIfOpen()
+	if v == nil {
+		return
+	}
+	current, ok := v.Credential(entry)
+	stale := ok && current.Resource == entry && subtle.ConstantTimeCompare(current.Secret, secret) == 1
+	current.Wipe()
+	if !stale {
+		return
+	}
+	if err := v.DeleteCredential(entry); err != nil {
+		a.log.Warn("remove rejected credential failed", "resource", entry, "error", err)
+	}
 }
 
 func (a *App) vaultIfOpen() *vault.Vault {

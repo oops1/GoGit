@@ -615,20 +615,8 @@ func swapRootReadlinkForPath(t testing.TB, path, target string) {
 func swapRootSymlinkSucceeds(t testing.TB) {
 	t.Helper()
 	original := fsRootSymlink
-	fsRootSymlink = func(*os.Root, string, string) error { return nil }
+	fsRootSymlink = func(root *os.Root, target, name string) error { return root.WriteFile(name, []byte(target), 0o666) }
 	t.Cleanup(func() { fsRootSymlink = original })
-}
-
-func swapRootMkdirAllFailForPath(t testing.TB, failPath string) {
-	t.Helper()
-	original := fsRootMkdirAll
-	fsRootMkdirAll = func(root *os.Root, name string, perm fs.FileMode) error {
-		if filepath.ToSlash(name) == failPath {
-			return errInjected
-		}
-		return original(root, name, perm)
-	}
-	t.Cleanup(func() { fsRootMkdirAll = original })
 }
 
 func TestDiscardFailsWhenIndexFileIsCorrupt(t *testing.T) {
@@ -789,7 +777,7 @@ func TestDiscardFailsWhenMkdirAllFails(t *testing.T) {
 	idx := r.index()
 	idx.Add(index.Entry{Path: "dir/a.txt", Mode: object.ModeBlob, ID: blobID, Stage: index.StageMerged})
 	r.saveIndex(idx)
-	swapRootMkdirAllFailForPath(t, "dir")
+	swapRootMkdirFailForPath(t, "dir")
 	if err := Discard(t.Context(), r.repo, []string{"dir/a.txt"}, DiscardOptions{}); !errors.Is(err, errInjected) {
 		t.Fatalf("err = %v, want errInjected", err)
 	}
@@ -1557,7 +1545,7 @@ func TestCheckoutFailsWhenMkdirAllFails(t *testing.T) {
 	if err := Switch(t.Context(), r.repo, "feature", SwitchOptions{}); err != nil {
 		t.Fatalf("Switch returned error %v", err)
 	}
-	swapRootMkdirAllFailForPath(t, "dir")
+	swapRootMkdirFailForPath(t, "dir")
 	err := Switch(t.Context(), r.repo, "feature2", SwitchOptions{})
 	if !errors.Is(err, errInjected) {
 		t.Fatalf("err = %v, want errInjected", err)

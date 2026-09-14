@@ -140,6 +140,29 @@ func TestARebaseThatCannotStartIsExplained(t *testing.T) {
 	}
 }
 
+func TestARebaseThatCannotContinueIsExplained(t *testing.T) {
+	for key, cause := range map[string]error{
+		"Operation.Log.RebaseUnsupported":     ops.ErrRebaseStepUnsupported,
+		"Operation.Log.RebaseUncommitted":     ops.ErrRebaseUncommittedChanges,
+		"Operation.Log.RebaseApplyInProgress": ops.ErrRebaseApplyInProgress,
+	} {
+		t.Run(key, func(t *testing.T) {
+			a, _ := forkedApp(t, false)
+			prev := runContinueRebase
+			runContinueRebase = func(context.Context, *gitrepo.Repository, ops.RebaseOptions) (ops.RebaseResult, error) {
+				return ops.RebaseResult{}, cause
+			}
+			t.Cleanup(func() { runContinueRebase = prev })
+
+			lines := rebaseThrough(t, a, func() { a.continueRebase("") })
+
+			if !logHasPrefix(t, lines, key) {
+				t.Fatalf("log = %v", lines)
+			}
+		})
+	}
+}
+
 func TestARebaseOfABranchAlreadyOnTopSaysSo(t *testing.T) {
 	a, _ := forkedApp(t, false)
 

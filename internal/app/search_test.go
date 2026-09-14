@@ -181,6 +181,86 @@ func TestWireSearchViewCancelClosesModalWithoutPanicking(t *testing.T) {
 	view.OnCancel()
 }
 
+func searchViewOnDispatcher(t *testing.T, a *App) *search.View {
+	t.Helper()
+	view, err := search.NewView(a.Engine())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runOnDispatcher(t, a, func() {
+		a.wireSearchView(view)
+		a.showModal(view.Dialog(), view)
+	})
+	return view
+}
+
+func stubScanRepositories(t *testing.T, stub func(context.Context, string, bool) ([]search.Found, error)) {
+	t.Helper()
+	prev := scanRepositories
+	scanRepositories = stub
+	t.Cleanup(func() { scanRepositories = prev })
+}
+
+func waitForSearches(t *testing.T) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		searchWG.Wait()
+		close(done)
+	}()
+	waitForChannel(t, done, "the repository scan to stop")
+}
+
+func addsAfterEnter(t *testing.T, a *App, view *search.View) int {
+	t.Helper()
+	adds := 0
+	runOnDispatcher(t, a, func() {
+		view.OnAdd = func([]string) { adds++ }
+		view.Dialog().DefaultAction()
+	})
+	return adds
+}
+
+func TestCancellingTheSearchStopsARunningScan(t *testing.T) {
+	a := newTestApp(t)
+	started := make(chan struct{})
+	stubScanRepositories(t, func(ctx context.Context, _ string, _ bool) ([]search.Found, error) {
+		close(started)
+		<-ctx.Done()
+		return []search.Found{{Path: "late"}}, ctx.Err()
+	})
+	view := searchViewOnDispatcher(t, a)
+
+	runOnDispatcher(t, a, func() { view.OnScan(t.TempDir(), false) })
+	waitForChannel(t, started, "the repository scan")
+	runOnDispatcher(t, a, view.OnCancel)
+	waitForSearches(t)
+	drainPostQueue(t, a)
+
+	if adds := addsAfterEnter(t, a, view); adds != 0 {
+		t.Fatal("a cancelled scan still delivered its results")
+	}
+}
+
+func TestAScanFinishedAfterTheDialogClosedDeliversNothing(t *testing.T) {
+	a := newTestApp(t)
+	stubScanRepositories(t, func(context.Context, string, bool) ([]search.Found, error) {
+		return []search.Found{{Path: "late"}}, nil
+	})
+	view := searchViewOnDispatcher(t, a)
+
+	runOnDispatcher(t, a, func() {
+		view.OnScan(t.TempDir(), false)
+		searchWG.Wait()
+		view.OnCancel()
+	})
+	drainPostQueue(t, a)
+
+	if adds := addsAfterEnter(t, a, view); adds != 0 {
+		t.Fatal("a scan of a closed dialog still delivered its results")
+	}
+}
+
 func TestSearchStatusTextCoversErrorEmptyAndFoundStates(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)

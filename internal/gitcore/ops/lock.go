@@ -19,6 +19,7 @@ type indexLock struct {
 	root *os.Root
 	file *os.File
 	idx  *index.Index
+	repo *repo.Repository
 }
 
 func lockIndex(r *repo.Repository) (*indexLock, error) {
@@ -36,7 +37,7 @@ func lockIndex(r *repo.Repository) (*indexLock, error) {
 		_ = fsRootRemove(root, indexLockName)
 		return nil, err
 	}
-	return &indexLock{root: root, file: file, idx: idx}, nil
+	return &indexLock{root: root, file: file, idx: idx, repo: r}, nil
 }
 
 func readIndex(r *repo.Repository) (*index.Index, error) {
@@ -56,6 +57,7 @@ func (l *indexLock) abort() {
 }
 
 func (l *indexLock) commit() error {
+	smudgeRacilyClean(l.repo, l.idx)
 	if err := idxWrite(l.idx, l.file, 0); err != nil {
 		l.abort()
 		return err
@@ -64,9 +66,15 @@ func (l *indexLock) commit() error {
 		_ = fsRootRemove(l.root, indexLockName)
 		return fmt.Errorf("ops: close %s: %w", indexLockName, err)
 	}
+	written, err := fsRootLstat(l.root, indexLockName)
+	if err != nil {
+		_ = fsRootRemove(l.root, indexLockName)
+		return fmt.Errorf("ops: stat %s: %w", indexLockName, err)
+	}
 	if err := fsRootRename(l.root, indexLockName, indexFileName); err != nil {
 		_ = fsRootRemove(l.root, indexLockName)
 		return fmt.Errorf("ops: rename %s: %w", indexLockName, err)
 	}
+	l.idx.Timestamp = written.ModTime()
 	return nil
 }

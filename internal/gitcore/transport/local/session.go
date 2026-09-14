@@ -23,6 +23,7 @@ var (
 	repoOpen = repo.Open
 	odbOpen  = odb.Open
 	refsOpen = refs.Open
+	dbReload = (*odb.DB).Reload
 )
 
 type session struct {

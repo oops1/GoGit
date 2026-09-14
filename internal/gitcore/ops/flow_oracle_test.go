@@ -118,6 +118,7 @@ type flowFinishOracle struct {
 	tracked  bool
 	pushed   bool
 	moreBase bool
+	oldTag   bool
 	opts     FinishFlowOptions
 	git      func(message string) [][]string
 }
@@ -210,6 +211,31 @@ func flowFinishOracles() []flowFinishOracle {
 					{"merge", "-q", "--no-ff", "-m", "Finish Hotfix-1", "hotfix/Hotfix-1"},
 				}
 			}},
+		{label: "release over a tag that already exists", kind: FlowKindRelease, name: "Release-1", oldTag: true, opts: FinishFlowOptions{DeleteBranch: true},
+			git: func(string) [][]string {
+				return [][]string{
+					checkout("master"),
+					{"merge", "-q", "--no-ff", "-m", "Finish Release-1", "release/Release-1"},
+					checkout("develop"),
+					{"merge", "-q", "--no-ff", "-m", "Finish Release-1", "release/Release-1"},
+					{"branch", "-D", "release/Release-1"},
+				}
+			}},
+		{label: "hotfix pushed over a tag that already exists", kind: FlowKindHotfix, name: "Hotfix-1", tracked: true, pushed: true, oldTag: true, opts: FinishFlowOptions{Fetch: true, Push: true, DeleteBranch: true},
+			git: func(string) [][]string {
+				return [][]string{
+					flowFetchArgs("master"),
+					flowFetchArgs("develop"),
+					checkout("master"),
+					{"merge", "-q", "--no-ff", "-m", "Finish Hotfix-1", "hotfix/Hotfix-1"},
+					checkout("develop"),
+					{"merge", "-q", "--no-ff", "--no-edit", "hotfix/Hotfix-1"},
+					push("refs/heads/develop:refs/heads/develop"),
+					push("refs/heads/master:refs/heads/master"),
+					push(":refs/heads/hotfix/Hotfix-1"),
+					{"branch", "-D", "hotfix/Hotfix-1"},
+				}
+			}},
 	}
 }
 
@@ -223,6 +249,9 @@ func TestOracleFinishFlowFollowsTheSmartGitLog(t *testing.T) {
 			}
 			branch := c.kind + "/" + c.name
 			prepare := func(b *mergeBuilder) {
+				if c.oldTag {
+					b.git("tag", "-a", "-m", "earlier "+c.name, c.name, "master")
+				}
 				b.git("branch", "--no-track", branch, base)
 				b.git("checkout", "-q", branch)
 				b.commit("work on "+c.name, map[string]string{"VERSION": c.name + "\n"})

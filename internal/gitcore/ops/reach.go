@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
+	"github.com/oops1/gogit/internal/gitcore/pack"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
@@ -25,6 +27,8 @@ var (
 )
 
 var reachHeads = []refs.Name{refs.HEAD, refs.OrigHead, refs.MergeHead, refs.CherryPickHead, refs.RebaseHead, refs.BisectHead}
+
+var rebaseRootFiles = []string{"rebase-apply/autostash", "rebase-apply/orig-head", "rebase-merge/autostash", "rebase-merge/orig-head"}
 
 type walkTrouble int
 
@@ -39,6 +43,7 @@ var ErrWrongObjectType = errors.New("ops: object has another type than the link 
 type walkItem struct {
 	id   hash.ObjectID
 	kind object.Type
+	base uint32
 }
 
 type objectWalk struct {
@@ -46,6 +51,7 @@ type objectWalk struct {
 	db      *odb.DB
 	shallow map[hash.ObjectID]struct{}
 	seen    map[hash.ObjectID]struct{}
+	names   map[hash.ObjectID]uint32
 	commits []commitgraph.Commit
 	stack   []walkItem
 	strict  bool
@@ -62,6 +68,7 @@ func newObjectWalk(ctx context.Context, r *repo.Repository, db *odb.DB) (*object
 		db:      db,
 		shallow: shallow,
 		seen:    make(map[hash.ObjectID]struct{}),
+		names:   make(map[hash.ObjectID]uint32),
 		broken:  func(_ hash.ObjectID, _ walkTrouble, err error) error { return err },
 	}, nil
 }
@@ -94,6 +101,31 @@ func (w *objectWalk) push(id hash.ObjectID, kind object.Type) {
 	}
 	w.seen[id] = struct{}{}
 	w.stack = append(w.stack, walkItem{id: id, kind: kind})
+}
+
+func (w *objectWalk) pushNamed(id hash.ObjectID, kind object.Type, name uint32) {
+	pending := len(w.stack)
+	w.push(id, kind)
+	if len(w.stack) == pending {
+		return
+	}
+	w.names[id] = name
+	w.stack[pending].base = pack.AppendNameHash(name, "/")
+}
+
+func (w *objectWalk) pushPresent(id hash.ObjectID, kind object.Type) error {
+	if _, seen := w.seen[id]; seen || id.IsZero() || w.strict {
+		w.push(id, kind)
+		return nil
+	}
+	present, err := w.db.Contains(id)
+	if err != nil {
+		return err
+	}
+	if present {
+		w.push(id, kind)
+	}
+	return nil
 }
 
 func (w *objectWalk) gatherRoots(r *repo.Repository) error {
@@ -152,7 +184,22 @@ func (w *objectWalk) gatherGitDir(r *repo.Repository, gitDir string) error {
 	if err := w.gatherReflogs(store, gitDir); err != nil {
 		return err
 	}
+	w.gatherRebaseFiles(gitDir)
 	return w.gatherIndex(filepath.Join(gitDir, indexFileName))
+}
+
+func (w *objectWalk) gatherRebaseFiles(gitDir string) {
+	for _, name := range rebaseRootFiles {
+		data, err := os.ReadFile(filepath.Join(gitDir, filepath.FromSlash(name)))
+		if err != nil {
+			continue
+		}
+		id, err := hash.Parse(strings.TrimSpace(string(data)))
+		if err != nil {
+			continue
+		}
+		w.push(id, 0)
+	}
 }
 
 func (w *objectWalk) gatherReflogs(store *refs.Store, gitDir string) error {
@@ -175,8 +222,12 @@ func (w *objectWalk) gatherReflogs(store *refs.Store, gitDir string) error {
 			if err != nil {
 				return err
 			}
-			w.push(record.Old, 0)
-			w.push(record.New, 0)
+			if err := w.pushPresent(record.Old, 0); err != nil {
+				return err
+			}
+			if err := w.pushPresent(record.New, 0); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -194,7 +245,19 @@ func (w *objectWalk) gatherIndex(path string) error {
 		if entry.Mode.IsSubmodule() || entry.IntentToAdd {
 			continue
 		}
-		w.push(entry.ID, entry.Mode.ObjectType())
+		if err := w.pushPresent(entry.ID, entry.Mode.ObjectType()); err != nil {
+			return err
+		}
+	}
+	for _, undo := range idx.ResolveUndo {
+		for stage, id := range undo.IDs {
+			if undo.Modes[stage] == 0 {
+				continue
+			}
+			if err := w.pushPresent(id, object.TypeBlob); err != nil {
+				return err
+			}
+		}
 	}
 	w.pushCacheTree(idx.CacheTree)
 	return nil
@@ -237,7 +300,7 @@ func (w *objectWalk) visit(item walkItem) error {
 	if w.strict && item.kind != 0 && kind != item.kind {
 		return w.broken(item.id, troubleWrongType, fmt.Errorf("%w: %s is a %s, not a %s", ErrWrongObjectType, item.id, kind, item.kind))
 	}
-	if err := w.expand(item.id, kind, data); err != nil {
+	if err := w.expand(item, kind, data); err != nil {
 		return w.broken(item.id, troubleMalformed, err)
 	}
 	return nil
@@ -264,7 +327,8 @@ func (w *objectWalk) visitBlob(id hash.ObjectID) error {
 	return nil
 }
 
-func (w *objectWalk) expand(id hash.ObjectID, kind object.Type, data []byte) error {
+func (w *objectWalk) expand(item walkItem, kind object.Type, data []byte) error {
+	id := item.id
 	switch kind {
 	case object.TypeCommit:
 		commit, err := object.ParseCommit(data)
@@ -289,7 +353,7 @@ func (w *objectWalk) expand(id hash.ObjectID, kind object.Type, data []byte) err
 			if entry.Mode.IsSubmodule() {
 				continue
 			}
-			w.push(entry.ID, entry.Mode.ObjectType())
+			w.pushNamed(entry.ID, entry.Mode.ObjectType(), pack.AppendNameHash(item.base, entry.Name))
 		}
 		if w.strict && !tree.IsSorted() {
 			return fmt.Errorf("%w: the entries of tree %s are out of order", object.ErrMalformed, id)

@@ -25,12 +25,14 @@ var journalPeriods = []struct {
 	{key: "Journal.Filter.Period.Year", back: func(now time.Time) time.Time { return now.AddDate(-1, 0, 0) }},
 }
 
+var journalFilterDelay = 250 * time.Millisecond
+
 func (a *App) wireJournalFilter() {
 	a.journalFilterBranch.OnChange = func(int, string) { a.onJournalFilterChanged() }
-	a.journalFilterAuthor.OnChange = func(string) { a.onJournalFilterChanged() }
-	a.journalFilterMessage.OnChange = func(string) { a.onJournalFilterChanged() }
-	a.journalFilterPath.OnChange = func(string) { a.onJournalFilterChanged() }
-	a.journalFilterContent.OnChange = func(string) { a.onJournalFilterChanged() }
+	a.journalFilterAuthor.OnChange = func(string) { a.onJournalFilterTyped() }
+	a.journalFilterMessage.OnChange = func(string) { a.onJournalFilterTyped() }
+	a.journalFilterPath.OnChange = func(string) { a.onJournalFilterTyped() }
+	a.journalFilterContent.OnChange = func(string) { a.onJournalFilterTyped() }
 	a.journalFilterRegexp.OnChange = func(bool) { a.onJournalFilterChanged() }
 	a.journalFilterPeriod.OnChange = func(int, string) { a.onJournalFilterChanged() }
 	a.showJournalPeriods()
@@ -38,7 +40,35 @@ func (a *App) wireJournalFilter() {
 }
 
 func (a *App) onJournalFilterChanged() {
+	a.journalFilterMu.Lock()
+	a.cancelJournalFilterDelayLocked()
+	a.journalFilterMu.Unlock()
 	a.startJournal()
+}
+
+func (a *App) onJournalFilterTyped() {
+	a.journalFilterMu.Lock()
+	defer a.journalFilterMu.Unlock()
+	a.cancelJournalFilterDelayLocked()
+	a.journalFilterWG.Add(1)
+	a.journalFilterTimer = time.AfterFunc(journalFilterDelay, func() {
+		defer a.journalFilterWG.Done()
+		a.Post(a.startJournal)
+	})
+}
+
+func (a *App) cancelJournalFilterDelayLocked() {
+	if a.journalFilterTimer != nil && a.journalFilterTimer.Stop() {
+		a.journalFilterWG.Done()
+	}
+	a.journalFilterTimer = nil
+}
+
+func (a *App) stopJournalFilterDelay() {
+	a.journalFilterMu.Lock()
+	a.cancelJournalFilterDelayLocked()
+	a.journalFilterMu.Unlock()
+	a.journalFilterWG.Wait()
 }
 
 func (a *App) showJournalPeriods() {

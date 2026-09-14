@@ -164,7 +164,7 @@ func TestStoreHelperEraseRemovesOnlyMatchingEntries(t *testing.T) {
 	if err := h.Store(context.Background(), bob, Answer{Username: "bob", Password: []byte("pw2")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.Erase(context.Background(), alice); err != nil {
+	if err := h.Erase(context.Background(), alice, Answer{}); err != nil {
 		t.Fatalf("Erase returned %v", err)
 	}
 	if _, ok, _ := h.Get(context.Background(), alice); ok {
@@ -234,7 +234,7 @@ func TestStoreHelperEraseReturnsReadError(t *testing.T) {
 	if err := os.MkdirAll(path, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.Erase(context.Background(), Query{Protocol: "https", Host: "example.com"}); err == nil {
+	if err := h.Erase(context.Background(), Query{Protocol: "https", Host: "example.com"}, Answer{}); err == nil {
 		t.Fatalf("Erase succeeded despite the credentials path being a directory")
 	}
 }

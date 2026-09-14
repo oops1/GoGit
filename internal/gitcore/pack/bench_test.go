@@ -2,9 +2,55 @@ package pack
 
 import (
 	"bytes"
+	"os"
 	"slices"
 	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/object"
 )
+
+func reversedRefDeltaChain(b *testing.B, length int) []byte {
+	b.Helper()
+	contents := make([][]byte, length+1)
+	contents[0] = bytes.Repeat([]byte("index pack benchmark base line\n"), 32)
+	for step := 1; step <= length; step++ {
+		contents[step] = append(slices.Clone(contents[step-1]), byte(step))
+	}
+	builder := newPackBuilder()
+	for step := length; step >= 1; step-- {
+		base := contents[step-1]
+		size := int64(len(base))
+		delta := slices.Concat(deltaSizes(size, size+1), copyOp(0, uint32(size)), insertOp([]byte{byte(step)}))
+		builder.addRefDelta(b, hash.SumSHA1(object.TypeBlob.String(), base), delta)
+	}
+	builder.addObject(b, KindBlob, contents[0])
+	return builder.bytes()
+}
+
+func benchmarkIndexPack(b *testing.B, raw []byte) {
+	b.Helper()
+	root := b.TempDir()
+	b.SetBytes(int64(len(raw)))
+	b.ReportAllocs()
+	for b.Loop() {
+		dir, err := os.MkdirTemp(root, "run")
+		if err != nil {
+			b.Fatal(err)
+		}
+		if _, err := IndexPack(b.Context(), bytes.NewReader(raw), dir, IndexOptions{}); err != nil {
+			b.Fatalf("IndexPack returned error %v", err)
+		}
+	}
+}
+
+func BenchmarkIndexPackReversedRefDeltaChain(b *testing.B) {
+	benchmarkIndexPack(b, reversedRefDeltaChain(b, 1000))
+}
+
+func BenchmarkIndexPackGitPack(b *testing.B) {
+	benchmarkIndexPack(b, readFixture(b, fixturePackPath(b, fixtureName(b, offsetPack))))
+}
 
 func BenchmarkIndexFind(b *testing.B) {
 	index := openFixtureIndex(b, fixtureName(b, offsetPack))

@@ -298,6 +298,33 @@ func mergeFaultScenarios() []faultScenario {
 			_, err := Revert(ctx, tr.repo, "HEAD", pickOptions())
 			return err
 		}},
+		{"rebase skipping a commit applied upstream", func(tr *testRepo) {
+			f := tenLines("f")
+			base := tr.commitFiles("base", map[string]string{"f": f})
+			tr.createBranch("topic", base)
+			tr.commitFiles("main f line 8", map[string]string{"f": changeLine(f, 8, "MAIN")})
+			tr.commitFiles("picked f line 2", map[string]string{"f": changeLine(changeLine(f, 8, "MAIN"), 2, "TOPIC")})
+			tr.switchTo("topic")
+			tr.commitFiles("topic f line 2", map[string]string{"f": changeLine(f, 2, "TOPIC")})
+			tr.commitFiles("topic h", map[string]string{"h": "h\n"})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := Rebase(ctx, tr.repo, "main", rebaseOptions())
+			return err
+		}},
+		{"interactive rebase continued after an edit", func(tr *testRepo) { tr.threeOnAnUpToDateTopic() }, func(ctx context.Context, tr *testRepo) error {
+			todo, err := PlannedRebase(ctx, tr.repo, "main~0")
+			if err != nil {
+				return err
+			}
+			if len(todo) > 0 {
+				todo[len(todo)-1].Action = actionEdit
+			}
+			if _, err := Rebase(ctx, tr.repo, "main", RebaseOptions{When: mergeTime, Todo: todo}); err != nil {
+				return err
+			}
+			_, err = ContinueRebase(ctx, tr.repo, RebaseOptions{When: mergeTime, Message: "changed"})
+			return err
+		}},
 		{"commit after a pick", func(tr *testRepo) {
 			tr.pickFork(true)
 			if _, err := CherryPick(tr.t.Context(), tr.repo, "feature", pickOptions()); err != nil {

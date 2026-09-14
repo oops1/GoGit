@@ -39,6 +39,7 @@ type Worktree struct {
 	attrsMu           sync.Mutex
 	format            hash.Format
 	fileMode          bool
+	symlinks          bool
 	workers           int
 	maxFiles          int
 	includeUnmodified bool
@@ -89,6 +90,8 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		IgnoreCase:     core.IgnoreCase,
 		AutoCRLF:       core.AutoCRLF,
 		EOL:            core.EOL,
+		Config:         r.Config(),
+		ObjectFormat:   opts.DB.Format(),
 	})
 	return &Worktree{
 		repo:              r,
@@ -101,6 +104,7 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		attrs:             attrs,
 		format:            opts.DB.Format(),
 		fileMode:          core.FileMode,
+		symlinks:          core.Symlinks,
 		workers:           workerCount(opts.Workers),
 		maxFiles:          opts.MaxFiles,
 		includeUnmodified: opts.IncludeUnmodified,
@@ -181,10 +185,10 @@ func (w *Worktree) isIgnored(path string, isDir bool) bool {
 	return ignored
 }
 
-func (w *Worktree) textPolicy(path string) attributes.TextPolicy {
+func (w *Worktree) policy(path string) attributes.Policy {
 	w.attrsMu.Lock()
 	defer w.attrsMu.Unlock()
-	return w.attrs.Text(path)
+	return w.attrs.Policy(path)
 }
 
 func (w *Worktree) Index() *index.Index { return w.index }

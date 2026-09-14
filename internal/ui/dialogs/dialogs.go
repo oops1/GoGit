@@ -29,6 +29,15 @@ func LoadResizable(name, title string) (*widget.Dialog, map[string]widget.Widget
 	return dlg, named, nil
 }
 
+func Release(dlg widget.Widget) {
+	if holder, ok := dlg.(interface{ Content() widget.Widget }); ok {
+		widget.ReleaseXAML(holder.Content())
+	}
+	for _, child := range dlg.Children() {
+		widget.ReleaseXAML(child)
+	}
+}
+
 func build(name, title string) (*widget.Dialog, widget.Widget, map[string]widget.Widget, error) {
 	data, err := source(name)
 	if err != nil {

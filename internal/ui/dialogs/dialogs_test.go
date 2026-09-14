@@ -3,6 +3,10 @@ package dialogs
 import (
 	"errors"
 	"testing"
+
+	"github.com/oops1/headless-gui/v3/widget"
+
+	"github.com/oops1/gogit/internal/i18n"
 )
 
 func TestLoadReturnsDialogAndNamedWidgets(t *testing.T) {
@@ -24,6 +28,57 @@ func TestLoadReturnsDialogAndNamedWidgets(t *testing.T) {
 	content := dlg.ContentBounds()
 	if content.Dx() <= 0 || content.Dy() <= 0 {
 		t.Fatalf("content bounds = %v", content)
+	}
+}
+
+func installLanguages(t *testing.T) {
+	t.Helper()
+	widget.ClearStrings()
+	t.Cleanup(widget.ClearStrings)
+	if _, err := i18n.Install(""); err != nil {
+		t.Fatal(err)
+	}
+	i18n.Apply("en")
+	t.Cleanup(func() { i18n.Apply("en") })
+}
+
+func TestAReleasedDialogNoLongerFollowsTheLanguage(t *testing.T) {
+	installLanguages(t)
+	released, releasedNamed, err := Load("add_repo", "Title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, keptNamed, err := Load("add_repo", "Title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	english := releasedNamed["browse"].(*widget.Button).GetText()
+
+	Release(released)
+	i18n.Apply("ru")
+
+	if got := releasedNamed["browse"].(*widget.Button).GetText(); got != english {
+		t.Fatalf("released button = %q, want it left at %q", got, english)
+	}
+	if got := keptNamed["browse"].(*widget.Button).GetText(); got == english {
+		t.Fatalf("kept button = %q, want it translated", got)
+	}
+	Release(kept)
+}
+
+func TestAReleasedResizableDialogNoLongerFollowsTheLanguage(t *testing.T) {
+	installLanguages(t)
+	dlg, named, err := LoadResizable("add_repo", "Title")
+	if err != nil {
+		t.Fatal(err)
+	}
+	english := named["browse"].(*widget.Button).GetText()
+
+	Release(dlg)
+	i18n.Apply("ru")
+
+	if got := named["browse"].(*widget.Button).GetText(); got != english {
+		t.Fatalf("released button = %q, want it left at %q", got, english)
 	}
 }
 

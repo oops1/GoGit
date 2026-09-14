@@ -170,3 +170,36 @@ func TestPushToGitCreatedBareRepositoryPassesFsck(t *testing.T) {
 		t.Fatalf("git rev-list --all = %q, want %q", revs, want)
 	}
 }
+
+func TestOracleAdvertisementPeelsTheRefsGitLsRemotePeels(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git is not available: %v", err)
+	}
+	dir := t.TempDir()
+	oracleGit(t, dir, "init", "-q", "-b", "main")
+	writeOracleFile(t, dir, "a.txt", "hello\n")
+	oracleGit(t, dir, "add", "a.txt")
+	oracleGit(t, dir, "commit", "-q", "-m", "initial")
+	oracleGit(t, dir, "tag", "-a", "v1", "-m", "v1")
+	oracleGit(t, dir, "tag", "light")
+	oracleGit(t, dir, "update-ref", "refs/remotes/o/v1", "refs/tags/v1")
+	tag := strings.TrimSpace(string(oracleGit(t, dir, "rev-parse", "refs/tags/v1")))
+	writeOracleFile(t, dir, filepath.Join(".git", "refs", "heads", "x"), tag+"\n")
+	writeOracleFile(t, dir, filepath.Join(".git", "HEAD"), tag+"\n")
+
+	adv, err := dialSession(t, dir).Advertise(t.Context())
+	if err != nil {
+		t.Fatalf("Advertise returned error %v", err)
+	}
+
+	var ours strings.Builder
+	for _, ref := range adv.Refs {
+		ours.WriteString(ref.ID.String() + "\t" + ref.Name + "\n")
+		if !ref.Peeled.IsZero() {
+			ours.WriteString(ref.Peeled.String() + "\t" + ref.Name + "^{}\n")
+		}
+	}
+	if theirs := string(oracleGit(t, dir, "ls-remote", dir)); ours.String() != theirs {
+		t.Fatalf("advertisement:\n%s\ngit ls-remote:\n%s", ours.String(), theirs)
+	}
+}

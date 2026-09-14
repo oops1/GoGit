@@ -8,6 +8,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
+	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/changes"
@@ -16,6 +17,7 @@ import (
 
 var (
 	newCompareView     = compare.NewView
+	compareBlobData    = blobData
 	showSaveFileDialog = func(eng widget.ModalShower, opts widget.FileDialogOptions, cb func(string, bool)) *widget.FileDialog {
 		return widget.NewMessageBox(eng).ShowSaveFile(opts, cb)
 	}
@@ -51,32 +53,51 @@ func (a *App) compareCommitSelection(files []diff.File) {
 	a.compareCommitFiles(picked)
 }
 
+const compareReadKey = "compare"
+
+type sidesLoader func(ctx context.Context) (compareSide, compareSide, error)
+
+func (a *App) loadCompareSides(path string, load sidesLoader) {
+	var left, right compareSide
+	a.startKeyedRead(compareReadKey, func(ctx context.Context, _ *gitrepo.Repository) error {
+		var err error
+		left, right, err = load(ctx)
+		return err
+	}, func(err error) {
+		if err != nil {
+			a.log.Warn("compare file failed", "path", path, "error", err)
+			return
+		}
+		a.openCompareSides(left, right)
+	})
+}
+
 func (a *App) compareCommitFiles(picked []diff.File) {
 	o := a.opened()
 	if o == nil || len(picked) == 0 {
 		a.openCompareFiles("", "")
 		return
 	}
-	commit := a.selectedCommit.String()
-	var left, right compareSide
-	var err error
-	if len(picked) == 1 {
-		left, right, err = commitSides(o, picked[0], commit)
-	} else {
-		left, err = commitVersion(o, picked[0], commit)
-		if err == nil {
-			right, err = commitVersion(o, picked[1], commit)
+	commit := a.selectedCommitID().String()
+	a.loadCompareSides(cmp.Or(picked[0].NewPath, picked[0].OldPath), func(context.Context) (compareSide, compareSide, error) {
+		if len(picked) == 1 {
+			return commitSides(o, picked[0], commit)
 		}
-	}
+		return commitVersions(o, picked[0], picked[1], commit)
+	})
+}
+
+func commitVersions(o *openedRepository, first, second diff.File, commit string) (compareSide, compareSide, error) {
+	left, err := commitVersion(o, first, commit)
 	if err != nil {
-		a.log.Warn("compare files failed", "error", err)
-		return
+		return compareSide{}, compareSide{}, err
 	}
-	a.openCompareSides(left, right)
+	right, err := commitVersion(o, second, commit)
+	return left, right, err
 }
 
 func commitVersion(o *openedRepository, file diff.File, commit string) (compareSide, error) {
-	data, present, err := blobData(o.db, file.NewID)
+	data, present, err := compareBlobData(o.db, file.NewID)
 	if err != nil {
 		return compareSide{}, err
 	}
@@ -169,27 +190,25 @@ func (a *App) onFilesRowActivated(_ int, item any) {
 	a.filesMu.Lock()
 	mode, files, entries := a.filesMode, a.currentFiles, a.currentEntries
 	a.filesMu.Unlock()
-	var left, right compareSide
-	var err error
 	switch mode {
 	case filesModeCommit:
 		file, found := fileOf(files, row)
 		if !found {
 			return
 		}
-		left, right, err = commitSides(o, file, a.selectedCommit.String())
+		commit := a.selectedCommitID().String()
+		a.loadCompareSides(row.RelPath, func(context.Context) (compareSide, compareSide, error) {
+			return commitSides(o, file, commit)
+		})
 	default:
 		entry, found := entryOf(entries, row)
 		if !found {
 			return
 		}
-		left, right, err = workingSides(context.Background(), o, entry)
+		a.loadCompareSides(row.RelPath, func(ctx context.Context) (compareSide, compareSide, error) {
+			return workingSides(ctx, o, entry)
+		})
 	}
-	if err != nil {
-		a.log.Warn("compare file failed", "path", row.RelPath, "error", err)
-		return
-	}
-	a.openCompareSides(left, right)
 }
 
 func workingSides(ctx context.Context, o *openedRepository, entry worktree.Entry) (compareSide, compareSide, error) {
@@ -199,7 +218,7 @@ func workingSides(ctx context.Context, o *openedRepository, entry worktree.Entry
 	if err != nil {
 		return compareSide{}, compareSide{}, err
 	}
-	data, present, err := blobData(o.db, id)
+	data, present, err := compareBlobData(o.db, id)
 	if err != nil {
 		return compareSide{}, compareSide{}, err
 	}
@@ -215,11 +234,11 @@ func workingSides(ctx context.Context, o *openedRepository, entry worktree.Entry
 }
 
 func commitSides(o *openedRepository, file diff.File, commit string) (compareSide, compareSide, error) {
-	oldData, oldPresent, err := blobData(o.db, file.OldID)
+	oldData, oldPresent, err := compareBlobData(o.db, file.OldID)
 	if err != nil {
 		return compareSide{}, compareSide{}, err
 	}
-	newData, newPresent, err := blobData(o.db, file.NewID)
+	newData, newPresent, err := compareBlobData(o.db, file.NewID)
 	if err != nil {
 		return compareSide{}, compareSide{}, err
 	}

@@ -1,11 +1,14 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/refs"
+	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -14,6 +17,80 @@ import (
 func journalFilterOf(t *testing.T, a *App) journal.Filter {
 	t.Helper()
 	return readOnDispatcher(t, a, a.journalFilter)
+}
+
+func waitForJournalFilterDelay(t *testing.T, a *App) {
+	t.Helper()
+	a.journalFilterWG.Wait()
+	waitForPostQueueDrain(t, a)
+}
+
+func countJournalStarts(t *testing.T) *atomic.Int32 {
+	t.Helper()
+	starts := new(atomic.Int32)
+	prev := newJournalPager
+	newJournalPager = func(ctx context.Context, source revision.Context, opts journal.Options) journalPager {
+		starts.Add(1)
+		return prev(ctx, source, opts)
+	}
+	t.Cleanup(func() { newJournalPager = prev })
+	return starts
+}
+
+func TestTypingIntoTheJournalFilterRestartsTheJournalOnceTheTypingPauses(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	waitForJournalRows(t, a, 1)
+	starts := countJournalStarts(t)
+
+	runOnDispatcher(t, a, func() {
+		for _, text := range []string{"o", "ou", "our"} {
+			a.journalFilterMessage.SetText(text)
+			a.journalFilterMessage.OnChange(text)
+		}
+	})
+	if got := starts.Load(); got != 0 {
+		t.Fatalf("journal restarted %d times while the typing went on, want none", got)
+	}
+	waitForJournalFilterDelay(t, a)
+
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("journal restarted %d times after the typing paused, want once", got)
+	}
+}
+
+func TestAChoiceInTheJournalFilterRestartsAtOnceAndDropsThePendingTyping(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	waitForJournalRows(t, a, 1)
+	starts := countJournalStarts(t)
+
+	runOnDispatcher(t, a, func() {
+		a.journalFilterAuthor.SetText("someone")
+		a.journalFilterAuthor.OnChange("someone")
+		a.journalFilterPeriod.SetSelected(1)
+		a.journalFilterPeriod.OnChange(1, a.journalFilterPeriod.SelectedText())
+	})
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("journal restarted %d times, want once right after the choice", got)
+	}
+	waitForJournalFilterDelay(t, a)
+
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("journal restarted %d times, want the pending typing dropped", got)
+	}
+}
+
+func TestClosingTheAppDropsThePendingJournalFilterTyping(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	waitForJournalRows(t, a, 1)
+	starts := countJournalStarts(t)
+
+	runOnDispatcher(t, a, func() { a.journalFilterAuthor.OnChange("someone") })
+	a.Close()
+	a.journalFilterWG.Wait()
+
+	if got := starts.Load(); got != 0 {
+		t.Fatalf("journal restarted %d times after close, want none", got)
+	}
 }
 
 func TestTheJournalFilterStartsOnEveryBranch(t *testing.T) {
@@ -59,7 +136,7 @@ func TestTheJournalFilterNarrowsByAuthorAndMessage(t *testing.T) {
 		a.journalFilterAuthor.OnChange("nobody at all")
 		return true
 	})
-	waitForPostQueueDrain(t, a)
+	waitForJournalFilterDelay(t, a)
 
 	if got := readOnDispatcher(t, a, a.journalView.Count); got != 0 {
 		t.Fatalf("rows = %d", got)
@@ -75,7 +152,7 @@ func TestTheJournalFilterNarrowsByAuthorAndMessage(t *testing.T) {
 		a.journalFilterMessage.OnChange("nothing like this")
 		return true
 	})
-	waitForPostQueueDrain(t, a)
+	waitForJournalFilterDelay(t, a)
 
 	if got := readOnDispatcher(t, a, a.journalView.Count); got != 0 {
 		t.Fatalf("rows = %d", got)
@@ -91,6 +168,7 @@ func TestTheJournalFilterFindsTheCommitsItIsAskedFor(t *testing.T) {
 		a.journalFilterMessage.OnChange("ours")
 		return true
 	})
+	waitForJournalFilterDelay(t, a)
 
 	waitForJournalRows(t, a, 1)
 	if got := readOnDispatcher(t, a, a.journalFilterLabel.Text); got != i18n.Tf("Journal.Filter.Found", readOnDispatcher(t, a, a.journalView.Count)) {
@@ -152,7 +230,7 @@ func typeIntoJournalFilter(t *testing.T, a *App, input interface {
 		onChange(text)
 		return true
 	})
-	waitForPostQueueDrain(t, a)
+	waitForJournalFilterDelay(t, a)
 }
 
 func journalMessages(t *testing.T, a *App) []string {

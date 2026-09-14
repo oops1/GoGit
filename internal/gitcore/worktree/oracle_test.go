@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -110,9 +111,18 @@ func (o *oracle) write(dir, rel, text string) {
 	}
 }
 
+func (o *oracle) commitPlainSymlink(dir, rel, target string) {
+	o.t.Helper()
+	o.run(dir, "config", "core.symlinks", "false")
+	o.write(dir, rel, target)
+	id := strings.TrimSpace(o.run(dir, "hash-object", "-w", rel))
+	o.run(dir, "update-index", "--add", "--cacheinfo", "120000,"+id+","+rel)
+	o.run(dir, "commit", "-q", "-m", "symlink")
+}
+
 func (o *oracle) status(dir string) (changed map[string]porcelainEntry, untracked map[string]bool) {
 	o.t.Helper()
-	out := o.run(dir, "status", "--porcelain=v2", "-z", "--untracked-files=normal")
+	out := o.run(dir, "--no-optional-locks", "status", "--porcelain=v2", "-z", "--untracked-files=normal")
 	return parsePorcelainV2(o.t, out)
 }
 
@@ -408,6 +418,40 @@ func TestOracleStatusMatchesGitStatusPorcelainV2(t *testing.T) {
 				o.t.Skipf("cannot create symlinks on this platform: %v", err)
 			}
 		}},
+		{"symlink checked out as a plain file without symlink support", func(o *oracle, dir string) {
+			o.commitPlainSymlink(dir, "link", "target.txt")
+			if err := os.Remove(filepath.Join(dir, "link")); err != nil {
+				o.t.Fatalf("Remove returned error %v", err)
+			}
+			o.run(dir, "checkout", "--", "link")
+		}},
+		{"plain symlink file with a new target without symlink support", func(o *oracle, dir string) {
+			o.commitPlainSymlink(dir, "link", "target.txt")
+			o.write(dir, "link", "elsewhere.txt")
+		}},
+		{"plain symlink file rewritten with the same target without symlink support", func(o *oracle, dir string) {
+			o.commitPlainSymlink(dir, "link", "target.txt")
+			later := time.Unix(1800000000, 0)
+			if err := os.Chtimes(filepath.Join(dir, "link"), later, later); err != nil {
+				o.t.Fatalf("Chtimes returned error %v", err)
+			}
+		}},
+		{"plain symlink file replaced by a directory without symlink support", func(o *oracle, dir string) {
+			o.commitPlainSymlink(dir, "link", "target.txt")
+			if err := os.Remove(filepath.Join(dir, "link")); err != nil {
+				o.t.Fatalf("Remove returned error %v", err)
+			}
+			o.write(dir, "link/inner.txt", "inner\n")
+		}},
+		{"file replaced by a directory", func(o *oracle, dir string) {
+			o.write(dir, "thing.txt", "content\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			if err := os.Remove(filepath.Join(dir, "thing.txt")); err != nil {
+				o.t.Fatalf("Remove returned error %v", err)
+			}
+			o.write(dir, "thing.txt/inner.txt", "inner\n")
+		}},
 		{"nested tracked and untracked files coexist", func(o *oracle, dir string) {
 			o.write(dir, "dir/tracked.txt", "hello\n")
 			o.run(dir, "add", ".")
@@ -420,8 +464,61 @@ func TestOracleStatusMatchesGitStatusPorcelainV2(t *testing.T) {
 			o.run(dir, "add", ".")
 			o.run(dir, "commit", "-q", "-m", "initial")
 		}},
+		{"autocrlf rewrite to another size", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "one\ntwo\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.run(dir, "config", "core.autocrlf", "true")
+			o.write(dir, "a.txt", "one\r\ntwo\r\n")
+		}},
+		{"same-size rewrite with other content", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "a.txt", "HELLO\n")
+		}},
+		{"same-size rewrite with the same content", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			later := time.Unix(1800000000, 0)
+			if err := os.Chtimes(filepath.Join(dir, "a.txt"), later, later); err != nil {
+				o.t.Fatalf("Chtimes returned error %v", err)
+			}
+		}},
+		{"zero-size entry over an autocrlf rewrite", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "one\ntwo\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.run(dir, "config", "core.autocrlf", "true")
+			o.write(dir, "a.txt", "one\r\ntwo\r\n")
+			o.run(dir, "read-tree", "HEAD")
+		}},
+		{"zero-size entry over other content", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "one\ntwo\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "a.txt", "three\n")
+			o.run(dir, "read-tree", "HEAD")
+		}},
+		{"empty committed file gains content", func(o *oracle, dir string) {
+			o.write(dir, "empty.txt", "")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "empty.txt", "x\n")
+		}},
 	}
 
+	tests = append(tests, struct {
+		name  string
+		setup func(o *oracle, dir string)
+	}{"sparse checkout leaves skipped files out", func(o *oracle, dir string) {
+		o.write(dir, "a/y", "one\n")
+		o.write(dir, "b/x", "one\n")
+		o.run(dir, "add", ".")
+		o.run(dir, "commit", "-q", "-m", "initial")
+		o.run(dir, "sparse-checkout", "set", "--no-cone", "/a/")
+	}})
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			o := newOracle(t)

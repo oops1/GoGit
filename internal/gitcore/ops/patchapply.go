@@ -82,7 +82,7 @@ func indexedContent(wt *workingTree, db *odb.DB, idx *index.Index, rel string) (
 	if err != nil {
 		return 0, nil, err
 	}
-	mode, _, err := (&stager{wt: wt}).readWorktreeObject(rel, info)
+	mode, _, err := (&stager{wt: wt, idx: idx}).readWorktreeObject(rel, info)
 	return mode, nil, err
 }
 
@@ -121,5 +121,5 @@ func workingContent(r *repo.Repository, rel string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return wt.checkinConvert(rel, data), nil
+	return wt.stageConvert(rel, data)
 }

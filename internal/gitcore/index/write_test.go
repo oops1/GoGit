@@ -353,6 +353,52 @@ func TestWriteFileFailsWhenTheLockCannotBeRenamed(t *testing.T) {
 	}
 }
 
+func TestWriteFileTakesTheTimestampOfTheWrittenFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "index")
+	idx := loadFixture(t, basicV2)
+	idx.Timestamp = time.Unix(1, 0)
+	if err := idx.WriteFile(path, Version2); err != nil {
+		t.Fatalf("WriteFile returned error %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat returned error %v", err)
+	}
+	if !idx.Timestamp.Equal(info.ModTime()) {
+		t.Fatalf("Timestamp = %v, want the time %v the index file was written", idx.Timestamp, info.ModTime())
+	}
+}
+
+func TestWriteFileKeepsTheTimestampWhenTheWriteFails(t *testing.T) {
+	stamp := time.Unix(1, 0)
+	idx := New(Version2)
+	idx.Timestamp = stamp
+	swapRename(t, func(*os.Root, string, string) error { return errInjected })
+	if err := idx.WriteFile(filepath.Join(t.TempDir(), "index"), Version2); !errors.Is(err, errInjected) {
+		t.Fatalf("WriteFile returned %v, want %v", err, errInjected)
+	}
+	if !idx.Timestamp.Equal(stamp) {
+		t.Fatalf("Timestamp = %v after a failed write, want %v", idx.Timestamp, stamp)
+	}
+}
+
+func TestWriteFileFailsWhenTheLockCannotBeStatted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "index")
+	original := fsStatAt
+	fsStatAt = func(*os.Root, string) (fs.FileInfo, error) { return nil, errInjected }
+	t.Cleanup(func() { fsStatAt = original })
+	err := New(Version2).WriteFile(path, Version2)
+	if !errors.Is(err, errInjected) {
+		t.Fatalf("WriteFile returned %v, want %v", err, errInjected)
+	}
+	for _, name := range []string{path, path + lockSuffix} {
+		if _, err := os.Stat(name); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s exists after the failed stat: %v", name, err)
+		}
+	}
+}
+
 func TestWriteFileAndReadFileAgree(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "index")

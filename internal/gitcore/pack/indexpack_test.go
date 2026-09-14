@@ -457,6 +457,9 @@ func TestIndexPackWritesAKeepFileWhenRequested(t *testing.T) {
 		t.Fatalf("IndexPack returned error %v", err)
 	}
 	keepPath := filepath.Join(dir, "pack-"+result.Checksum.String()+".keep")
+	if result.KeepPath != keepPath {
+		t.Fatalf("KeepPath = %q, want %q", result.KeepPath, keepPath)
+	}
 	data, err := os.ReadFile(keepPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%q) returned error %v", keepPath, err)
@@ -470,15 +473,48 @@ func TestIndexPackReportsKeepWriteFailure(t *testing.T) {
 	builder := newPackBuilder()
 	builder.addObject(t, KindBlob, []byte("content for keep failure test"))
 	raw := builder.bytes()
-	checksum := hash.ObjectID(raw[len(raw)-hash.Size:])
-
-	dir := t.TempDir()
-	blocking := filepath.Join(dir, "pack-"+checksum.String()+".keep")
-	if err := os.Mkdir(blocking, 0o755); err != nil {
-		t.Fatalf("Mkdir returned error %v", err)
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T)
+	}{
+		{"open", func(t *testing.T) {
+			original := openKeepFile
+			openKeepFile = func(string) (*os.File, error) { return nil, errRead }
+			t.Cleanup(func() { openKeepFile = original })
+		}},
+		{"close", func(t *testing.T) {
+			original := fileClose
+			fileClose = func(file *os.File) error { _ = file.Close(); return errRead }
+			t.Cleanup(func() { fileClose = original })
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup(t)
+			if _, err := IndexPack(t.Context(), bytes.NewReader(raw), t.TempDir(), IndexOptions{KeepName: "x"}); !errors.Is(err, errRead) {
+				t.Fatalf("IndexPack returned %v, want %v", err, errRead)
+			}
+		})
 	}
-	if _, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{KeepName: "x"}); err == nil {
-		t.Fatal("IndexPack succeeded despite a blocking directory at the keep path")
+}
+
+func TestIndexPackLeavesAKeepFileItDidNotCreate(t *testing.T) {
+	builder := newPackBuilder()
+	builder.addObject(t, KindBlob, []byte("a pack somebody already keeps"))
+	raw := builder.bytes()
+	checksum := hash.ObjectID(raw[len(raw)-hash.Size:])
+	dir := t.TempDir()
+	keepPath := writeTemp(t, filepath.Join(dir, "pack-"+checksum.String()+".keep"), []byte("kept by an administrator"))
+
+	result, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{KeepName: "fetch"})
+	if err != nil {
+		t.Fatalf("IndexPack returned error %v", err)
+	}
+
+	if result.KeepPath != "" {
+		t.Fatalf("KeepPath = %q, want empty for a keep file that was already there", result.KeepPath)
+	}
+	if data := readFixture(t, keepPath); string(data) != "kept by an administrator" {
+		t.Fatalf("the keep file holds %q after indexing", data)
 	}
 }
 
@@ -651,8 +687,7 @@ func TestAppendMissingBasesReportsEveryFailure(t *testing.T) {
 			file := newAppendFaultFile(t, content)
 			tc.fault(file)
 			entries := make([]Entry, 0)
-			offsetByID := make(map[hash.ObjectID]int64)
-			if _, _, err := appendMissingBases(file, int64(len(content)), 0, tc.appended, &entries, offsetByID); !errors.Is(err, errAppendFault) {
+			if _, _, err := appendMissingBases(file, int64(len(content)), 0, tc.appended, &entries); !errors.Is(err, errAppendFault) {
 				t.Fatalf("appendMissingBases returned %v, want wrapping %v", err, errAppendFault)
 			}
 		})
@@ -669,19 +704,12 @@ func TestAppendMissingBasesPatchesHeaderAndAppendsInIDOrder(t *testing.T) {
 	content := make([]byte, headerSize+hash.Size)
 	file := newAppendFaultFile(t, content)
 	entries := make([]Entry, 0)
-	offsetByID := make(map[hash.ObjectID]int64)
-	checksum, size, err := appendMissingBases(file, int64(len(content)), 3, appended, &entries, offsetByID)
+	checksum, size, err := appendMissingBases(file, int64(len(content)), 3, appended, &entries)
 	if err != nil {
 		t.Fatalf("appendMissingBases returned error %v", err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("len(entries) = %d, want 2", len(entries))
-	}
-	if _, ok := offsetByID[firstID]; !ok {
-		t.Error("offsetByID does not hold the first appended base")
-	}
-	if _, ok := offsetByID[secondID]; !ok {
-		t.Error("offsetByID does not hold the second appended base")
+	if len(entries) != 2 || entries[0].ID.Compare(entries[1].ID) >= 0 {
+		t.Fatalf("entries = %+v, want both appended bases in id order", entries)
 	}
 
 	info, err := file.Stat()

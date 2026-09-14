@@ -2,11 +2,11 @@ package ops
 
 import (
 	"maps"
-	"path/filepath"
 	"slices"
 
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/merge"
+	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 )
 
@@ -62,21 +62,34 @@ func unionKeys[A, B, C any](a map[string]A, b map[string]B, c map[string]C) map[
 }
 
 func (m *merger) moveTo(from merge.Snapshot, to outcome, cleanIndex bool) error {
+	if err := m.verifySnapshot(to.tree); err != nil {
+		return err
+	}
 	lock, err := lockIndex(m.r)
 	if err != nil {
 		return err
 	}
 	sw := &switcher{ctx: m.ctx, wt: m.wt, db: m.rc.db, format: m.rc.db.Format()}
+	current := indexByPath(lock.idx)
+	if m.r.Core().IgnoreCase {
+		sw.folded = foldPaths(current)
+	}
 	changed := to.changedFrom(from)
 	checked := changed
 	if cleanIndex {
-		checked = slices.Sorted(maps.Keys(unionKeys(from, indexByPath(lock.idx), to.tree)))
+		checked = slices.Sorted(maps.Keys(unionKeys(from, current, to.tree)))
 	}
 	blocked, err := blockedPaths(sw, lock.idx, from, checked, changed)
 	if err != nil {
 		lock.abort()
 		return err
 	}
+	leading, err := leadingPathBlockers(sw, current, to.tree, changed)
+	if err != nil {
+		lock.abort()
+		return err
+	}
+	blocked = slices.Compact(slices.Sorted(slices.Values(append(blocked, leading...))))
 	if len(blocked) > 0 {
 		lock.abort()
 		return &OverwriteError{Paths: blocked}
@@ -113,6 +126,23 @@ func blockedPaths(sw *switcher, idx *index.Index, from merge.Snapshot, checked, 
 		}
 	}
 	return blocked, nil
+}
+
+func leadingPathBlockers(sw *switcher, current map[string]*index.Entry, written merge.Snapshot, changed []string) ([]string, error) {
+	var blockers []string
+	for _, path := range changed {
+		if _, writes := written[path]; !writes {
+			continue
+		}
+		blocker, err := sw.blockingLeadingPath(path, current)
+		if err != nil {
+			return nil, err
+		}
+		if blocker != "" {
+			blockers = append(blockers, blocker)
+		}
+	}
+	return blockers, nil
 }
 
 func indexHolds(idx *index.Index, path string, want merge.Entry, has bool) bool {
@@ -158,7 +188,8 @@ func applyOutcome(sw *switcher, idx *index.Index, to outcome, changed []string) 
 		if _, keep := to.tree[path]; keep {
 			continue
 		}
-		if err := fsRootRemove(sw.wt.root, filepath.FromSlash(path)); err != nil && !missingPath(err) {
+		previous, _ := idx.Get(path, index.StageMerged)
+		if err := sw.removeTracked(path, previous); err != nil {
 			return err
 		}
 		removed = append(removed, path)
@@ -166,26 +197,36 @@ func applyOutcome(sw *switcher, idx *index.Index, to outcome, changed []string) 
 	for _, path := range removed {
 		sw.pruneEmptyDirs(parentOf(path))
 	}
+	entries := make([]index.Entry, 0, len(changed))
 	for _, path := range changed {
 		if err := sw.ctx.Err(); err != nil {
 			return err
 		}
-		idx.Remove(path)
+		previous, _ := idx.Get(path, index.StageMerged)
 		entry, keep := to.tree[path]
-		if keep {
-			if err := sw.checkout(path, treeEntry{mode: entry.Mode, id: entry.ID}); err != nil {
+		stages, conflicted := to.stages[path]
+		switch {
+		case conflicted && keep:
+			if _, err := sw.checkout(path, treeEntry{mode: entry.Mode, id: entry.ID}); err != nil {
 				return err
 			}
-		}
-		if stages, conflicted := to.stages[path]; conflicted {
-			for _, staged := range stages {
-				idx.Add(staged)
+		case keep:
+			merged, err := sw.checkoutEntry(path, treeEntry{mode: entry.Mode, id: entry.ID}, previous)
+			if err != nil {
+				return err
 			}
-			continue
+			entries = append(entries, merged)
 		}
-		if keep {
-			idx.Add(index.Entry{Path: path, Mode: entry.Mode, ID: entry.ID, Stage: index.StageMerged})
-		}
+		entries = append(entries, stages...)
 	}
+	idx.Replace(changed, entries)
 	return nil
+}
+
+func (m *merger) verifySnapshot(tree merge.Snapshot) error {
+	rules, err := pathRulesOf(m.r)
+	if err != nil {
+		return err
+	}
+	return verifyPaths(tree, func(entry merge.Entry) object.Mode { return entry.Mode }, rules)
 }

@@ -203,7 +203,7 @@ func (a *App) clearChangesPanels() {
 	a.activeModified = false
 	a.filesDirFilter = ""
 	a.filesMu.Unlock()
-	a.selectedCommit = hash.ObjectID{}
+	a.setSelectedCommit(hash.ObjectID{})
 	a.setCommitSelected(false)
 	a.setFilesRows(nil)
 	a.clearDiff()

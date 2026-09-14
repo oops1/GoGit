@@ -454,18 +454,27 @@ func TestWritePackSortsMultipleThinBasesByID(t *testing.T) {
 	}
 }
 
-func TestSearchRefDeltaSkipsThinBasesOfADifferentType(t *testing.T) {
-	target := writeObject{kind: object.TypeBlob, data: similarBlob(0, 200)}
-	thins := []thinBase{
-		{kind: object.TypeTree, data: []byte("tree content unrelated to the blob")},
-		{kind: object.TypeBlob, id: hash.SumSHA1("blob", similarBlob(0, 200)), data: similarBlob(0, 200)},
+func loadedObject(kind object.Type, data []byte) writeObject {
+	return writeObject{id: hash.SumSHA1(kind.String(), data), kind: kind, size: int64(len(data)), data: data, loaded: true}
+}
+
+func TestSearchDeltaSkipsThinBasesOfADifferentType(t *testing.T) {
+	base := similarBlob(0, 200)
+	target := append(bytes.Clone(base), "a tail only the target has\n"...)
+	session := &packSession{
+		opts:    WriteOptions{Window: 4, Depth: 4},
+		objects: []writeObject{loadedObject(object.TypeBlob, target)},
+		thins: []thinBase{
+			{kind: object.TypeTree, data: bytes.Clone(base)},
+			{kind: object.TypeBlob, id: hash.SumSHA1("blob", base), data: base},
+		},
+		writer: newPackWriter(&bytes.Buffer{}),
 	}
-	choice := searchRefDelta(target, thins)
-	if choice == nil {
-		t.Fatal("searchRefDelta returned nil, want the matching blob base")
-	}
-	if choice.kind != KindRefDelta {
-		t.Fatalf("kind = %s, want ref-delta", choice.kind)
+
+	choice, err := session.searchDelta(0)
+
+	if err != nil || choice == nil || choice.kind != KindRefDelta || !bytes.Equal(choice.base, session.thins[1].id[:]) {
+		t.Fatalf("searchDelta = (%+v, %v), want a ref delta against the blob base", choice, err)
 	}
 }
 
@@ -491,32 +500,58 @@ func TestPackWriterWriteObjectFailsWhenTheStreamCannotBeClosed(t *testing.T) {
 	}
 }
 
-func TestChooseEncodingIgnoresDifferentTypeCandidates(t *testing.T) {
-	blob := writeObject{id: hash.SumSHA1("blob", []byte("blob content")), kind: object.TypeBlob, data: []byte("blob content")}
-	written := []packedObject{{
-		writeObject: writeObject{kind: object.TypeTree, data: []byte("tree content, unrelated to the blob above")},
-		offset:      0,
-	}}
-	choice := chooseEncoding(blob, 100, written, nil, WriteOptions{Window: 4, Depth: 4})
-	if choice.kind == KindOffsetDelta || choice.kind == KindRefDelta {
-		t.Fatalf("chooseEncoding used a delta across mismatched types: %s", choice.kind)
+func TestSearchDeltaIgnoresWindowCandidatesOfADifferentType(t *testing.T) {
+	content := similarBlob(0, 200)
+	tree := loadedObject(object.TypeTree, bytes.Clone(content))
+	tree.state = stateWritten
+	session := &packSession{
+		opts:    WriteOptions{Window: 4, Depth: 4},
+		objects: []writeObject{tree, loadedObject(object.TypeBlob, append(bytes.Clone(content), '\n'))},
+		window:  []int{0},
+		writer:  newPackWriter(&bytes.Buffer{}),
+	}
+
+	if choice, err := session.searchDelta(1); err != nil || choice != nil {
+		t.Fatalf("searchDelta = (%+v, %v), want no delta across types", choice, err)
 	}
 }
 
-func TestSortForDeltaGroupsByTypeThenDecreasingSize(t *testing.T) {
+func TestSortForDeltaOrdersByTypeNameHashAndSizeLikeGit(t *testing.T) {
 	objects := []writeObject{
-		{kind: object.TypeBlob, data: make([]byte, 10)},
-		{kind: object.TypeTree, data: make([]byte, 5)},
-		{kind: object.TypeBlob, data: make([]byte, 30)},
-		{kind: object.TypeTree, data: make([]byte, 40)},
+		{id: hash.ObjectID{1}, kind: object.TypeBlob, name: 7, size: 10},
+		{id: hash.ObjectID{2}, kind: object.TypeTree, size: 5},
+		{id: hash.ObjectID{3}, kind: object.TypeBlob, name: 7, size: 30},
+		{id: hash.ObjectID{4}, kind: object.TypeBlob, name: 9, size: 1},
+		{id: hash.ObjectID{5}, kind: object.TypeCommit, size: 40},
+		{id: hash.ObjectID{6}, kind: object.TypeBlob, name: 7, size: 30},
 	}
+
 	order := sortForDelta(objects)
-	for i := 1; i < len(order); i++ {
-		if order[i-1].kind > order[i].kind {
-			t.Fatalf("order[%d].kind = %s came after order[%d].kind = %s", i-1, order[i-1].kind, i, order[i].kind)
+
+	var got []byte
+	for _, obj := range order {
+		got = append(got, obj.id[0])
+	}
+	if want := []byte{4, 3, 6, 1, 2, 5}; !bytes.Equal(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
+func TestNameHashFollowsTheLastCharactersAndSkipsWhitespace(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		want uint32
+	}{
+		{"", 0},
+		{"a", 'a' << 24},
+		{"ab", ('a'<<24)>>2 + 'b'<<24},
+		{"a b\t\r\n", ('a'<<24)>>2 + 'b'<<24},
+	} {
+		if got := NameHash(tt.name); got != tt.want {
+			t.Fatalf("NameHash(%q) = %#x, want %#x", tt.name, got, tt.want)
 		}
-		if order[i-1].kind == order[i].kind && len(order[i-1].data) < len(order[i].data) {
-			t.Fatalf("within kind %s, size %d came before %d", order[i].kind, len(order[i-1].data), len(order[i].data))
-		}
+	}
+	if AppendNameHash(NameHash("dir/"), "file.c") != NameHash("dir/file.c") {
+		t.Fatal("AppendNameHash does not continue the hash of a prefix")
 	}
 }

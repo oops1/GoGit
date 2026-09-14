@@ -51,8 +51,15 @@ type httpSession struct {
 	version      int
 	caps         Capabilities
 	authHeader   string
+	supplied     *suppliedCredentials
 	credAttempts int
 	closed       bool
+}
+
+type suppliedCredentials struct {
+	resource string
+	creds    Credentials
+	approved bool
 }
 
 func newHTTPSession(endpoint Endpoint, password Password, service Service, opts Options) *httpSession {
@@ -67,7 +74,7 @@ func newHTTPSession(endpoint Endpoint, password Password, service Service, opts 
 		opts:     opts,
 		client:   client,
 		baseURL:  httpBaseURL(endpoint),
-		resource: resourceOf(endpoint),
+		resource: CredentialResource(endpoint),
 	}
 }
 
@@ -80,7 +87,36 @@ func (s *httpSession) Close() error {
 	s.closed = true
 	s.password.Wipe()
 	s.authHeader = ""
+	s.forgetSupplied()
 	return nil
+}
+
+func (s *httpSession) forgetSupplied() {
+	if s.supplied == nil {
+		return
+	}
+	s.supplied.creds.Wipe()
+	s.supplied = nil
+}
+
+func (s *httpSession) approveSupplied(ctx context.Context) {
+	if s.supplied == nil || s.supplied.approved {
+		return
+	}
+	s.supplied.approved = true
+	if feedback, ok := s.opts.Credentials.(CredentialFeedback); ok {
+		feedback.Approve(ctx, s.supplied.resource, s.supplied.creds)
+	}
+}
+
+func (s *httpSession) rejectSupplied(ctx context.Context) {
+	if s.supplied == nil {
+		return
+	}
+	if feedback, ok := s.opts.Credentials.(CredentialFeedback); ok {
+		feedback.Reject(ctx, s.supplied.resource, s.supplied.creds)
+	}
+	s.forgetSupplied()
 }
 
 func (s *httpSession) applyAuthHeader(req *http.Request) {
@@ -100,12 +136,12 @@ func (s *httpSession) authenticate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer creds.Wipe()
 	if len(creds.Token) > 0 {
 		s.authHeader = "Bearer " + string(creds.Token)
-		return nil
+	} else {
+		s.authHeader = "Basic " + base64.StdEncoding.EncodeToString([]byte(creds.Username+":"+string(creds.Password)))
 	}
-	s.authHeader = "Basic " + base64.StdEncoding.EncodeToString([]byte(creds.Username+":"+string(creds.Password)))
+	s.supplied = &suppliedCredentials{resource: s.resource, creds: creds}
 	return nil
 }
 
@@ -141,6 +177,7 @@ func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType
 	s.adoptRedirect(resp.Request)
 	for resp.StatusCode == http.StatusUnauthorized && s.credAttempts < 2 && s.opts.Credentials != nil {
 		_ = resp.Body.Close()
+		s.rejectSupplied(ctx)
 		if err := s.authenticate(ctx); err != nil {
 			return nil, err
 		}
@@ -152,10 +189,14 @@ func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		_ = resp.Body.Close()
+		s.rejectSupplied(ctx)
 		if s.opts.Credentials == nil {
 			return nil, ErrNoCredentials
 		}
 		return nil, ErrAuthRequired
+	}
+	if resp.StatusCode == http.StatusOK {
+		s.approveSupplied(ctx)
 	}
 	return s.checkStatus(resp)
 }
@@ -253,8 +294,16 @@ func (s *httpSession) adoptRedirect(final *http.Request) {
 		return
 	}
 	if !strings.HasPrefix(s.baseURL+"/", target.Scheme+"://"+target.Host+"/") {
-		s.resource = target.Hostname() + strings.TrimSuffix(target.Path, "/info/refs")
+		s.resource = CredentialResource(Endpoint{
+			Scheme: Scheme(target.Scheme),
+			Host:   target.Hostname(),
+			Port:   target.Port(),
+			Path:   strings.TrimSuffix(target.Path, "/info/refs"),
+		})
+		s.endpoint.User = ""
+		s.password.Wipe()
 		s.authHeader = ""
+		s.forgetSupplied()
 		s.credAttempts = 0
 	}
 	s.baseURL = base

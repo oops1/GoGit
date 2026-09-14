@@ -134,6 +134,13 @@ type App struct {
 	watchWG     sync.WaitGroup
 	watcher     watcherIface
 
+	refreshFlagMu sync.Mutex
+	refreshQueued bool
+
+	journalFilterMu    sync.Mutex
+	journalFilterTimer *time.Timer
+	journalFilterWG    sync.WaitGroup
+
 	journalRunMu    sync.Mutex
 	journalMu       sync.Mutex
 	journalCancel   context.CancelFunc
@@ -143,7 +150,14 @@ type App struct {
 
 	filesItems *datagrid.ObservableCollection
 
-	readWG sync.WaitGroup
+	readMu     sync.Mutex
+	readCtx    context.Context
+	readCancel context.CancelFunc
+	readKeys   map[string]bool
+	readWG     sync.WaitGroup
+
+	dialogsMu    sync.Mutex
+	shownDialogs []shownDialog
 
 	diffRunMu  sync.Mutex
 	diffMu     sync.Mutex
@@ -181,6 +195,9 @@ type App struct {
 
 	branchMu    sync.Mutex
 	branchCache map[string]string
+	branchFresh map[string]string
+	branchGen   uint64
+	branchWG    sync.WaitGroup
 
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
@@ -375,6 +392,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		newWatcher:      newRealWatcher,
 		journalPageSize: defaultJournalPageSize,
 		banner:          banner,
+		branchCache:     map[string]string{},
+		branchFresh:     map[string]string{},
 	}
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight
@@ -382,6 +401,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
 	a.eng.SetRoot(root)
+	a.eng.SetOnModalClosed(func(widget.ModalWidget) { a.releaseClosedDialogs() })
 	a.startPostQueue()
 	a.askInput = func(title, prompt string, cb func(text string, ok bool)) {
 		widget.NewMessageBox(a.eng).ShowInput(title, prompt, "", nil, cb)
@@ -441,7 +461,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.wireJournalFilter()
 	a.applyFilesFilter()
 	a.restoreActiveRepository()
-	a.refreshBranchCache()
+	a.loadBranchCache()
 	a.applyTheme()
 	a.updateStatusText()
 
@@ -643,6 +663,7 @@ func (a *App) ActivateRepository(id string) {
 	a.refreshDivergence(opened)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
 	a.refreshBranchCache()
+	a.setActiveBranch(id, snap)
 	a.refreshRemoteState()
 	a.refreshFlowState(opened, snap.Current)
 	a.reposView.Render(a.registry, a.repoTreeState())
@@ -668,6 +689,24 @@ func (a *App) commitIsSelected() bool {
 	a.stateMu.RLock()
 	defer a.stateMu.RUnlock()
 	return a.commitSelected
+}
+
+func (a *App) selectedCommitID() hash.ObjectID {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.selectedCommit
+}
+
+func (a *App) setSelectedCommit(id hash.ObjectID) {
+	a.stateMu.Lock()
+	a.selectedCommit = id
+	a.stateMu.Unlock()
+}
+
+func (a *App) shownCommit() (hash.ObjectID, bool) {
+	a.stateMu.RLock()
+	defer a.stateMu.RUnlock()
+	return a.selectedCommit, a.commitSelected && !a.selectedCommit.IsZero()
 }
 
 func (a *App) setCommitSelected(v bool) {
@@ -721,7 +760,7 @@ func (a *App) RefreshRepository() {
 	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
-	a.refreshBranchCache()
+	a.setActiveBranch(o.id, snap)
 	a.refreshRemoteState()
 	a.refreshFlowState(o, snap.Current)
 	a.reposView.Render(a.registry, a.repoTreeState())
@@ -730,6 +769,33 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.requestWorking()
+}
+
+func (a *App) requestRefresh() {
+	a.refreshFlagMu.Lock()
+	queued := a.refreshQueued
+	a.refreshQueued = true
+	a.refreshFlagMu.Unlock()
+	if !queued {
+		a.Post(a.runQueuedRefresh)
+	}
+}
+
+func (a *App) runQueuedRefresh() {
+	a.refreshFlagMu.Lock()
+	queued := a.refreshQueued
+	a.refreshQueued = false
+	a.refreshFlagMu.Unlock()
+	if queued {
+		a.RefreshRepository()
+	}
+}
+
+func (a *App) refreshAtOnce() {
+	a.refreshFlagMu.Lock()
+	a.refreshQueued = false
+	a.refreshFlagMu.Unlock()
+	a.RefreshRepository()
 }
 
 func branchStatusText(snap branches.Snapshot) string {
@@ -988,6 +1054,7 @@ func effectiveTheme(name string, detect func() systheme.Scheme) string {
 
 func (a *App) SetLanguage(code string) {
 	a.cfg.Language = code
+	a.releaseClosedDialogs()
 	i18n.Apply(code)
 	a.detailsView.Retitle()
 	a.keepDetailsTabsVisible()
@@ -1022,9 +1089,12 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.closeOnce.Do(func() {
+		a.stopJournalFilterDelay()
 		a.stopAutoFetch()
 		a.stopNetOperations()
 		a.closePostQueue()
+		a.branchWG.Wait()
+		a.releaseDialogs(true)
 		a.stopWatcher()
 		a.stopJournal()
 		a.stopDiff()

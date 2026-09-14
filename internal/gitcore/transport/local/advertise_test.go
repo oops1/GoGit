@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/transport"
 )
 
@@ -150,5 +151,61 @@ func TestAdvertiseRespectsCanceledContext(t *testing.T) {
 	cancel()
 	if _, err := sess.Advertise(ctx); err == nil {
 		t.Fatal("Advertise on a canceled context returned no error")
+	}
+}
+
+func TestAdvertisePeelsEveryRefThatPointsAtAnAnnotatedTag(t *testing.T) {
+	src := newTestRepo(t, true)
+	first := src.commit("main", map[string]string{"a.txt": "a"})
+	tagID := src.annotatedTag("v1", first, object.TypeCommit)
+	src.writeRawRef("refs/heads/x", tagID.String()+"\n")
+	tx := src.refs.Begin()
+	if err := tx.Set(refs.Name("refs/remotes/o/v1"), tagID); err != nil {
+		t.Fatalf("Set returned error %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("Commit returned error %v", err)
+	}
+	src.writeRawHead(tagID.String() + "\n")
+
+	adv, err := dialSession(t, src.dir).Advertise(t.Context())
+	if err != nil {
+		t.Fatalf("Advertise returned error %v", err)
+	}
+
+	for _, name := range []string{"HEAD", "refs/heads/x", "refs/remotes/o/v1", "refs/tags/v1"} {
+		ref, ok := findRef(adv.Refs, name)
+		if !ok || ref.ID != tagID || ref.Peeled != first {
+			t.Fatalf("%s = %+v, want id %s peeled to %s", name, ref, tagID, first)
+		}
+	}
+	if main, _ := findRef(adv.Refs, "refs/heads/main"); !main.Peeled.IsZero() {
+		t.Fatalf("refs/heads/main = %+v, want no peeled value for a commit", main)
+	}
+}
+
+func TestAdvertiseLeavesARefToAMissingObjectUnpeeled(t *testing.T) {
+	src := newTestRepo(t, true)
+	src.commit("main", map[string]string{"a.txt": "a"})
+	missing := src.missingObjectID()
+	src.writeRawRef("refs/heads/gone", missing.String()+"\n")
+
+	adv, err := dialSession(t, src.dir).Advertise(t.Context())
+	if err != nil {
+		t.Fatalf("Advertise returned error %v", err)
+	}
+
+	if gone, ok := findRef(adv.Refs, "refs/heads/gone"); !ok || gone.ID != missing || !gone.Peeled.IsZero() {
+		t.Fatalf("refs/heads/gone = %+v, want %s without a peeled value", gone, missing)
+	}
+}
+
+func TestAdvertiseFailsWhenARefTargetCannotBeRead(t *testing.T) {
+	src := newTestRepo(t, true)
+	src.commit("main", map[string]string{"a.txt": "a"})
+	src.writeRawRef("refs/heads/corrupt", src.corruptLooseObject().String()+"\n")
+
+	if _, err := dialSession(t, src.dir).Advertise(t.Context()); err == nil {
+		t.Fatal("Advertise accepted a reference whose object cannot be read")
 	}
 }

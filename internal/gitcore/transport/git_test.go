@@ -90,17 +90,29 @@ func gitV2AdvertisementBytes(capLines []string) []byte {
 
 func readHaveRound(t *testing.T, dec *Decoder) (haveCount int, isDone bool) {
 	t.Helper()
+	inWants := false
 	for {
 		line, typ, err := readOnePktLine(dec)
 		if err != nil {
 			t.Errorf("readOnePktLine returned error %v", err)
 			return haveCount, false
 		}
+		if typ == PktFlush && inWants {
+			inWants = false
+			continue
+		}
 		if typ == PktFlush {
 			return haveCount, false
 		}
 		if typ != PktData {
 			continue
+		}
+		if strings.HasPrefix(line, "want ") {
+			inWants = true
+			continue
+		}
+		if inWants && (line == "done" || strings.HasPrefix(line, "have ")) {
+			t.Errorf("%q arrived before the want list was flushed", line)
 		}
 		if line == "done" {
 			return haveCount, true
@@ -385,7 +397,7 @@ func TestGitFetchV1NegotiationStopsAtServerReady(t *testing.T) {
 		totalHaves += n2
 		round2Final = done2
 		readyID := haves[total-1]
-		if _, err := conn.Write(newPktBuilder().line("ACK " + readyID.String() + " ready\n").bytes()); err != nil {
+		if _, err := conn.Write(newPktBuilder().line("ACK " + readyID.String() + " ready\n").line("NAK\n").bytes()); err != nil {
 			t.Errorf("Write returned error %v", err)
 			return
 		}

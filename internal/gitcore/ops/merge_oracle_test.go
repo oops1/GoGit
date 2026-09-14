@@ -125,6 +125,19 @@ func mergeScenarios() []mergeScenario {
 			b.commit("next", map[string]string{"g": g})
 			b.git("checkout", "-q", "main")
 		}},
+		{name: "empty file renamed against its deletion", target: "feature", setup: func(b *mergeBuilder) {
+			b.o.write(b.dir, "old/__init__.py", "")
+			b.git("add", "--", "old/__init__.py")
+			b.commit("base", map[string]string{"keep": "keep\n"})
+			b.git("branch", "feature")
+			b.git("rm", "-q", "--", "old/__init__.py")
+			b.o.write(b.dir, "new/__init__.py", "")
+			b.git("add", "--", "new/__init__.py")
+			b.commit("ours", nil)
+			b.git("checkout", "-q", "feature")
+			b.commit("theirs", map[string]string{"old/__init__.py": ""})
+			b.git("checkout", "-q", "main")
+		}},
 		{name: "squash", target: "feature", args: []string{"--squash"}, opts: MergeOptions{Mode: MergeSquash}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "squash with a conflict", target: "feature", args: []string{"--squash"}, opts: MergeOptions{Mode: MergeSquash}, setup: forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")})},
 		{name: "no commit", target: "feature", args: []string{"--no-commit"}, opts: MergeOptions{NoCommit: true}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
@@ -182,6 +195,26 @@ func mergeScenarios() []mergeScenario {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
 			b.o.write(b.dir, "keep", "local\n")
 		}},
+		{name: "untracked file in a leading path", target: "feature", setup: func(b *mergeBuilder) {
+			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"d/x": "theirs\n"})(b)
+			b.o.write(b.dir, "d", "untracked\n")
+		}},
+		{name: "untracked file in a leading path of a fast-forward", target: "feature", setup: func(b *mergeBuilder) {
+			b.commit("base", map[string]string{"f": f})
+			b.git("checkout", "-q", "-b", "feature")
+			b.commit("next", map[string]string{"d/x": "theirs\n"})
+			b.git("checkout", "-q", "main")
+			b.o.write(b.dir, "d", "untracked\n")
+		}},
+		{name: "untracked symlink in a leading path", target: "feature", setup: func(b *mergeBuilder) {
+			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"d/x": "theirs\n"})(b)
+			b.o.write(b.dir, "target", "untracked\n")
+			if err := os.Symlink("target", filepath.Join(b.dir, "d")); err != nil {
+				b.o.t.Skipf("symbolic links are not available: %v", err)
+			}
+		}},
+		{name: "a case rename of a tracked file", target: "feature", setup: caseRenameHistory(false)},
+		{name: "a case rename over a local edit", target: "feature", setup: caseRenameHistory(true)},
 		{name: "staged change refused", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
 			b.write(map[string]string{"keep": "staged\n"})
@@ -326,6 +359,25 @@ func mergeScenarios() []mergeScenario {
 			forkedHistory(map[string]string{"f": editLine(f, 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": editLine(f, 4, "THEIRS"), "new": "new\n"})(b)
 			b.o.write(b.dir, "keep", "local\n")
 		}, after: abortMerge},
+	}
+}
+
+func caseRenameHistory(localEdit bool) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		if !caseInsensitiveFileSystem(b.o.t) {
+			b.o.t.Skip("the file system is case-sensitive")
+		}
+		f := lines("f", 10)
+		b.commit("base", map[string]string{"keep": "keep\n", "f": f, "readme": "hello\n"})
+		b.git("branch", "feature")
+		b.commit("ours", map[string]string{"f": editLine(f, 0, "OURS")})
+		b.git("checkout", "-q", "feature")
+		b.git("mv", "readme", "README")
+		b.git("commit", "-q", "-m", "rename")
+		b.git("checkout", "-q", "main")
+		if localEdit {
+			b.o.write(b.dir, "readme", "local edit\n")
+		}
 	}
 }
 

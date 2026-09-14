@@ -34,6 +34,7 @@ const (
 )
 
 type pickPlan struct {
+	parentCommit hash.ObjectID
 	base, theirs hash.ObjectID
 	labels       merge.Labels
 	message      string
@@ -108,14 +109,19 @@ func (m *merger) planPick(id hash.ObjectID, revert bool) (pickPlan, error) {
 		}, nil
 	}
 	author := c.Author
+	var parentCommit hash.ObjectID
+	if len(c.Parents) == 1 {
+		parentCommit = c.Parents[0]
+	}
 	return pickPlan{
-		base:      parent,
-		theirs:    c.Tree,
-		labels:    merge.Labels{Ours: oursLabel, Theirs: label, Base: parentLabelPrefix + label},
-		message:   c.Message,
-		author:    &author,
-		reflog:    pickNote + subject,
-		stateFile: pickHeadFile,
+		parentCommit: parentCommit,
+		base:         parent,
+		theirs:       c.Tree,
+		labels:       merge.Labels{Ours: oursLabel, Theirs: label, Base: parentLabelPrefix + label},
+		message:      c.Message,
+		author:       &author,
+		reflog:       pickNote + subject,
+		stateFile:    pickHeadFile,
 	}, nil
 }
 

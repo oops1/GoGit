@@ -244,6 +244,8 @@ func loadExtension(idx *Index, name string, payload []byte) error {
 		idx.OffsetTable, err = parseOffsetTable(payload)
 	case extSplitIndex:
 		err = fmt.Errorf("%w: the index is split, its entries live in a shared index file", ErrUnsupported)
+	case extSparseIndex:
+		err = fmt.Errorf("%w: the index is sparse, its directories are collapsed into tree entries", ErrUnsupported)
 	default:
 		if !optionalExtension(name) {
 			err = fmt.Errorf("%w: %s", ErrUnsupportedExtension, name)

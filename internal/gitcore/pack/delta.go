@@ -141,12 +141,18 @@ func releasePayload(buffer *payload) {
 }
 
 func EncodeDelta(base, target []byte) []byte {
+	return encodeDelta(buildDeltaIndex(base), base, target, 0)
+}
+
+func encodeDelta(index map[uint32][]int, base, target []byte, limit int64) []byte {
 	out := appendDeltaSize(nil, int64(len(base)))
 	out = appendDeltaSize(out, int64(len(target)))
-	index := buildDeltaIndex(base)
 	var pending []byte
 	position := 0
 	for position < len(target) {
+		if limit > 0 && int64(len(out)+len(pending)) > limit {
+			return nil
+		}
 		if matchOffset, length, ok := findDeltaMatch(index, base, target, position); ok {
 			out = appendDeltaInsert(out, pending)
 			pending = pending[:0]
@@ -157,7 +163,11 @@ func EncodeDelta(base, target []byte) []byte {
 		pending = append(pending, target[position])
 		position++
 	}
-	return appendDeltaInsert(out, pending)
+	out = appendDeltaInsert(out, pending)
+	if limit > 0 && int64(len(out)) > limit {
+		return nil
+	}
+	return out
 }
 
 func findDeltaMatch(index map[uint32][]int, base, target []byte, position int) (int, int, bool) {

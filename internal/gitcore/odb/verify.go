@@ -27,44 +27,38 @@ func (d *DB) VerifyLoose(id hash.ObjectID) error {
 
 func (d *DB) VerifyPack(ctx context.Context, name string) iter.Seq2[hash.ObjectID, error] {
 	return func(yield func(hash.ObjectID, error) bool) {
-		file := d.packFile(name)
-		if file == nil {
-			yield(hash.Zero, fmt.Errorf("%w: pack %s", ErrNotFound, name))
-			return
-		}
-		if err := file.Index.Verify(); err != nil && !yield(hash.Zero, err) {
-			return
-		}
-		if err := file.Pack.Verify(); err != nil && !yield(hash.Zero, err) {
-			return
-		}
-		for id := range file.Index.Objects() {
-			if ctx.Err() != nil {
-				return
-			}
-			offset, _ := file.Index.Find(id)
-			kind, data, err := file.Pack.ObjectAt(offset)
-			if err == nil {
-				if got := hash.SumSHA1(kind.String(), data); got != id {
-					err = fmt.Errorf("%w: %s in %s holds %s", ErrCorrupt, id, name, got)
+		if store := d.store(); store != nil {
+			for file := range store.Acquire() {
+				if file.Name == name {
+					verifyPackFile(ctx, file, yield)
+					return
 				}
 			}
-			if err != nil && !yield(id, err) {
-				return
-			}
 		}
+		yield(hash.Zero, fmt.Errorf("%w: pack %s", ErrNotFound, name))
 	}
 }
 
-func (d *DB) packFile(name string) *pack.PackFile {
-	store := d.store()
-	if store == nil {
-		return nil
+func verifyPackFile(ctx context.Context, file *pack.PackFile, yield func(hash.ObjectID, error) bool) {
+	if err := file.Index.Verify(); err != nil && !yield(hash.Zero, err) {
+		return
 	}
-	for _, file := range store.Files() {
-		if file.Name == name {
-			return file
+	if err := file.Pack.Verify(); err != nil && !yield(hash.Zero, err) {
+		return
+	}
+	for id := range file.Index.Objects() {
+		if ctx.Err() != nil {
+			return
+		}
+		offset, _ := file.Index.Find(id)
+		kind, data, err := file.Pack.ObjectAt(offset)
+		if err == nil {
+			if got := hash.SumSHA1(kind.String(), data); got != id {
+				err = fmt.Errorf("%w: %s in %s holds %s", ErrCorrupt, id, file.Name, got)
+			}
+		}
+		if err != nil && !yield(id, err) {
+			return
 		}
 	}
-	return nil
 }

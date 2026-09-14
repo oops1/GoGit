@@ -68,7 +68,7 @@ func (a *App) runWatcher(ctx context.Context, w watcherIface) {
 
 func (a *App) handleChangeSet(set watch.ChangeSet) {
 	if set.Has(watch.Head) || set.Has(watch.Refs) || set.Has(watch.State) {
-		a.Post(a.RefreshRepository)
+		a.requestRefresh()
 	}
 	if set.Has(watch.Index) || set.Has(watch.WorkTree) {
 		a.Post(a.refreshWorkingStatus)
@@ -89,20 +89,16 @@ func (a *App) stopWatcher() {
 	a.watchWG.Wait()
 }
 
-func (a *App) pauseWatch() {
+func (a *App) holdWatch() func() {
 	a.watchMu.Lock()
 	w := a.watcher
 	a.watchMu.Unlock()
-	if w != nil {
-		w.Pause()
+	if w == nil {
+		return func() {}
 	}
-}
-
-func (a *App) resumeWatch() {
-	a.watchMu.Lock()
-	w := a.watcher
-	a.watchMu.Unlock()
-	if w != nil {
+	w.Pause()
+	return func() {
 		w.Resume()
+		w.Poke()
 	}
 }

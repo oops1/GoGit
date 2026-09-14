@@ -32,6 +32,15 @@ func validateTodo(todo []RebaseStep) error {
 	return nil
 }
 
+func runnableTodo(todo []RebaseStep) error {
+	for _, step := range todo {
+		if step.Line != "" {
+			return fmt.Errorf("%w: %s", ErrRebaseStepUnsupported, step.Action)
+		}
+	}
+	return nil
+}
+
 func folds(action string) bool { return action == actionSquash || action == actionFixup }
 
 func (m *merger) runRebase(state RebaseState, result RebaseResult) (RebaseResult, error) {
@@ -50,12 +59,10 @@ func (m *merger) runRebaseStep(state *RebaseState, result *RebaseResult, step Re
 	case actionDrop:
 		state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
 		return false, writeRebaseState(m.r, *state)
-	case actionPick, actionReword, actionEdit:
-		return m.applyRebaseStep(state, result, step)
 	case actionSquash, actionFixup:
 		return m.foldRebaseStep(state, result, step)
 	}
-	return false, fmt.Errorf("%w: %s", ErrRebaseStepUnsupported, step.Action)
+	return m.applyRebaseStep(state, result, step)
 }
 
 func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step RebaseStep) (bool, error) {
@@ -67,6 +74,13 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	if err != nil {
 		return false, err
 	}
+	if plan.parentCommit == head.old {
+		if _, err := m.fastForward(head, step.Commit, m.rebaseName()+": fast-forward", MergeResult{}); err != nil {
+			return false, err
+		}
+		state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
+		return m.recordRebaseStep(state, result, step, step.Commit, plan)
+	}
 	plan.reflog = m.rebaseNote(actionPick) + firstLine(plan.message)
 	picked, err := m.mergePick(head, plan)
 	if err != nil {
@@ -76,16 +90,25 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 	if len(picked.conflicts) > 0 {
 		return true, m.stopForConflicts(state, result, step.Commit, plan, picked.conflicts)
 	}
-	if picked.empty {
+	if picked.empty && !plan.startedEmpty() {
+		if step.Action == actionEdit {
+			return true, m.stopForAmending(state, result, step.Commit, head.old, plan)
+		}
 		return false, writeRebaseState(m.r, *state)
 	}
 	commit, err := m.commitPick(head, plan, picked.tree)
 	if err != nil {
 		return false, err
 	}
-	state.Rewritten += step.Commit.String() + " " + commit.String() + "\n"
+	return m.recordRebaseStep(state, result, step, commit, plan)
+}
+
+func (p pickPlan) startedEmpty() bool { return p.base == p.theirs }
+
+func (m *merger) recordRebaseStep(state *RebaseState, result *RebaseResult, step RebaseStep, commit hash.ObjectID, plan pickPlan) (bool, error) {
 	result.Applied++
 	if step.Action == actionPick {
+		state.Rewritten += step.Commit.String() + " " + commit.String() + "\n"
 		return false, writeRebaseState(m.r, *state)
 	}
 	return true, m.stopForAmending(state, result, step.Commit, commit, plan)
@@ -184,25 +207,48 @@ func (m *merger) continueAmending(state *RebaseState, result *RebaseResult, mess
 	if err != nil {
 		return err
 	}
-	amended, err := dbCommit(m.rc.db, head.old)
-	if err != nil {
-		return err
-	}
 	tree, err := m.stagedTree()
 	if err != nil {
 		return err
 	}
-	message = cmp.Or(message, state.Message, amended.Message)
-	plan := pickPlan{message: message, author: &amended.Author}
-	plan.reflog = m.rebaseNote("continue") + firstLine(plan.message)
-	commit, err := m.amendHead(head, amended, tree, plan)
+	amended, err := dbCommit(m.rc.db, head.old)
 	if err != nil {
 		return err
 	}
-	state.Rewritten = rewrittenAfterFold(state.Rewritten, head.old, state.Stopped, commit)
+	final, err := m.finishAmending(state, head, amended, tree, message)
+	if err != nil {
+		return err
+	}
+	var recorded error
+	if final != head.old {
+		recorded = m.rerere().record()
+	}
+	state.Rewritten = rewrittenAfterFold(state.Rewritten, state.Amend, state.Stopped, final)
 	state.Stopped, state.Amend, state.Message, state.Author = hash.Zero, hash.Zero, "", nil
 	result.Applied++
-	return joinErrors(writeRebaseState(m.r, *state), removeStateFiles(m.r, mergeMsgFile))
+	return joinErrors(writeRebaseState(m.r, *state), removeStateFiles(m.r, mergeMsgFile), recorded)
+}
+
+func (m *merger) finishAmending(state *RebaseState, head headTarget, amended *object.Commit, tree hash.ObjectID, message string) (hash.ObjectID, error) {
+	clean := tree == amended.Tree
+	switch {
+	case head.old != state.Amend && !clean:
+		return hash.Zero, ErrRebaseUncommittedChanges
+	case head.old != state.Amend:
+		return head.old, nil
+	case clean && lastRebaseAction(*state) == actionEdit && (message == "" || normalizeMessage(message) == normalizeMessage(state.Message)):
+		return head.old, nil
+	}
+	plan := pickPlan{message: cmp.Or(message, state.Message, amended.Message), author: &amended.Author}
+	plan.reflog = m.rebaseNote("continue") + firstLine(plan.message)
+	return m.amendHead(head, amended, tree, plan)
+}
+
+func lastRebaseAction(state RebaseState) string {
+	if len(state.Done) == 0 {
+		return ""
+	}
+	return state.Done[len(state.Done)-1].Action
 }
 
 func (m *merger) stagedTree() (hash.ObjectID, error) {

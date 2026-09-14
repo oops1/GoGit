@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/pack"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/transport"
@@ -235,20 +236,18 @@ func TestPushFailsWhenObjectDatabaseCannotReload(t *testing.T) {
 	commit := src.commit("main", map[string]string{"a.txt": "hello"})
 	dst := newTestRepo(t, true)
 	sess := dialSession(t, dst.dir)
-	if err := os.WriteFile(filepath.Join(dst.repo.PackDir(), "pack-broken.pack"), []byte("not a packfile"), 0o666); err != nil {
-		t.Fatalf("WriteFile returned error %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dst.repo.PackDir(), "pack-broken.idx"), []byte("not an index"), 0o666); err != nil {
-		t.Fatalf("WriteFile returned error %v", err)
-	}
+	wantErr := errors.New("boom")
+	original := dbReload
+	t.Cleanup(func() { dbReload = original })
+	dbReload = func(*odb.DB) (bool, error) { return false, wantErr }
 
 	packBytes := writePackFor(t, src, []hash.ObjectID{commit})
 	_, err := sess.Push(t.Context(), transport.PushRequest{
 		Updates: []transport.Update{{Name: "refs/heads/feature", Old: hash.Zero, New: commit}},
 		Pack:    bytes.NewReader(packBytes),
 	})
-	if err == nil {
-		t.Fatal("Push tolerated a broken pack file already present in the destination")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Push returned %v, want %v", err, wantErr)
 	}
 }
 

@@ -1,8 +1,12 @@
 package ops
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -14,8 +18,9 @@ import (
 )
 
 var (
-	ErrNoRebaseInProgress    = errors.New("ops: there is no rebase in progress")
-	ErrRebaseStepUnsupported = errors.New("ops: the rebase step is not supported")
+	ErrNoRebaseInProgress       = errors.New("ops: there is no rebase in progress")
+	ErrRebaseStepUnsupported    = errors.New("ops: the rebase step is not supported")
+	ErrRebaseUncommittedChanges = errors.New("ops: commit the staged changes before continuing the rebase")
 )
 
 func joinErrors(errs ...error) error { return errors.Join(errs...) }
@@ -23,15 +28,14 @@ func joinErrors(errs ...error) error { return errors.Join(errs...) }
 const (
 	rebaseAction = "rebase"
 	returningTo  = "returning to "
+	refsPrefix   = "refs/"
 )
 
 func (m *merger) rebaseNote(kind string) string {
-	action := m.action
-	if action == "" {
-		action = rebaseAction
-	}
-	return action + " (" + kind + "): "
+	return m.rebaseName() + " (" + kind + "): "
 }
+
+func (m *merger) rebaseName() string { return cmp.Or(m.action, rebaseAction) }
 
 type RebaseOptions struct {
 	Onto     string
@@ -107,23 +111,13 @@ func openRebaser(ctx context.Context, r *repo.Repository, opts RebaseOptions) (*
 
 func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName string, chosen []RebaseStep) (RebaseResult, error) {
 	result := RebaseResult{Old: head.old, New: head.old}
-	upToDate, err := m.rebaseIsUpToDate(head.old, base, onto)
+	todo, upToDate, err := m.rebaseSteps(head.old, base, onto, chosen)
 	if err != nil || upToDate {
 		result.UpToDate = upToDate
 		return result, err
 	}
 	if err := m.requireCleanWorkTree(); err != nil {
 		return result, err
-	}
-	todo, err := m.rebaseTodo(base, head.old)
-	if err != nil {
-		return result, err
-	}
-	if len(chosen) > 0 {
-		if err := validateTodo(chosen); err != nil {
-			return result, err
-		}
-		todo = chosen
 	}
 	if err := writeStateFile(m.r, origHeadFile, head.old.String()+"\n"); err != nil {
 		return result, err
@@ -148,6 +142,30 @@ func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName
 	}
 	return m.runRebase(state, result)
 }
+
+func (m *merger) rebaseSteps(head, base, onto hash.ObjectID, chosen []RebaseStep) ([]RebaseStep, bool, error) {
+	planned := len(chosen) == 0
+	if !planned {
+		todo, err := m.rebaseTodo(base, head)
+		if err != nil {
+			return nil, false, err
+		}
+		planned = slices.EqualFunc(todo, chosen, sameStep)
+	}
+	if planned {
+		upToDate, err := m.rebaseIsUpToDate(head, base, onto)
+		if err != nil || upToDate {
+			return nil, upToDate, err
+		}
+	}
+	if len(chosen) > 0 {
+		return chosen, false, validateTodo(chosen)
+	}
+	todo, err := m.rebaseTodo(base, head)
+	return todo, false, err
+}
+
+func sameStep(a, b RebaseStep) bool { return a.Action == b.Action && a.Commit == b.Commit }
 
 func (m *merger) rebaseIsUpToDate(head, base, onto hash.ObjectID) (bool, error) {
 	ctx := revision.Context{Objects: m.store()}
@@ -185,6 +203,10 @@ func (m *merger) requireCleanWorkTree() error {
 }
 
 func (m *merger) rebaseTodo(base, head hash.ObjectID) ([]RebaseStep, error) {
+	upstream, err := m.upstreamPatchIDs(base, head)
+	if err != nil {
+		return nil, err
+	}
 	var todo []RebaseStep
 	walk := revision.Walk(m.ctx, revision.Options{
 		Context: revision.Context{Objects: m.store()},
@@ -200,7 +222,13 @@ func (m *merger) rebaseTodo(base, head hash.ObjectID) ([]RebaseStep, error) {
 		if len(commit.Parents) > 1 {
 			continue
 		}
-		todo = append(todo, RebaseStep{Action: actionPick, Commit: commit.ID, Subject: firstLine(commit.Message)})
+		applied, err := m.appliedUpstream(commit, upstream)
+		if err != nil {
+			return nil, err
+		}
+		if !applied {
+			todo = append(todo, RebaseStep{Action: actionPick, Commit: commit.ID, Subject: firstLine(commit.Message)})
+		}
 	}
 	return todo, nil
 }
@@ -235,6 +263,18 @@ func (m *merger) finishRebase(state RebaseState, result RebaseResult) (RebaseRes
 	}
 	result.New = head.old
 	return result, errors.Join(clearRebaseState(m.r), removeStateFiles(m.r, mergeMsgFile))
+}
+
+func (m *merger) restoreRebaseHead(state RebaseState) error {
+	note := m.rebaseNote("abort") + returningTo + state.HeadName
+	if strings.HasPrefix(state.HeadName, refsPrefix) {
+		return m.attachTo(refs.Name(state.HeadName), note)
+	}
+	head, err := resolveHeadTarget(m.rc.refs)
+	if err != nil {
+		return err
+	}
+	return m.advance(head, state.OrigHead, note)
 }
 
 func (m *merger) attachTo(branch refs.Name, note string) error {
@@ -290,11 +330,15 @@ func (m *merger) commitResolution(state RebaseState) (hash.ObjectID, error) {
 	if err != nil || headTree == tree {
 		return hash.Zero, err
 	}
-	return m.commitPick(head, pickPlan{
+	commit, err := m.commitPick(head, pickPlan{
 		message: state.Message,
 		author:  state.Author,
 		reflog:  m.rebaseNote("continue") + firstLine(state.Message),
 	}, tree)
+	if err != nil {
+		return hash.Zero, err
+	}
+	return commit, m.rerere().record()
 }
 
 func SkipRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions) (RebaseResult, error) {
@@ -304,11 +348,11 @@ func SkipRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions) (Re
 	}
 	defer m.close()
 	result := RebaseResult{Old: state.OrigHead}
-	if err := m.resetToHead(); err != nil {
+	if err := errors.Join(m.rerere().clear(), m.resetToHead()); err != nil {
 		return result, err
 	}
 	state.Stopped, state.Amend, state.Message, state.Author = hash.Zero, hash.Zero, "", nil
-	if err := errors.Join(writeRebaseState(m.r, state), removeStateFiles(m.r, mergeMsgFile)); err != nil {
+	if err := errors.Join(writeRebaseState(m.r, state), clearMergeState(m.r)); err != nil {
 		return result, err
 	}
 	return m.runRebase(state, result)
@@ -331,14 +375,23 @@ func openRebaseInProgress(ctx context.Context, r *repo.Repository, opts RebaseOp
 	if err != nil {
 		return nil, RebaseState{}, err
 	}
-	if !state.InProgress() {
+	switch {
+	case !state.InProgress():
 		return nil, RebaseState{}, ErrNoRebaseInProgress
+	case state.Applying:
+		return nil, RebaseState{}, ErrRebaseApplyInProgress
+	}
+	if err := runnableTodo(state.Todo); err != nil {
+		return nil, RebaseState{}, err
 	}
 	m, err := openRebaser(ctx, r, opts)
 	return m, state, err
 }
 
 func (m *merger) abortRebase(state RebaseState) error {
+	if state.OrigHead.IsZero() {
+		return fmt.Errorf("%w: the original head is unknown", ErrRebaseStateCorrupt)
+	}
 	tree, _, err := m.snapshot(state.OrigHead)
 	if err != nil {
 		return err
@@ -346,8 +399,8 @@ func (m *merger) abortRebase(state RebaseState) error {
 	if err := m.resetTo(tree); err != nil {
 		return err
 	}
-	if err := m.attachTo(refs.Name(state.HeadName), m.rebaseNote("abort")+returningTo+state.HeadName); err != nil {
+	if err := m.restoreRebaseHead(state); err != nil {
 		return err
 	}
-	return errors.Join(clearRebaseState(m.r), removeStateFiles(m.r, mergeMsgFile, autoMergeFile))
+	return errors.Join(m.rerere().clear(), clearRebaseState(m.r), clearMergeState(m.r))
 }

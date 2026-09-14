@@ -12,6 +12,7 @@ import (
 type CheckoutOptions struct {
 	Force    bool
 	Progress progress.Func
+	Report   *CheckoutReport
 }
 
 func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID, opts CheckoutOptions) error {
@@ -30,11 +31,15 @@ func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID,
 	}
 	defer func() { _ = db.Close() }()
 
-	targetTree, err := commitTreeEntries(db, commit)
+	rules, err := pathRulesOf(r)
+	if err != nil {
+		return err
+	}
+	targetTree, err := verifiedTreeEntries(db, commit, rules)
 	if err != nil {
 		return err
 	}
 
 	opts.Progress.Phase(progress.PhaseCheckout)
-	return layoutWorkingTree(ctx, r, wt, db, nil, targetTree, opts.Force)
+	return layoutWorkingTree(ctx, r, wt, db, nil, targetTree, opts.Force, opts.Report)
 }

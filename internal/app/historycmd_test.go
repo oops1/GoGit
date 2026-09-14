@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -186,6 +187,87 @@ func TestTheHistoryAndBlameDialogFailuresAreLogged(t *testing.T) {
 
 	readOnDispatcher(t, a, func() bool { a.openBlame("HEAD", "f.txt"); return true })
 	waitForStatusText(t, a, i18n.Tf("Status.BlameFailed", errors.New("no dialog")))
+}
+
+func waitForReadJobs(t *testing.T, a *App) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		a.readWG.Wait()
+		close(done)
+	}()
+	waitForChannel(t, done, "the running reads")
+	drainPostQueue(t, a)
+}
+
+func TestClosingTheRepositoryCancelsALongHistoryRead(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	views := captureHistoryViews(t)
+	started := make(chan struct{})
+	prev := readFileHistory
+	readFileHistory = func(ctx context.Context, _ *gitrepo.Repository, _, _ string, _ ops.HistoryOptions) ([]ops.HistoryEntry, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	t.Cleanup(func() { readFileHistory = prev })
+
+	runOnDispatcher(t, a, func() { a.openFileHistory("f.txt") })
+	waitForChannel(t, started, "the history read")
+	runOnDispatcher(t, a, a.CloseRepository)
+	drainPostQueue(t, a)
+
+	if n := readOnDispatcher(t, a, func() int { return len(*views) }); n != 0 {
+		t.Fatalf("%d history dialogs opened for a repository that was closed", n)
+	}
+	if got := readOnDispatcher(t, a, a.statusLabel.Text); got == i18n.Tf("Status.FileHistoryFailed", context.Canceled) {
+		t.Fatalf("status = %q, want the cancelled read kept quiet", got)
+	}
+}
+
+func TestAReadStartedAfterACancelRunsNormally(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	views := captureBlameViews(t)
+
+	runOnDispatcher(t, a, a.cancelReads)
+	runOnDispatcher(t, a, func() { a.openBlame("HEAD", "f.txt") })
+	view := waitForBlameView(t, a, views)
+
+	readOnDispatcher(t, a, func() bool { view.Dialog().CancelAction(); return true })
+}
+
+func TestTheSameHistoryIsNotReadTwiceAtOnce(t *testing.T) {
+	a, _ := forkedApp(t, false)
+	views := captureHistoryViews(t)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	prev := readFileHistory
+	readFileHistory = func(ctx context.Context, r *gitrepo.Repository, rev, path string, opts ops.HistoryOptions) ([]ops.HistoryEntry, error) {
+		calls.Add(1)
+		<-release
+		return prev(ctx, r, rev, path, opts)
+	}
+	t.Cleanup(func() { readFileHistory = prev })
+
+	runOnDispatcher(t, a, func() {
+		a.openFileHistory("f.txt")
+		a.openFileHistory("f.txt")
+	})
+	close(release)
+	waitForReadJobs(t, a)
+
+	if n := readOnDispatcher(t, a, func() int { return len(*views) }); calls.Load() != 1 || n != 1 {
+		t.Fatalf("reads = %d, dialogs = %d, want one of each", calls.Load(), n)
+	}
+	runOnDispatcher(t, a, func() { (*views)[0].Dialog().CancelAction() })
+
+	runOnDispatcher(t, a, func() { a.openFileHistory("f.txt") })
+	waitForReadJobs(t, a)
+
+	if calls.Load() != 2 {
+		t.Fatalf("reads = %d, want a finished history readable again", calls.Load())
+	}
+	runOnDispatcher(t, a, func() { (*views)[1].Dialog().CancelAction() })
 }
 
 func TestAReadJobNeedsARepository(t *testing.T) {

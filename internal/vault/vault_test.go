@@ -411,6 +411,28 @@ func TestCredentialPrefixLookup(t *testing.T) {
 	}
 }
 
+func TestCredentialPrefixLookupStopsAtTheURLAuthority(t *testing.T) {
+	v, _ := createTestVault(t, "p")
+	for _, r := range []string{"https:", "https:/", "https://"} {
+		if err := v.SetCredential(Credential{Resource: r, Username: "scheme-only", Secret: []byte("s")}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, ok := v.Credential("https://example.com/org/repo.git"); ok {
+		t.Fatalf("a scheme-only entry matched a URL resource: %+v", got)
+	}
+	if err := v.SetCredential(Credential{Resource: "https://example.com", Username: "host", Secret: []byte("s")}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := v.Credential("https://example.com/org/repo.git")
+	if !ok || got.Username != "host" {
+		t.Fatalf("got %+v ok=%v, want the host entry", got, ok)
+	}
+	if _, ok := v.Credential("http://example.com/org/repo.git"); ok {
+		t.Fatal("an https entry matched an http resource")
+	}
+}
+
 func TestResourcesSorted(t *testing.T) {
 	v, _ := createTestVault(t, "p")
 	for _, r := range []string{"z.example", "a.example", "m.example"} {

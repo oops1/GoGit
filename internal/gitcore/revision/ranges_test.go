@@ -44,6 +44,13 @@ func TestRangesTranslatesRevisionArguments(t *testing.T) {
 		{"glob relative to refs", []string{"--glob=heads/*"}, []string{"c6", "c5"}, nil, nil},
 		{"glob with a question mark", []string{"--glob=heads/mai?"}, []string{"c6"}, nil, nil},
 		{"glob across slashes", []string{"--glob=**/main"}, []string{"c6", "c3"}, nil, nil},
+		{"glob star crossing slashes", []string{"--glob=r*main"}, []string{"c3"}, nil, nil},
+		{"glob with a plain directory", []string{"--glob=refs/tags"}, []string{"c3", "c5"}, nil, nil},
+		{"branches with an empty pattern", []string{"--branches="}, []string{"c6", "c5"}, nil, nil},
+		{"branches keep a refs prefix literal", []string{"--branches=refs/heads/main"}, nil, nil, nil},
+		{"remotes with a trailing slash", []string{"--remotes=origin/"}, []string{"c3", "c3"}, nil, nil},
+		{"remotes with a star crossing slashes", []string{"--remotes=o*n"}, []string{"c3"}, nil, nil},
+		{"tags with a bracket class", []string{"--tags=v[12]"}, []string{"c3", "c5"}, nil, nil},
 		{"paths", []string{"main", "--", "file.txt", "dir"}, []string{"c6"}, nil, []string{"file.txt", "dir"}},
 		{"only paths", []string{"--", "file.txt"}, nil, nil, []string{"file.txt"}},
 	}
@@ -160,36 +167,6 @@ func TestRangesFeedTheWalk(t *testing.T) {
 	got := collect(t, b, Walk(t.Context(), opts))
 	if want := []string{"c6", "c3"}; !slices.Equal(got, want) {
 		t.Errorf("Walk visited %v, want %v", got, want)
-	}
-}
-
-func TestGlobMatchHandlesPatterns(t *testing.T) {
-	tests := []struct {
-		pattern string
-		text    string
-		want    bool
-	}{
-		{"", "", true},
-		{"", "main", false},
-		{"main", "main", true},
-		{"main", "mai", false},
-		{"ma?n", "main", true},
-		{"ma?n", "ma/n", false},
-		{"*", "main", true},
-		{"*", "topic/main", false},
-		{"**", "topic/main", true},
-		{"topic/*", "topic/main", true},
-		{"*/main", "topic/deep/main", false},
-		{"**/main", "topic/deep/main", true},
-		{"main*", "main", true},
-		{"x*", "main", false},
-	}
-	for _, test := range tests {
-		t.Run(test.pattern+" "+test.text, func(t *testing.T) {
-			if got := globMatch(test.pattern, test.text); got != test.want {
-				t.Errorf("globMatch(%q, %q) = %v, want %v", test.pattern, test.text, got, test.want)
-			}
-		})
 	}
 }
 

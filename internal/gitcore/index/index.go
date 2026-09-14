@@ -30,6 +30,7 @@ type Index struct {
 
 	entries    []*Entry
 	extensions []extension
+	upToDate   map[*Entry]bool
 }
 
 func New(version int) *Index {
@@ -81,6 +82,54 @@ func (x *Index) Add(entry Entry) {
 		x.entries = slices.Insert(x.entries, at, &stored)
 	}
 	x.invalidate(entry.Path)
+}
+
+func (x *Index) Replace(paths []string, entries []Entry) {
+	removed := make(map[string]bool, len(paths))
+	for _, path := range paths {
+		removed[path] = true
+		x.invalidate(path)
+	}
+	added := make([]*Entry, 0, len(entries))
+	for at := range entries {
+		stored := entries[at]
+		added = append(added, &stored)
+		x.invalidate(stored.Path)
+	}
+	slices.SortStableFunc(added, func(a, b *Entry) int {
+		return comparePathStage(a.Path, a.Stage, b.Path, b.Stage)
+	})
+	added = compactLastWins(added)
+	merged := make([]*Entry, 0, len(x.entries)+len(added))
+	next := 0
+	for _, entry := range x.entries {
+		for next < len(added) && comparePathStage(added[next].Path, added[next].Stage, entry.Path, entry.Stage) < 0 {
+			merged = append(merged, added[next])
+			next++
+		}
+		if next < len(added) && comparePathStage(added[next].Path, added[next].Stage, entry.Path, entry.Stage) == 0 {
+			merged = append(merged, added[next])
+			next++
+			continue
+		}
+		if !removed[entry.Path] {
+			merged = append(merged, entry)
+		}
+	}
+	merged = append(merged, added[next:]...)
+	x.entries = merged
+}
+
+func compactLastWins(sorted []*Entry) []*Entry {
+	out := sorted[:0]
+	for _, entry := range sorted {
+		if last := len(out) - 1; last >= 0 && out[last].Path == entry.Path && out[last].Stage == entry.Stage {
+			out[last] = entry
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func (x *Index) Remove(path string) bool {
@@ -149,12 +198,56 @@ func (x *Index) IsRacy(entry *Entry) bool {
 	return x.Timestamp.Nanosecond() <= entry.Stat.MTime.Nanosecond()
 }
 
-func (x *Index) MatchesFile(entry *Entry, fi os.FileInfo) bool {
-	return entry.Matches(fi, x.IsRacy(entry))
+func (x *Index) AddUpToDate(entry Entry) {
+	x.Add(entry)
+	stored, _ := x.Get(entry.Path, entry.Stage)
+	if x.upToDate == nil {
+		x.upToDate = map[*Entry]bool{}
+	}
+	x.upToDate[stored] = true
+}
+
+func (x *Index) mayBeRacilyClean(entry *Entry) bool {
+	return !x.upToDate[entry] && x.IsRacy(entry)
+}
+
+func (x *Index) HasRacyEntries() bool {
+	return slices.ContainsFunc(x.entries, x.mayBeRacilyClean)
+}
+
+func (x *Index) SmudgeRacilyClean(modified func(*Entry) bool) {
+	for _, entry := range x.entries {
+		if x.mayBeRacilyClean(entry) && modified(entry) {
+			entry.Stat.Size = 0
+		}
+	}
+}
+
+func (x *Index) MatchesFile(entry *Entry, fi os.FileInfo, symlinks bool) bool {
+	return entry.Matches(fi, x.IsRacy(entry), symlinks)
 }
 
 type Writer interface {
 	Put(kind object.Type, data []byte) (hash.ObjectID, error)
+}
+
+type Reader interface {
+	Get(id hash.ObjectID) (object.Type, []byte, error)
+}
+
+func (x *Index) ContentBlob(objects Reader, path string) ([]byte, bool) {
+	entry, ok := x.Get(path, StageMerged)
+	if !ok {
+		entry, ok = x.Get(path, StageOurs)
+	}
+	if !ok {
+		return nil, false
+	}
+	kind, data, err := objects.Get(entry.ID)
+	if err != nil || kind != object.TypeBlob {
+		return nil, false
+	}
+	return data, true
 }
 
 func (x *Index) WriteTree(objects Writer) (hash.ObjectID, error) {

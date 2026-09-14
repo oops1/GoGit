@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ var (
 	ErrFlowPending       = errors.New("ops: another git-flow finish is waiting")
 	ErrFlowState         = errors.New("ops: git-flow state is damaged")
 	ErrFlowKind          = errors.New("ops: git-flow has no such branch kind here")
+	ErrFlowTagExists     = errors.New("ops: git-flow version tag already exists")
 )
 
 type FlowStep int
@@ -250,9 +252,14 @@ type StartFlowOptions struct {
 }
 
 func StartFlow(ctx context.Context, r *repo.Repository, kind, name string, opts StartFlowOptions) (refs.Name, error) {
-	_, branch, err := configuredFlow(r, kind, name)
+	cfg, branch, err := configuredFlow(r, kind, name)
 	if err != nil {
 		return "", err
+	}
+	if branch.Tagged {
+		if err := flowTagAbsent(r, cfg.VersionTagPrefix+name); err != nil {
+			return "", err
+		}
 	}
 	base := cmp.Or(opts.Base, branch.Base)
 	start, err := flowStartPoint(r, base)
@@ -269,6 +276,17 @@ func StartFlow(ctx context.Context, r *repo.Repository, kind, name string, opts 
 		return "", err
 	}
 	return refs.BranchName(full), nil
+}
+
+func flowTagAbsent(r *repo.Repository, tag string) error {
+	exists, err := flowRefExists(r, refs.TagName(tag))
+	if err != nil {
+		return err
+	}
+	if exists {
+		return fmt.Errorf("%w: %s", ErrFlowTagExists, tag)
+	}
+	return nil
 }
 
 func flowStartPoint(r *repo.Repository, base string) (refs.Name, error) {
@@ -317,6 +335,7 @@ type FinishFlowOptions struct {
 
 type FinishFlowResult struct {
 	Tag       TagResult
+	KeptTag   string
 	Pushed    bool
 	Conflicts []string
 	Stopped   FlowStep
@@ -479,13 +498,7 @@ func (f *flowFinisher) do(step FlowStep) ([]string, error) {
 		if f.state.tag == "" {
 			return nil, nil
 		}
-		var err error
-		f.result.Tag, err = CreateTag(f.ctx, f.r, f.state.tag, refs.BranchName(f.cfg.Master).String(), CreateTagOptions{
-			Message: f.message(),
-			Force:   true,
-			When:    f.when,
-		})
-		return nil, err
+		return nil, f.tagMaster()
 	case FlowStepRebase:
 		if f.state.integration != FlowRebase {
 			return nil, nil
@@ -508,6 +521,47 @@ func (f *flowFinisher) do(step FlowStep) ([]string, error) {
 		}
 		return nil, flowDeleteBranch(f.ctx, f.r, f.branch, true)
 	}
+}
+
+func (f *flowFinisher) tagMaster() error {
+	exists, elsewhere, err := flowTagPlace(f.r, f.state.tag, f.cfg.Master)
+	switch {
+	case err != nil:
+		return err
+	case elsewhere:
+		tag := refs.TagName(f.state.tag).String()
+		f.push = slices.DeleteFunc(f.push, func(spec refspec.RefSpec) bool { return spec.Src == tag })
+		f.result.KeptTag, f.state.tag = f.state.tag, ""
+		return nil
+	case exists:
+		return nil
+	}
+	f.result.Tag, err = CreateTag(f.ctx, f.r, f.state.tag, refs.BranchName(f.cfg.Master).String(), CreateTagOptions{
+		Message: f.message(),
+		When:    f.when,
+	})
+	return err
+}
+
+func flowTagPlace(r *repo.Repository, tag, master string) (exists, elsewhere bool, err error) {
+	rc, err := openRepoContext(r)
+	if err != nil {
+		return false, false, err
+	}
+	defer func() { _ = rc.close() }()
+	name := refs.TagName(tag)
+	if _, err := refsLookup(rc.refs, name); err != nil {
+		if errors.Is(err, refs.ErrNotFound) {
+			return false, false, nil
+		}
+		return false, false, err
+	}
+	tagged, err := resolveCommittish(rc, name.String())
+	if err != nil {
+		return true, false, err
+	}
+	tip, err := resolveCommittish(rc, refs.BranchName(master).String())
+	return true, tagged != tip, err
 }
 
 func (f *flowFinisher) mergeDevelop() ([]string, error) {

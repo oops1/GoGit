@@ -19,6 +19,7 @@ import (
 
 const (
 	packIndexSuffix = ".idx"
+	packDataSuffix  = ".pack"
 	packTempPrefix  = "tmp_"
 	incomingPrefix  = "incoming-"
 	writableMode    = 0o644
@@ -192,7 +193,7 @@ func (d *DB) PackedSince(since time.Time) iter.Seq[hash.ObjectID] {
 		if store == nil {
 			return
 		}
-		for _, file := range store.Files() {
+		for file := range store.Acquire() {
 			if file.ModTime.Before(since) {
 				continue
 			}
@@ -211,7 +212,7 @@ func (d *DB) PackObjects(name string) iter.Seq[hash.ObjectID] {
 		if store == nil {
 			return
 		}
-		for _, file := range store.Files() {
+		for file := range store.Acquire() {
 			if file.Name != name {
 				continue
 			}
@@ -225,7 +226,7 @@ func (d *DB) PackObjects(name string) iter.Seq[hash.ObjectID] {
 	}
 }
 
-func (d *DB) PutLoose(kind object.Type, data []byte) (hash.ObjectID, error) {
+func (d *DB) PutLoose(kind object.Type, data []byte, modTime time.Time) (hash.ObjectID, error) {
 	if !kind.Valid() {
 		return hash.Zero, fmt.Errorf("%w: %d", object.ErrUnknownType, uint8(kind))
 	}
@@ -237,7 +238,10 @@ func (d *DB) PutLoose(kind object.Type, data []byte) (hash.ObjectID, error) {
 	if has {
 		return id, nil
 	}
-	return id, d.writeLoose(id, kind, data)
+	if err := d.writeLoose(id, kind, data); err != nil {
+		return id, err
+	}
+	return id, d.Touch(id, modTime)
 }
 
 func (d *DB) Touch(id hash.ObjectID, when time.Time) error {

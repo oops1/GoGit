@@ -177,33 +177,47 @@ func (p *Pack) applyDeltaAt(head ObjectHeader, depth int) (object.Type, []byte, 
 	if err != nil {
 		return 0, nil, err
 	}
-	if err := p.checkSize(head); err != nil {
+	data, err := p.patch(head, base)
+	if err != nil {
 		return 0, nil, err
+	}
+	return kind, data, nil
+}
+
+func (p *Pack) deltaAt(offset int64, base []byte) ([]byte, error) {
+	head, err := p.HeaderAt(offset)
+	if err != nil {
+		return nil, err
+	}
+	return p.patch(head, base)
+}
+
+func (p *Pack) patch(head ObjectHeader, base []byte) ([]byte, error) {
+	if err := p.checkSize(head); err != nil {
+		return nil, err
 	}
 	buffer := acquirePayload(head.Size)
 	defer releasePayload(buffer)
 	if err := inflateExact(p.dataReader(head), buffer.data); err != nil {
-		return 0, nil, fmt.Errorf("pack: delta at %d: %w", head.Offset, err)
+		return nil, fmt.Errorf("pack: delta at %d: %w", head.Offset, err)
 	}
 	data, err := ApplyDelta(base, buffer.data)
 	if err != nil {
-		return 0, nil, fmt.Errorf("pack: delta at %d: %w", head.Offset, err)
+		return nil, fmt.Errorf("pack: delta at %d: %w", head.Offset, err)
 	}
-	return kind, data, nil
+	return data, nil
 }
 
 func (p *Pack) baseOf(head ObjectHeader, depth int) (object.Type, []byte, error) {
 	if head.Kind == KindOffsetDelta {
 		return p.objectAt(head.BaseOffset, depth)
 	}
-	if index := p.settings.index; index != nil {
-		offset, ok, err := index.Lookup(head.BaseID)
-		if err != nil {
-			return 0, nil, err
-		}
-		if ok {
-			return p.objectAt(offset, depth)
-		}
+	offset, ok, err := p.localBase(head.BaseID)
+	if err != nil {
+		return 0, nil, err
+	}
+	if ok {
+		return p.objectAt(offset, depth)
 	}
 	if p.settings.bases != nil {
 		return p.settings.bases.ResolveBase(head.BaseID, depth)

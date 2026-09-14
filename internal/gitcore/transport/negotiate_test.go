@@ -135,7 +135,7 @@ func TestFetchV2ShallowInfoAndWantedRefsSections(t *testing.T) {
 		Wants:    []hash.ObjectID{idOf(1)},
 		WantRefs: []string{"refs/heads/feature"},
 		Depth:    1,
-	}, nil, Capabilities{}, "gogit")
+	}, nil, fetchFeatures("shallow ref-in-want"), "gogit")
 	if err != nil {
 		t.Fatalf("fetchV2 returned error %v", err)
 	}
