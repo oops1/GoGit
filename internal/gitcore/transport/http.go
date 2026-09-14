@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -132,20 +133,22 @@ func (s *httpSession) attempt(ctx context.Context, method, url, contentType stri
 	return s.client.Do(req)
 }
 
-func (s *httpSession) doRequest(ctx context.Context, method, url, contentType string, bodyFactory func() io.Reader, headers map[string]string) (*http.Response, error) {
-	resp, err := s.attempt(ctx, method, url, contentType, bodyFactory, headers)
+func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType string, bodyFactory func() io.Reader, headers map[string]string) (*http.Response, error) {
+	resp, err := s.attempt(ctx, method, s.baseURL+suffix, contentType, bodyFactory, headers)
 	if err != nil {
 		return nil, err
 	}
+	s.adoptRedirect(resp.Request)
 	for resp.StatusCode == http.StatusUnauthorized && s.credAttempts < 2 && s.opts.Credentials != nil {
 		_ = resp.Body.Close()
 		if err := s.authenticate(ctx); err != nil {
 			return nil, err
 		}
-		resp, err = s.attempt(ctx, method, url, contentType, bodyFactory, headers)
+		resp, err = s.attempt(ctx, method, s.baseURL+suffix, contentType, bodyFactory, headers)
 		if err != nil {
 			return nil, err
 		}
+		s.adoptRedirect(resp.Request)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		_ = resp.Body.Close()
@@ -206,8 +209,7 @@ func (s *httpSession) advertiseLocked(ctx context.Context) (Advertisement, error
 	if s.opts.Version != 1 {
 		headers["Git-Protocol"] = "version=2"
 	}
-	url := s.baseURL + "/info/refs?service=" + string(s.service)
-	resp, err := s.doRequest(ctx, http.MethodGet, url, "", nil, headers)
+	resp, err := s.doRequest(ctx, http.MethodGet, "/info/refs?service="+string(s.service), "", nil, headers)
 	if err != nil {
 		return Advertisement{}, err
 	}
@@ -241,6 +243,23 @@ func (s *httpSession) advertiseLocked(ctx context.Context) (Advertisement, error
 	return adv, nil
 }
 
+func (s *httpSession) adoptRedirect(final *http.Request) {
+	if final == nil {
+		return
+	}
+	target := url.URL{Scheme: final.URL.Scheme, Host: final.URL.Host, Path: final.URL.Path, RawPath: final.URL.RawPath}
+	base, ok := strings.CutSuffix(target.String(), "/info/refs")
+	if !ok || base == s.baseURL {
+		return
+	}
+	if !strings.HasPrefix(s.baseURL+"/", target.Scheme+"://"+target.Host+"/") {
+		s.resource = target.Hostname() + strings.TrimSuffix(target.Path, "/info/refs")
+		s.authHeader = ""
+		s.credAttempts = 0
+	}
+	s.baseURL = base
+}
+
 func (s *httpSession) ensureAdvertised(ctx context.Context) error {
 	if s.advertised {
 		return nil
@@ -255,13 +274,12 @@ type httpRoundTripper struct {
 
 func (rt httpRoundTripper) round(ctx context.Context, body []byte) (io.ReadCloser, error) {
 	s := rt.session
-	url := s.baseURL + "/" + string(s.service)
 	reqCT := "application/x-" + string(s.service) + "-request"
 	headers := map[string]string{}
 	if s.version == 2 {
 		headers["Git-Protocol"] = "version=2"
 	}
-	resp, err := s.doRequest(ctx, http.MethodPost, url, reqCT, func() io.Reader { return bytes.NewReader(body) }, headers)
+	resp, err := s.doRequest(ctx, http.MethodPost, "/"+string(s.service), reqCT, func() io.Reader { return bytes.NewReader(body) }, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -304,12 +322,11 @@ func (s *httpSession) Push(ctx context.Context, req PushRequest) (*PushResult, e
 		return nil, fmt.Errorf("%w: reading the push pack: %w", ErrProtocol, err)
 	}
 	prefix, _ := buildPushRequest(req, s.caps, agentValue(s.opts))
-	url := s.baseURL + "/" + string(ReceivePack)
 	reqCT := "application/x-" + string(ReceivePack) + "-request"
 	bodyFactory := func() io.Reader {
 		return io.MultiReader(bytes.NewReader(prefix), bytes.NewReader(packBytes))
 	}
-	resp, err := s.doRequest(ctx, http.MethodPost, url, reqCT, bodyFactory, nil)
+	resp, err := s.doRequest(ctx, http.MethodPost, "/"+string(ReceivePack), reqCT, bodyFactory, nil)
 	if err != nil {
 		return nil, err
 	}
