@@ -63,6 +63,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"pruneOnFetch":          widget.NewCheckBox(""),
 		"banAttribution":        widget.NewCheckBox(""),
 		"shallowDepth":          widget.NewNumericUpDown(),
+		"switchChanges":         widget.NewDropdown(),
 		"gitAdvanced":           widget.NewExpander(""),
 		"gitAdvancedContent":    widget.NewGrid(),
 		"ok":                    widget.NewButton(""),
@@ -150,7 +151,7 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 		"language", "theme", "layoutMode", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
 		"banAttribution",
-		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
+		"shallowDepth", "switchChanges", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
 		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
 		"credentialsTable", "credentialResource", "credentialUsername", "credentialType", "credentialSecret",
 		"credentialAdd", "credentialEditStatus", "credentialEditOK", "credentialEditCancel",
@@ -217,6 +218,7 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		ShallowDepth:          15,
 		CredentialSource:      config.CredentialSourceHelper,
 		Layout:                config.LayoutSidebar,
+		SwitchChanges:         config.SwitchChangesAsk,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -381,6 +383,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		ShallowDepth:          15,
 		CredentialSource:      config.CredentialSourceHelper,
 		Layout:                config.LayoutSidebar,
+		SwitchChanges:         config.SwitchChangesAsk,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)

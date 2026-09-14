@@ -315,6 +315,28 @@ func TestNormalizeFallsBackToFFForUnknownPullStrategy(t *testing.T) {
 	}
 }
 
+func TestNormalizeKeepsKnownSwitchChangesAndAsksOtherwise(t *testing.T) {
+	if got := Default().Git.SwitchChanges; got != SwitchChangesAsk {
+		t.Fatalf("default SwitchChanges = %q, want %q", got, SwitchChangesAsk)
+	}
+	for _, mode := range []string{SwitchChangesAsk, SwitchChangesStash, SwitchChangesMerge, SwitchChangesOverwrite} {
+		cfg := Default()
+		cfg.Git.SwitchChanges = mode
+		cfg.Normalize()
+		if cfg.Git.SwitchChanges != mode {
+			t.Fatalf("SwitchChanges = %q, want %q", cfg.Git.SwitchChanges, mode)
+		}
+	}
+	for _, mode := range []string{"", "bogus"} {
+		cfg := Default()
+		cfg.Git.SwitchChanges = mode
+		cfg.Normalize()
+		if cfg.Git.SwitchChanges != SwitchChangesAsk {
+			t.Fatalf("SwitchChanges(%q) = %q, want %q", mode, cfg.Git.SwitchChanges, SwitchChangesAsk)
+		}
+	}
+}
+
 func TestNormalizeFallsBackToOriginForEmptyDefaultRemote(t *testing.T) {
 	cfg := Default()
 	cfg.Git.DefaultRemote = ""

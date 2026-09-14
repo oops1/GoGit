@@ -32,6 +32,13 @@ const (
 )
 
 const (
+	SwitchChangesAsk       = "ask"
+	SwitchChangesStash     = "stash"
+	SwitchChangesMerge     = "merge"
+	SwitchChangesOverwrite = "overwrite"
+)
+
+const (
 	CredentialSourceVault           = "vault"
 	CredentialSourceVaultThenHelper = "vault+helper"
 	CredentialSourceHelper          = "helper"
@@ -75,6 +82,7 @@ type Git struct {
 	BanAttribution   bool   `toml:"ban_attribution"`
 	ShallowDepth     int    `toml:"shallow_depth"`
 	CredentialSource string `toml:"credential_source"`
+	SwitchChanges    string `toml:"switch_local_changes"`
 }
 
 type UI struct {
@@ -117,7 +125,7 @@ func Default() *Config {
 		Language: "en",
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
-		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true},
+		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true, SwitchChanges: SwitchChangesAsk},
 		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true, Layout: LayoutDocks},
 	}
 }
@@ -175,6 +183,11 @@ func (c *Config) Normalize() {
 	case PullStrategyMerge, PullStrategyRebase:
 	default:
 		c.Git.PullStrategy = PullStrategyFF
+	}
+	switch c.Git.SwitchChanges {
+	case SwitchChangesStash, SwitchChangesMerge, SwitchChangesOverwrite:
+	default:
+		c.Git.SwitchChanges = SwitchChangesAsk
 	}
 	if c.Git.DefaultRemote == "" {
 		c.Git.DefaultRemote = "origin"

@@ -34,6 +34,7 @@ type Model struct {
 	BanAttribution        bool
 	ShallowDepth          int
 	CredentialSource      string
+	SwitchChanges         string
 }
 
 func FromConfig(cfg *config.Config) Model {
@@ -55,6 +56,7 @@ func FromConfig(cfg *config.Config) Model {
 		BanAttribution:        cfg.Git.BanAttribution,
 		ShallowDepth:          cfg.Git.ShallowDepth,
 		CredentialSource:      cfg.Git.CredentialSource,
+		SwitchChanges:         cfg.Git.SwitchChanges,
 	}
 	return m.Normalized()
 }
@@ -88,6 +90,11 @@ func (m Model) Normalized() Model {
 	default:
 		m.CredentialSource = config.CredentialSourceVault
 	}
+	switch m.SwitchChanges {
+	case config.SwitchChangesStash, config.SwitchChangesMerge, config.SwitchChangesOverwrite:
+	default:
+		m.SwitchChanges = config.SwitchChangesAsk
+	}
 	return m
 }
 
@@ -110,6 +117,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.BanAttribution = n.BanAttribution
 	cfg.Git.ShallowDepth = n.ShallowDepth
 	cfg.Git.CredentialSource = n.CredentialSource
+	cfg.Git.SwitchChanges = n.SwitchChanges
 }
 
 func clamp(v, min, max int) int {

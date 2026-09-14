@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -25,6 +26,13 @@ var credentialSourceOrder = []string{
 	config.CredentialSourceVault,
 	config.CredentialSourceVaultThenHelper,
 	config.CredentialSourceHelper,
+}
+
+var switchChangesOrder = []string{
+	config.SwitchChangesAsk,
+	config.SwitchChangesStash,
+	config.SwitchChangesMerge,
+	config.SwitchChangesOverwrite,
 }
 
 type View struct {
@@ -65,6 +73,7 @@ type View struct {
 	pruneOnFetch          *widget.CheckBox
 	banAttribution        *widget.CheckBox
 	shallowDepth          *widget.NumericUpDown
+	switchChanges         *widget.Dropdown
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
 
@@ -259,6 +268,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.pullStrategy, ok = named["pullStrategy"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: pullStrategy", ErrWidgetMissing)
 	}
+	if v.switchChanges, ok = named["switchChanges"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: switchChanges", ErrWidgetMissing)
+	}
 	if v.defaultRemote, ok = named["defaultRemote"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: defaultRemote", ErrWidgetMissing)
 	}
@@ -341,6 +353,7 @@ func (v *View) apply(m Model) {
 	v.pruneOnFetch.SetChecked(m.PruneOnFetch)
 	v.banAttribution.SetChecked(m.BanAttribution)
 	v.shallowDepth.SetValue(float64(m.ShallowDepth))
+	v.switchChanges.SetSelected(orderIndex(switchChangesOrder, m.SwitchChanges))
 	v.credentialSource.SetSelected(credentialSourceIndex(m.CredentialSource))
 }
 
@@ -399,6 +412,17 @@ func credentialSourceAt(idx int) string {
 	return credentialSourceOrder[idx]
 }
 
+func orderIndex(order []string, value string) int {
+	return max(slices.Index(order, value), 0)
+}
+
+func orderAt(order []string, idx int) string {
+	if idx < 0 || idx >= len(order) {
+		return order[0]
+	}
+	return order[idx]
+}
+
 func (v *View) request() Model {
 	code := ""
 	if idx := v.language.Selected(); idx >= 0 && idx < len(v.languages) {
@@ -421,6 +445,7 @@ func (v *View) request() Model {
 		PruneOnFetch:          v.pruneOnFetch.IsChecked(),
 		BanAttribution:        v.banAttribution.IsChecked(),
 		ShallowDepth:          int(v.shallowDepth.Value()),
+		SwitchChanges:         orderAt(switchChangesOrder, v.switchChanges.Selected()),
 		CredentialSource:      credentialSourceAt(v.credentialSource.Selected()),
 	}.Normalized()
 }

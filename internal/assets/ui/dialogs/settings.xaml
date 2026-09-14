@@ -161,8 +161,10 @@
 
                     <Expander x:Name="gitAdvanced" Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="3"
                               Header="{Loc Dialog.Settings.Group.Advanced}">
-                        <Grid x:Name="gitAdvancedContent" Height="138">
+                        <Grid x:Name="gitAdvancedContent" Height="180">
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="30"/>
+                                    <RowDefinition Height="12"/>
                                     <RowDefinition Height="30"/>
                                     <RowDefinition Height="12"/>
                                     <RowDefinition Height="30"/>
@@ -194,6 +196,16 @@
                                 <NumericUpDown x:Name="shallowDepth" Grid.Row="4" Grid.Column="1"
                                                 Height="30" VerticalAlignment="Center"
                                                 Minimum="0" Maximum="100000" Increment="1"/>
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="{Loc Dialog.Settings.SwitchChanges}"
+                                           Height="18" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="switchChanges" Grid.Row="6" Grid.Column="1"
+                                          Height="30" VerticalAlignment="Center">
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Ask}"/>
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Stash}"/>
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Merge}"/>
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Overwrite}"/>
+                                </ComboBox>
                         </Grid>
                     </Expander>
                 </Grid>

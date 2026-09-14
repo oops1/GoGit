@@ -108,6 +108,9 @@ func (v *View) buildSearchIndex() {
 		{section: "git", grid: v.gitAdvancedContent, rows: []int{4, 5},
 			labelKey: "Dialog.Settings.ShallowDepth", hintKey: "Dialog.Settings.ShallowDepth.Hint",
 			groupKey: "Dialog.Settings.Group.Advanced", value: v.shallowDepthText, isAdvanced: true},
+		{section: "git", grid: v.gitAdvancedContent, rows: []int{6, 7},
+			labelKey: "Dialog.Settings.SwitchChanges", hintKey: "Dialog.Settings.SwitchChanges.Hint",
+			groupKey: "Dialog.Settings.Group.Advanced", value: v.switchChanges.SelectedText, isAdvanced: true},
 
 		{section: "credentials", grid: v.sectionCredentials, rows: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
 			labelKey: "Dialog.Settings.CredentialSource", value: v.credentialSource.SelectedText},

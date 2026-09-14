@@ -193,6 +193,7 @@ func TestModifiedTrackingCoversEveryWiredWidget(t *testing.T) {
 		{"defaultRemote", func(v *View) { v.defaultRemote.SetText("upstream"); v.defaultRemote.OnChange("upstream") }},
 		{"pruneOnFetch", func(v *View) { clickCheckBox(v.pruneOnFetch) }},
 		{"shallowDepth", func(v *View) { v.shallowDepth.SetValue(v.shallowDepth.Value() + 1) }},
+		{"switchChanges", func(v *View) { v.switchChanges.SetSelected(2); v.switchChanges.OnChange(2, "") }},
 		{"credentialSource", func(v *View) { v.credentialSource.SetSelected(1); v.credentialSource.OnChange(1, "") }},
 	}
 	for _, c := range cases {

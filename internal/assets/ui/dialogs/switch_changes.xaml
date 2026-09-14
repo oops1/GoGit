@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="540" Height="300">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="54"/>
+        <RowDefinition Height="10"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="10"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="20"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="30"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="110"/>
+        <ColumnDefinition Width="90"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="message" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Text=""/>
+    <TextBlock x:Name="paths" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="" FontSize="11" TextWrapping="Wrap"/>
+
+    <RadioButton x:Name="modeStash" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="switchChanges" Content="{Loc Dialog.SwitchChanges.Stash}" IsChecked="True"/>
+    <RadioButton x:Name="modeMerge" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="switchChanges" Content="{Loc Dialog.SwitchChanges.Merge}"/>
+    <RadioButton x:Name="modeOverwrite" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3"
+                 GroupName="switchChanges" Content="{Loc Dialog.SwitchChanges.Overwrite}"/>
+
+    <CheckBox x:Name="remember" Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3"
+              Content="{Loc Dialog.SwitchChanges.Remember}"/>
+    <TextBlock x:Name="rememberHint" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="{Loc Dialog.SwitchChanges.RememberHint}" FontSize="11"/>
+
+    <Button x:Name="ok" Grid.Row="10" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.SwitchChanges.OK}"/>
+    <Button x:Name="cancel" Grid.Row="10" Grid.Column="2"
+            Content="{Loc Dialog.SwitchChanges.Cancel}"/>
+</Grid>

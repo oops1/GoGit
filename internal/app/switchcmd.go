@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/switchbranch"
+	"github.com/oops1/gogit/internal/ui/switchchanges"
 )
 
 var newSwitchView = switchbranch.NewView
@@ -63,6 +64,7 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 	if o == nil {
 		return
 	}
+	setting := a.cfg.Git.SwitchChanges
 	a.RunOperation(i18n.T("Operation.Title.Switch"), func(ctx context.Context, reporter OperationReporter) error {
 		defer a.Post(a.finishMerge)
 		r, err := a.freshRepo(o)
@@ -72,6 +74,14 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 		defer func() { _ = r.Close() }()
 		name, err := switchTo(ctx, r, choice)
 		reportSwitch(reporter, name, err)
+		var overwrite *ops.OverwriteError
+		if !errors.As(err, &overwrite) {
+			return err
+		}
+		if mode, ok := switchchanges.Automatic(setting); ok {
+			return resolveBlockedSwitch(ctx, r, reporter, name, mode, overwrite.Paths)
+		}
+		a.Post(func() { a.askSwitchChanges(name, overwrite.Paths) })
 		return err
 	})
 }

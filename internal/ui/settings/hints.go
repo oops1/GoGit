@@ -75,6 +75,7 @@ func (v *View) buildHints() {
 	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.WorkTreeDepth.Hint", 0, 2)
 	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.PullStrategy.Hint", 2, 2)
 	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.ShallowDepth.Hint", 4, 2)
+	addFieldHint(v.gitAdvancedContent, "Dialog.Settings.SwitchChanges.Hint", 6, 2)
 	v.gitAdvancedContent.SetBounds(v.gitAdvancedContent.Bounds())
 
 	addGroupDescription(v.sectionCredentials, "Dialog.Settings.Credentials.Desc", 1)
