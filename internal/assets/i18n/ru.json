@@ -979,6 +979,7 @@
   "Status.BlameFailed": "Не удалось проследить строки: %v",
   "Status.BranchDeleteFailed": "Не удалось удалить ветку: %v",
   "Status.BranchDeleted": "Ветка %s удалена",
+  "Status.Busy": "Ещё выполняется другая операция: дождитесь её завершения",
   "Status.CommitFailed": "Не удалось зафиксировать: %s",
   "Status.CommitSelected": "%s %s",
   "Status.Committed": "Зафиксировано %s",

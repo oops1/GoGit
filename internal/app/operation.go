@@ -104,12 +104,19 @@ func (s *operationProgressState) reportPhase(r progress.Report, keys phaseKeys) 
 }
 
 func (a *App) RunOperation(title string, body func(context.Context, OperationReporter) error) {
+	ctx, cancel, ok := a.beginNetOperation()
+	if !ok {
+		a.reportBusy()
+		return
+	}
 	view, err := newOperationView(a.eng, title)
 	if err != nil {
 		a.log.Warn("open operation dialog failed", "title", title, "error", err)
+		cancel()
+		a.releaseNetOperation()
+		a.netWG.Done()
 		return
 	}
-	ctx, cancel := a.beginNetOperation()
 	view.OnCancel = cancel
 	view.OnClose = func() {
 		cancel()
@@ -119,29 +126,46 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 	a.showModal(view.Dialog(), view)
 	reporter := OperationReporter{app: a, view: view}
 	go func() {
-		defer func() {
-			cancel()
-			a.endNetOperation()
-		}()
+		defer a.netWG.Done()
+		resume := a.holdWatch()
 		err := body(ctx, reporter)
+		resume()
+		cancel()
+		a.releaseNetOperation()
 		a.Post(func() { view.Finish(err) })
 	}()
 }
 
-func (a *App) beginNetOperation() (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (a *App) beginNetOperation() (context.Context, context.CancelFunc, bool) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
 	a.netMu.Lock()
+	defer a.netMu.Unlock()
+	if a.writeCancel != nil || a.netCancel != nil {
+		return nil, nil, false
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	a.netCancel = cancel
-	a.netMu.Unlock()
 	a.netWG.Add(1)
-	return ctx, cancel
+	return ctx, cancel, true
 }
 
-func (a *App) endNetOperation() {
+func (a *App) releaseNetOperation() {
 	a.netMu.Lock()
 	a.netCancel = nil
 	a.netMu.Unlock()
-	a.netWG.Done()
+}
+
+func (a *App) busy() bool {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	a.netMu.Lock()
+	defer a.netMu.Unlock()
+	return a.writeCancel != nil || a.netCancel != nil
+}
+
+func (a *App) reportBusy() {
+	a.Post(func() { a.statusLabel.SetText(i18n.T("Status.Busy")) })
 }
 
 func (a *App) cancelNetOperation() {

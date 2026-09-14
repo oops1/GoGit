@@ -89,20 +89,16 @@ func (a *App) stopWatcher() {
 	a.watchWG.Wait()
 }
 
-func (a *App) pauseWatch() {
+func (a *App) holdWatch() func() {
 	a.watchMu.Lock()
 	w := a.watcher
 	a.watchMu.Unlock()
-	if w != nil {
-		w.Pause()
+	if w == nil {
+		return func() {}
 	}
-}
-
-func (a *App) resumeWatch() {
-	a.watchMu.Lock()
-	w := a.watcher
-	a.watchMu.Unlock()
-	if w != nil {
+	w.Pause()
+	return func() {
 		w.Resume()
+		w.Poke()
 	}
 }

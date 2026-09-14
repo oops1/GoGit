@@ -50,24 +50,33 @@ func (a *App) startWrite(fn writeFunc, onDone func(error)) bool {
 	}
 	a.writeRunMu.Lock()
 	defer a.writeRunMu.Unlock()
-	a.writeMu.Lock()
-	if a.writeCancel != nil {
-		a.writeMu.Unlock()
+	ctx, cancel, ok := a.reserveWrite()
+	if !ok {
+		a.reportBusy()
 		return false
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	a.writeCancel = cancel
-	a.writeMu.Unlock()
 	r := o.repo
 	a.writeWG.Go(func() { a.runWrite(ctx, cancel, r, fn, onDone) })
 	return true
 }
 
+func (a *App) reserveWrite() (context.Context, context.CancelFunc, bool) {
+	a.writeMu.Lock()
+	defer a.writeMu.Unlock()
+	a.netMu.Lock()
+	defer a.netMu.Unlock()
+	if a.writeCancel != nil || a.netCancel != nil {
+		return nil, nil, false
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.writeCancel = cancel
+	return ctx, cancel, true
+}
+
 func (a *App) runWrite(ctx context.Context, cancel context.CancelFunc, r *gitrepo.Repository, fn writeFunc, onDone func(error)) {
-	a.pauseWatch()
+	resume := a.holdWatch()
 	err := fn(ctx, r)
-	a.resumeWatch()
-	a.pokeWatch()
+	resume()
 	a.writeMu.Lock()
 	a.writeCancel = nil
 	a.writeMu.Unlock()
@@ -94,15 +103,6 @@ func (a *App) reloadWorktree() {
 	stale := o.swapWorktree(fresh)
 	if err := closeWorktree(stale); err != nil {
 		a.log.Warn("close previous working tree failed", "error", err)
-	}
-}
-
-func (a *App) pokeWatch() {
-	a.watchMu.Lock()
-	w := a.watcher
-	a.watchMu.Unlock()
-	if w != nil {
-		w.Poke()
 	}
 }
 

@@ -979,6 +979,7 @@
   "Status.BlameFailed": "The lines could not be traced: %v",
   "Status.BranchDeleteFailed": "Could not delete the branch: %v",
   "Status.BranchDeleted": "Branch %s deleted",
+  "Status.Busy": "Another operation is still running: wait for it to finish",
   "Status.CommitFailed": "Could not commit: %s",
   "Status.CommitSelected": "%s %s",
   "Status.Committed": "Committed %s",
