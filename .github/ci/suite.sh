@@ -23,24 +23,35 @@ annotate_oracle() {
   } >> "$GITHUB_STEP_SUMMARY"
 }
 
+case "${suite#*-}" in
+  ops)
+    packages="./internal/gitcore/ops/"
+    ;;
+  app)
+    packages="./internal/app/"
+    ;;
+  rest)
+    packages=$(go list ./... | grep -v -e '/internal/gitcore/ops$' -e '/internal/app$')
+    ;;
+  *)
+    echo "::error::unknown suite $suite"
+    exit 2
+    ;;
+esac
+
 case "$suite" in
-  race)
-    go vet -unsafeptr=false ./... || exit 1
-    CGO_ENABLED=1 go test -count=1 -timeout=40m -race ./... 2>&1 | tee race.log
+  race-*)
+    if [ "$suite" = race-rest ]; then
+      go vet -unsafeptr=false ./... || exit 1
+    fi
+    CGO_ENABLED=1 go test -count=1 -timeout=40m -race $packages 2>&1 | tee race.log
     status=${PIPESTATUS[0]}
     if [ "$status" -ne 0 ]; then
       annotate_race race.log
     fi
     exit "$status"
     ;;
-  oracle-ops)
-    packages="./internal/gitcore/ops/"
-    ;;
-  oracle-app)
-    packages="./internal/app/"
-    ;;
-  oracle-rest)
-    packages=$(go list ./... | grep -v -e '/internal/gitcore/ops$' -e '/internal/app$')
+  oracle-*)
     ;;
   *)
     echo "::error::unknown suite $suite"

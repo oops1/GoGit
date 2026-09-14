@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [race, oracle-ops, oracle-app, oracle-rest]
+        suite: [race-ops, race-app, race-rest, oracle-ops, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash
@@ -29,6 +29,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
+          cache: false
+      - id: goenv
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ${{ steps.goenv.outputs.build }}
+            ${{ steps.goenv.outputs.modules }}
+          key: go-${{ runner.os }}-${{ matrix.suite }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ matrix.suite }}-
       - run: bash .github/ci/suite.sh ${{ matrix.suite }}
 
   suites-windows:
@@ -38,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [race, oracle-ops, oracle-app, oracle-rest]
+        suite: [race-ops, race-app, race-rest, oracle-ops, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash
@@ -47,6 +60,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
+          cache: false
+      - id: goenv
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ${{ steps.goenv.outputs.build }}
+            ${{ steps.goenv.outputs.modules }}
+          key: go-${{ runner.os }}-${{ matrix.suite }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ matrix.suite }}-
       - run: bash .github/ci/suite.sh ${{ matrix.suite }}
 
   test-ubuntu:
