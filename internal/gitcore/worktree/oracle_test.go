@@ -122,7 +122,7 @@ func (o *oracle) commitPlainSymlink(dir, rel, target string) {
 
 func (o *oracle) status(dir string) (changed map[string]porcelainEntry, untracked map[string]bool) {
 	o.t.Helper()
-	out := o.run(dir, "status", "--porcelain=v2", "-z", "--untracked-files=normal")
+	out := o.run(dir, "--no-optional-locks", "status", "--porcelain=v2", "-z", "--untracked-files=normal")
 	return parsePorcelainV2(o.t, out)
 }
 
@@ -463,6 +463,49 @@ func TestOracleStatusMatchesGitStatusPorcelainV2(t *testing.T) {
 			o.write(dir, "crlf.txt", "line1\r\nline2\r\n")
 			o.run(dir, "add", ".")
 			o.run(dir, "commit", "-q", "-m", "initial")
+		}},
+		{"autocrlf rewrite to another size", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "one\ntwo\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.run(dir, "config", "core.autocrlf", "true")
+			o.write(dir, "a.txt", "one\r\ntwo\r\n")
+		}},
+		{"same-size rewrite with other content", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "a.txt", "HELLO\n")
+		}},
+		{"same-size rewrite with the same content", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "hello\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			later := time.Unix(1800000000, 0)
+			if err := os.Chtimes(filepath.Join(dir, "a.txt"), later, later); err != nil {
+				o.t.Fatalf("Chtimes returned error %v", err)
+			}
+		}},
+		{"zero-size entry over an autocrlf rewrite", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "one\ntwo\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.run(dir, "config", "core.autocrlf", "true")
+			o.write(dir, "a.txt", "one\r\ntwo\r\n")
+			o.run(dir, "read-tree", "HEAD")
+		}},
+		{"zero-size entry over other content", func(o *oracle, dir string) {
+			o.write(dir, "a.txt", "one\ntwo\n")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "a.txt", "three\n")
+			o.run(dir, "read-tree", "HEAD")
+		}},
+		{"empty committed file gains content", func(o *oracle, dir string) {
+			o.write(dir, "empty.txt", "")
+			o.run(dir, "add", ".")
+			o.run(dir, "commit", "-q", "-m", "initial")
+			o.write(dir, "empty.txt", "x\n")
 		}},
 	}
 

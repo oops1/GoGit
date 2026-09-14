@@ -85,6 +85,9 @@ func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
 		}
 		return StatusUnmodified, nil
 	}
+	if sizeChangedWithoutReading(entry, fi) {
+		return StatusModified, nil
+	}
 	switch actualKind {
 	case kindSymlink:
 		target, err := fsReadlinkFile(w.root, name)
@@ -116,6 +119,13 @@ func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
 		}
 		return StatusUnmodified, nil
 	}
+}
+
+func sizeChangedWithoutReading(entry *index.Entry, fi os.FileInfo) bool {
+	if entry.Stat.Size == 0 || uint32(fi.Size()) == entry.Stat.Size {
+		return false
+	}
+	return fi.Mode()&os.ModeSymlink == 0 || fi.Size() != 0
 }
 
 func (w *Worktree) holdsPlainSymlink(wantKind entryKind, fi os.FileInfo) bool {

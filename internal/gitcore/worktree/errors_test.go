@@ -403,7 +403,7 @@ func TestCompareToWorktreeDetectsSymlinkChangesUsingFaultInjection(t *testing.T)
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   oldID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 
@@ -437,7 +437,7 @@ func TestCompareToWorktreeIsUnmodifiedWhenTheSymlinkTargetIsUnchanged(t *testing
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   oldID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 
@@ -471,7 +471,7 @@ func TestCompareToWorktreeFailsWhenReadlinkFails(t *testing.T) {
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   oldID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 

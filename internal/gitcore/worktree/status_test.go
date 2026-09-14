@@ -346,19 +346,76 @@ func TestStatusReportsAnIgnoredFileNextToAModifiedFile(t *testing.T) {
 	}
 }
 
-func TestStatusNormalizesCRLFWhenTextAutoIsSet(t *testing.T) {
+func TestStatusNormalizesCRLFOnlyWhenTheIndexHoldsNoSize(t *testing.T) {
+	tests := []struct {
+		name string
+		size uint32
+		want StatusCode
+	}{
+		{"size never recorded", 0, StatusUnmodified},
+		{"size of the stored blob", uint32(len("line1\nline2\n")), StatusModified},
+		{"size of the worktree file", uint32(len("line1\r\nline2\r\n")), StatusUnmodified},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := newTestRepo(t)
+			tr.stage(".gitattributes", "* text=auto\n")
+			id := tr.stageContent("crlf.txt", "line1\nline2\n")
+			tr.idx.Add(index.Entry{Path: "crlf.txt", Mode: object.ModeBlob, ID: id, Stat: index.Stat{MTime: time.Unix(1, 0), Size: tc.size}})
+			tr.commit("initial")
+			tr.writeFile("crlf.txt", "line1\r\nline2\r\n")
+			status, err := tr.open().Status(t.Context())
+			if err != nil {
+				t.Fatalf("Status returned error %v", err)
+			}
+			entry, ok := entryMap(status.Entries)["crlf.txt"]
+			if got := entry.Unstaged; !ok && tc.want != StatusUnmodified || ok && got != tc.want {
+				t.Fatalf("crlf.txt entry = %#v (reported %v), want Unstaged=%v", entry, ok, tc.want)
+			}
+		})
+	}
+}
+
+func TestStatusReportsASizeChangeWithoutReadingTheFile(t *testing.T) {
 	tr := newTestRepo(t)
-	tr.stage(".gitattributes", "* text=auto\n")
-	tr.stageContent("crlf.txt", "line1\nline2\n")
+	tr.stageContent("a.txt", "hello\n")
 	tr.commit("initial")
-	tr.writeFile("crlf.txt", "line1\r\nline2\r\n")
+	tr.writeFile("a.txt", "hello\n\n")
 	w := tr.open()
+	original := fsReadFileFile
+	fsReadFileFile = func(*os.Root, string) ([]byte, error) { return nil, errors.New("the content was read") }
+	t.Cleanup(func() { fsReadFileFile = original })
 	status, err := w.Status(t.Context())
 	if err != nil {
 		t.Fatalf("Status returned error %v", err)
 	}
-	if entry, ok := entryMap(status.Entries)["crlf.txt"]; ok {
-		t.Fatalf("crlf.txt entry = %#v, want no entry (content matches after normalization)", entry)
+	if entry := entryMap(status.Entries)["a.txt"]; entry.Unstaged != StatusModified {
+		t.Fatalf("a.txt entry = %#v, want Unstaged=Modified", entry)
+	}
+}
+
+func TestSizeChangedWithoutReadingFollowsGit(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry uint32
+		info  fakeFileInfo
+		want  bool
+	}{
+		{"no size in the index", 0, fakeFileInfo{size: 7}, false},
+		{"the same size", 7, fakeFileInfo{size: 7}, false},
+		{"another size", 7, fakeFileInfo{size: 8}, true},
+		{"a file emptied", 7, fakeFileInfo{size: 0}, true},
+		{"the same size modulo four gigabytes", 7, fakeFileInfo{size: 1<<32 + 7}, false},
+		{"a symlink of another length", 7, fakeFileInfo{mode: os.ModeSymlink, size: 8}, true},
+		{"a symlink whose length the platform does not report", 7, fakeFileInfo{mode: os.ModeSymlink}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := &index.Entry{Path: "a", Mode: object.ModeBlob, Stat: index.Stat{Size: tc.entry}}
+			if got := sizeChangedWithoutReading(entry, tc.info); got != tc.want {
+				t.Fatalf("sizeChangedWithoutReading = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

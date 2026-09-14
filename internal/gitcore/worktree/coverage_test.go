@@ -202,7 +202,7 @@ func TestCompareToWorktreeFailsWhenHashingASymlinkTargetWithAnUnsupportedFormat(
 		Path: "link",
 		Mode: object.ModeSymlink,
 		ID:   linkID,
-		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 3},
+		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
 	w.format = hash.Format(99)

@@ -4,10 +4,25 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"testing"
+	"time"
+
+	"github.com/oops1/gogit/internal/gitcore/index"
+	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
 func lfsPointerOf(content string) string {
 	return fmt.Sprintf("version https://git-lfs.github.com/spec/v1\noid sha256:%x\nsize %d\n", sha256.Sum256([]byte(content)), len(content))
+}
+
+func (r *testRepo) stageContentCheckedOutAs(rel, storedContent, worktreeContent string) {
+	r.t.Helper()
+	id := r.stageContent(rel, storedContent)
+	r.idx.Add(index.Entry{
+		Path: rel,
+		Mode: object.ModeBlob,
+		ID:   id,
+		Stat: index.Stat{MTime: time.Unix(1, 0), CTime: time.Unix(1, 0), Size: uint32(len(worktreeContent))},
+	})
 }
 
 func TestStatusComparesLFSContentWithThePointerInTheIndex(t *testing.T) {
@@ -17,8 +32,8 @@ func TestStatusComparesLFSContentWithThePointerInTheIndex(t *testing.T) {
 	tr.stage(".gitattributes", "*.bin filter=lfs -text\n")
 	content := "binary\x00payload"
 	pointer := lfsPointerOf(content)
-	for _, rel := range []string{"smudged.bin", "pointer.bin", "changed.bin"} {
-		tr.stageContent(rel, pointer)
+	for rel, worktreeContent := range map[string]string{"smudged.bin": content, "pointer.bin": pointer, "changed.bin": "changed\x00payload"} {
+		tr.stageContentCheckedOutAs(rel, pointer, worktreeContent)
 	}
 	tr.commit("lfs")
 	tr.writeFile("smudged.bin", content)
@@ -48,9 +63,10 @@ func TestStatusComparesLFSContentWithThePointerInTheIndex(t *testing.T) {
 func TestStatusExpandsIdentBeforeComparing(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage(".gitattributes", "*.c ident\n")
-	tr.stageContent("a.c", "$Id$\n")
+	expanded := "$Id: 0123456789abcdef0123456789abcdef01234567 $\n"
+	tr.stageContentCheckedOutAs("a.c", "$Id$\n", expanded)
 	tr.commit("ident")
-	tr.writeFile("a.c", "$Id: 0123456789abcdef0123456789abcdef01234567 $\n")
+	tr.writeFile("a.c", expanded)
 	w := tr.open()
 	status, err := w.Status(t.Context())
 	if err != nil {
