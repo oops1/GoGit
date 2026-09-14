@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"golang.org/x/crypto/ssh"
@@ -82,6 +83,35 @@ func (p *knownHostsPolicy) Check(ctx context.Context, key HostKey) error {
 		return p.confirmAndAccept(ctx, key)
 	}
 	return err
+}
+
+func (p *knownHostsPolicy) HostKeyAlgorithms(host string) []string {
+	p.mu.Lock()
+	cb, err := p.buildCallback()
+	p.mu.Unlock()
+	if err != nil {
+		return nil
+	}
+	var keyErr *knownhosts.KeyError
+	if !errors.As(cb(host, stringAddr(host), probeHostKey), &keyErr) {
+		return nil
+	}
+	var algorithms []string
+	for _, known := range keyErr.Want {
+		for _, algorithm := range hostKeyAlgorithmsFor(known.Key.Type()) {
+			if !slices.Contains(algorithms, algorithm) {
+				algorithms = append(algorithms, algorithm)
+			}
+		}
+	}
+	return algorithms
+}
+
+func hostKeyAlgorithmsFor(keyType string) []string {
+	if keyType == ssh.KeyAlgoRSA {
+		return []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+	}
+	return []string{keyType}
 }
 
 func (p *knownHostsPolicy) confirmAndAccept(ctx context.Context, key HostKey) error {

@@ -232,7 +232,7 @@ func sshUsername(explicit string) string {
 		return explicit
 	}
 	if u, err := currentUser(); err == nil && u.Username != "" {
-		return u.Username
+		return u.Username[strings.LastIndexByte(u.Username, '\\')+1:]
 	}
 	return ""
 }
@@ -319,6 +319,9 @@ func (s *sshSession) handshakeAndExec(ctx context.Context, conn net.Conn, addr s
 		User:            sshUsername(s.endpoint.User),
 		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signers...)},
 		HostKeyCallback: hostKeyCallback(ctx, s.opts.HostKeys),
+	}
+	if lister, ok := s.opts.HostKeys.(interface{ HostKeyAlgorithms(string) []string }); ok {
+		config.HostKeyAlgorithms = lister.HostKeyAlgorithms(addr)
 	}
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
 	if err != nil {
