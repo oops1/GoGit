@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -28,6 +27,7 @@ type View struct {
 	modeCreate *widget.RadioButton
 	bareCheck  *widget.CheckBox
 	nameInput  *widget.TextInput
+	autoName   string
 	okBtn      *widget.Button
 	cancelBtn  *widget.Button
 
@@ -139,13 +139,14 @@ func (v *View) applyModeVisibility() {
 }
 
 func (v *View) autoFillName() {
-	if !v.modeCreate.IsSelected() || strings.TrimSpace(v.nameInput.GetText()) != "" {
+	if current := v.nameInput.GetText(); !v.modeCreate.IsSelected() || current != "" && current != v.autoName {
 		return
 	}
 	base := filepath.Base(filepath.Clean(v.pathInput.GetText()))
 	if base == "." || base == string(filepath.Separator) {
-		return
+		base = ""
 	}
+	v.autoName = base
 	v.nameInput.SetText(base)
 }
 
