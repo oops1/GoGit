@@ -26,8 +26,15 @@ func (a *Answer) Wipe() {
 type Helper interface {
 	Get(ctx context.Context, q Query) (Answer, bool, error)
 	Store(ctx context.Context, q Query, a Answer) error
-	Erase(ctx context.Context, q Query) error
+	Erase(ctx context.Context, q Query, a Answer) error
 	Name() string
+}
+
+func (q Query) withAnswer(a Answer) Query {
+	if a.Username != "" {
+		q.Username = a.Username
+	}
+	return q
 }
 
 type Chain []Helper
@@ -57,10 +64,10 @@ func (c Chain) Store(ctx context.Context, q Query, a Answer) error {
 	return errs
 }
 
-func (c Chain) Erase(ctx context.Context, q Query) error {
+func (c Chain) Erase(ctx context.Context, q Query, a Answer) error {
 	var errs error
 	for _, h := range c {
-		if err := h.Erase(ctx, q); err != nil {
+		if err := h.Erase(ctx, q, a); err != nil {
 			errs = errors.Join(errs, err)
 		}
 	}

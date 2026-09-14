@@ -90,7 +90,7 @@ func TestExecHelperErasePropagatesFailure(t *testing.T) {
 	h := fakeHelper(t, map[string]string{
 		"GOGIT_CREDENTIAL_FAKE_EXIT": "1",
 	})
-	err := h.Erase(context.Background(), Query{Protocol: "https", Host: "example.com"})
+	err := h.Erase(context.Background(), Query{Protocol: "https", Host: "example.com"}, Answer{})
 	if !errors.Is(err, ErrHelperFailed) {
 		t.Fatalf("Erase returned %v, want ErrHelperFailed", err)
 	}

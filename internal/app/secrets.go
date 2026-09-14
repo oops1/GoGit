@@ -42,7 +42,7 @@ var secretsWG sync.WaitGroup
 
 func (a *App) wireSecretsView(view *settings.View) {
 	view.OnAddCredential = func(resource, username string, secret []byte) {
-		cred := vault.Credential{Resource: resource, Username: username, Secret: append([]byte(nil), secret...)}
+		cred := vault.Credential{Resource: credentialResourceKey(resource), Username: username, Secret: append([]byte(nil), secret...)}
 		secretsWG.Go(func() {
 			defer cred.Wipe()
 			a.runSecretsAction(view, true, true, func(ctx context.Context, v *vault.Vault) error {
