@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [race-ops, race-app, race-rest, oracle-ops, oracle-app, oracle-rest]
+        suite: [race-ops, race-app, race-rest, oracle-ops-unit, oracle-ops-git, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [race-ops, race-app, race-rest, oracle-ops, oracle-app, oracle-rest]
+        suite: [race-ops, race-app, race-rest, oracle-ops-unit, oracle-ops-git, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash

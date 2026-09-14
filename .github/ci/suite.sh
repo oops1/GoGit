@@ -23,14 +23,18 @@ annotate_oracle() {
   } >> "$GITHUB_STEP_SUMMARY"
 }
 
-case "${suite#*-}" in
-  ops)
+ops_oracle_tests() {
+  grep -ho '^func Test[A-Za-z0-9_]*' internal/gitcore/ops/*_oracle_test.go | sed 's/^func //' | sort -u | paste -sd'|' -
+}
+
+case "$suite" in
+  race-ops|oracle-ops-unit|oracle-ops-git)
     packages="./internal/gitcore/ops/"
     ;;
-  app)
+  race-app|oracle-app)
     packages="./internal/app/"
     ;;
-  rest)
+  race-rest|oracle-rest)
     packages=$(go list ./... | grep -v -e '/internal/gitcore/ops$' -e '/internal/app$')
     ;;
   *)
@@ -39,6 +43,8 @@ case "${suite#*-}" in
     ;;
 esac
 
+selection=()
+gate=true
 case "$suite" in
   race-*)
     if [ "$suite" = race-rest ]; then
@@ -51,19 +57,23 @@ case "$suite" in
     fi
     exit "$status"
     ;;
-  oracle-*)
+  oracle-ops-unit)
+    selection=(-skip "^($(ops_oracle_tests))\$")
     ;;
-  *)
-    echo "::error::unknown suite $suite"
-    exit 2
+  oracle-ops-git)
+    selection=(-run "^($(ops_oracle_tests))\$")
+    gate=false
     ;;
 esac
 
-go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic $packages 2>&1 | tee oracle.log
+go test -count=1 -timeout=40m -tags oracle ${selection[@]+"${selection[@]}"} -coverprofile=cover.out -covermode=atomic $packages 2>&1 | tee oracle.log
 status=${PIPESTATUS[0]}
 if [ "$status" -ne 0 ]; then
   annotate_oracle oracle.log
   exit "$status"
+fi
+if [ "$gate" = false ]; then
+  exit 0
 fi
 total=$(go tool cover -func=cover.out | tail -1 | awk '{print $3}' | tr -d '%')
 echo "$suite coverage: $total%"
