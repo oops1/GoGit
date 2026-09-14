@@ -121,5 +121,5 @@ func workingContent(r *repo.Repository, rel string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return wt.checkinConvert(rel, data), nil
+	return wt.stageConvert(rel, data)
 }

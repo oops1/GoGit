@@ -180,7 +180,11 @@ func (s *stager) stageEntry(rel string, info fs.FileInfo) error {
 	for _, inside := range slices.Collect(s.idx.Paths(rel + "/")) {
 		s.idx.Remove(inside)
 	}
-	return s.idx.AddVerified(entry, s.rules)
+	if err := index.VerifyPath(entry.Path, entry.Mode, s.rules); err != nil {
+		return err
+	}
+	s.idx.AddUpToDate(entry)
+	return nil
 }
 
 func (s *stager) readWorktreeObject(rel string, info fs.FileInfo) (object.Mode, []byte, error) {
@@ -196,7 +200,10 @@ func (s *stager) readWorktreeObject(rel string, info fs.FileInfo) (object.Mode, 
 	if err != nil {
 		return 0, nil, err
 	}
-	data = s.wt.checkinConvert(rel, data)
+	data, err = s.wt.stageConvert(rel, data)
+	if err != nil {
+		return 0, nil, err
+	}
 	if s.keepsSymlinkMode(rel) {
 		return object.ModeSymlink, data, nil
 	}

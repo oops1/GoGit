@@ -19,6 +19,7 @@ type indexLock struct {
 	root *os.Root
 	file *os.File
 	idx  *index.Index
+	repo *repo.Repository
 }
 
 func lockIndex(r *repo.Repository) (*indexLock, error) {
@@ -36,7 +37,7 @@ func lockIndex(r *repo.Repository) (*indexLock, error) {
 		_ = fsRootRemove(root, indexLockName)
 		return nil, err
 	}
-	return &indexLock{root: root, file: file, idx: idx}, nil
+	return &indexLock{root: root, file: file, idx: idx, repo: r}, nil
 }
 
 func readIndex(r *repo.Repository) (*index.Index, error) {
@@ -56,6 +57,7 @@ func (l *indexLock) abort() {
 }
 
 func (l *indexLock) commit() error {
+	smudgeRacilyClean(l.repo, l.idx)
 	if err := idxWrite(l.idx, l.file, 0); err != nil {
 		l.abort()
 		return err

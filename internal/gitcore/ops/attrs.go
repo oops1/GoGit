@@ -1,14 +1,18 @@
 package ops
 
 import (
-	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/config"
+	"github.com/oops1/gogit/internal/gitcore/index"
+	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
+
+var ErrFilterUnsupported = attributes.ErrFilterUnsupported
 
 type workingTree struct {
 	root     *os.Root
@@ -16,6 +20,10 @@ type workingTree struct {
 	attrs    *attributes.Attributes
 	fileMode bool
 	symlinks bool
+	repo     *repo.Repository
+	idx      *index.Index
+	db       *odb.DB
+	loadErr  error
 }
 
 func openWorkingTree(r *repo.Repository) (*workingTree, error) {
@@ -48,11 +56,16 @@ func openWorkingTree(r *repo.Repository) (*workingTree, error) {
 		IgnoreCase:     core.IgnoreCase,
 		AutoCRLF:       core.AutoCRLF,
 		EOL:            core.EOL,
+		Config:         r.Config(),
+		ObjectFormat:   r.ObjectFormat,
 	})
-	return &workingTree{root: root, ignore: ignore, attrs: attrs, fileMode: core.FileMode, symlinks: core.Symlinks}, nil
+	return &workingTree{root: root, ignore: ignore, attrs: attrs, fileMode: core.FileMode, symlinks: core.Symlinks, repo: r}, nil
 }
 
 func (w *workingTree) close() error {
+	if w.db != nil {
+		_ = w.db.Close()
+	}
 	return w.root.Close()
 }
 
@@ -82,30 +95,66 @@ func (w *workingTree) isIgnored(path string, isDir bool) bool {
 	return ignored
 }
 
+func (w *workingTree) indexBlob(path string) attributes.IndexBlob {
+	return func() ([]byte, bool) {
+		if !w.loadIndexObjects() {
+			return nil, false
+		}
+		return w.idx.ContentBlob(w.db, path)
+	}
+}
+
+func (w *workingTree) loadIndexObjects() bool {
+	if w.idx == nil && w.loadErr == nil {
+		w.idx, w.loadErr = readIndex(w.repo)
+	}
+	if w.db == nil && w.loadErr == nil {
+		w.db, w.loadErr = odbOpen(w.repo.ObjectsDir(), odb.Options{Format: w.repo.ObjectFormat})
+	}
+	return w.loadErr == nil
+}
+
 func (w *workingTree) checkinConvert(path string, data []byte) []byte {
-	policy := w.attrs.Text(path)
-	if policy.Convert.OnCheckin != attributes.ConvertLF {
-		return data
-	}
-	if policy.Convert.Detect && attributes.IsBinaryContent(data) {
-		return data
-	}
-	if !bytes.Contains(data, []byte("\r\n")) {
-		return data
-	}
-	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	return w.attrs.Policy(path).CompareToGit(data, w.indexBlob(path))
+}
+
+func (w *workingTree) stageConvert(path string, data []byte) ([]byte, error) {
+	return w.attrs.Policy(path).ToGit(data, w.indexBlob(path))
 }
 
 func (w *workingTree) checkoutConvert(path string, data []byte) []byte {
-	policy := w.attrs.Text(path)
-	if policy.Convert.OnCheckout != attributes.ConvertCRLF {
-		return data
+	return w.attrs.Policy(path).ToWorkingTree(data)
+}
+
+func smudgeRacilyClean(r *repo.Repository, idx *index.Index) {
+	if !idx.HasRacyEntries() {
+		return
 	}
-	if policy.Convert.Detect && attributes.IsBinaryContent(data) {
-		return data
+	wt, err := openWorkingTree(r)
+	if err != nil {
+		idx.SmudgeRacilyClean(func(*index.Entry) bool { return true })
+		return
 	}
-	if bytes.Contains(data, []byte("\r\n")) {
-		return data
+	defer func() { _ = wt.close() }()
+	wt.idx = idx
+	idx.SmudgeRacilyClean(wt.racilyModified)
+}
+
+func (w *workingTree) racilyModified(entry *index.Entry) bool {
+	name := filepath.FromSlash(entry.Path)
+	info, err := fsRootLstat(w.root, name)
+	if err != nil {
+		return false
 	}
-	return bytes.ReplaceAll(data, []byte("\n"), []byte("\r\n"))
+	probe := *entry
+	probe.AssumeValid, probe.SkipWorktree = false, false
+	if !probe.Matches(info, false, w.symlinks) {
+		return false
+	}
+	data, err := (&switcher{wt: w}).readWorktreeBytes(entry.Path, info)
+	if err != nil {
+		return true
+	}
+	id, err := hashSum(w.repo.ObjectFormat, "blob", data)
+	return err != nil || id != entry.ID
 }
