@@ -2,14 +2,18 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/oops1/gogit/internal/safefile"
 )
 
 const CurrentVersion = 1
@@ -57,9 +61,19 @@ type Config struct {
 	Git              Git          `toml:"git"`
 	UI               UI           `toml:"ui"`
 	Updates          Updates      `toml:"updates"`
+	Security         Security     `toml:"security"`
 	Groups           []Group      `toml:"groups"`
 	Repositories     []Repository `toml:"repositories"`
 	ActiveRepository string       `toml:"active_repository"`
+
+	saved  savedState
+	extras []extraValue
+}
+
+type savedState struct {
+	sum          [sha256.Size]byte
+	groups       []Group
+	repositories []Repository
 }
 
 type Window struct {
@@ -102,6 +116,10 @@ type Updates struct {
 	LastCheck time.Time `toml:"last_check"`
 }
 
+type Security struct {
+	VaultGeneration uint64 `toml:"vault_generation"`
+}
+
 type Group struct {
 	ID     string `toml:"id"`
 	Name   string `toml:"name"`
@@ -117,7 +135,10 @@ type Repository struct {
 	Parent   string `toml:"parent"`
 }
 
-var ErrUnsupportedVersion = errors.New("config: unsupported version")
+var (
+	ErrUnsupportedVersion = errors.New("config: unsupported version")
+	ErrInvalid            = errors.New("config: invalid file")
+)
 
 func Default() *Config {
 	return &Config{
@@ -131,7 +152,7 @@ func Default() *Config {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := safefile.Read(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return Default(), nil
 	}
@@ -141,17 +162,42 @@ func Load(path string) (*Config, error) {
 	return Parse(data)
 }
 
+func LoadOrRecover(path string, now time.Time) (*Config, string, error) {
+	cfg, err := Load(path)
+	if !errors.Is(err, ErrInvalid) {
+		return cfg, "", err
+	}
+	backup := path + ".bad-" + now.Format("20060102-150405")
+	if err := os.Rename(path, backup); err != nil {
+		return nil, "", err
+	}
+	return Default(), backup, nil
+}
+
 func Parse(data []byte) (*Config, error) {
 	cfg := Default()
-	if _, err := toml.Decode(string(data), cfg); err != nil {
-		return nil, fmt.Errorf("config: %w", err)
+	meta, err := toml.Decode(string(data), cfg)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	if cfg.Version > CurrentVersion {
 		return nil, fmt.Errorf("%w: %d", ErrUnsupportedVersion, cfg.Version)
 	}
 	cfg.Version = CurrentVersion
 	cfg.Normalize()
+	var raw map[string]any
+	_, _ = toml.Decode(string(data), &raw)
+	cfg.extras = collectExtras(raw, meta.Undecoded())
+	cfg.remember(data)
 	return cfg, nil
+}
+
+func (c *Config) remember(data []byte) {
+	c.saved = savedState{
+		sum:          sha256.Sum256(data),
+		groups:       slices.Clone(c.Groups),
+		repositories: slices.Clone(c.Repositories),
+	}
 }
 
 func (c *Config) Normalize() {
@@ -204,36 +250,87 @@ func (c *Config) Normalize() {
 
 func (c *Config) Encode() ([]byte, error) {
 	var buf bytes.Buffer
-	err := toml.NewEncoder(&buf).Encode(c)
+	if err := toml.NewEncoder(&buf).Encode(c); err != nil || len(c.extras) == 0 {
+		return buf.Bytes(), err
+	}
+	var doc map[string]any
+	_, _ = toml.Decode(buf.String(), &doc)
+	for _, extra := range c.extras {
+		insertExtra(doc, extra.path, extra.value)
+	}
+	buf.Reset()
+	err := toml.NewEncoder(&buf).Encode(doc)
 	return buf.Bytes(), err
 }
 
 func (c *Config) Save(path string) error {
-	data, err := c.Encode()
+	var data []byte
+	err := safefile.Update(path, func(current []byte) ([]byte, error) {
+		if err := c.mergeChanges(current); err != nil {
+			return nil, err
+		}
+		var err error
+		data, err = c.Encode()
+		return data, err
+	})
 	if err == nil {
-		err = writeAtomic(path, data)
+		c.remember(data)
 	}
 	return err
 }
 
-func writeAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+func (c *Config) mergeChanges(current []byte) error {
+	if current == nil || sha256.Sum256(current) == c.saved.sum {
+		return nil
+	}
+	disk, err := Parse(current)
+	if errors.Is(err, ErrUnsupportedVersion) {
 		return err
 	}
-	tmp := path + ".tmp"
-	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return err
+		return nil
 	}
-	_, err = file.Write(data)
-	err = errors.Join(err, file.Sync(), file.Close())
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		return errors.Join(err, os.Remove(tmp))
-	}
+	c.Groups = mergeByID(c.saved.groups, c.Groups, disk.Groups, func(g Group) string { return g.ID })
+	c.Repositories = uniqueRepositoryPaths(mergeByID(c.saved.repositories, c.Repositories, disk.Repositories, func(r Repository) string { return r.ID }))
+	c.Security.VaultGeneration = max(c.Security.VaultGeneration, disk.Security.VaultGeneration)
+	c.extras = mergeExtras(c.extras, disk.extras)
 	return nil
+}
+
+func mergeByID[T any](base, ours, theirs []T, id func(T) string) []T {
+	inBase, inOurs, inTheirs := idSet(base, id), idSet(ours, id), idSet(theirs, id)
+	var out []T
+	for _, item := range ours {
+		if !inBase[id(item)] || inTheirs[id(item)] {
+			out = append(out, item)
+		}
+	}
+	for _, item := range theirs {
+		if !inBase[id(item)] && !inOurs[id(item)] {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func idSet[T any](items []T, id func(T) string) map[string]bool {
+	set := make(map[string]bool, len(items))
+	for _, item := range items {
+		set[id(item)] = true
+	}
+	return set
+}
+
+func uniqueRepositoryPaths(repos []Repository) []Repository {
+	seen := make(map[string]bool, len(repos))
+	return slices.DeleteFunc(repos, func(r Repository) bool {
+		key := filepath.Clean(r.Path)
+		if seen[key] {
+			return true
+		}
+		seen[key] = true
+		return false
+	})
 }
 
 func (c *Config) FindRepository(id string) (Repository, bool) {
