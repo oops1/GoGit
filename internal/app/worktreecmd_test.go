@@ -313,7 +313,7 @@ func TestRemovingIsOnlyOfferedForAWorktree(t *testing.T) {
 	a, _, _ := newWorktreeTestApp(t)
 	asked := answerConfirm(a, true)
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	if len(*asked) != 0 {
 		t.Fatal("a repository is not removed by the worktree command")
@@ -330,7 +330,7 @@ func worktreeInTree(t *testing.T, a *App, main, linked string) *repo.Node {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.ActivateRepository(node.ID)
+	runOnDispatcher(t, a, func() { a.ActivateRepository(node.ID) })
 	return node
 }
 
@@ -347,7 +347,7 @@ func TestRemovingAWorktreeAsksFirstAndDropsItFromTheTree(t *testing.T) {
 		return err
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	waitOnDispatcher(t, a, func() bool {
 		_, ok := a.registry.Find(node.ID)
@@ -372,7 +372,7 @@ func TestRemovingAWorktreeKeepsTheWindowResponsive(t *testing.T) {
 		return nil
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 	<-started
 
 	if !readOnDispatcher(t, a, func() bool { return true }) {
@@ -397,9 +397,9 @@ func TestARemovalThatEndsAfterTheRepositoryClosedLeavesTheTreeAlone(t *testing.T
 		return nil
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 	<-started
-	a.CloseRepository()
+	runOnDispatcher(t, a, a.CloseRepository)
 	drainPostQueue(t, a)
 
 	if len(*failures) != 0 {
@@ -419,7 +419,7 @@ func TestADeclinedQuestionKeepsTheWorktree(t *testing.T) {
 		return nil
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	if _, ok := a.registry.Find(node.ID); !ok {
 		t.Fatal("the worktree must stay in the tree")
@@ -441,7 +441,7 @@ func TestAWorktreeWithChangesIsRemovedOnlyAfterASecondQuestion(t *testing.T) {
 		return nil
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	waitOnDispatcher(t, a, func() bool {
 		_, ok := a.registry.Find(node.ID)
@@ -460,7 +460,7 @@ func TestADeclinedForceLeavesTheWorktreeAlone(t *testing.T) {
 		return ops.ErrWorktreeDirty
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	waitOnDispatcher(t, a, func() bool { return len(*asked) == 2 })
 	if _, ok := a.registry.Find(node.ID); !ok {
@@ -477,7 +477,7 @@ func TestAFailedRemovalIsReported(t *testing.T) {
 		return errors.New("it is stuck")
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	waitOnDispatcher(t, a, func() bool { return len(*failures) == 1 })
 }
@@ -499,7 +499,7 @@ func TestRemovingNeedsARepositoryToRemoveFrom(t *testing.T) {
 		return nil
 	})
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 }
 
 func TestAWorktreeWithoutAParentIsNotRemoved(t *testing.T) {
@@ -513,7 +513,7 @@ func TestAWorktreeWithoutAParentIsNotRemoved(t *testing.T) {
 	}
 	asked := answerConfirm(a, true)
 
-	a.removeActiveWorktree()
+	runOnDispatcher(t, a, a.removeActiveWorktree)
 
 	if len(*asked) != 0 {
 		t.Fatal("a worktree without a parent repository cannot be removed")
@@ -527,7 +527,7 @@ func TestPruningNeedsAnOpenRepository(t *testing.T) {
 		return nil, nil
 	})
 
-	a.pruneObsoleteWorktrees()
+	runOnDispatcher(t, a, a.pruneObsoleteWorktrees)
 }
 
 func TestPruningWithNothingStaleSaysSo(t *testing.T) {
@@ -537,7 +537,7 @@ func TestPruningWithNothingStaleSaysSo(t *testing.T) {
 		return nil, nil
 	})
 
-	a.pruneObsoleteWorktrees()
+	runOnDispatcher(t, a, a.pruneObsoleteWorktrees)
 
 	waitOnDispatcher(t, a, func() bool { return len(*info) == 1 })
 }
@@ -552,7 +552,7 @@ func TestPruningAsksBeforeItDropsTheRecords(t *testing.T) {
 		return []string{"feature", "old"}, nil
 	})
 
-	a.pruneObsoleteWorktrees()
+	runOnDispatcher(t, a, a.pruneObsoleteWorktrees)
 
 	waitOnDispatcher(t, a, func() bool { return len(*info) == 1 })
 	if len(*asked) != 1 || len(dry) != 2 || !dry[0] || dry[1] {
@@ -569,7 +569,7 @@ func TestADeclinedPruneRemovesNothing(t *testing.T) {
 		return []string{"feature"}, nil
 	})
 
-	a.pruneObsoleteWorktrees()
+	runOnDispatcher(t, a, a.pruneObsoleteWorktrees)
 
 	waitOnDispatcher(t, a, func() bool { return len(*asked) == 1 })
 	drainPostQueue(t, a)
@@ -585,7 +585,7 @@ func TestAFailedDryRunIsReported(t *testing.T) {
 		return nil, errors.New("cannot read")
 	})
 
-	a.pruneObsoleteWorktrees()
+	runOnDispatcher(t, a, a.pruneObsoleteWorktrees)
 
 	waitOnDispatcher(t, a, func() bool { return len(*failures) == 1 })
 }
@@ -601,7 +601,7 @@ func TestAFailedPruneIsReported(t *testing.T) {
 		return nil, errors.New("cannot delete")
 	})
 
-	a.pruneObsoleteWorktrees()
+	runOnDispatcher(t, a, a.pruneObsoleteWorktrees)
 
 	waitOnDispatcher(t, a, func() bool { return len(*failures) == 1 })
 }
