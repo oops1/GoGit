@@ -214,7 +214,8 @@ func lineMap(older, newer []byte, opts diff.Options) map[int]int {
 		}
 		oldLine, newLine = hunk.OldStart+hunk.OldLines, hunk.NewStart+hunk.NewLines
 	}
-	for newLine <= len(splitLines(newer)) {
+	total := len(splitLines(newer))
+	for newLine <= total {
 		same[newLine] = oldLine
 		oldLine++
 		newLine++
