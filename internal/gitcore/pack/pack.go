@@ -212,14 +212,12 @@ func (p *Pack) baseOf(head ObjectHeader, depth int) (object.Type, []byte, error)
 	if head.Kind == KindOffsetDelta {
 		return p.objectAt(head.BaseOffset, depth)
 	}
-	if index := p.settings.index; index != nil {
-		offset, ok, err := index.Lookup(head.BaseID)
-		if err != nil {
-			return 0, nil, err
-		}
-		if ok {
-			return p.objectAt(offset, depth)
-		}
+	offset, ok, err := p.localBase(head.BaseID)
+	if err != nil {
+		return 0, nil, err
+	}
+	if ok {
+		return p.objectAt(offset, depth)
 	}
 	if p.settings.bases != nil {
 		return p.settings.bases.ResolveBase(head.BaseID, depth)
