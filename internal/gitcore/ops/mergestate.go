@@ -42,6 +42,8 @@ type MergeState struct {
 	Message       string
 	NoFastForward bool
 	Rebasing      bool
+	Bisecting     bool
+	BisectStart   string
 }
 
 func (s MergeState) Operation() Operation {
@@ -95,6 +97,9 @@ func ReadMergeState(r *repo.Repository) (MergeState, error) {
 			return MergeState{}, err
 		}
 		state.Message += text
+	}
+	if err := readBisectState(r, &state); err != nil {
+		return MergeState{}, err
 	}
 	return state, nil
 }
