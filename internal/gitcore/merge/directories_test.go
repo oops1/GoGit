@@ -19,10 +19,11 @@ func TestDirectoriesOfCollectsEveryParentOnce(t *testing.T) {
 func TestAsidePathAvoidsSlashesAndTakenNames(t *testing.T) {
 	tree := Snapshot{"docs~origin_main": {}, "docs~origin_main_0": {}}
 
-	if got := asidePath(tree, "docs", "origin/main"); got != "docs~origin_main_1" {
+	taken := func(candidate string) bool { _, ok := tree[candidate]; return ok }
+	if got := asidePath(taken, "docs", "origin/main"); got != "docs~origin_main_1" {
 		t.Fatalf("asidePath = %q", got)
 	}
-	if got := asidePath(Snapshot{}, "docs", "HEAD"); got != "docs~HEAD" {
+	if got := asidePath(func(string) bool { return false }, "docs", "HEAD"); got != "docs~HEAD" {
 		t.Fatalf("asidePath = %q", got)
 	}
 }

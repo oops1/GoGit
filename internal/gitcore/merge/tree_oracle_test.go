@@ -60,6 +60,24 @@ func apply(t *testing.T, dir string, files side) {
 			runGit(t, dir, "rm", "-q", "-r", "--", name)
 			continue
 		}
+		if info, err := os.Lstat(full); err == nil && info.IsDir() {
+			runGit(t, dir, "rm", "-q", "-r", "--cached", "--ignore-unmatch", "--", name)
+			if err := os.RemoveAll(full); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if id, ok := strings.CutPrefix(content, gitlinkPrefix); ok {
+			replaceIndexEntry(t, dir, name, "160000", id)
+			continue
+		}
+		if target, ok := strings.CutPrefix(content, symlinkPrefix); ok {
+			blob := filepath.Join(t.TempDir(), "target")
+			if err := os.WriteFile(blob, []byte(target), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			replaceIndexEntry(t, dir, name, "120000", strings.TrimSpace(runGit(t, dir, "hash-object", "-w", blob)))
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}

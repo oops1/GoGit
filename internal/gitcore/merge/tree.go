@@ -41,6 +41,7 @@ const (
 	ConflictFileDirectory
 	ConflictRenameDelete
 	ConflictRenameRename
+	ConflictDistinctTypes
 )
 
 type Conflict struct {
@@ -70,8 +71,14 @@ func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (Tree
 		return TreeResult{}, err
 	}
 	result := TreeResult{Tree: a.decided, Conflicts: a.conflicts}
+	taken := takenPaths(a.decided, a.base, a.ours, a.theirs)
 	for _, path := range unionPaths(a.base, a.ours, a.theirs) {
-		merged, conflict, err := mergePath(path, lookup(a.base, path), lookup(a.ours, path), lookup(a.theirs, path), objects, a.optionsFor(path, opts))
+		baseEntry, ourEntry, theirEntry := lookup(a.base, path), lookup(a.ours, path), lookup(a.theirs, path)
+		if distinctTypes(baseEntry, ourEntry, theirEntry) {
+			result.keepDistinctTypes(path, baseEntry, ourEntry, theirEntry, opts.File.Labels, taken)
+			continue
+		}
+		merged, conflict, err := mergePath(path, baseEntry, ourEntry, theirEntry, objects, a.optionsFor(path, opts))
 		if err != nil {
 			return TreeResult{}, err
 		}
@@ -101,22 +108,67 @@ func moveFilesOutOfTheWay(result *TreeResult, ours Snapshot, labels Labels) {
 		} else {
 			conflict.Theirs = &entry
 		}
-		conflict.Path = asidePath(result.Tree, path, label)
+		conflict.Path = asidePath(func(candidate string) bool { _, taken := result.Tree[candidate]; return taken }, path, label)
 		delete(result.Tree, path)
 		result.Tree[conflict.Path] = entry
 		result.Conflicts = append(result.Conflicts, conflict)
 	}
 }
 
-func asidePath(tree Snapshot, path, label string) string {
+func asidePath(taken func(string) bool, path, label string) string {
 	base := path + "~" + strings.ReplaceAll(label, "/", "_")
 	candidate := base
-	for suffix := 0; ; suffix++ {
-		if _, taken := tree[candidate]; !taken {
-			return candidate
-		}
+	for suffix := 0; taken(candidate); suffix++ {
 		candidate = base + "_" + strconv.Itoa(suffix)
 	}
+	return candidate
+}
+
+func takenPaths(snapshots ...Snapshot) map[string]bool {
+	taken := map[string]bool{}
+	for _, s := range snapshots {
+		for path := range s {
+			taken[path] = true
+		}
+		maps.Copy(taken, directoriesOf(s))
+	}
+	return taken
+}
+
+func sameKind(a, b object.Mode) bool {
+	return a.IsSubmodule() == b.IsSubmodule() && a.IsSymlink() == b.IsSymlink()
+}
+
+func distinctTypes(base, ours, theirs *Entry) bool {
+	if ours == nil || theirs == nil || same(base, ours) || same(base, theirs) {
+		return false
+	}
+	return !sameKind(ours.Mode, theirs.Mode)
+}
+
+func baseOfKind(base, side *Entry) *Entry {
+	if base != nil && sameKind(base.Mode, side.Mode) {
+		return base
+	}
+	return nil
+}
+
+func (r *TreeResult) keepDistinctTypes(path string, base, ours, theirs *Entry, labels Labels, taken map[string]bool) {
+	isTaken := func(candidate string) bool { return taken[candidate] }
+	ourPath, theirPath := path, path
+	if ours.Mode.IsRegular() || !theirs.Mode.IsRegular() {
+		ourPath = asidePath(isTaken, path, labels.Ours)
+		taken[ourPath] = true
+	}
+	if !ours.Mode.IsRegular() {
+		theirPath = asidePath(isTaken, path, labels.Theirs)
+		taken[theirPath] = true
+	}
+	r.Tree[ourPath], r.Tree[theirPath] = *ours, *theirs
+	r.Conflicts = append(r.Conflicts,
+		Conflict{Path: ourPath, Kind: ConflictDistinctTypes, Base: baseOfKind(base, ours), Ours: ours},
+		Conflict{Path: theirPath, Kind: ConflictDistinctTypes, Base: baseOfKind(base, theirs), Theirs: theirs},
+	)
 }
 
 func directoriesOf(tree Snapshot) map[string]bool {
