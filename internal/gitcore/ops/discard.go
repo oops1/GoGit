@@ -89,10 +89,7 @@ func (d *discarder) restoreEntry(entry *index.Entry) error {
 	if kind != object.TypeBlob {
 		return nil
 	}
-	if !entry.Mode.IsSymlink() {
-		data = d.wt.checkoutConvert(entry.Path, data)
-	}
-	return writeWorktreeBlob(d.wt, entry.Path, entry.Mode, data)
+	return d.wt.writeCheckedOut(entry.Path, entry.Mode, data, nil)
 }
 
 func parentOf(rel string) string {

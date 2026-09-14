@@ -51,6 +51,7 @@ type CloneOptions struct {
 	NoCheckout   bool
 	Progress     progress.Func
 	Transport    transport.Options
+	Report       *CheckoutReport
 }
 
 type cloneTarget struct {
@@ -175,7 +176,7 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 	r = reopened
 
 	if !opts.Bare && !opts.NoCheckout && !target.commit.IsZero() {
-		if err := CheckoutTree(ctx, r, target.commit, CheckoutOptions{Progress: prog}); err != nil {
+		if err := CheckoutTree(ctx, r, target.commit, CheckoutOptions{Progress: prog, Report: opts.Report}); err != nil {
 			return failClone(r, err)
 		}
 	}

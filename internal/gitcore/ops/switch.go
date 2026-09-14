@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -29,6 +30,10 @@ type switcher struct {
 	target map[string]treeEntry
 	force  bool
 	folded map[string]*index.Entry
+
+	sparse     *attributes.Sparse
+	leftSparse []string
+	report     *CheckoutReport
 }
 
 func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchOptions) error {
@@ -82,20 +87,25 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		return err
 	}
 
-	if err := layoutWorkingTree(ctx, r, wt, db, headTree, targetTree, opts.Force); err != nil {
+	if err := layoutWorkingTree(ctx, r, wt, db, headTree, targetTree, opts.Force, opts.Report); err != nil {
 		return err
 	}
 
 	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
 }
 
-func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool) error {
+func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool, report *CheckoutReport) error {
+	sparse, err := sparseCheckoutOf(r)
+	if err != nil {
+		return err
+	}
 	lock, err := lockIndex(r)
 	if err != nil {
 		return err
 	}
 
-	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format(), head: headTree, target: targetTree, force: force}
+	sparse.clearPresentSkipWorktree(wt.root, lock.idx)
+	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format(), head: headTree, target: targetTree, force: force, sparse: sparse.patterns, report: report}
 	currentIndex := indexByPath(lock.idx)
 	if r.Core().IgnoreCase {
 		sw.folded = foldPaths(currentIndex)
@@ -115,6 +125,7 @@ func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree,
 		lock.abort()
 		return err
 	}
+	report.sort()
 	return lock.commit()
 }
 
@@ -238,6 +249,9 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry) ([]s
 			conflicts = append(conflicts, rel)
 			return nil
 		}
+		if sw.addedOutsideSparse(rel, currentIndex) {
+			return nil
+		}
 		dirty, err := sw.isDirty(rel, cur, func(path string) bool { _, ok := currentIndex[path]; return ok })
 		if err != nil {
 			return err
@@ -255,6 +269,9 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry) ([]s
 	for rel := range sw.target {
 		if err := check(rel); err != nil {
 			return nil, err
+		}
+		if sw.addedOutsideSparse(rel, currentIndex) {
+			continue
 		}
 		blocker, err := sw.blockingLeadingPath(rel, currentIndex)
 		if err != nil {
@@ -419,13 +436,13 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 		if sw.carried(rel) || sw.head != nil && !sw.force && sw.indexHoldsTarget(rel, currentIndex) {
 			continue
 		}
-		entry, err := sw.checkoutEntry(rel, tgt, currentIndex[rel])
+		entry, err := sw.layoutEntry(rel, tgt, currentIndex[rel])
 		if err != nil {
 			return err
 		}
 		idx.Add(entry)
 	}
-	return nil
+	return sw.sparsifyKept(idx, currentIndex)
 }
 
 func (sw *switcher) checkoutEntry(rel string, tgt treeEntry, previous *index.Entry) (index.Entry, error) {
@@ -461,10 +478,7 @@ func (sw *switcher) checkout(rel string, tgt treeEntry) (index.Stat, error) {
 	if kind != object.TypeBlob {
 		return index.Stat{}, nil
 	}
-	if !tgt.mode.IsSymlink() {
-		data = sw.wt.checkoutConvert(rel, data)
-	}
-	if err := writeWorktreeBlob(sw.wt, rel, tgt.mode, data); err != nil {
+	if err := sw.wt.writeCheckedOut(rel, tgt.mode, data, sw.report); err != nil {
 		return index.Stat{}, err
 	}
 	return checkedOutStat(sw.wt.root, rel)

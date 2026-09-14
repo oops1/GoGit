@@ -12,6 +12,7 @@ import (
 type CheckoutOptions struct {
 	Force    bool
 	Progress progress.Func
+	Report   *CheckoutReport
 }
 
 func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID, opts CheckoutOptions) error {
@@ -40,5 +41,5 @@ func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID,
 	}
 
 	opts.Progress.Phase(progress.PhaseCheckout)
-	return layoutWorkingTree(ctx, r, wt, db, nil, targetTree, opts.Force)
+	return layoutWorkingTree(ctx, r, wt, db, nil, targetTree, opts.Force, opts.Report)
 }

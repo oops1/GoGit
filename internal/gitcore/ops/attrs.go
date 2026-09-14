@@ -15,15 +15,17 @@ import (
 var ErrFilterUnsupported = attributes.ErrFilterUnsupported
 
 type workingTree struct {
-	root     *os.Root
-	ignore   *attributes.Matcher
-	attrs    *attributes.Attributes
-	fileMode bool
-	symlinks bool
-	repo     *repo.Repository
-	idx      *index.Index
-	db       *odb.DB
-	loadErr  error
+	root       *os.Root
+	ignore     *attributes.Matcher
+	attrs      *attributes.Attributes
+	fileMode   bool
+	symlinks   bool
+	repo       *repo.Repository
+	idx        *index.Index
+	db         *odb.DB
+	loadErr    error
+	lfsObjects string
+	lfsFetch   attributes.LFSFetchFilter
 }
 
 func openWorkingTree(r *repo.Repository) (*workingTree, error) {
@@ -59,7 +61,16 @@ func openWorkingTree(r *repo.Repository) (*workingTree, error) {
 		Config:         r.Config(),
 		ObjectFormat:   r.ObjectFormat,
 	})
-	return &workingTree{root: root, ignore: ignore, attrs: attrs, fileMode: core.FileMode, symlinks: core.Symlinks, repo: r}, nil
+	return &workingTree{
+		root:       root,
+		ignore:     ignore,
+		attrs:      attrs,
+		fileMode:   core.FileMode,
+		symlinks:   core.Symlinks,
+		repo:       r,
+		lfsObjects: lfsObjectsDir(r),
+		lfsFetch:   attributes.NewLFSFetchFilter(r.Config(), core.IgnoreCase),
+	}, nil
 }
 
 func (w *workingTree) close() error {
