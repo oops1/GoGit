@@ -279,18 +279,11 @@ func (d *DB) packHeader(id hash.ObjectID) (object.Type, int64, bool, error) {
 		if !ok {
 			continue
 		}
-		head, err := file.Pack.HeaderAt(offset)
+		kind, size, err := file.Pack.InfoAt(offset)
 		if err != nil {
 			return 0, 0, false, err
 		}
-		if !head.Kind.IsDelta() {
-			return head.Kind.Type(), head.Size, true, nil
-		}
-		kind, data, err := file.Pack.ObjectAt(offset)
-		if err != nil {
-			return 0, 0, false, err
-		}
-		return kind, int64(len(data)), true, nil
+		return kind, size, true, nil
 	}
 	return 0, 0, false, nil
 }
