@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -71,48 +73,104 @@ func addOriginRemote(t *testing.T, target string) {
 	}
 }
 
+func operationNumber(t *testing.T, a *App, views *[]*operation.View, number int) []string {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	var view *operation.View
+	for view == nil {
+		view = readOnDispatcher(t, a, func() *operation.View {
+			if len(*views) < number {
+				return nil
+			}
+			return (*views)[number-1]
+		})
+		if view == nil && time.Now().After(deadline) {
+			t.Fatalf("operation %d did not start in time", number)
+		}
+		if view == nil {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	waitForFinishedOperation(t, a, view)
+	waitForPostQueueDrain(t, a)
+	return readOnDispatcher(t, a, view.Lines)
+}
+
+type offerScript struct {
+	mu       sync.Mutex
+	finished ops.FinishFlowResult
+	pushErr  error
+	answer   bool
+	pushed   []ops.FinishFlowOptions
+}
+
+func (s *offerScript) set(change func(*offerScript)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	change(s)
+}
+
+func (s *offerScript) pushes() []ops.FinishFlowOptions {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.pushed)
+}
+
 func TestFinishingWithoutPushOffersToSendTheResult(t *testing.T) {
 	a, target := flowReadyApp(t, true)
 	addOriginRemote(t, target)
-	operations := captureOperationViews(t)
+	views := captureOperationViews(t)
+	script := &offerScript{}
 	prevFinish, prevPush := runFinishFlow, runPushFinishedFlow
 	t.Cleanup(func() { runFinishFlow, runPushFinishedFlow = prevFinish, prevPush })
-	finished := ops.FinishFlowResult{}
 	runFinishFlow = func(context.Context, *gitrepo.Repository, string, string, ops.FinishFlowOptions) (ops.FinishFlowResult, error) {
-		return finished, nil
+		script.mu.Lock()
+		defer script.mu.Unlock()
+		return script.finished, nil
 	}
-	var pushed []ops.FinishFlowOptions
-	var pushErr error
 	runPushFinishedFlow = func(_ context.Context, _ *gitrepo.Repository, _, _ string, opts ops.FinishFlowOptions) error {
-		pushed = append(pushed, opts)
-		return pushErr
+		script.mu.Lock()
+		defer script.mu.Unlock()
+		script.pushed = append(script.pushed, opts)
+		return script.pushErr
 	}
-	answer := false
-	runOnDispatcher(t, a, func() { a.askConfirm = func(_, _ string, cb func(bool)) { cb(answer) } })
+	runOnDispatcher(t, a, func() {
+		a.askConfirm = func(_, _ string, cb func(bool)) {
+			script.mu.Lock()
+			answer := script.answer
+			script.mu.Unlock()
+			cb(answer)
+		}
+	})
+	started := readOnDispatcher(t, a, func() int { return len(*views) })
 	finish := func() []string {
 		runOnDispatcher(t, a, func() { a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{Message: "Finish 1.0"}) })
-		return operationLines(t, a, operations)
+		started++
+		return operationNumber(t, a, views, started)
 	}
 
 	lines := finish()
-	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowNotPushed", "1.0")) || len(pushed) != 0 {
-		t.Fatalf("declined offer: log = %v, pushes = %d", lines, len(pushed))
+	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowNotPushed", "1.0")) || len(script.pushes()) != 0 {
+		t.Fatalf("declined offer: log = %v, pushes = %d", lines, len(script.pushes()))
 	}
 
-	answer = true
+	script.set(func(s *offerScript) { s.answer = true })
 	finish()
-	lines = operationLines(t, a, operations)
+	started++
+	lines = operationNumber(t, a, views, started)
+	pushed := script.pushes()
 	if !slices.Contains(lines, i18n.Tf("Operation.Log.FlowPushed", "1.0")) || len(pushed) != 1 || pushed[0].Network.Remote != "origin" || pushed[0].Message != "Finish 1.0" {
 		t.Fatalf("accepted offer: log = %v, pushes = %+v", lines, pushed)
 	}
 
-	pushErr = errors.New("offline")
+	script.set(func(s *offerScript) { s.pushErr = errors.New("offline") })
 	finish()
-	if lines := operationLines(t, a, operations); slices.Contains(lines, i18n.Tf("Operation.Log.FlowPushed", "1.0")) {
+	started++
+	if lines := operationNumber(t, a, views, started); slices.Contains(lines, i18n.Tf("Operation.Log.FlowPushed", "1.0")) {
 		t.Fatalf("a failed push was reported as sent: %v", lines)
 	}
 
-	finished = ops.FinishFlowResult{Pushed: true}
+	script.set(func(s *offerScript) { s.finished = ops.FinishFlowResult{Pushed: true} })
 	if lines := finish(); slices.Contains(lines, i18n.Tf("Operation.Log.FlowNotPushed", "1.0")) {
 		t.Fatalf("a pushed finish still offered to push: %v", lines)
 	}
