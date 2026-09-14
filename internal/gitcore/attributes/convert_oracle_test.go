@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -147,7 +148,48 @@ func encodingCase(name string) bool {
 	return strings.HasPrefix(name, "enc")
 }
 
+const (
+	iconvGlibc    = "glibc"
+	iconvLibiconv = "libiconv"
+	iconvUnknown  = "unknown"
+)
+
+func gitIconvFlavor(t *testing.T) string {
+	t.Helper()
+	o := newOracle(t)
+	o.write(".gitattributes", "u16 working-tree-encoding=UTF-16\nalias working-tree-encoding=utf16le\n")
+	blob := strings.TrimSpace(mustCommand(o, []byte("a\n"), "hash-object", "-w", "--no-filters", "--stdin"))
+	mustCommand(o, []byte("100644 "+blob+"\tu16\n"), "update-index", "--add", "--index-info")
+	_, _ = o.command(nil, "checkout-index", "-f", "--", "u16")
+	o.write("alias", "a\x00\n\x00")
+	aliased := strings.TrimSpace(o.git("hash-object", "alias")) == blob
+	switch checkout := string(o.read("u16")); {
+	case checkout == "\xff\xfea\x00\n\x00" && aliased:
+		return iconvGlibc
+	case checkout == "\xfe\xff\x00a\x00\n" && !aliased:
+		return iconvLibiconv
+	}
+	return iconvUnknown
+}
+
+func platformIconv() string {
+	if runtime.GOOS == "windows" {
+		return iconvLibiconv
+	}
+	return iconvGlibc
+}
+
+func encodingsComparable(t *testing.T) bool {
+	t.Helper()
+	if flavor := gitIconvFlavor(t); flavor != platformIconv() {
+		t.Logf("git converts working-tree-encoding like %s iconv, this platform follows %s; encoding cases are skipped", flavor, platformIconv())
+		return false
+	}
+	return true
+}
+
 func TestConversionToGitMatchesGitHashObject(t *testing.T) {
+	comparable := encodingsComparable(t)
 	for _, autoCRLF := range []string{AutoCRLFFalse, AutoCRLFTrue, AutoCRLFInput} {
 		t.Run("autocrlf="+autoCRLF, func(t *testing.T) {
 			o := newOracle(t)
@@ -157,6 +199,9 @@ func TestConversionToGitMatchesGitHashObject(t *testing.T) {
 			attrs := o.conversionAttributes(autoCRLF)
 			want := o.hashPaths([]string{"hash-object"}, names)
 			for _, name := range names {
+				if !comparable && encodingCase(name) {
+					continue
+				}
 				got := attrs.Policy(name).CompareToGit(conversionContent(name), nil)
 				if id := blobID(t, got); id != want[name] {
 					t.Errorf("%s hashes to %s after conversion (%.60q), git says %s", name, id, got, want[name])
@@ -167,6 +212,9 @@ func TestConversionToGitMatchesGitHashObject(t *testing.T) {
 }
 
 func TestStrictConversionFailsWhereGitRefusesToWriteTheObject(t *testing.T) {
+	if !encodingsComparable(t) {
+		t.Skip("the iconv of git differs from the one this platform follows")
+	}
 	o := newOracle(t)
 	names := conversionFixture(o)
 	o.writeContents(names)
@@ -230,6 +278,7 @@ func mustCommand(o *oracle, stdin []byte, args ...string) string {
 }
 
 func TestConversionToWorkingTreeMatchesGitCheckout(t *testing.T) {
+	comparable := encodingsComparable(t)
 	for _, autoCRLF := range []string{AutoCRLFFalse, AutoCRLFTrue, AutoCRLFInput} {
 		t.Run("autocrlf="+autoCRLF, func(t *testing.T) {
 			o := newOracle(t)
@@ -248,6 +297,9 @@ func TestConversionToWorkingTreeMatchesGitCheckout(t *testing.T) {
 			_, _ = o.command(nil, "checkout-index", "-f", "-a")
 			attrs := o.conversionAttributes(autoCRLF)
 			for _, name := range names {
+				if !comparable && encodingCase(name) {
+					continue
+				}
 				got := attrs.Policy(name).ToWorkingTree(conversionContent(name))
 				if want := o.read(name); !bytes.Equal(got, want) {
 					t.Errorf("%s is checked out as %.60q by git, we write %.60q", name, want, got)

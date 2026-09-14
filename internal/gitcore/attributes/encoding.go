@@ -96,24 +96,31 @@ type utfCodec struct {
 	bom   []byte
 }
 
+type unmarkedUTF struct {
+	order byteOrder
+	bom16 []byte
+	bom32 []byte
+}
+
 func utfCodecOf(name string, reading bool) (utfCodec, bool) {
+	unmarked16 := utfCodec{width: 2, order: iconvUnmarked.order, bom: iconvUnmarked.bom16}
 	switch {
 	case sameUTFEncoding(name, utf16LEBOMName) && reading:
-		return utfCodec{width: 2, order: binary.BigEndian, bom: utf16BEBOM}, true
+		return unmarked16, true
 	case sameUTFEncoding(name, utf16LEBOMName):
 		return utfCodec{width: 2, order: binary.LittleEndian, bom: utf16LEBOM}, true
 	case sameUTFEncoding(name, utf16BEBOMName) && !reading:
 		return utfCodec{width: 2, order: binary.BigEndian, bom: utf16BEBOM}, true
 	}
-	switch strings.ToUpper(name) {
+	switch iconvUTFName(name) {
 	case "UTF-16":
-		return utfCodec{width: 2, order: binary.BigEndian, bom: utf16BEBOM}, true
+		return unmarked16, true
 	case "UTF-16BE":
 		return utfCodec{width: 2, order: binary.BigEndian}, true
 	case "UTF-16LE":
 		return utfCodec{width: 2, order: binary.LittleEndian}, true
 	case "UTF-32":
-		return utfCodec{width: 4, order: binary.BigEndian, bom: utf32BEBOM}, true
+		return utfCodec{width: 4, order: iconvUnmarked.order, bom: iconvUnmarked.bom32}, true
 	case "UTF-32BE":
 		return utfCodec{width: 4, order: binary.BigEndian}, true
 	case "UTF-32LE":

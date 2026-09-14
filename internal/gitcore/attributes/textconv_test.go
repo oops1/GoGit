@@ -317,7 +317,6 @@ func TestDecodeToUTF8FollowsIconv(t *testing.T) {
 	}{
 		{"utf16BigEndianBOM", "UTF-16", "\xfe\xff\x00a", "a", true},
 		{"utf16LittleEndianBOM", "UTF-16", "\xff\xfea\x00", "a", true},
-		{"utf16DefaultsToBigEndian", "UTF-16LE-BOM", "\x00a", "a", true},
 		{"utf16SurrogatePair", "UTF-16BE", "\xd8\x3d\xde\x00", "\U0001f600", true},
 		{"utf16OddLength", "UTF-16BE", "\x00a\x00", "", false},
 		{"utf16HighAtEnd", "UTF-16BE", "\xd8\x3d", "", false},
@@ -355,11 +354,9 @@ func TestEncodeFromUTF8FollowsIconv(t *testing.T) {
 		want string
 		ok   bool
 	}{
-		{"utf16WritesBigEndianBOM", "UTF-16", "a", "\xfe\xff\x00a", true},
 		{"utf16LEBOM", "utf16le-bom", "a", "\xff\xfea\x00", true},
 		{"utf16BEBOM", "UTF-16BE-BOM", "a", "\xfe\xff\x00a", true},
 		{"utf16LESurrogates", "UTF-16LE", "\U0001f600", "\x3d\xd8\x00\xde", true},
-		{"utf32", "UTF-32", "a", "\x00\x00\xfe\xff\x00\x00\x00a", true},
 		{"utf32LE", "UTF-32LE", "a", "a\x00\x00\x00", true},
 		{"utf32BE", "UTF-32BE", "a", "\x00\x00\x00a", true},
 		{"invalidUTF8", "UTF-16", "\xc3", "", false},
@@ -373,6 +370,26 @@ func TestEncodeFromUTF8FollowsIconv(t *testing.T) {
 			got, ok := encodeFromUTF8(tc.enc, []byte(tc.data))
 			if ok != tc.ok || string(got) != tc.want {
 				t.Fatalf("encodeFromUTF8(%q, %q) = %q, %v, want %q, %v", tc.enc, tc.data, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+type iconvCase struct {
+	name string
+	enc  string
+	data string
+	want string
+	ok   bool
+}
+
+func checkIconvCases(t *testing.T, convert func(string, []byte) ([]byte, bool), cases []iconvCase) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := convert(tc.enc, []byte(tc.data))
+			if ok != tc.ok || string(got) != tc.want {
+				t.Fatalf("convert(%q, %q) = %q, %v, want %q, %v", tc.enc, tc.data, got, ok, tc.want, tc.ok)
 			}
 		})
 	}
