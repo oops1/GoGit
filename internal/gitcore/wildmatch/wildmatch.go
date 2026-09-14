@@ -9,8 +9,17 @@ const (
 	Pathname
 )
 
+type outcome uint8
+
+const (
+	noMatch outcome = iota
+	matched
+	abortAll
+	abortToStarStar
+)
+
 func Match(pattern, text string, flags Flags) bool {
-	return dowild(pattern, text, flags, true)
+	return dowild(pattern, text, flags, true) == matched
 }
 
 func lower(c byte) byte {
@@ -43,7 +52,7 @@ func inRange(lo, hi, c byte, flags Flags) bool {
 	return false
 }
 
-func dowild(p, t string, flags Flags, compStart bool) bool {
+func dowild(p, t string, flags Flags, compStart bool) outcome {
 	i, j := 0, 0
 	cs := compStart
 	for i < len(p) {
@@ -51,19 +60,19 @@ func dowild(p, t string, flags Flags, compStart bool) bool {
 			return star(p, i, t[j:], flags, cs)
 		}
 		if j >= len(t) {
-			return false
+			return abortAll
 		}
 		tc := t[j]
 		switch p[i] {
 		case '?':
 			if tc == '/' && flags&Pathname != 0 {
-				return false
+				return noMatch
 			}
 			i++
 		case '[':
 			n, ok := matchBracket(p[i:], tc, flags)
 			if !ok {
-				return false
+				return noMatch
 			}
 			i += n
 		default:
@@ -73,17 +82,20 @@ func dowild(p, t string, flags Flags, compStart bool) bool {
 				pc = p[i]
 			}
 			if !eqByte(pc, tc, flags) {
-				return false
+				return noMatch
 			}
 			i++
 		}
 		cs = tc == '/'
 		j++
 	}
-	return j == len(t)
+	if j == len(t) {
+		return matched
+	}
+	return noMatch
 }
 
-func star(p string, i int, tail string, flags Flags, compStart bool) bool {
+func star(p string, i int, tail string, flags Flags, compStart bool) outcome {
 	k := i
 	for k < len(p) && p[k] == '*' {
 		k++
@@ -91,33 +103,32 @@ func star(p string, i int, tail string, flags Flags, compStart bool) bool {
 	rest := p[k:]
 	pathname := flags&Pathname != 0
 	matchSlash := !pathname
-	if k-i > 1 && pathname {
-		if !compStart || (rest != "" && rest[0] != '/') {
-			return false
-		}
+	if k-i > 1 && pathname && compStart && (i == 0 || p[i-1] == '/') && (rest == "" || rest[0] == '/') {
 		if rest == "" {
-			return true
+			return matched
 		}
-		if dowild(rest[1:], tail, flags, true) {
-			return true
+		if dowild(rest[1:], tail, flags, true) == matched {
+			return matched
 		}
 		matchSlash = true
 	}
 	if rest == "" {
-		return matchSlash || !strings.Contains(tail, "/")
+		if matchSlash || !strings.Contains(tail, "/") {
+			return matched
+		}
+		return noMatch
 	}
-	limit := len(tail)
-	if !matchSlash {
-		if x := strings.IndexByte(tail, '/'); x >= 0 {
-			limit = x
+	for m := range len(tail) {
+		result := dowild(rest, tail[m:], flags, false)
+		if result != noMatch {
+			if !matchSlash || result != abortToStarStar {
+				return result
+			}
+		} else if !matchSlash && tail[m] == '/' {
+			return abortToStarStar
 		}
 	}
-	for m := 0; m <= limit; m++ {
-		if dowild(rest, tail[m:], flags, false) {
-			return true
-		}
-	}
-	return false
+	return abortAll
 }
 
 func matchBracket(p string, tc byte, flags Flags) (int, bool) {
