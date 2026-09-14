@@ -30,7 +30,11 @@ func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID,
 	}
 	defer func() { _ = db.Close() }()
 
-	targetTree, err := commitTreeEntries(db, commit)
+	rules, err := pathRulesOf(r)
+	if err != nil {
+		return err
+	}
+	targetTree, err := verifiedTreeEntries(db, commit, rules)
 	if err != nil {
 		return err
 	}

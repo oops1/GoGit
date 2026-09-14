@@ -789,7 +789,7 @@ func TestDiscardFailsWhenMkdirAllFails(t *testing.T) {
 	idx := r.index()
 	idx.Add(index.Entry{Path: "dir/a.txt", Mode: object.ModeBlob, ID: blobID, Stage: index.StageMerged})
 	r.saveIndex(idx)
-	swapRootMkdirAllFailForPath(t, "dir")
+	swapRootMkdirFailForPath(t, "dir")
 	if err := Discard(t.Context(), r.repo, []string{"dir/a.txt"}, DiscardOptions{}); !errors.Is(err, errInjected) {
 		t.Fatalf("err = %v, want errInjected", err)
 	}
@@ -1557,7 +1557,7 @@ func TestCheckoutFailsWhenMkdirAllFails(t *testing.T) {
 	if err := Switch(t.Context(), r.repo, "feature", SwitchOptions{}); err != nil {
 		t.Fatalf("Switch returned error %v", err)
 	}
-	swapRootMkdirAllFailForPath(t, "dir")
+	swapRootMkdirFailForPath(t, "dir")
 	err := Switch(t.Context(), r.repo, "feature2", SwitchOptions{})
 	if !errors.Is(err, errInjected) {
 		t.Fatalf("err = %v, want errInjected", err)

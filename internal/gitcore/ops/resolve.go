@@ -72,10 +72,11 @@ func resolveConflict(sw *switcher, idx *index.Index, raw string, side ConflictSi
 		if entry.Stage != side.stage() {
 			continue
 		}
-		if err := sw.checkout(rel, treeEntry{mode: entry.Mode, id: entry.ID}); err != nil {
+		stat, err := sw.checkout(rel, treeEntry{mode: entry.Mode, id: entry.ID})
+		if err != nil {
 			return err
 		}
-		idx.Add(index.Entry{Path: rel, Mode: entry.Mode, ID: entry.ID, Stage: index.StageMerged})
+		idx.Add(index.Entry{Path: rel, Mode: entry.Mode, ID: entry.ID, Stage: index.StageMerged, Stat: stat})
 		return nil
 	}
 	if err := fsRootRemove(sw.wt.root, filepath.FromSlash(rel)); err != nil && !missingPath(err) {

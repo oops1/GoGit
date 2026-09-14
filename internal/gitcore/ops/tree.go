@@ -2,6 +2,8 @@ package ops
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -50,6 +52,9 @@ func collectTree(db *odb.DB, id hash.ObjectID, prefix string, out map[string]tre
 	}
 	for _, entry := range tree.Entries {
 		name := joinRel(prefix, entry.Name)
+		if strings.Contains(entry.Name, "/") {
+			return fmt.Errorf("%w: %q", ErrUnsafePath, name)
+		}
 		if entry.Mode.IsTree() {
 			if err := collectTree(db, entry.ID, name, out); err != nil {
 				return err

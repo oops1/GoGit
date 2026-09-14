@@ -2,6 +2,8 @@ package ops
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -13,6 +15,12 @@ func Unstage(ctx context.Context, r *repo.Repository, paths []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	wt, err := openWorkingTree(r)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = wt.close() }()
+
 	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
 	if err != nil {
 		return err
@@ -38,6 +46,7 @@ func Unstage(ctx context.Context, r *repo.Repository, paths []string) error {
 	if err != nil {
 		return err
 	}
+	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format()}
 	for _, p := range paths {
 		if err := ctx.Err(); err != nil {
 			lock.abort()
@@ -48,41 +57,57 @@ func Unstage(ctx context.Context, r *repo.Repository, paths []string) error {
 			lock.abort()
 			return err
 		}
-		unstagePath(lock.idx, headTree, clean)
+		if err := unstagePath(sw, lock.idx, headTree, clean); err != nil {
+			lock.abort()
+			return err
+		}
 	}
 	return lock.commit()
 }
 
-func unstagePath(idx *index.Index, headTree map[string]treeEntry, rel string) {
-	if resetSingle(idx, headTree, rel) {
-		return
+func unstagePath(sw *switcher, idx *index.Index, headTree map[string]treeEntry, rel string) error {
+	if done, err := resetSingle(sw, idx, headTree, rel); done || err != nil {
+		return err
 	}
 	prefix := rel + "/"
-	for path, he := range headTree {
+	for _, path := range slices.Sorted(maps.Keys(headTree)) {
 		if !hasPrefix(path, prefix) {
 			continue
 		}
-		idx.Remove(path)
-		idx.Add(index.Entry{Path: path, Mode: he.mode, ID: he.id, Stage: index.StageMerged})
+		if err := resetEntry(sw, idx, path, headTree[path]); err != nil {
+			return err
+		}
 	}
 	for _, tracked := range collectPaths(idx, prefix) {
 		if _, ok := headTree[tracked]; !ok {
 			idx.Remove(tracked)
 		}
 	}
+	return nil
 }
 
-func resetSingle(idx *index.Index, headTree map[string]treeEntry, rel string) bool {
+func resetSingle(sw *switcher, idx *index.Index, headTree map[string]treeEntry, rel string) (bool, error) {
 	he, existsInHead := headTree[rel]
 	_, existsInIndex := idx.Get(rel, index.StageMerged)
 	if !existsInHead && !existsInIndex && len(idx.Conflicts(rel)) == 0 {
-		return false
+		return false, nil
+	}
+	if !existsInHead {
+		idx.Remove(rel)
+		return true, nil
+	}
+	return true, resetEntry(sw, idx, rel, he)
+}
+
+func resetEntry(sw *switcher, idx *index.Index, rel string, he treeEntry) error {
+	previous, _ := idx.Get(rel, index.StageMerged)
+	entry, err := sw.mergedEntry(rel, he.mode, he.id, previous)
+	if err != nil {
+		return err
 	}
 	idx.Remove(rel)
-	if existsInHead {
-		idx.Add(index.Entry{Path: rel, Mode: he.mode, ID: he.id, Stage: index.StageMerged})
-	}
-	return true
+	idx.Add(entry)
+	return nil
 }
 
 func hasPrefix(path, prefix string) bool {

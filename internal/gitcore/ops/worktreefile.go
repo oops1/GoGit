@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
@@ -17,9 +18,12 @@ func holdsRepository(entries []fs.DirEntry) bool {
 }
 
 func writeWorktreeBlob(wt *workingTree, rel string, mode object.Mode, data []byte) error {
+	if err := index.VerifyPath(rel, mode, writeGuardRules); err != nil {
+		return err
+	}
 	name := filepath.FromSlash(rel)
 	if dir := parentOf(rel); dir != "" {
-		if err := fsRootMkdirAll(wt.root, filepath.FromSlash(dir), 0o777); err != nil {
+		if err := ensureDirectories(wt.root, dir); err != nil {
 			return err
 		}
 	}
