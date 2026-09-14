@@ -467,9 +467,7 @@ func TestCredentialsSourceLogsWhenARejectedVaultEntryCannotBeRemoved(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(a.paths.VaultFile()+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockFileWrites(t, a.paths.VaultFile())
 	feedbackOf(t, src).Reject(context.Background(), testResource, stale)
 	if buf.Len() == 0 {
 		t.Fatal("a failed removal must be logged")
@@ -765,9 +763,7 @@ func TestCredentialsSourceApproveLogsWhenTheUnlockedVaultCannotBeWritten(t *test
 	v := createTestVault(t, a.paths.VaultFile())
 	a.vaultInst = v
 	stubRememberedDialogAnswer(t, a)
-	if err := os.MkdirAll(a.paths.VaultFile()+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockFileWrites(t, a.paths.VaultFile())
 
 	rememberAndApprove(t, a)
 	if len(v.Resources()) != 0 {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/remote"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/logx"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
 
@@ -35,7 +36,7 @@ func (a *App) checkRemoteConnection(view *settings.View) {
 	secretsWG.Go(func() {
 		refs, err := lsRemoteRefs(context.Background(), rawURL, a.transportOptions(nil))
 		if err != nil {
-			a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.ConnectionFailed", transportErrorText(err)), true)
+			a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.ConnectionFailed", transportErrorText(redactError(err))), true)
 			return
 		}
 		a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.ConnectionOk", len(refs)), false)
@@ -53,7 +54,7 @@ func (a *App) checkKeyFile(view *settings.View) {
 	secretsWG.Go(func() {
 		defer clear(passphrase)
 		if err := checkPrivateKeyFile(path, passphrase); err != nil {
-			a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.KeyFailed", err.Error()), true)
+			a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.KeyFailed", logx.RedactText(err.Error())), true)
 			return
 		}
 		a.reportSecretsCheck(view, i18n.T("Dialog.Settings.Secrets.Status.KeyOk"), false)

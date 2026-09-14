@@ -144,7 +144,7 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 		a.releaseNetOperation()
 		followUps := after.actions
 		a.Post(func() {
-			view.Finish(err)
+			view.Finish(redactError(err))
 			for _, followUp := range followUps {
 				followUp()
 			}

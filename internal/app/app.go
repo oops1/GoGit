@@ -213,6 +213,11 @@ type App struct {
 	vaultMu   sync.Mutex
 	vaultInst *vault.Vault
 
+	vaultGenMu         sync.Mutex
+	vaultGen           uint64
+	vaultAccept        uint64
+	vaultAcceptPending bool
+
 	closeOnce sync.Once
 }
 
@@ -394,6 +399,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		banner:          banner,
 		branchCache:     map[string]string{},
 		branchFresh:     map[string]string{},
+		vaultGen:        cfg.Security.VaultGeneration,
 	}
 	root.MinWidth = config.MinWindowWidth
 	root.MinHeight = config.MinWindowHeight

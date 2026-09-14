@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"testing"
 
 	"github.com/oops1/gogit/internal/config"
@@ -73,15 +72,7 @@ func TestTogglingSubdirectoriesHidesNestedRowsAndSurvivesRestart(t *testing.T) {
 
 func TestTogglingSubdirectoriesSurvivesAConfigThatCannotBeSaved(t *testing.T) {
 	a, paths := newTestAppWithPaths(t)
-	if err := writeFile(paths.Dir, "config.toml.tmp", ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(paths.ConfigFile() + ".tmp"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(paths.ConfigFile()+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockFileWrites(t, paths.ConfigFile())
 
 	a.toggleFilesSubdirectories()
 

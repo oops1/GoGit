@@ -46,7 +46,7 @@ func TestRemoteErrorMessageTranslatesKnownCoreErrors(t *testing.T) {
 
 func TestRemoteErrorMessageFallsBackToATranslatedWrapperForUnknownErrors(t *testing.T) {
 	err := errors.New("boom")
-	want := i18n.Tf("Dialog.Remotes.Error.Failed", err)
+	want := i18n.Tf("Dialog.Remotes.Error.Failed", redactError(err))
 	if got := remoteErrorMessage(err); got != want {
 		t.Fatalf("remoteErrorMessage(%v) = %q, want %q", err, got, want)
 	}

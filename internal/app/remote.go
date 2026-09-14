@@ -298,7 +298,7 @@ func (a *App) checkCloneURL(view *clone.View, url string) {
 	a.Post(func() {
 		view.SetBusy(false)
 		if err != nil {
-			view.SetStatus(i18n.Tf("Dialog.Clone.Status.Failed", transportErrorText(err)))
+			view.SetStatus(i18n.Tf("Dialog.Clone.Status.Failed", transportErrorText(redactError(err))))
 			return
 		}
 		branchNames, head := cloneBranchesFromRefs(refList)
@@ -405,7 +405,7 @@ func remoteErrorMessage(err error) string {
 	case errors.Is(err, remote.ErrNoRemote):
 		return i18n.T("Dialog.Remotes.Error.NotFound")
 	default:
-		return i18n.Tf("Dialog.Remotes.Error.Failed", err)
+		return i18n.Tf("Dialog.Remotes.Error.Failed", redactError(err))
 	}
 }
 
