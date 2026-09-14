@@ -3,10 +3,10 @@ package vault
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"slices"
 	"strings"
@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
+
+	"github.com/oops1/gogit/internal/safefile"
 )
 
 type Credential struct {
@@ -104,35 +106,38 @@ func prefixCandidates(resource string) []string {
 }
 
 type Vault struct {
-	mu         sync.Mutex
-	opts       Options
-	version    uint16
-	flags      uint16
-	slots      []Slot
-	nonce      []byte
-	ciphertext []byte
-	dek        []byte
-	secrets    *payload
-	timer      *time.Timer
-	closed     bool
+	mu      sync.Mutex
+	opts    Options
+	file    vaultFile
+	highest uint64
+	dek     []byte
+	secrets *payload
+	timer   *time.Timer
+	closed  bool
+}
+
+type revision struct {
+	slots   []Slot
+	dek     []byte
+	secrets *payload
 }
 
 func Open(opts Options) (*Vault, error) {
 	if opts.Path == "" {
 		return nil, ErrInvalidPath
 	}
-	version, flags, slots, nonce, ciphertext, err := readVaultFile(opts.Path)
+	data, err := safefile.Read(opts.Path)
+	if err != nil {
+		return nil, fmt.Errorf("vault: %w", err)
+	}
+	file, err := parseVaultFile(data)
 	if err != nil {
 		return nil, err
 	}
-	return &Vault{
-		opts:       opts,
-		version:    version,
-		flags:      flags,
-		slots:      slots,
-		nonce:      nonce,
-		ciphertext: ciphertext,
-	}, nil
+	if file.header.generation < opts.KnownGeneration {
+		return nil, ErrRollback
+	}
+	return &Vault{opts: opts, file: file, highest: file.header.generation}, nil
 }
 
 func Create(ctx context.Context, opts Options, first Unlocker) (*Vault, error) {
@@ -144,25 +149,30 @@ func Create(ctx context.Context, opts Options, first Unlocker) (*Vault, error) {
 	}
 	if _, err := os.Stat(opts.Path); err == nil {
 		return nil, ErrAlreadyExists
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("vault: %w", err)
 	}
 	dek := make([]byte, chacha20poly1305.KeySize)
 	_, _ = rand.Read(dek)
 	slot, err := first.Wrap(ctx, dek)
 	if err != nil {
+		clear(dek)
 		return nil, err
 	}
-	v := &Vault{
-		opts:    opts,
-		version: formatVersion,
-		flags:   0,
-		dek:     dek,
-		secrets: &payload{},
-	}
-	if err := v.persistWithLocked([]Slot{slot}, v.secrets); err != nil {
+	v := &Vault{opts: opts, highest: opts.KnownGeneration}
+	rev := revision{slots: []Slot{slot}, dek: dek, secrets: &payload{}}
+	var written vaultFile
+	err = safefile.Update(opts.Path, func(current []byte) ([]byte, error) {
+		if current != nil {
+			return nil, ErrAlreadyExists
+		}
+		data, file, err := v.seal(rev)
+		written = file
+		return data, err
+	})
+	if err != nil {
+		clear(dek)
 		return nil, err
 	}
+	v.adoptLocked(written, rev)
 	v.touchLocked()
 	return v, nil
 }
@@ -176,14 +186,26 @@ func (v *Vault) Exists() bool {
 	return err == nil
 }
 
+func (v *Vault) Generation() uint64 {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.highest
+}
+
 func (v *Vault) Slots() []SlotInfo {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	out := make([]SlotInfo, len(v.slots))
-	for i, s := range v.slots {
+	out := make([]SlotInfo, len(v.file.header.slots))
+	for i, s := range v.file.header.slots {
 		out[i] = SlotInfo{Kind: s.Kind, Index: i}
 	}
 	return out
+}
+
+func (v *Vault) HasSlot(kind SlotKind) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return slices.ContainsFunc(v.file.header.slots, func(s Slot) bool { return s.Kind == kind })
 }
 
 func (v *Vault) Locked() bool {
@@ -201,9 +223,12 @@ func (v *Vault) Unlock(ctx context.Context, unlocker Unlocker) error {
 	if unlocker == nil {
 		return ErrNilUnlocker
 	}
+	if err := v.refreshLocked(); err != nil {
+		return err
+	}
 	kind := unlocker.Kind()
 	var lastErr error
-	for _, slot := range v.slots {
+	for _, slot := range v.file.header.slots {
 		if slot.Kind != kind {
 			continue
 		}
@@ -212,13 +237,12 @@ func (v *Vault) Unlock(ctx context.Context, unlocker Unlocker) error {
 			lastErr = err
 			continue
 		}
-		secrets, err := v.decryptPayloadLocked(dek)
+		secrets, err := openPayload(v.file, dek)
 		if err != nil {
 			clear(dek)
 			return err
 		}
-		v.dek = dek
-		v.secrets = secrets
+		v.adoptLocked(v.file, revision{dek: dek, secrets: secrets})
 		v.touchLocked()
 		return nil
 	}
@@ -228,16 +252,12 @@ func (v *Vault) Unlock(ctx context.Context, unlocker Unlocker) error {
 	return ErrSlotNotFound
 }
 
-func (v *Vault) decryptPayloadLocked(dek []byte) (*payload, error) {
-	headerBytes, err := encodeHeader(v.version, v.flags, v.slots)
-	if err != nil {
-		return nil, err
-	}
-	aead, err := chacha20poly1305.NewX(dek)
+func openPayload(file vaultFile, dek []byte) (*payload, error) {
+	aead, err := newXChaCha20Poly1305(dek)
 	if err != nil {
 		return nil, fmt.Errorf("vault: %w", err)
 	}
-	plaintext, err := aead.Open(nil, v.nonce, v.ciphertext, headerBytes)
+	plaintext, err := aead.Open(nil, file.nonce, file.ciphertext, file.headerRaw)
 	if err != nil {
 		return nil, ErrCorrupted
 	}
@@ -247,6 +267,144 @@ func (v *Vault) decryptPayloadLocked(dek []byte) (*payload, error) {
 		return nil, fmt.Errorf("vault: %w", err)
 	}
 	return &p, nil
+}
+
+func (v *Vault) refreshLocked() error {
+	data, err := safefile.Read(v.opts.Path)
+	if err != nil {
+		return fmt.Errorf("vault: %w", err)
+	}
+	file, changed, err := v.changedFileLocked(data)
+	if err != nil || !changed {
+		return err
+	}
+	v.lockLocked()
+	v.file = file
+	v.noteGenerationLocked(file.header.generation)
+	return nil
+}
+
+func (v *Vault) changedFileLocked(data []byte) (vaultFile, bool, error) {
+	if sha256.Sum256(data) == v.file.sum {
+		return vaultFile{}, false, nil
+	}
+	file, err := parseVaultFile(data)
+	if err != nil {
+		return vaultFile{}, false, err
+	}
+	if file.header.generation < v.highest {
+		return vaultFile{}, false, ErrRollback
+	}
+	return file, true, nil
+}
+
+func (v *Vault) syncLocked(current []byte) error {
+	if current == nil {
+		return nil
+	}
+	file, changed, err := v.changedFileLocked(current)
+	if err != nil || !changed {
+		return err
+	}
+	secrets, err := openPayload(file, v.dek)
+	if err != nil {
+		v.lockLocked()
+		v.file = file
+		v.noteGenerationLocked(file.header.generation)
+		return ErrChangedElsewhere
+	}
+	v.adoptLocked(file, revision{dek: v.dek, secrets: secrets})
+	return nil
+}
+
+func (v *Vault) seal(rev revision) ([]byte, vaultFile, error) {
+	h := header{version: formatVersion, flags: v.file.header.flags, generation: v.highest + 1, slots: rev.slots}
+	headerRaw, err := encodeHeader(h)
+	if err != nil {
+		return nil, vaultFile{}, err
+	}
+	aead, err := newXChaCha20Poly1305(rev.dek)
+	if err != nil {
+		return nil, vaultFile{}, fmt.Errorf("vault: %w", err)
+	}
+	plaintext, _ := json.Marshal(rev.secrets)
+	defer clear(plaintext)
+	nonce := make([]byte, payloadNonceSize)
+	_, _ = rand.Read(nonce)
+	ciphertext := aead.Seal(nil, nonce, plaintext, headerRaw)
+	data := make([]byte, 0, len(headerRaw)+len(nonce)+len(ciphertext))
+	data = append(data, headerRaw...)
+	data = append(data, nonce...)
+	data = append(data, ciphertext...)
+	return data, vaultFile{
+		header:     h,
+		headerRaw:  headerRaw,
+		nonce:      nonce,
+		ciphertext: ciphertext,
+		sum:        sha256.Sum256(data),
+	}, nil
+}
+
+func (v *Vault) writeLocked(change func() (revision, error)) error {
+	var (
+		next    revision
+		written vaultFile
+	)
+	err := safefile.Update(v.opts.Path, func(current []byte) ([]byte, error) {
+		if err := v.syncLocked(current); err != nil {
+			return nil, err
+		}
+		var err error
+		if next, err = change(); err != nil {
+			return nil, err
+		}
+		data, file, err := v.seal(next)
+		written = file
+		return data, err
+	})
+	if err != nil {
+		v.discardLocked(next)
+		return err
+	}
+	v.adoptLocked(written, next)
+	return nil
+}
+
+func sameBuffer(a, b []byte) bool {
+	return len(a) > 0 && len(b) > 0 && &a[0] == &b[0]
+}
+
+func (v *Vault) discardLocked(rev revision) {
+	if rev.secrets != nil && rev.secrets != v.secrets {
+		rev.secrets.wipe()
+	}
+	if !sameBuffer(rev.dek, v.dek) {
+		clear(rev.dek)
+	}
+}
+
+func (v *Vault) adoptLocked(file vaultFile, rev revision) {
+	if v.secrets != nil && v.secrets != rev.secrets {
+		v.secrets.wipe()
+	}
+	if !sameBuffer(v.dek, rev.dek) {
+		clear(v.dek)
+	}
+	v.file = file
+	v.dek = rev.dek
+	v.secrets = rev.secrets
+	v.noteGenerationLocked(file.header.generation)
+}
+
+func (v *Vault) noteGenerationLocked(generation uint64) {
+	v.highest = max(v.highest, generation)
+	if v.opts.OnGeneration != nil {
+		v.opts.OnGeneration(v.highest)
+	}
+}
+
+func (v *Vault) payloadRevisionLocked(next *payload) revision {
+	return revision{slots: v.file.header.slots, dek: v.dek, secrets: next}
 }
 
 func (v *Vault) Lock() {
@@ -289,19 +447,20 @@ func (v *Vault) AddSlot(ctx context.Context, unlocker Unlocker) error {
 	if v.dek == nil {
 		return ErrLocked
 	}
-	if len(v.slots) >= maxSlotCount {
+	if len(v.file.header.slots) >= maxSlotCount {
 		return ErrTooManySlots
 	}
 	slot, err := unlocker.Wrap(ctx, v.dek)
 	if err != nil {
 		return err
 	}
-	nextSlots := append(slices.Clone(v.slots), slot)
-	if err := v.persistWithLocked(nextSlots, v.secrets); err != nil {
-		return err
+	err = v.writeLocked(func() (revision, error) {
+		return revision{slots: append(slices.Clone(v.file.header.slots), slot), dek: v.dek, secrets: v.secrets}, nil
+	})
+	if err == nil {
+		v.touchLocked()
 	}
-	v.touchLocked()
-	return nil
+	return err
 }
 
 func (v *Vault) RemoveSlot(index int) error {
@@ -313,49 +472,189 @@ func (v *Vault) RemoveSlot(index int) error {
 	if v.dek == nil {
 		return ErrLocked
 	}
-	if index < 0 || index >= len(v.slots) {
+	err := v.writeLocked(func() (revision, error) {
+		slots := v.file.header.slots
+		if index < 0 || index >= len(slots) {
+			return revision{}, ErrSlotIndex
+		}
+		if len(slots) <= minSlotCount {
+			return revision{}, ErrLastSlot
+		}
+		return revision{slots: slices.Delete(slices.Clone(slots), index, index+1), dek: v.dek, secrets: v.secrets}, nil
+	})
+	if err == nil {
+		v.touchLocked()
+	}
+	return err
+}
+
+func (v *Vault) Rekey(ctx context.Context, unlockers []Unlocker) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.closed {
+		return ErrClosed
+	}
+	if v.dek == nil {
+		return ErrLocked
+	}
+	return v.rekeyLocked(ctx, unlockers)
+}
+
+func (v *Vault) RevokeSlot(ctx context.Context, index int, others []Unlocker) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.closed {
+		return ErrClosed
+	}
+	if v.dek == nil {
+		return ErrLocked
+	}
+	slots := v.file.header.slots
+	if index < 0 || index >= len(slots) {
 		return ErrSlotIndex
 	}
-	if len(v.slots) <= minSlotCount {
+	if len(slots) <= minSlotCount {
 		return ErrLastSlot
 	}
-	nextSlots := slices.Delete(slices.Clone(v.slots), index, index+1)
-	if err := v.persistWithLocked(nextSlots, v.secrets); err != nil {
+	kept, err := v.keptUnlockersLocked(ctx, others, func(i int, _ Slot) bool { return i == index })
+	if err != nil {
 		return err
 	}
-	v.touchLocked()
+	return v.rekeyLocked(ctx, kept)
+}
+
+func (v *Vault) ChangePassword(ctx context.Context, current, next *PasswordUnlocker, others []Unlocker) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.closed {
+		return ErrClosed
+	}
+	if next == nil {
+		return ErrNilUnlocker
+	}
+	if v.dek == nil {
+		return ErrLocked
+	}
+	if err := v.verifyPasswordLocked(ctx, current); err != nil {
+		return err
+	}
+	kept, err := v.keptUnlockersLocked(ctx, others, func(_ int, s Slot) bool { return s.Kind == SlotPassword })
+	if err != nil {
+		return err
+	}
+	return v.rekeyLocked(ctx, append(kept, next))
+}
+
+func (v *Vault) AcceptGeneration(known uint64) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.closed {
+		return ErrClosed
+	}
+	if v.dek == nil {
+		return ErrLocked
+	}
+	return v.writeLocked(func() (revision, error) {
+		v.highest = max(v.highest, known)
+		return v.payloadRevisionLocked(v.secrets), nil
+	})
+}
+
+func (v *Vault) verifyPasswordLocked(ctx context.Context, current *PasswordUnlocker) error {
+	protected := false
+	for _, slot := range v.file.header.slots {
+		if slot.Kind != SlotPassword {
+			continue
+		}
+		protected = true
+		if current != nil && v.unwrapsToKeyLocked(ctx, current, slot) {
+			return nil
+		}
+	}
+	if protected {
+		return ErrWrongKey
+	}
 	return nil
 }
 
-func (v *Vault) persistWithLocked(slots []Slot, p *payload) error {
-	headerBytes, err := encodeHeader(v.version, v.flags, slots)
+func (v *Vault) keptUnlockersLocked(ctx context.Context, others []Unlocker, drop func(int, Slot) bool) ([]Unlocker, error) {
+	used := make(map[int]bool, len(others))
+	kept := make([]Unlocker, 0, len(others)+1)
+	for i, slot := range v.file.header.slots {
+		if drop(i, slot) {
+			continue
+		}
+		idx := v.unlockerForSlotLocked(ctx, others, slot)
+		if idx < 0 {
+			return nil, fmt.Errorf("%w: %s", ErrSlotUnavailable, slot.Kind)
+		}
+		if !used[idx] {
+			used[idx] = true
+			kept = append(kept, others[idx])
+		}
+	}
+	return kept, nil
+}
+
+func (v *Vault) unlockerForSlotLocked(ctx context.Context, others []Unlocker, slot Slot) int {
+	for i, u := range others {
+		if u != nil && u.Kind() == slot.Kind && v.unwrapsToKeyLocked(ctx, u, slot) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (v *Vault) unwrapsToKeyLocked(ctx context.Context, u Unlocker, slot Slot) bool {
+	got, err := u.Unwrap(ctx, slot)
 	if err != nil {
-		return err
+		return false
 	}
-	plaintext, err := json.Marshal(p)
+	defer clear(got)
+	return subtle.ConstantTimeCompare(got, v.dek) == 1
+}
+
+func (v *Vault) rekeyLocked(ctx context.Context, unlockers []Unlocker) error {
+	if len(unlockers) < minSlotCount || len(unlockers) > maxSlotCount {
+		return ErrSlotCount
+	}
+	dek := make([]byte, chacha20poly1305.KeySize)
+	_, _ = rand.Read(dek)
+	slots := make([]Slot, 0, len(unlockers))
+	for _, u := range unlockers {
+		slot, err := wrapVerified(ctx, u, dek)
+		if err != nil {
+			clear(dek)
+			return err
+		}
+		slots = append(slots, slot)
+	}
+	err := v.writeLocked(func() (revision, error) {
+		return revision{slots: slots, dek: dek, secrets: v.secrets}, nil
+	})
+	if err == nil {
+		v.touchLocked()
+	}
+	return err
+}
+
+func wrapVerified(ctx context.Context, u Unlocker, dek []byte) (Slot, error) {
+	if u == nil {
+		return Slot{}, ErrNilUnlocker
+	}
+	slot, err := u.Wrap(ctx, dek)
 	if err != nil {
-		return fmt.Errorf("vault: %w", err)
+		return Slot{}, err
 	}
-	defer clear(plaintext)
-	nonce := make([]byte, payloadNonceSize)
-	_, _ = rand.Read(nonce)
-	aead, err := chacha20poly1305.NewX(v.dek)
+	got, err := u.Unwrap(ctx, slot)
 	if err != nil {
-		return fmt.Errorf("vault: %w", err)
+		return Slot{}, err
 	}
-	ciphertext := aead.Seal(nil, nonce, plaintext, headerBytes)
-	data := make([]byte, 0, len(headerBytes)+len(nonce)+len(ciphertext))
-	data = append(data, headerBytes...)
-	data = append(data, nonce...)
-	data = append(data, ciphertext...)
-	if err := writeAtomic(v.opts.Path, data); err != nil {
-		return err
+	defer clear(got)
+	if subtle.ConstantTimeCompare(got, dek) != 1 {
+		return Slot{}, ErrWrongKey
 	}
-	v.slots = slots
-	v.nonce = nonce
-	v.ciphertext = ciphertext
-	v.secrets = p
-	return nil
+	return slot, nil
 }
 
 func (v *Vault) touchLocked() {
@@ -395,64 +694,50 @@ func (v *Vault) Credential(resource string) (Credential, bool) {
 	return Credential{}, false
 }
 
-func (v *Vault) SetCredential(c Credential) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+func (v *Vault) mutateLocked(change func() (revision, error)) error {
 	if v.closed {
 		return ErrClosed
 	}
 	if v.dek == nil {
 		return ErrLocked
 	}
-	next := clonePayload(v.secrets)
-	stored := cloneCredential(c)
-	idx := -1
-	for i, existing := range next.Credentials {
-		if existing.Resource == c.Resource {
-			idx = i
-			break
+	err := v.writeLocked(change)
+	if err == nil {
+		v.touchLocked()
+	}
+	return err
+}
+
+func (v *Vault) SetCredential(c Credential) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.mutateLocked(func() (revision, error) {
+		next := clonePayload(v.secrets)
+		stored := cloneCredential(c)
+		idx := slices.IndexFunc(next.Credentials, func(e Credential) bool { return e.Resource == c.Resource })
+		if idx >= 0 {
+			next.Credentials[idx].Wipe()
+			next.Credentials[idx] = stored
+		} else {
+			next.Credentials = append(next.Credentials, stored)
 		}
-	}
-	if idx >= 0 {
-		next.Credentials[idx].Wipe()
-		next.Credentials[idx] = stored
-	} else {
-		next.Credentials = append(next.Credentials, stored)
-	}
-	if err := v.persistWithLocked(v.slots, next); err != nil {
-		return err
-	}
-	v.touchLocked()
-	return nil
+		return v.payloadRevisionLocked(next), nil
+	})
 }
 
 func (v *Vault) DeleteCredential(resource string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.closed {
-		return ErrClosed
-	}
-	if v.dek == nil {
-		return ErrLocked
-	}
-	idx := -1
-	for i, c := range v.secrets.Credentials {
-		if c.Resource == resource {
-			idx = i
-			break
+	return v.mutateLocked(func() (revision, error) {
+		idx := slices.IndexFunc(v.secrets.Credentials, func(e Credential) bool { return e.Resource == resource })
+		if idx < 0 {
+			return revision{}, ErrNotFound
 		}
-	}
-	if idx < 0 {
-		return ErrNotFound
-	}
-	next := clonePayload(v.secrets)
-	next.Credentials[idx].Wipe()
-	next.Credentials = slices.Delete(next.Credentials, idx, idx+1)
-	if err := v.persistWithLocked(v.slots, next); err != nil {
-		return err
-	}
-	v.touchLocked()
-	return nil
+		next := clonePayload(v.secrets)
+		next.Credentials[idx].Wipe()
+		next.Credentials = slices.Delete(next.Credentials, idx, idx+1)
+		return v.payloadRevisionLocked(next), nil
+	})
 }
 
 func (v *Vault) Resources() []string {
@@ -493,61 +778,33 @@ func (v *Vault) SSHKey(host string) (SSHKey, bool) {
 func (v *Vault) SetSSHKey(k SSHKey) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.closed {
-		return ErrClosed
-	}
-	if v.dek == nil {
-		return ErrLocked
-	}
-	next := clonePayload(v.secrets)
-	stored := cloneSSHKey(k)
-	idx := -1
-	for i, existing := range next.SSHKeys {
-		if existing.Host == k.Host {
-			idx = i
-			break
+	return v.mutateLocked(func() (revision, error) {
+		next := clonePayload(v.secrets)
+		stored := cloneSSHKey(k)
+		idx := slices.IndexFunc(next.SSHKeys, func(e SSHKey) bool { return e.Host == k.Host })
+		if idx >= 0 {
+			next.SSHKeys[idx].Wipe()
+			next.SSHKeys[idx] = stored
+		} else {
+			next.SSHKeys = append(next.SSHKeys, stored)
 		}
-	}
-	if idx >= 0 {
-		next.SSHKeys[idx].Wipe()
-		next.SSHKeys[idx] = stored
-	} else {
-		next.SSHKeys = append(next.SSHKeys, stored)
-	}
-	if err := v.persistWithLocked(v.slots, next); err != nil {
-		return err
-	}
-	v.touchLocked()
-	return nil
+		return v.payloadRevisionLocked(next), nil
+	})
 }
 
 func (v *Vault) DeleteSSHKey(host string) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.closed {
-		return ErrClosed
-	}
-	if v.dek == nil {
-		return ErrLocked
-	}
-	idx := -1
-	for i, k := range v.secrets.SSHKeys {
-		if k.Host == host {
-			idx = i
-			break
+	return v.mutateLocked(func() (revision, error) {
+		idx := slices.IndexFunc(v.secrets.SSHKeys, func(e SSHKey) bool { return e.Host == host })
+		if idx < 0 {
+			return revision{}, ErrNotFound
 		}
-	}
-	if idx < 0 {
-		return ErrNotFound
-	}
-	next := clonePayload(v.secrets)
-	next.SSHKeys[idx].Wipe()
-	next.SSHKeys = slices.Delete(next.SSHKeys, idx, idx+1)
-	if err := v.persistWithLocked(v.slots, next); err != nil {
-		return err
-	}
-	v.touchLocked()
-	return nil
+		next := clonePayload(v.secrets)
+		next.SSHKeys[idx].Wipe()
+		next.SSHKeys = slices.Delete(next.SSHKeys, idx, idx+1)
+		return v.payloadRevisionLocked(next), nil
+	})
 }
 
 func (v *Vault) Hosts() []string {

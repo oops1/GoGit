@@ -112,9 +112,7 @@ func TestCreateFailsWhenWrapFails(t *testing.T) {
 func TestCreateFailsWhenPersistFails(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "vault.bin")
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	u := NewPasswordUnlocker([]byte("p"), TestSlotParams())
 	if _, err := Create(context.Background(), Options{Path: path}, u); err == nil {
 		t.Fatal("expected error")
@@ -247,15 +245,12 @@ func TestUnlockOnClosedVault(t *testing.T) {
 
 func TestUnlockCorruptedCiphertextReturnsErrCorrupted(t *testing.T) {
 	v, path := createTestVault(t, "p")
-	headerBytes, err := encodeHeader(v.version, v.flags, v.slots)
-	if err != nil {
-		t.Fatal(err)
-	}
-	corrupted := append([]byte(nil), v.ciphertext...)
+	headerBytes := v.file.headerRaw
+	corrupted := append([]byte(nil), v.file.ciphertext...)
 	corrupted[len(corrupted)-1] ^= 0xFF
-	data := make([]byte, 0, len(headerBytes)+len(v.nonce)+len(corrupted))
+	data := make([]byte, 0, len(headerBytes)+len(v.file.nonce)+len(corrupted))
 	data = append(data, headerBytes...)
-	data = append(data, v.nonce...)
+	data = append(data, v.file.nonce...)
 	data = append(data, corrupted...)
 	v.Lock()
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -272,10 +267,7 @@ func TestUnlockCorruptedCiphertextReturnsErrCorrupted(t *testing.T) {
 
 func TestUnlockMalformedPayloadJSON(t *testing.T) {
 	v, path := createTestVault(t, "p")
-	headerBytes, err := encodeHeader(v.version, v.flags, v.slots)
-	if err != nil {
-		t.Fatal(err)
-	}
+	headerBytes := v.file.headerRaw
 	nonce := make([]byte, payloadNonceSize)
 	if _, err := rand.Read(nonce); err != nil {
 		t.Fatal(err)
@@ -552,21 +544,19 @@ func TestAddSlotFailsWhenWrapFails(t *testing.T) {
 	if err := v.AddSlot(context.Background(), NewFileUnlocker(filepath.Join(blocker, "vault.key"))); err == nil {
 		t.Fatal("expected error")
 	}
-	if len(v.slots) != 1 {
-		t.Fatalf("slots mutated on failure: %d", len(v.slots))
+	if len(v.file.header.slots) != 1 {
+		t.Fatalf("slots mutated on failure: %d", len(v.file.header.slots))
 	}
 }
 
 func TestAddSlotPersistFailureLeavesStateUnchanged(t *testing.T) {
 	v, path := createTestVault(t, "p")
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	if err := v.AddSlot(context.Background(), NewFileUnlocker(filepath.Join(t.TempDir(), "vault.key"))); err == nil {
 		t.Fatal("expected error")
 	}
-	if len(v.slots) != 1 {
-		t.Fatalf("slots mutated on failure: %d", len(v.slots))
+	if len(v.file.header.slots) != 1 {
+		t.Fatalf("slots mutated on failure: %d", len(v.file.header.slots))
 	}
 }
 
@@ -618,43 +608,32 @@ func TestRemoveSlotPersistFailureLeavesStateUnchanged(t *testing.T) {
 	if err := v.AddSlot(context.Background(), NewFileUnlocker(filepath.Join(t.TempDir(), "vault.key"))); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	if err := v.RemoveSlot(0); err == nil {
 		t.Fatal("expected error")
 	}
-	if len(v.slots) != 2 {
-		t.Fatalf("slots mutated on failure: %d", len(v.slots))
+	if len(v.file.header.slots) != 2 {
+		t.Fatalf("slots mutated on failure: %d", len(v.file.header.slots))
 	}
 }
 
-func TestDecryptPayloadLockedRejectsInvalidSlotCount(t *testing.T) {
+func TestOpenPayloadRejectsBadDEKLength(t *testing.T) {
 	v, _ := createTestVault(t, "p")
-	v.slots = nil
-	if _, err := v.decryptPayloadLocked(v.dek); !errors.Is(err, ErrSlotCount) {
-		t.Fatalf("got %v, want ErrSlotCount", err)
-	}
-}
-
-func TestDecryptPayloadLockedRejectsBadDEKLength(t *testing.T) {
-	v, _ := createTestVault(t, "p")
-	if _, err := v.decryptPayloadLocked([]byte("short")); err == nil {
+	if _, err := openPayload(v.file, []byte("short")); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func TestPersistWithLockedRejectsInvalidSlotCount(t *testing.T) {
+func TestSealRejectsInvalidSlotCount(t *testing.T) {
 	v, _ := createTestVault(t, "p")
-	if err := v.persistWithLocked(nil, v.secrets); !errors.Is(err, ErrSlotCount) {
+	if _, _, err := v.seal(revision{dek: v.dek, secrets: v.secrets}); !errors.Is(err, ErrSlotCount) {
 		t.Fatalf("got %v, want ErrSlotCount", err)
 	}
 }
 
-func TestPersistWithLockedRejectsBadDEKLength(t *testing.T) {
+func TestSealRejectsBadDEKLength(t *testing.T) {
 	v, _ := createTestVault(t, "p")
-	v.dek = []byte("short")
-	if err := v.persistWithLocked(v.slots, v.secrets); err == nil {
+	if _, _, err := v.seal(revision{slots: v.file.header.slots, dek: []byte("short"), secrets: v.secrets}); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -690,9 +669,7 @@ func TestLockZeroesSSHKeySecrets(t *testing.T) {
 
 func TestSetCredentialPersistFailureReturnsError(t *testing.T) {
 	v, path := createTestVault(t, "p")
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	if err := v.SetCredential(Credential{Resource: "h", Secret: []byte("s")}); err == nil {
 		t.Fatal("expected error")
 	}
@@ -703,9 +680,7 @@ func TestDeleteCredentialPersistFailureReturnsError(t *testing.T) {
 	if err := v.SetCredential(Credential{Resource: "h", Secret: []byte("s")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	if err := v.DeleteCredential("h"); err == nil {
 		t.Fatal("expected error")
 	}
@@ -713,9 +688,7 @@ func TestDeleteCredentialPersistFailureReturnsError(t *testing.T) {
 
 func TestSetSSHKeyPersistFailureReturnsError(t *testing.T) {
 	v, path := createTestVault(t, "p")
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	if err := v.SetSSHKey(SSHKey{Host: "h"}); err == nil {
 		t.Fatal("expected error")
 	}
@@ -726,9 +699,7 @@ func TestDeleteSSHKeyPersistFailureReturnsError(t *testing.T) {
 	if err := v.SetSSHKey(SSHKey{Host: "h"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".tmp", 0o700); err != nil {
-		t.Fatal(err)
-	}
+	blockWrites(t, path)
 	if err := v.DeleteSSHKey("h"); err == nil {
 		t.Fatal("expected error")
 	}

@@ -1,26 +1,40 @@
 package vault
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
-	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
 const (
-	magicValue              = "GOGITVLT"
-	formatVersion    uint16 = 1
-	minSlotCount            = 1
-	maxSlotCount            = 8
-	payloadNonceSize        = chacha20poly1305.NonceSizeX
-	slotNonceSize           = chacha20poly1305.NonceSizeX
-	headerFixedSize         = len(magicValue) + 2 + 2 + 1
+	magicValue                     = "GOGITVLT"
+	formatVersionUnnumbered uint16 = 1
+	formatVersion           uint16 = 2
+	minSlotCount                   = 1
+	maxSlotCount                   = 8
+	payloadNonceSize               = chacha20poly1305.NonceSizeX
+	slotNonceSize                  = chacha20poly1305.NonceSizeX
+	headerFixedSize                = len(magicValue) + 2 + 2 + 1
+	generationSize                 = 8
 )
 
 var newXChaCha20Poly1305 = chacha20poly1305.NewX
+
+type header struct {
+	version    uint16
+	flags      uint16
+	generation uint64
+	slots      []Slot
+}
+
+type vaultFile struct {
+	header     header
+	headerRaw  []byte
+	nonce      []byte
+	ciphertext []byte
+	sum        [sha256.Size]byte
+}
 
 func encodeSlot(s Slot) []byte {
 	buf := make([]byte, 0, headerFixedSize+len(s.Kind)+len(s.Salt)+len(s.Nonce)+len(s.Wrapped))
@@ -82,11 +96,13 @@ func decodeSlot(data []byte) (Slot, int, error) {
 	if off+9 > len(data) {
 		return Slot{}, 0, ErrInvalidFormat
 	}
-	t := binary.BigEndian.Uint32(data[off : off+4])
-	m := binary.BigEndian.Uint32(data[off+4 : off+8])
-	threads := data[off+8]
+	params := SlotParams{
+		Time:    binary.BigEndian.Uint32(data[off : off+4]),
+		Memory:  binary.BigEndian.Uint32(data[off+4 : off+8]),
+		Threads: data[off+8],
+	}
 	off += 9
-	if SlotKind(kind) == SlotPassword && (t < minSlotTime || t > maxSlotTime || m < minSlotMemory || m > maxSlotMemory || threads < 1) {
+	if SlotKind(kind) == SlotPassword && !params.withinBounds() {
 		return Slot{}, 0, ErrInvalidFormat
 	}
 	return Slot{
@@ -94,102 +110,93 @@ func decodeSlot(data []byte) (Slot, int, error) {
 		Salt:    append([]byte(nil), salt...),
 		Nonce:   append([]byte(nil), nonce...),
 		Wrapped: append([]byte(nil), wrapped...),
-		Params:  SlotParams{Time: t, Memory: m, Threads: threads},
+		Params:  params,
 	}, off, nil
 }
 
 const (
-	minSlotTime   = 1
-	maxSlotTime   = 64
-	minSlotMemory = 8 * 1024
-	maxSlotMemory = 4 * 1024 * 1024
+	minSlotTime    = 1
+	maxSlotTime    = 10
+	minSlotMemory  = 8 * 1024
+	maxSlotMemory  = 1024 * 1024
+	minSlotThreads = 1
+	maxSlotThreads = 16
 )
 
-func encodeHeader(version, flags uint16, slots []Slot) ([]byte, error) {
-	if len(slots) < minSlotCount || len(slots) > maxSlotCount {
+func (p SlotParams) withinBounds() bool {
+	return p.Time >= minSlotTime && p.Time <= maxSlotTime &&
+		p.Memory >= minSlotMemory && p.Memory <= maxSlotMemory &&
+		p.Threads >= minSlotThreads && p.Threads <= maxSlotThreads
+}
+
+func encodeHeader(h header) ([]byte, error) {
+	if len(h.slots) < minSlotCount || len(h.slots) > maxSlotCount {
 		return nil, ErrSlotCount
 	}
-	buf := make([]byte, 0, headerFixedSize+len(slots)*32)
+	buf := make([]byte, 0, headerFixedSize+generationSize+len(h.slots)*32)
 	buf = append(buf, []byte(magicValue)...)
-	buf = binary.BigEndian.AppendUint16(buf, version)
-	buf = binary.BigEndian.AppendUint16(buf, flags)
-	buf = append(buf, byte(len(slots)))
-	for _, s := range slots {
+	buf = binary.BigEndian.AppendUint16(buf, h.version)
+	buf = binary.BigEndian.AppendUint16(buf, h.flags)
+	if h.version != formatVersionUnnumbered {
+		buf = binary.BigEndian.AppendUint64(buf, h.generation)
+	}
+	buf = append(buf, byte(len(h.slots)))
+	for _, s := range h.slots {
 		buf = append(buf, encodeSlot(s)...)
 	}
 	return buf, nil
 }
 
-func decodeHeader(data []byte) (version, flags uint16, slots []Slot, consumed int, err error) {
-	if len(data) < headerFixedSize {
-		return 0, 0, nil, 0, ErrInvalidFormat
-	}
-	if string(data[:len(magicValue)]) != magicValue {
-		return 0, 0, nil, 0, ErrInvalidFormat
+func decodeHeader(data []byte) (header, int, error) {
+	if len(data) < headerFixedSize || string(data[:len(magicValue)]) != magicValue {
+		return header{}, 0, ErrInvalidFormat
 	}
 	off := len(magicValue)
-	version = binary.BigEndian.Uint16(data[off : off+2])
+	h := header{version: binary.BigEndian.Uint16(data[off : off+2])}
 	off += 2
-	if version != formatVersion {
-		return 0, 0, nil, 0, ErrUnsupportedVersion
+	if h.version != formatVersion && h.version != formatVersionUnnumbered {
+		return header{}, 0, ErrUnsupportedVersion
 	}
-	flags = binary.BigEndian.Uint16(data[off : off+2])
+	h.flags = binary.BigEndian.Uint16(data[off : off+2])
 	off += 2
+	if h.version == formatVersion {
+		if len(data) < off+generationSize+1 {
+			return header{}, 0, ErrInvalidFormat
+		}
+		h.generation = binary.BigEndian.Uint64(data[off : off+generationSize])
+		off += generationSize
+	}
 	slotCount := int(data[off])
 	off++
 	if slotCount < minSlotCount || slotCount > maxSlotCount {
-		return 0, 0, nil, 0, ErrInvalidFormat
+		return header{}, 0, ErrInvalidFormat
 	}
-	slots = make([]Slot, 0, slotCount)
+	h.slots = make([]Slot, 0, slotCount)
 	for range slotCount {
-		var (
-			slot Slot
-			n    int
-		)
-		slot, n, err = decodeSlot(data[off:])
+		slot, n, err := decodeSlot(data[off:])
 		if err != nil {
-			return 0, 0, nil, 0, err
+			return header{}, 0, err
 		}
-		slots = append(slots, slot)
+		h.slots = append(h.slots, slot)
 		off += n
 	}
-	return version, flags, slots, off, nil
+	return h, off, nil
 }
 
-func readVaultFile(path string) (version, flags uint16, slots []Slot, nonce, ciphertext []byte, err error) {
-	data, readErr := os.ReadFile(path)
-	if readErr != nil {
-		return 0, 0, nil, nil, nil, fmt.Errorf("vault: %w", readErr)
-	}
-	version, flags, slots, n, hErr := decodeHeader(data)
-	if hErr != nil {
-		return 0, 0, nil, nil, nil, hErr
+func parseVaultFile(data []byte) (vaultFile, error) {
+	h, n, err := decodeHeader(data)
+	if err != nil {
+		return vaultFile{}, err
 	}
 	rest := data[n:]
 	if len(rest) <= payloadNonceSize {
-		return 0, 0, nil, nil, nil, ErrInvalidFormat
+		return vaultFile{}, ErrInvalidFormat
 	}
-	nonce = append([]byte(nil), rest[:payloadNonceSize]...)
-	ciphertext = append([]byte(nil), rest[payloadNonceSize:]...)
-	return version, flags, slots, nonce, ciphertext, nil
-}
-
-func writeAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("vault: %w", err)
-	}
-	tmp := path + ".tmp"
-	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("vault: %w", err)
-	}
-	_, err = file.Write(data)
-	err = errors.Join(err, file.Sync(), file.Close())
-	if err == nil {
-		err = os.Rename(tmp, path)
-	}
-	if err != nil {
-		return fmt.Errorf("vault: %w", errors.Join(err, os.Remove(tmp)))
-	}
-	return nil
+	return vaultFile{
+		header:     h,
+		headerRaw:  append([]byte(nil), data[:n]...),
+		nonce:      append([]byte(nil), rest[:payloadNonceSize]...),
+		ciphertext: append([]byte(nil), rest[payloadNonceSize:]...),
+		sum:        sha256.Sum256(data),
+	}, nil
 }
