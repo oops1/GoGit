@@ -2,11 +2,13 @@ package ops
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 
+	"github.com/oops1/gogit/internal/gitcore/gitlink"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -108,22 +110,54 @@ func (s *stager) removeUnlessSparse(rel string) {
 	}
 }
 
+func (s *stager) tracksGitlink(rel string) bool {
+	if entry, ok := s.idx.Get(rel, index.StageMerged); ok {
+		return entry.Mode.IsSubmodule()
+	}
+	return slices.ContainsFunc(s.idx.Conflicts(rel), func(stage index.Entry) bool { return stage.Mode.IsSubmodule() })
+}
+
+func (s *stager) tracksInside(rel string) bool {
+	for range s.idx.Paths(rel + "/") {
+		return true
+	}
+	return false
+}
+
+func (s *stager) stageGitlink(rel string, tracked bool) (bool, error) {
+	head, found, err := gitlink.HeadOf(filepath.Join(s.wt.root.Name(), filepath.FromSlash(rel)))
+	switch {
+	case !found, !tracked && s.tracksInside(rel):
+		return tracked, nil
+	case tracked && (err != nil || s.sparse(rel)):
+		return true, nil
+	case err != nil:
+		return true, fmt.Errorf("%w: %s", ErrNoCommitCheckedOut, rel)
+	}
+	s.idx.Remove(rel)
+	return true, s.idx.AddVerified(index.Entry{Path: rel, Mode: object.ModeSubmodule, ID: head, Stage: index.StageMerged}, s.rules)
+}
+
 func (s *stager) stageDir(rel string) error {
-	if !s.opts.Force && s.wt.isIgnored(rel, true) {
+	tracked := s.tracksGitlink(rel)
+	if !tracked && !s.opts.Force && s.wt.isIgnored(rel, true) {
 		return nil
+	}
+	if handled, err := s.stageGitlink(rel, tracked); handled {
+		return err
 	}
 	entries, err := readDirRoot(s.wt.root, rel)
 	if err != nil {
 		return err
-	}
-	if holdsRepository(entries) {
-		return nil
 	}
 	s.idx.Remove(rel)
 	present := map[string]bool{}
 	for _, entry := range entries {
 		if err := s.ctx.Err(); err != nil {
 			return err
+		}
+		if entry.Name() == gitDirName {
+			continue
 		}
 		child := joinRel(rel, entry.Name())
 		if entry.IsDir() {
