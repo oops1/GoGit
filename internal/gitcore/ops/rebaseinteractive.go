@@ -212,10 +212,14 @@ func (m *merger) continueAmending(state *RebaseState, result *RebaseResult, mess
 	if err != nil {
 		return err
 	}
+	var recorded error
+	if final != head.old {
+		recorded = m.rerere().record()
+	}
 	state.Rewritten = rewrittenAfterFold(state.Rewritten, state.Amend, state.Stopped, final)
 	state.Stopped, state.Amend, state.Message, state.Author = hash.Zero, hash.Zero, "", nil
 	result.Applied++
-	return joinErrors(writeRebaseState(m.r, *state), removeStateFiles(m.r, mergeMsgFile))
+	return joinErrors(writeRebaseState(m.r, *state), removeStateFiles(m.r, mergeMsgFile), recorded)
 }
 
 func (m *merger) finishAmending(state *RebaseState, head headTarget, amended *object.Commit, tree hash.ObjectID, message string) (hash.ObjectID, error) {

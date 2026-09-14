@@ -305,11 +305,15 @@ func (m *merger) commitResolution(state RebaseState) (hash.ObjectID, error) {
 	if err != nil || headTree == tree {
 		return hash.Zero, err
 	}
-	return m.commitPick(head, pickPlan{
+	commit, err := m.commitPick(head, pickPlan{
 		message: state.Message,
 		author:  state.Author,
 		reflog:  m.rebaseNote("continue") + firstLine(state.Message),
 	}, tree)
+	if err != nil {
+		return hash.Zero, err
+	}
+	return commit, m.rerere().record()
 }
 
 func SkipRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions) (RebaseResult, error) {
@@ -319,11 +323,11 @@ func SkipRebase(ctx context.Context, r *repo.Repository, opts RebaseOptions) (Re
 	}
 	defer m.close()
 	result := RebaseResult{Old: state.OrigHead}
-	if err := m.resetToHead(); err != nil {
+	if err := errors.Join(m.rerere().clear(), m.resetToHead()); err != nil {
 		return result, err
 	}
 	state.Stopped, state.Amend, state.Message, state.Author = hash.Zero, hash.Zero, "", nil
-	if err := errors.Join(writeRebaseState(m.r, state), removeStateFiles(m.r, mergeMsgFile)); err != nil {
+	if err := errors.Join(writeRebaseState(m.r, state), clearMergeState(m.r)); err != nil {
 		return result, err
 	}
 	return m.runRebase(state, result)
@@ -364,5 +368,5 @@ func (m *merger) abortRebase(state RebaseState) error {
 	if err := m.attachTo(refs.Name(state.HeadName), m.rebaseNote("abort")+returningTo+state.HeadName); err != nil {
 		return err
 	}
-	return errors.Join(clearRebaseState(m.r), removeStateFiles(m.r, mergeMsgFile, autoMergeFile))
+	return errors.Join(m.rerere().clear(), clearRebaseState(m.r), clearMergeState(m.r))
 }
