@@ -41,32 +41,42 @@ func (x *Index) WriteFile(path string, version int) error {
 		return fmt.Errorf("index: open %s: %w", dir, err)
 	}
 	defer root.Close()
-	return writeThroughLock(root, base, path, data)
+	written, err := writeThroughLock(root, base, path, data)
+	if err != nil {
+		return err
+	}
+	x.Timestamp = written
+	return nil
 }
 
-func writeThroughLock(root *os.Root, base, path string, data []byte) error {
+func writeThroughLock(root *os.Root, base, path string, data []byte) (time.Time, error) {
 	lock := base + lockSuffix
 	file, err := fsCreate(root, lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
 	if err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			return fmt.Errorf("%w: %s%s", ErrLocked, path, lockSuffix)
+			return time.Time{}, fmt.Errorf("%w: %s%s", ErrLocked, path, lockSuffix)
 		}
-		return fmt.Errorf("index: create %s%s: %w", path, lockSuffix, err)
+		return time.Time{}, fmt.Errorf("index: create %s%s: %w", path, lockSuffix, err)
 	}
 	if _, err := fsWrite(file, data); err != nil {
 		_ = fsClose(file)
 		_ = fsRemove(root, lock)
-		return fmt.Errorf("index: write %s%s: %w", path, lockSuffix, err)
+		return time.Time{}, fmt.Errorf("index: write %s%s: %w", path, lockSuffix, err)
 	}
 	if err := fsClose(file); err != nil {
 		_ = fsRemove(root, lock)
-		return fmt.Errorf("index: close %s%s: %w", path, lockSuffix, err)
+		return time.Time{}, fmt.Errorf("index: close %s%s: %w", path, lockSuffix, err)
+	}
+	info, err := fsStatAt(root, lock)
+	if err != nil {
+		_ = fsRemove(root, lock)
+		return time.Time{}, fmt.Errorf("index: stat %s%s: %w", path, lockSuffix, err)
 	}
 	if err := fsRename(root, lock, base); err != nil {
 		_ = fsRemove(root, lock)
-		return fmt.Errorf("index: rename %s%s: %w", path, lockSuffix, err)
+		return time.Time{}, fmt.Errorf("index: rename %s%s: %w", path, lockSuffix, err)
 	}
-	return nil
+	return info.ModTime(), nil
 }
 
 func (x *Index) effectiveVersion(version int) (int, error) {

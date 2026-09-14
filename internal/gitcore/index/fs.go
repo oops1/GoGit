@@ -20,5 +20,6 @@ var (
 	fsWrite  = func(file *os.File, data []byte) (int, error) { return file.Write(data) }
 	fsClose  = func(file *os.File) error { return file.Close() }
 	fsRename = func(root *os.Root, from, to string) error { return root.Rename(from, to) }
+	fsStatAt = func(root *os.Root, name string) (fs.FileInfo, error) { return root.Stat(name) }
 	fsRemove = func(root *os.Root, name string) error { return root.Remove(name) }
 )
