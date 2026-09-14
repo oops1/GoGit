@@ -317,6 +317,7 @@ type FinishFlowOptions struct {
 
 type FinishFlowResult struct {
 	Tag       TagResult
+	Pushed    bool
 	Conflicts []string
 	Stopped   FlowStep
 }
@@ -359,6 +360,19 @@ func FinishFlow(ctx context.Context, r *repo.Repository, kind, name string, opts
 		}
 	}
 	return f.run()
+}
+
+func PushFinishedFlow(ctx context.Context, r *repo.Repository, kind, name string, opts FinishFlowOptions) error {
+	cfg, branch, err := configuredFlow(r, kind, name)
+	if err != nil {
+		return err
+	}
+	opts.Push = true
+	f := &flowFinisher{ctx: ctx, r: r, cfg: cfg, net: opts.Network, state: newFlowState(cfg, branch, kind, name, opts), branch: branch.Prefix + name}
+	if f.push, err = refspec.ParseAll(f.pushTexts()); err != nil {
+		return err
+	}
+	return f.pushResults()
 }
 
 func newFlowState(cfg FlowConfig, branch FlowBranch, kind, name string, opts FinishFlowOptions) flowState {
@@ -512,6 +526,7 @@ func (f *flowFinisher) pushResults() error {
 	if !f.state.push || !f.net.enabled() {
 		return nil
 	}
+	f.result.Pushed = true
 	specs := f.push
 	tracked, err := HasRemoteBranch(f.r, f.net.Remote, f.branch)
 	if err != nil {

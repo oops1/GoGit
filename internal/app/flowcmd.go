@@ -19,6 +19,7 @@ var (
 	newFlowIntegrateView  = flow.NewIntegrateView
 	runStartFlow          = ops.StartFlow
 	runFinishFlow         = ops.FinishFlow
+	runPushFinishedFlow   = ops.PushFinishedFlow
 	runIntegrateDevelop   = ops.IntegrateDevelop
 	runConfigureFlow      = ops.ConfigureFlow
 	runSwitchOffFlow      = ops.SwitchOffFlow
@@ -247,7 +248,7 @@ func (a *App) flowRemoteChoices(r *gitrepo.Repository, cfg ops.FlowConfig, kind,
 
 func (a *App) finishFlow(kind, name string, model flow.FinishModel) {
 	a.runFlowOperation(i18n.Tf(flowOperationTexts[kind].finish, name), func(ctx context.Context, r *gitrepo.Repository, reporter OperationReporter) error {
-		result, err := runFinishFlow(ctx, r, kind, name, ops.FinishFlowOptions{
+		opts := ops.FinishFlowOptions{
 			Message:      model.Message,
 			Integration:  model.Integration,
 			TagName:      model.TagName,
@@ -257,9 +258,30 @@ func (a *App) finishFlow(kind, name string, model flow.FinishModel) {
 			Push:         model.Push,
 			DeleteBranch: model.DeleteBranch,
 			Network:      a.flowNetwork(r, reporter),
-		})
+		}
+		result, err := runFinishFlow(ctx, r, kind, name, opts)
 		reportFinishFlow(reporter, kind, name, result, err)
+		if err == nil && result.Finished() && !result.Pushed && opts.Network.Remote != "" {
+			reporter.Log(i18n.Tf("Operation.Log.FlowNotPushed", name))
+			a.Post(func() { a.offerFlowPush(kind, name, opts) })
+		}
 		return err
+	})
+}
+
+func (a *App) offerFlowPush(kind, name string, opts ops.FinishFlowOptions) {
+	a.askConfirm(i18n.T("Dialog.FlowPush.Title"), i18n.Tf("Dialog.FlowPush.Message", name), func(ok bool) {
+		if !ok {
+			return
+		}
+		a.runFlowOperation(i18n.Tf("Operation.Title.FlowPush", name), func(ctx context.Context, r *gitrepo.Repository, reporter OperationReporter) error {
+			opts.Network = a.flowNetwork(r, reporter)
+			err := runPushFinishedFlow(ctx, r, kind, name, opts)
+			if err == nil {
+				reporter.Log(i18n.Tf("Operation.Log.FlowPushed", name))
+			}
+			return err
+		})
 	})
 }
 

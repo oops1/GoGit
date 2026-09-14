@@ -520,11 +520,13 @@ func TestARescanAskedForDuringAScanKeepsTheWorkingCopyBusyUntilItStarts(t *testi
 	a.workingAgain = true
 	a.workingFlagMu.Unlock()
 
-	a.finishWorking()
-
-	a.workingFlagMu.Lock()
-	busy, again := a.workingBusy, a.workingAgain
-	a.workingFlagMu.Unlock()
+	flags := readOnDispatcher(t, a, func() [2]bool {
+		a.finishWorking()
+		a.workingFlagMu.Lock()
+		defer a.workingFlagMu.Unlock()
+		return [2]bool{a.workingBusy, a.workingAgain}
+	})
+	busy, again := flags[0], flags[1]
 	if !busy || again {
 		t.Fatalf("busy = %v, again = %v, want the queued scan to keep the working copy busy", busy, again)
 	}

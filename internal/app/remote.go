@@ -213,9 +213,10 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		return err
 	}
 	result, err := ops.Push(ctx, r, a.effectiveDefaultRemote(r), remote.PushOptions{
-		Refspecs:  []refspec.RefSpec{spec},
-		Progress:  prog,
-		Transport: a.transportOptions(prog),
+		Refspecs:   []refspec.RefSpec{spec},
+		FollowTags: true,
+		Progress:   prog,
+		Transport:  a.transportOptions(prog),
 	})
 	if err != nil {
 		if errors.Is(err, remote.ErrNonFastForward) || errors.Is(err, remote.ErrRejected) {
@@ -223,12 +224,25 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		}
 		return err
 	}
-	if len(result.Changes) == 0 {
+	if len(result.Changes) == 0 && len(result.Tags) == 0 {
 		reporter.Log(i18n.T("Operation.Log.UpToDate"))
 		return nil
 	}
-	reporter.Log(i18n.Tf("Operation.Log.Pushed", pushSummary(result.Changes)))
+	if len(result.Changes) > 0 {
+		reporter.Log(i18n.Tf("Operation.Log.Pushed", pushSummary(result.Changes)))
+	}
+	if len(result.Tags) > 0 {
+		reporter.Log(i18n.Tf("Operation.Log.PushedTags", tagSummary(result.Tags)))
+	}
 	return nil
+}
+
+func tagSummary(tags []refs.Name) string {
+	names := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		names = append(names, tag.Short())
+	}
+	return strings.Join(names, ", ")
 }
 
 func (a *App) banAttribution(ctx context.Context, r *gitrepo.Repository, branch refs.Name, reporter OperationReporter) error {
