@@ -690,7 +690,7 @@ func TestDiscardDirectoryPrefixSkipsConflictedEntries(t *testing.T) {
 	}
 }
 
-func TestDiscardSubmoduleEntryIsNoop(t *testing.T) {
+func TestDiscardOfASubmoduleOnlyCreatesItsEmptyDirectory(t *testing.T) {
 	r := newTestRepo(t)
 	bogus := bogusObjectID(t, r.repo.ObjectFormat)
 	idx := r.index()
@@ -699,8 +699,8 @@ func TestDiscardSubmoduleEntryIsNoop(t *testing.T) {
 	if err := Discard(t.Context(), r.repo, []string{"sub"}, DiscardOptions{}); err != nil {
 		t.Fatalf("Discard returned error %v", err)
 	}
-	if r.exists("sub") {
-		t.Fatalf("submodule path should not have been materialized")
+	if entries, err := os.ReadDir(r.path("sub")); err != nil || len(entries) != 0 {
+		t.Fatalf("sub = %v, %v; want an empty directory", entries, err)
 	}
 }
 
@@ -1552,7 +1552,7 @@ func TestCheckoutFailsWhenMkdirAllFails(t *testing.T) {
 	}
 }
 
-func TestCheckoutSubmoduleEntryIsNoop(t *testing.T) {
+func TestCheckoutOfASubmoduleOnlyCreatesItsEmptyDirectory(t *testing.T) {
 	r := newTestRepo(t)
 	bogus := bogusObjectID(t, r.repo.ObjectFormat)
 	treeID := putTree(t, r, object.TreeEntry{Mode: object.ModeSubmodule, Name: "sub", ID: bogus})
@@ -1561,8 +1561,8 @@ func TestCheckoutSubmoduleEntryIsNoop(t *testing.T) {
 	if err := Switch(t.Context(), r.repo, "feature", SwitchOptions{}); err != nil {
 		t.Fatalf("Switch returned error %v", err)
 	}
-	if r.exists("sub") {
-		t.Fatalf("submodule path should not have been materialized")
+	if entries, err := os.ReadDir(r.path("sub")); err != nil || len(entries) != 0 {
+		t.Fatalf("sub = %v, %v; want an empty directory", entries, err)
 	}
 }
 

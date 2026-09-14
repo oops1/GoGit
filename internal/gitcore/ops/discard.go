@@ -80,7 +80,7 @@ func (d *discarder) discard(rel string) error {
 
 func (d *discarder) restoreEntry(entry *index.Entry) error {
 	if entry.Mode.IsSubmodule() {
-		return nil
+		return writeGitlinkDirectory(d.wt, entry.Path)
 	}
 	kind, data, err := d.db.Get(entry.ID)
 	if err != nil {
