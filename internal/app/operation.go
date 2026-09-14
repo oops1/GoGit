@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sync"
 
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/i18n"
@@ -78,8 +79,14 @@ func (r OperationReporter) Progress(fraction float64) {
 	r.app.Post(func() { r.view.SetProgress(fraction) })
 }
 
+var phaseNoticeKeys = map[string]string{
+	progress.PhaseTLSVerifyDisabled: "Operation.Log.TLSVerifyDisabled",
+}
+
 type operationProgressState struct {
 	reporter OperationReporter
+	mu       sync.Mutex
+	noticed  map[string]bool
 }
 
 func newOperationProgress(reporter OperationReporter) progress.Func {
@@ -87,7 +94,23 @@ func newOperationProgress(reporter OperationReporter) progress.Func {
 	return state.report
 }
 
+func (s *operationProgressState) notice(phase, key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.noticed[phase] {
+		return
+	}
+	if s.noticed == nil {
+		s.noticed = map[string]bool{}
+	}
+	s.noticed[phase] = true
+	s.reporter.Log(i18n.T(key))
+}
+
 func (s *operationProgressState) report(r progress.Report) {
+	if key, ok := phaseNoticeKeys[r.Phase]; ok {
+		s.notice(r.Phase, key)
+	}
 	if keys, ok := phaseLogKeys[r.Phase]; ok {
 		s.reportPhase(r, keys)
 	}
@@ -144,7 +167,7 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 		a.releaseNetOperation()
 		followUps := after.actions
 		a.Post(func() {
-			view.Finish(redactError(err))
+			view.Finish(redactError(localizeOperationError(err)))
 			for _, followUp := range followUps {
 				followUp()
 			}

@@ -20,8 +20,6 @@ import (
 	"github.com/oops1/gogit/internal/ui/remotes"
 )
 
-const remoteUserAgent = "Go.Git"
-
 const headsRefPrefix = "refs/heads/"
 
 var (
