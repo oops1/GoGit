@@ -83,7 +83,7 @@ func ReadMergeState(r *repo.Repository) (MergeState, error) {
 	if err != nil {
 		return MergeState{}, err
 	}
-	state.Rebasing = headName != ""
+	state.Rebasing = headName != "" || rebaseApplyInProgress(r)
 	mode, err := readStateFile(r, mergeModeFile)
 	if err != nil {
 		return MergeState{}, err

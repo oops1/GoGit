@@ -32,6 +32,15 @@ func validateTodo(todo []RebaseStep) error {
 	return nil
 }
 
+func runnableTodo(todo []RebaseStep) error {
+	for _, step := range todo {
+		if step.Line != "" {
+			return fmt.Errorf("%w: %s", ErrRebaseStepUnsupported, step.Action)
+		}
+	}
+	return nil
+}
+
 func folds(action string) bool { return action == actionSquash || action == actionFixup }
 
 func (m *merger) runRebase(state RebaseState, result RebaseResult) (RebaseResult, error) {
@@ -50,12 +59,10 @@ func (m *merger) runRebaseStep(state *RebaseState, result *RebaseResult, step Re
 	case actionDrop:
 		state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
 		return false, writeRebaseState(m.r, *state)
-	case actionPick, actionReword, actionEdit:
-		return m.applyRebaseStep(state, result, step)
 	case actionSquash, actionFixup:
 		return m.foldRebaseStep(state, result, step)
 	}
-	return false, fmt.Errorf("%w: %s", ErrRebaseStepUnsupported, step.Action)
+	return m.applyRebaseStep(state, result, step)
 }
 
 func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step RebaseStep) (bool, error) {

@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -26,6 +28,7 @@ func joinErrors(errs ...error) error { return errors.Join(errs...) }
 const (
 	rebaseAction = "rebase"
 	returningTo  = "returning to "
+	refsPrefix   = "refs/"
 )
 
 func (m *merger) rebaseNote(kind string) string {
@@ -262,6 +265,18 @@ func (m *merger) finishRebase(state RebaseState, result RebaseResult) (RebaseRes
 	return result, errors.Join(clearRebaseState(m.r), removeStateFiles(m.r, mergeMsgFile))
 }
 
+func (m *merger) restoreRebaseHead(state RebaseState) error {
+	note := m.rebaseNote("abort") + returningTo + state.HeadName
+	if strings.HasPrefix(state.HeadName, refsPrefix) {
+		return m.attachTo(refs.Name(state.HeadName), note)
+	}
+	head, err := resolveHeadTarget(m.rc.refs)
+	if err != nil {
+		return err
+	}
+	return m.advance(head, state.OrigHead, note)
+}
+
 func (m *merger) attachTo(branch refs.Name, note string) error {
 	tx := m.rc.refs.Begin()
 	tx.SetMessage(note)
@@ -360,14 +375,23 @@ func openRebaseInProgress(ctx context.Context, r *repo.Repository, opts RebaseOp
 	if err != nil {
 		return nil, RebaseState{}, err
 	}
-	if !state.InProgress() {
+	switch {
+	case !state.InProgress():
 		return nil, RebaseState{}, ErrNoRebaseInProgress
+	case state.Applying:
+		return nil, RebaseState{}, ErrRebaseApplyInProgress
+	}
+	if err := runnableTodo(state.Todo); err != nil {
+		return nil, RebaseState{}, err
 	}
 	m, err := openRebaser(ctx, r, opts)
 	return m, state, err
 }
 
 func (m *merger) abortRebase(state RebaseState) error {
+	if state.OrigHead.IsZero() {
+		return fmt.Errorf("%w: the original head is unknown", ErrRebaseStateCorrupt)
+	}
 	tree, _, err := m.snapshot(state.OrigHead)
 	if err != nil {
 		return err
@@ -375,7 +399,7 @@ func (m *merger) abortRebase(state RebaseState) error {
 	if err := m.resetTo(tree); err != nil {
 		return err
 	}
-	if err := m.attachTo(refs.Name(state.HeadName), m.rebaseNote("abort")+returningTo+state.HeadName); err != nil {
+	if err := m.restoreRebaseHead(state); err != nil {
 		return err
 	}
 	return errors.Join(m.rerere().clear(), clearRebaseState(m.r), clearMergeState(m.r))

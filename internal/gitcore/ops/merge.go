@@ -430,7 +430,7 @@ func AbortOperation(ctx context.Context, r *repo.Repository) error {
 	}
 	defer m.close()
 	if state.Operation() == OperationRebase {
-		rebasing, err := ReadRebaseState(r)
+		rebasing, err := readRebaseHead(r)
 		if err != nil {
 			return err
 		}

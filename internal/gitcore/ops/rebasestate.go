@@ -16,6 +16,8 @@ import (
 
 const (
 	rebaseDir           = "rebase-merge"
+	rebaseApplyDir      = "rebase-apply"
+	todoNoop            = "noop"
 	rebaseHeadFile      = "REBASE_HEAD"
 	rebaseHeadName      = "head-name"
 	rebaseOnto          = "onto"
@@ -44,16 +46,32 @@ const (
 	authorDateKey       = "GIT_AUTHOR_DATE"
 )
 
-var ErrRebaseStateCorrupt = errors.New("ops: the rebase state cannot be read")
+var (
+	ErrRebaseStateCorrupt    = errors.New("ops: the rebase state cannot be read")
+	ErrRebaseApplyInProgress = errors.New("ops: git am or git rebase --apply is in progress")
+)
 
 type RebaseStep struct {
 	Action  string
 	Commit  hash.ObjectID
 	Subject string
+	Line    string
 }
 
 func (s RebaseStep) line() string {
+	if s.Line != "" {
+		return s.Line + "\n"
+	}
 	return s.Action + " " + s.Commit.String() + " " + s.Subject + "\n"
+}
+
+var todoCommands = map[string]string{
+	actionPick: actionPick, "p": actionPick,
+	actionReword: actionReword, "r": actionReword,
+	actionEdit: actionEdit, "e": actionEdit,
+	actionSquash: actionSquash, "s": actionSquash,
+	actionFixup: actionFixup, "f": actionFixup,
+	actionDrop: actionDrop, "d": actionDrop,
 }
 
 type RebaseState struct {
@@ -67,21 +85,52 @@ type RebaseState struct {
 	Message   string
 	Author    *object.Signature
 	Rewritten string
+	Applying  bool
 }
 
 func (s RebaseState) Amending() bool { return !s.Amend.IsZero() }
 
-func (s RebaseState) InProgress() bool { return s.HeadName != "" }
+func (s RebaseState) InProgress() bool { return s.HeadName != "" || s.Applying }
 
 func rebasePath(name string) string { return path.Join(rebaseDir, name) }
 
-func ReadRebaseState(r *repo.Repository) (RebaseState, error) {
+func rebaseApplyInProgress(r *repo.Repository) bool {
+	info, err := fsRootLstat(r.Root(), rebaseApplyDir)
+	return err == nil && info.IsDir()
+}
+
+func readRebaseHead(r *repo.Repository) (RebaseState, error) {
 	headName, err := readStateFile(r, rebasePath(rebaseHeadName))
-	if err != nil || headName == "" {
+	if err != nil {
 		return RebaseState{}, err
 	}
 	state := RebaseState{HeadName: strings.TrimSpace(headName)}
-	for name, into := range map[string]*hash.ObjectID{rebaseOnto: &state.Onto, rebaseOrigHead: &state.OrigHead, rebaseStopped: &state.Stopped, rebaseAmend: &state.Amend} {
+	origHead := rebasePath(rebaseOrigHead)
+	if state.HeadName == "" {
+		if !rebaseApplyInProgress(r) {
+			return RebaseState{}, nil
+		}
+		if headName, err = readStateFile(r, path.Join(rebaseApplyDir, rebaseHeadName)); err != nil {
+			return RebaseState{}, err
+		}
+		state.HeadName, state.Applying = strings.TrimSpace(headName), true
+		origHead = path.Join(rebaseApplyDir, rebaseOrigHead)
+		if state.HeadName == "" {
+			origHead = origHeadFile
+		}
+	}
+	if state.OrigHead, err = readHeadFile(r, origHead); err != nil {
+		return RebaseState{}, err
+	}
+	return state, nil
+}
+
+func ReadRebaseState(r *repo.Repository) (RebaseState, error) {
+	state, err := readRebaseHead(r)
+	if err != nil || state.Applying || !state.InProgress() {
+		return state, err
+	}
+	for name, into := range map[string]*hash.ObjectID{rebaseOnto: &state.Onto, rebaseStopped: &state.Stopped, rebaseAmend: &state.Amend} {
 		if *into, err = readHeadFile(r, rebasePath(name)); err != nil {
 			return RebaseState{}, err
 		}
@@ -125,24 +174,36 @@ func parseTodo(text string) ([]RebaseStep, error) {
 	var steps []RebaseStep
 	for line := range strings.SplitSeq(text, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" || strings.HasPrefix(line, "#") || line == todoNoop {
 			continue
 		}
-		fields := strings.SplitN(line, " ", 3)
-		if len(fields) < 2 {
-			return nil, fmt.Errorf("%w: %q", ErrRebaseStateCorrupt, line)
-		}
-		id, err := hash.Parse(fields[1])
+		step, err := parseTodoLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %q: %w", ErrRebaseStateCorrupt, line, err)
-		}
-		step := RebaseStep{Action: fields[0], Commit: id}
-		if len(fields) == 3 {
-			step.Subject = fields[2]
+			return nil, err
 		}
 		steps = append(steps, step)
 	}
 	return steps, nil
+}
+
+func parseTodoLine(line string) (RebaseStep, error) {
+	fields := strings.SplitN(line, " ", 3)
+	action, known := todoCommands[fields[0]]
+	if !known || len(fields) > 1 && strings.HasPrefix(fields[1], "-") {
+		return RebaseStep{Action: fields[0], Line: line}, nil
+	}
+	if len(fields) < 2 {
+		return RebaseStep{}, fmt.Errorf("%w: %q", ErrRebaseStateCorrupt, line)
+	}
+	id, err := hash.Parse(fields[1])
+	if err != nil {
+		return RebaseStep{}, fmt.Errorf("%w: %q: %w", ErrRebaseStateCorrupt, line, err)
+	}
+	step := RebaseStep{Action: action, Commit: id}
+	if len(fields) == 3 {
+		step.Subject = fields[2]
+	}
+	return step, nil
 }
 
 func formatTodo(steps []RebaseStep) string {
@@ -273,8 +334,10 @@ func clearRebaseState(r *repo.Repository) error {
 	if err := removeStateFiles(r, rebaseHeadFile); err != nil {
 		return err
 	}
-	if err := fsRootRemoveAll(r.Root(), rebaseDir); err != nil {
-		return fmt.Errorf("ops: remove %s: %w", rebaseDir, err)
+	for _, dir := range []string{rebaseDir, rebaseApplyDir} {
+		if err := fsRootRemoveAll(r.Root(), dir); err != nil {
+			return fmt.Errorf("ops: remove %s: %w", dir, err)
+		}
 	}
 	return nil
 }
