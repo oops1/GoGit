@@ -128,6 +128,7 @@ type Options struct {
 	Progress    progress.Func
 	HostKeys    HostKeyPolicy
 	Keys        KeySource
+	SSH         SSHOptions
 }
 
 type HostKey struct {

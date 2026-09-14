@@ -2,227 +2,20 @@ package transport
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"os/user"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
-)
-
-var (
-	ErrNoKeys  = errors.New("transport: no usable ssh keys")
-	ErrNoAgent = errors.New("transport: ssh agent is not available")
 )
 
 const defaultSSHPort = "22"
 
-var agentDialer = dialAgent
-
 var dialSSHTCP = func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, network, addr)
-}
-
-type signerLister interface {
-	listSigners(ctx context.Context, host string) ([]ssh.Signer, error)
-}
-
-type dirKeySource struct {
-	dir string
-}
-
-var dirKeyFileNames = []string{"id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"}
-
-func NewDirKeys(dir string) KeySource {
-	return dirKeySource{dir: dir}
-}
-
-func (d dirKeySource) Keys(ctx context.Context, _ string) ([]Key, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	var keys []Key
-	for _, name := range dirKeyFileNames {
-		path := filepath.Join(d.dir, name)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		keys = append(keys, Key{Path: path, Private: data})
-	}
-	return keys, nil
-}
-
-type multiKeySource struct {
-	sources []KeySource
-}
-
-func MultiKeys(sources ...KeySource) KeySource {
-	return &multiKeySource{sources: sources}
-}
-
-func (m *multiKeySource) Keys(ctx context.Context, host string) ([]Key, error) {
-	var all []Key
-	var lastErr error
-	for _, src := range m.sources {
-		if src == nil {
-			continue
-		}
-		keys, err := src.Keys(ctx, host)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		all = append(all, keys...)
-	}
-	if len(all) == 0 && lastErr != nil {
-		return nil, lastErr
-	}
-	return all, nil
-}
-
-func (m *multiKeySource) listSigners(ctx context.Context, host string) ([]ssh.Signer, error) {
-	var all []ssh.Signer
-	var lastErr error
-	for _, src := range m.sources {
-		if src == nil {
-			continue
-		}
-		signers, err := gatherSigners(ctx, host, src)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		all = append(all, signers...)
-	}
-	if len(all) == 0 {
-		if lastErr != nil {
-			return nil, lastErr
-		}
-		return nil, ErrNoKeys
-	}
-	return all, nil
-}
-
-type agentKeySource struct{}
-
-func NewAgentKeys() KeySource {
-	return agentKeySource{}
-}
-
-func (agentKeySource) Keys(ctx context.Context, _ string) ([]Key, error) {
-	signers, err := agentSigners(ctx)
-	if err != nil {
-		return nil, err
-	}
-	keys := make([]Key, 0, len(signers))
-	for _, s := range signers {
-		keys = append(keys, Key{Path: "agent:" + ssh.FingerprintSHA256(s.PublicKey())})
-	}
-	return keys, nil
-}
-
-func (agentKeySource) listSigners(ctx context.Context, _ string) ([]ssh.Signer, error) {
-	return agentSigners(ctx)
-}
-
-func agentSigners(ctx context.Context) ([]ssh.Signer, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	conn, err := agentDialer()
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrNoKeys, err)
-	}
-	defer closeQuietly(conn)
-	stop := watchContextClose(ctx, conn)
-	defer stop()
-	client := agent.NewClient(conn)
-	signers, err := client.Signers()
-	if err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return nil, ctxErr
-		}
-		return nil, fmt.Errorf("%w: %w", ErrNoKeys, err)
-	}
-	if len(signers) == 0 {
-		return nil, ErrNoKeys
-	}
-	return signers, nil
-}
-
-func watchContextClose(ctx context.Context, conn io.Closer) (stop func()) {
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			closeQuietly(conn)
-		case <-done:
-		}
-	}()
-	return func() { close(done) }
-}
-
-func gatherSigners(ctx context.Context, host string, source KeySource) ([]ssh.Signer, error) {
-	if source == nil {
-		return nil, fmt.Errorf("%w: no key source is configured", ErrNoKeys)
-	}
-	if sl, ok := source.(signerLister); ok {
-		return sl.listSigners(ctx, host)
-	}
-	keys, err := source.Keys(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	return signersFromKeys(keys)
-}
-
-func signersFromKeys(keys []Key) ([]ssh.Signer, error) {
-	if len(keys) == 0 {
-		return nil, ErrNoKeys
-	}
-	var signers []ssh.Signer
-	var lastErr error
-	for _, k := range keys {
-		signer, err := signerFromKey(k)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		signers = append(signers, signer)
-	}
-	if len(signers) == 0 {
-		return nil, lastErr
-	}
-	return signers, nil
-}
-
-func signerFromKey(k Key) (ssh.Signer, error) {
-	if len(k.Private) == 0 {
-		return nil, fmt.Errorf("%w: key %q has no private key material", ErrNoKeys, k.Path)
-	}
-	signer, err := ssh.ParsePrivateKey(k.Private)
-	if err == nil {
-		return signer, nil
-	}
-	var missing *ssh.PassphraseMissingError
-	if !errors.As(err, &missing) {
-		return nil, fmt.Errorf("transport: parse ssh key %q: %w", k.Path, err)
-	}
-	if len(k.Passphrase) == 0 {
-		return nil, fmt.Errorf("transport: ssh key %q is encrypted and no passphrase was supplied", k.Path)
-	}
-	signer, err = ssh.ParsePrivateKeyWithPassphrase(k.Private, k.Passphrase)
-	if err != nil {
-		return nil, fmt.Errorf("transport: decrypt ssh key %q: %w", k.Path, err)
-	}
-	return signer, nil
 }
 
 var currentUser = user.Current
@@ -259,12 +52,21 @@ func hostKeyCallback(ctx context.Context, policy HostKeyPolicy) ssh.HostKeyCallb
 	}
 }
 
+func hostKeyPolicyFor(policy HostKeyPolicy, hop sshHop) HostKeyPolicy {
+	known, ok := policy.(*knownHostsPolicy)
+	if !ok {
+		return policy
+	}
+	return known.forHop(hop.knownHostsFiles, hop.strictHostKeys)
+}
+
 type sshSession struct {
 	mu         sync.Mutex
 	endpoint   Endpoint
 	service    Service
 	opts       Options
 	rawConn    net.Conn
+	jumps      []*ssh.Client
 	client     *ssh.Client
 	sess       *ssh.Session
 	stdin      io.WriteCloser
@@ -279,59 +81,104 @@ func newSSHSession(endpoint Endpoint, service Service, opts Options) *sshSession
 	return &sshSession{endpoint: endpoint, service: service, opts: opts}
 }
 
+type sshDialState struct {
+	ctx     context.Context
+	rawConn net.Conn
+	jumps   []*ssh.Client
+	stop    func()
+}
+
+func (d *sshDialState) fail(err error) error {
+	for i := len(d.jumps) - 1; i >= 0; i-- {
+		closeQuietly(d.jumps[i])
+	}
+	if d.rawConn != nil {
+		closeQuietly(d.rawConn)
+	}
+	if ctxErr := d.ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	return err
+}
+
+func (d *sshDialState) dial(hop sshHop) (net.Conn, error) {
+	if len(d.jumps) == 0 {
+		conn, err := dialSSHTCP(d.ctx, "tcp", hop.addr)
+		if err != nil {
+			return nil, err
+		}
+		d.rawConn = conn
+		d.stop = watchContext(d.ctx, conn)
+		return conn, nil
+	}
+	return d.jumps[len(d.jumps)-1].DialContext(d.ctx, "tcp", hop.addr)
+}
+
 func (s *sshSession) connect(ctx context.Context) error {
 	if s.rawConn != nil {
 		return nil
 	}
-	signers, err := gatherSigners(ctx, s.endpoint.Host, s.opts.Keys)
+	hops, err := resolveSSHRoute(s.endpoint, s.opts.SSH)
 	if err != nil {
 		return err
 	}
-	port := s.endpoint.Port
-	if port == "" {
-		port = defaultSSHPort
-	}
-	addr := net.JoinHostPort(s.endpoint.Host, port)
-	conn, err := dialSSHTCP(ctx, "tcp", addr)
-	if err != nil {
-		return err
-	}
-	stop := watchContext(ctx, conn)
-	defer stop()
-	client, sess, stdin, stdout, err := s.handshakeAndExec(ctx, conn, addr, signers)
-	if err != nil {
-		_ = conn.Close()
-		if ctx.Err() != nil {
-			return ctx.Err()
+	state := &sshDialState{ctx: ctx, stop: func() {}}
+	defer func() { state.stop() }()
+	for i, hop := range hops {
+		client, err := s.connectHop(state, hop)
+		if err != nil {
+			return state.fail(err)
 		}
-		return err
+		if i < len(hops)-1 {
+			state.jumps = append(state.jumps, client)
+			continue
+		}
+		sess, stdin, stdout, err := s.startCommand(client)
+		if err != nil {
+			closeQuietly(client)
+			return state.fail(err)
+		}
+		s.rawConn = state.rawConn
+		s.jumps = state.jumps
+		s.client = client
+		s.sess = sess
+		s.stdin = stdin
+		s.stdout = stdout
 	}
-	s.rawConn = conn
-	s.client = client
-	s.sess = sess
-	s.stdin = stdin
-	s.stdout = stdout
 	return nil
 }
 
-func (s *sshSession) handshakeAndExec(ctx context.Context, conn net.Conn, addr string, signers []ssh.Signer) (*ssh.Client, *ssh.Session, io.WriteCloser, io.Reader, error) {
-	config := &ssh.ClientConfig{
-		User:            sshUsername(s.endpoint.User),
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signers...)},
-		HostKeyCallback: hostKeyCallback(ctx, s.opts.HostKeys),
-	}
-	if lister, ok := s.opts.HostKeys.(interface{ HostKeyAlgorithms(string) []string }); ok {
-		config.HostKeyAlgorithms = lister.HostKeyAlgorithms(addr)
-	}
-	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+func (s *sshSession) connectHop(state *sshDialState, hop sshHop) (*ssh.Client, error) {
+	auth, err := newSSHAuth(state.ctx, hop.target, s.opts.Keys, s.opts.SSH.Passphrases)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, err
 	}
-	client := ssh.NewClient(sshConn, chans, reqs)
+	defer auth.release()
+	conn, err := state.dial(hop)
+	if err != nil {
+		return nil, err
+	}
+	policy := hostKeyPolicyFor(s.opts.HostKeys, hop)
+	config := &ssh.ClientConfig{
+		User:            hop.target.User,
+		Auth:            []ssh.AuthMethod{auth.method()},
+		HostKeyCallback: hostKeyCallback(state.ctx, policy),
+	}
+	if lister, ok := policy.(interface{ HostKeyAlgorithms(string) []string }); ok {
+		config.HostKeyAlgorithms = lister.HostKeyAlgorithms(hop.hostKeyName)
+	}
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, hop.hostKeyName, config)
+	if err != nil {
+		closeQuietly(conn)
+		return nil, err
+	}
+	return ssh.NewClient(sshConn, chans, reqs), nil
+}
+
+func (s *sshSession) startCommand(client *ssh.Client) (*ssh.Session, io.WriteCloser, io.Reader, error) {
 	sess, err := client.NewSession()
 	if err != nil {
-		closeQuietly(client)
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 	stdin, _ := sess.StdinPipe()
 	stdout, _ := sess.StdoutPipe()
@@ -339,10 +186,9 @@ func (s *sshSession) handshakeAndExec(ctx context.Context, conn net.Conn, addr s
 		_ = sess.Setenv("GIT_PROTOCOL", "version=2")
 	}
 	if err := sess.Start(sshExecCommand(s.service, s.endpoint.Path)); err != nil {
-		closeQuietly(client)
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
-	return client, sess, stdin, stdout, nil
+	return sess, stdin, stdout, nil
 }
 
 func (s *sshSession) Close() error {
@@ -355,10 +201,14 @@ func (s *sshSession) Close() error {
 	if s.sess != nil {
 		closeQuietly(s.sess)
 	}
+	var err error
 	if s.client != nil {
-		return s.client.Close()
+		err = s.client.Close()
 	}
-	return nil
+	for i := len(s.jumps) - 1; i >= 0; i-- {
+		closeQuietly(s.jumps[i])
+	}
+	return err
 }
 
 type sshRoundTripper struct {
