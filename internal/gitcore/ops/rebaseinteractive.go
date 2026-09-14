@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -112,6 +113,7 @@ func (m *merger) foldRebaseStep(state *RebaseState, result *RebaseResult, step R
 	}
 	state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
 	if len(picked.conflicts) > 0 {
+		state.Amend = head.old
 		return true, m.stopForConflicts(state, result, step.Commit, plan, picked.conflicts)
 	}
 	commit, err := m.amendHead(head, previous, picked.tree, plan)
@@ -190,9 +192,7 @@ func (m *merger) continueAmending(state *RebaseState, result *RebaseResult, mess
 	if err != nil {
 		return err
 	}
-	if message == "" {
-		message = amended.Message
-	}
+	message = cmp.Or(message, state.Message, amended.Message)
 	plan := pickPlan{message: message, author: &amended.Author}
 	plan.reflog = m.rebaseNote("continue") + firstLine(plan.message)
 	commit, err := m.amendHead(head, amended, tree, plan)
