@@ -8,6 +8,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/progress"
+	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/ui/worktree"
@@ -166,11 +167,12 @@ func (a *App) removeActiveWorktree() {
 
 func (a *App) dropWorktree(parentID, path string, force bool) {
 	a.ActivateRepository(parentID)
-	o := a.opened()
-	if o == nil {
-		return
-	}
-	err := removeWorktree(context.Background(), o.repo, path, force)
+	a.startWrite(func(ctx context.Context, r *gitrepo.Repository) error {
+		return removeWorktree(ctx, r, path, force)
+	}, func(err error) { a.finishWorktreeRemoval(parentID, path, force, err) })
+}
+
+func (a *App) finishWorktreeRemoval(parentID, path string, force bool, err error) {
 	if errors.Is(err, ops.ErrWorktreeDirty) && !force {
 		a.askConfirm(i18n.T("Dialog.Worktree.Remove.Title"), i18n.Tf("Dialog.Worktree.Remove.Dirty", path), func(confirmed bool) {
 			if !confirmed {
@@ -185,16 +187,26 @@ func (a *App) dropWorktree(parentID, path string, force bool) {
 		a.showError(i18n.T("Dialog.Worktree.Remove.Title"), i18n.Tf("Dialog.Worktree.Remove.Failed", err))
 		return
 	}
-	a.saveWorktreeTree(parentID, o)
+	a.saveOpenedWorktreeTree(parentID)
+}
+
+func (a *App) saveOpenedWorktreeTree(parentID string) {
+	if o := a.opened(); o != nil {
+		a.saveWorktreeTree(parentID, o)
+	}
 }
 
 func (a *App) pruneObsoleteWorktrees() {
-	o := a.opened()
-	if o == nil {
-		return
-	}
 	title := i18n.T("Dialog.Worktree.Prune.Title")
-	stale, err := pruneWorktrees(o.repo, ops.PruneWorktreesOptions{DryRun: true})
+	var stale []string
+	a.startRead(func(_ context.Context, r *gitrepo.Repository) error {
+		found, err := pruneWorktrees(r, ops.PruneWorktreesOptions{DryRun: true})
+		stale = found
+		return err
+	}, func(err error) { a.offerWorktreePrune(title, stale, err) })
+}
+
+func (a *App) offerWorktreePrune(title string, stale []string, err error) {
 	if err != nil {
 		a.log.Warn("prune worktrees failed", "error", err)
 		a.showError(title, i18n.Tf("Dialog.Worktree.Prune.Failed", err))
@@ -208,17 +220,23 @@ func (a *App) pruneObsoleteWorktrees() {
 		if !confirmed {
 			return
 		}
-		a.applyWorktreePrune(o, title)
+		a.applyWorktreePrune(title)
 	})
 }
 
-func (a *App) applyWorktreePrune(o *openedRepository, title string) {
-	pruned, err := pruneWorktrees(o.repo, ops.PruneWorktreesOptions{})
-	if err != nil {
-		a.log.Warn("prune worktrees failed", "error", err)
-		a.showError(title, i18n.Tf("Dialog.Worktree.Prune.Failed", err))
-		return
-	}
-	a.saveWorktreeTree(a.worktreeParentID(), o)
-	a.showInfo(title, i18n.Tf("Dialog.Worktree.Prune.Done", len(pruned)))
+func (a *App) applyWorktreePrune(title string) {
+	var pruned []string
+	a.startWrite(func(_ context.Context, r *gitrepo.Repository) error {
+		removed, err := pruneWorktrees(r, ops.PruneWorktreesOptions{})
+		pruned = removed
+		return err
+	}, func(err error) {
+		if err != nil {
+			a.log.Warn("prune worktrees failed", "error", err)
+			a.showError(title, i18n.Tf("Dialog.Worktree.Prune.Failed", err))
+			return
+		}
+		a.saveOpenedWorktreeTree(a.worktreeParentID())
+		a.showInfo(title, i18n.Tf("Dialog.Worktree.Prune.Done", len(pruned)))
+	})
 }

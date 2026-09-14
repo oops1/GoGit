@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -63,6 +64,19 @@ func stubPruneWorktrees(t *testing.T, replacement func(*gitrepo.Repository, ops.
 	prev := pruneWorktrees
 	pruneWorktrees = replacement
 	t.Cleanup(func() { pruneWorktrees = prev })
+}
+
+func listWorktreeUntilRemoved(t *testing.T, main, linked string) *atomic.Bool {
+	t.Helper()
+	removed := new(atomic.Bool)
+	stubListWorktrees(t, func(*gitrepo.Repository) ([]ops.Worktree, error) {
+		list := []ops.Worktree{{Path: main, Main: true}}
+		if !removed.Load() {
+			list = append(list, ops.Worktree{Path: linked, ID: "feature", Branch: "refs/heads/feature"})
+		}
+		return list, nil
+	})
+	return removed
 }
 
 func answerConfirm(a *App, answers ...bool) *[]string {
@@ -324,22 +338,75 @@ func TestRemovingAWorktreeAsksFirstAndDropsItFromTheTree(t *testing.T) {
 	a, main, linked := newWorktreeTestApp(t)
 	node := worktreeInTree(t, a, main, linked)
 	asked := answerConfirm(a, true)
+	removed := listWorktreeUntilRemoved(t, main, linked)
 	var forced []bool
 	stubRemoveWorktree(t, func(_ context.Context, _ *gitrepo.Repository, path string, force bool) error {
 		forced = append(forced, force)
-		return os.RemoveAll(path)
-	})
-	stubListWorktrees(t, func(*gitrepo.Repository) ([]ops.Worktree, error) {
-		return []ops.Worktree{{Path: main, Main: true}}, nil
+		err := os.RemoveAll(path)
+		removed.Store(err == nil)
+		return err
 	})
 
 	a.removeActiveWorktree()
 
+	waitOnDispatcher(t, a, func() bool {
+		_, ok := a.registry.Find(node.ID)
+		return !ok
+	})
 	if len(*asked) != 1 || len(forced) != 1 || forced[0] {
 		t.Fatalf("asked = %v, forced = %v, want one plain removal", *asked, forced)
 	}
-	if _, ok := a.registry.Find(node.ID); ok {
-		t.Fatal("the removed worktree must leave the tree")
+}
+
+func TestRemovingAWorktreeKeepsTheWindowResponsive(t *testing.T) {
+	a, main, linked := newWorktreeTestApp(t)
+	node := worktreeInTree(t, a, main, linked)
+	answerConfirm(a, true)
+	removed := listWorktreeUntilRemoved(t, main, linked)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	stubRemoveWorktree(t, func(context.Context, *gitrepo.Repository, string, bool) error {
+		close(started)
+		<-release
+		removed.Store(true)
+		return nil
+	})
+
+	a.removeActiveWorktree()
+	<-started
+
+	if !readOnDispatcher(t, a, func() bool { return true }) {
+		t.Fatal("the dispatcher must answer while the worktree is being removed")
+	}
+	close(release)
+	waitOnDispatcher(t, a, func() bool {
+		_, ok := a.registry.Find(node.ID)
+		return !ok
+	})
+}
+
+func TestARemovalThatEndsAfterTheRepositoryClosedLeavesTheTreeAlone(t *testing.T) {
+	a, main, linked := newWorktreeTestApp(t)
+	node := worktreeInTree(t, a, main, linked)
+	answerConfirm(a, true)
+	_, failures := captureWorktreeMessages(a)
+	started := make(chan struct{})
+	stubRemoveWorktree(t, func(ctx context.Context, _ *gitrepo.Repository, _ string, _ bool) error {
+		close(started)
+		<-ctx.Done()
+		return nil
+	})
+
+	a.removeActiveWorktree()
+	<-started
+	a.CloseRepository()
+	drainPostQueue(t, a)
+
+	if len(*failures) != 0 {
+		t.Fatalf("failures = %v, want none", *failures)
+	}
+	if _, ok := a.registry.Find(node.ID); !ok {
+		t.Fatal("without an open repository the tree must stay as it was")
 	}
 }
 
@@ -361,22 +428,25 @@ func TestADeclinedQuestionKeepsTheWorktree(t *testing.T) {
 
 func TestAWorktreeWithChangesIsRemovedOnlyAfterASecondQuestion(t *testing.T) {
 	a, main, linked := newWorktreeTestApp(t)
-	worktreeInTree(t, a, main, linked)
+	node := worktreeInTree(t, a, main, linked)
 	asked := answerConfirm(a, true, true)
+	removed := listWorktreeUntilRemoved(t, main, linked)
 	var forced []bool
 	stubRemoveWorktree(t, func(_ context.Context, _ *gitrepo.Repository, _ string, force bool) error {
 		forced = append(forced, force)
 		if !force {
 			return ops.ErrWorktreeDirty
 		}
+		removed.Store(true)
 		return nil
-	})
-	stubListWorktrees(t, func(*gitrepo.Repository) ([]ops.Worktree, error) {
-		return []ops.Worktree{{Path: main, Main: true}}, nil
 	})
 
 	a.removeActiveWorktree()
 
+	waitOnDispatcher(t, a, func() bool {
+		_, ok := a.registry.Find(node.ID)
+		return !ok
+	})
 	if len(*asked) != 2 || len(forced) != 2 || !forced[1] {
 		t.Fatalf("asked %d times, forced = %v, want a forced second attempt", len(*asked), forced)
 	}
@@ -385,13 +455,14 @@ func TestAWorktreeWithChangesIsRemovedOnlyAfterASecondQuestion(t *testing.T) {
 func TestADeclinedForceLeavesTheWorktreeAlone(t *testing.T) {
 	a, main, linked := newWorktreeTestApp(t)
 	node := worktreeInTree(t, a, main, linked)
-	answerConfirm(a, true, false)
+	asked := answerConfirm(a, true, false)
 	stubRemoveWorktree(t, func(context.Context, *gitrepo.Repository, string, bool) error {
 		return ops.ErrWorktreeDirty
 	})
 
 	a.removeActiveWorktree()
 
+	waitOnDispatcher(t, a, func() bool { return len(*asked) == 2 })
 	if _, ok := a.registry.Find(node.ID); !ok {
 		t.Fatal("the worktree must stay when the force is declined")
 	}
@@ -408,9 +479,7 @@ func TestAFailedRemovalIsReported(t *testing.T) {
 
 	a.removeActiveWorktree()
 
-	if len(*failures) != 1 {
-		t.Fatalf("failures = %v, want the removal failure", *failures)
-	}
+	waitOnDispatcher(t, a, func() bool { return len(*failures) == 1 })
 }
 
 func TestRemovingNeedsARepositoryToRemoveFrom(t *testing.T) {
@@ -470,9 +539,7 @@ func TestPruningWithNothingStaleSaysSo(t *testing.T) {
 
 	a.pruneObsoleteWorktrees()
 
-	if len(*info) != 1 {
-		t.Fatalf("info = %v, want the nothing-to-prune notice", *info)
-	}
+	waitOnDispatcher(t, a, func() bool { return len(*info) == 1 })
 }
 
 func TestPruningAsksBeforeItDropsTheRecords(t *testing.T) {
@@ -487,17 +554,15 @@ func TestPruningAsksBeforeItDropsTheRecords(t *testing.T) {
 
 	a.pruneObsoleteWorktrees()
 
+	waitOnDispatcher(t, a, func() bool { return len(*info) == 1 })
 	if len(*asked) != 1 || len(dry) != 2 || !dry[0] || dry[1] {
 		t.Fatalf("asked = %v, dry runs = %v, want a dry run and then the real one", *asked, dry)
-	}
-	if len(*info) != 1 {
-		t.Fatalf("info = %v, want the count of removed records", *info)
 	}
 }
 
 func TestADeclinedPruneRemovesNothing(t *testing.T) {
 	a, _, _ := newWorktreeTestApp(t)
-	answerConfirm(a, false)
+	asked := answerConfirm(a, false)
 	var dry []bool
 	stubPruneWorktrees(t, func(_ *gitrepo.Repository, opts ops.PruneWorktreesOptions) ([]string, error) {
 		dry = append(dry, opts.DryRun)
@@ -506,6 +571,8 @@ func TestADeclinedPruneRemovesNothing(t *testing.T) {
 
 	a.pruneObsoleteWorktrees()
 
+	waitOnDispatcher(t, a, func() bool { return len(*asked) == 1 })
+	drainPostQueue(t, a)
 	if len(dry) != 1 {
 		t.Fatalf("dry runs = %v, want the dry run alone", dry)
 	}
@@ -520,9 +587,7 @@ func TestAFailedDryRunIsReported(t *testing.T) {
 
 	a.pruneObsoleteWorktrees()
 
-	if len(*failures) != 1 {
-		t.Fatalf("failures = %v, want the prune failure", *failures)
-	}
+	waitOnDispatcher(t, a, func() bool { return len(*failures) == 1 })
 }
 
 func TestAFailedPruneIsReported(t *testing.T) {
@@ -538,9 +603,7 @@ func TestAFailedPruneIsReported(t *testing.T) {
 
 	a.pruneObsoleteWorktrees()
 
-	if len(*failures) != 1 {
-		t.Fatalf("failures = %v, want the prune failure", *failures)
-	}
+	waitOnDispatcher(t, a, func() bool { return len(*failures) == 1 })
 }
 
 func TestTheWorktreeCommandsAreWired(t *testing.T) {
