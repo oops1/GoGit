@@ -285,3 +285,38 @@ func TestCommitDetachedHeadMovesHeadDirectly(t *testing.T) {
 		t.Fatalf("main should be unchanged, got %s want %s", branchRef.Target, first)
 	}
 }
+
+func TestCommitAmendKeepsTheAuthorAndTheAuthorDate(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.commitFiles("base", map[string]string{"f": "f\n"})
+	original := tr.commitWithAuthor("second", map[string]string{"g": "g\n"})
+	before, err := tr.db().Commit(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	id, err := Commit(t.Context(), tr.repo, CommitOptions{Message: "second amended", Amend: true, AllowEmpty: true, When: mergeTime})
+
+	if err != nil {
+		t.Fatalf("Commit returned error %v", err)
+	}
+	after, err := tr.db().Commit(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Author.Name != "Other" || !after.Author.When.Equal(before.Author.When) || after.Committer.Name != "ann" || !after.Committer.When.Equal(mergeTime) {
+		t.Fatalf("author = %+v, committer = %+v", after.Author, after.Committer)
+	}
+}
+
+func TestCommitAmendIsAllowedWhileARebaseStopsForAnEdit(t *testing.T) {
+	tr := newTestRepo(t)
+	commits := tr.threeOnTopic()
+	if _, err := Rebase(t.Context(), tr.repo, "main", RebaseOptions{When: mergeTime, Todo: steps(actionEdit, commits[0], actionPick, commits[1])}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Commit(t.Context(), tr.repo, CommitOptions{Message: "reworded while editing", Amend: true, AllowEmpty: true, When: mergeTime}); err != nil {
+		t.Fatalf("Commit returned error %v", err)
+	}
+}

@@ -33,7 +33,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err != nil {
 		return hash.Zero, err
 	}
-	if state.InProgress() && opts.Amend {
+	if opts.Amend && state.InProgress() && state.Operation() != OperationRebase {
 		return hash.Zero, ErrMergeInProgress
 	}
 	author := rc.sig
@@ -68,7 +68,7 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 		return hash.Zero, err
 	}
 
-	parents, err := commitParents(rc.db, target.old, opts.Amend)
+	parents, amended, err := commitParents(rc.db, target.old, opts.Amend)
 	if err != nil {
 		lock.abort()
 		return hash.Zero, err
@@ -89,7 +89,11 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if when.IsZero() {
 		when = time.Now()
 	}
-	if opts.Author == nil && state.Picked.IsZero() {
+	switch {
+	case opts.Author != nil, !state.Picked.IsZero():
+	case amended != nil:
+		author = amended.Author
+	default:
 		author.When = when
 	}
 	committer := rc.sig
@@ -120,21 +124,21 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	return id, errors.Join(recordRerereResolutions(ctx, r, rc.db), clearMergeState(r))
 }
 
-func commitParents(db *odb.DB, headCommit hash.ObjectID, amend bool) ([]hash.ObjectID, error) {
+func commitParents(db *odb.DB, headCommit hash.ObjectID, amend bool) ([]hash.ObjectID, *object.Commit, error) {
 	if !amend {
 		if headCommit.IsZero() {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return []hash.ObjectID{headCommit}, nil
+		return []hash.ObjectID{headCommit}, nil, nil
 	}
 	if headCommit.IsZero() {
-		return nil, ErrUnbornHead
+		return nil, nil, ErrUnbornHead
 	}
 	commit, err := db.Commit(headCommit)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return commit.Parents, nil
+	return commit.Parents, commit, nil
 }
 
 func isEmptyCommit(db *odb.DB, treeID hash.ObjectID, parents []hash.ObjectID) (bool, error) {
