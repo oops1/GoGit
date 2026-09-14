@@ -37,7 +37,7 @@ func (s *session) Push(ctx context.Context, req transport.PushRequest) (*transpo
 			}
 			return result, nil
 		}
-		if _, err := s.db.Reload(); err != nil {
+		if _, err := dbReload(s.db); err != nil {
 			return nil, err
 		}
 	}
