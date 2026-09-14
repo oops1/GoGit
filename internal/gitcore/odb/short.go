@@ -76,7 +76,7 @@ func (d *DB) collectShort(prefix string, seen map[hash.ObjectID]struct{}, out *[
 	}
 	if store := d.store(); store != nil {
 		id, bits := decodePrefix(prefix)
-		for _, file := range store.Files() {
+		for file := range store.Acquire() {
 			for match := range file.Index.Prefix(id[:], bits) {
 				addShortMatch(seen, match, out)
 			}

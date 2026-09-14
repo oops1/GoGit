@@ -76,12 +76,24 @@ func TestOpenWorksWithoutAPackDirectory(t *testing.T) {
 	}
 }
 
-func TestOpenFailsOnADamagedPackDirectory(t *testing.T) {
+func TestOpenSkipsADamagedPackAndServesTheRest(t *testing.T) {
 	objects := newObjectsDir(t)
+	copyFixturePacks(t, objects)
 	writeFile(t, filepath.Join(objects, packDirName, "pack-broken.pack"), []byte("not a packfile"))
 	writeFile(t, filepath.Join(objects, packDirName, "pack-broken.idx"), []byte("not an index"))
-	if _, err := Open(objects, Options{}); !errors.Is(err, pack.ErrTruncated) {
-		t.Fatalf("Open returned %v, want %v", err, pack.ErrTruncated)
+	db := openDB(t, objects, Options{})
+	packed := packFixtureObjects(t)[0]
+	if _, _, err := db.Get(packed.id); err != nil {
+		t.Fatalf("Get returned error %v beside a damaged pack", err)
+	}
+}
+
+func TestOpenFailsWhenThePackDirectoryCannotBeListed(t *testing.T) {
+	objects := newObjectsDir(t)
+	copyFixturePacks(t, objects)
+	swapMaintain(t, &packOpen, func(string, ...pack.Option) (*pack.Store, error) { return nil, errInjected })
+	if _, err := Open(objects, Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("Open returned %v, want %v", err, errInjected)
 	}
 }
 
@@ -469,14 +481,24 @@ func TestReloadForgetsARemovedPackDirectory(t *testing.T) {
 	}
 }
 
-func TestReloadReportsBrokenPacks(t *testing.T) {
+func TestReloadSkipsBrokenPacks(t *testing.T) {
 	objects := newObjectsDir(t)
 	copyFixturePacks(t, objects)
 	db := openDB(t, objects, Options{})
 	writeFile(t, filepath.Join(objects, packDirName, "pack-broken.pack"), []byte("not a packfile"))
 	writeFile(t, filepath.Join(objects, packDirName, "pack-broken.idx"), []byte("not an index"))
-	if _, err := db.Reload(); !errors.Is(err, pack.ErrTruncated) {
-		t.Fatalf("Reload returned %v, want %v", err, pack.ErrTruncated)
+	if changed, err := db.Reload(); changed || err != nil {
+		t.Fatalf("Reload returned (%v, %v), want (false, nil)", changed, err)
+	}
+}
+
+func TestReloadReportsAPackDirectoryThatCannotBeListed(t *testing.T) {
+	objects := newObjectsDir(t)
+	copyFixturePacks(t, objects)
+	db := openDB(t, objects, Options{})
+	swapMaintain(t, &packReload, func(*pack.Store) (bool, error) { return false, errInjected })
+	if _, err := db.Reload(); !errors.Is(err, errInjected) {
+		t.Fatalf("Reload returned %v, want %v", err, errInjected)
 	}
 }
 

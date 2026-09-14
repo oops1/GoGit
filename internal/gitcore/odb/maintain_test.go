@@ -449,17 +449,27 @@ func TestPutLooseWritesALooseCopyEvenOfAPackedObject(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := db.PutLoose(kind, data)
+	packTime := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	got, err := db.PutLoose(kind, data, packTime)
 	if err != nil || got != id {
 		t.Fatalf("id = %s, err = %v", got, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, looseName(id))); err != nil {
-		t.Fatalf("no loose copy: %v", err)
+	path := filepath.Join(dir, looseName(id))
+	if info, err := os.Stat(path); err != nil || !info.ModTime().Equal(packTime) {
+		t.Fatalf("the loose copy is not dated like its pack: %v", err)
 	}
-	if again, err := db.PutLoose(kind, data); err != nil || again != id {
+	fresh := time.Now().Truncate(time.Second)
+	if err := os.Chtimes(path, fresh, fresh); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := db.PutLoose(kind, data, packTime); err != nil || again != id {
 		t.Fatalf("second put = %s, %v", again, err)
 	}
-	if _, err := db.PutLoose(0, data); err == nil {
+	if info, err := os.Stat(path); err != nil || !info.ModTime().Equal(fresh) {
+		t.Fatalf("a loose copy already there was backdated: %v", err)
+	}
+	if _, err := db.PutLoose(0, data, packTime); err == nil {
 		t.Fatal("an invalid type was accepted")
 	}
 }
@@ -469,14 +479,21 @@ func TestPutLooseReportsFailures(t *testing.T) {
 	t.Run("checking for a loose copy", func(t *testing.T) {
 		db, _ := looseDB(t)
 		swapMaintain(t, &rootStat, func(*os.Root, string) (fs.FileInfo, error) { return nil, boom })
-		if _, err := db.PutLoose(1, []byte("tree? no, a commit that is not")); err == nil {
+		if _, err := db.PutLoose(1, []byte("tree? no, a commit that is not"), time.Now()); err == nil {
 			t.Fatal("a failed check was ignored")
 		}
 	})
 	t.Run("writing the loose copy", func(t *testing.T) {
 		db, _ := looseDB(t)
 		swapMaintain(t, &rootCreate, func(*os.Root, string, fs.FileMode) (*os.File, error) { return nil, boom })
-		if _, err := db.PutLoose(3, []byte("a blob that is not there yet")); !errors.Is(err, boom) {
+		if _, err := db.PutLoose(3, []byte("a blob that is not there yet"), time.Now()); !errors.Is(err, boom) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("dating the loose copy", func(t *testing.T) {
+		db, _ := looseDB(t)
+		swapMaintain(t, &rootChtimes, func(*os.Root, string, time.Time, time.Time) error { return boom })
+		if _, err := db.PutLoose(3, []byte("a blob whose time cannot be set"), time.Now()); !errors.Is(err, boom) {
 			t.Fatalf("err = %v", err)
 		}
 	})

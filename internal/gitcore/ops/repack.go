@@ -24,7 +24,6 @@ var (
 	dbWritePack     = (*odb.DB).WritePack
 	dbPackObjects   = (*odb.DB).PackObjects
 	dbPutLoose      = (*odb.DB).PutLoose
-	dbTouch         = (*odb.DB).Touch
 	removePackFiles = odb.RemovePackFiles
 )
 
@@ -162,10 +161,7 @@ func loosenUnreachable(db *odb.DB, plan repackPlan, expire time.Time, result *Re
 			if err != nil {
 				return err
 			}
-			if _, err := dbPutLoose(db, kind, data); err != nil {
-				return err
-			}
-			if err := dbTouch(db, id, old.ModTime); err != nil {
+			if _, err := dbPutLoose(db, kind, data, old.ModTime); err != nil {
 				return err
 			}
 			result.Loosened++

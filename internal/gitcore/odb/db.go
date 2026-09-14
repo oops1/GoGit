@@ -15,6 +15,11 @@ import (
 
 const packDirName = "pack"
 
+var (
+	packOpen   = pack.Open
+	packReload = (*pack.Store).Reload
+)
+
 type DB struct {
 	dir        string
 	root       *os.Root
@@ -83,7 +88,7 @@ func (d *DB) Reload() (bool, error) {
 
 func (d *DB) reloadPacks() (bool, error) {
 	if d.packs == nil {
-		store, err := pack.Open(d.PackDir(), d.packOptions()...)
+		store, err := packOpen(d.PackDir(), d.packOptions()...)
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
@@ -93,7 +98,7 @@ func (d *DB) reloadPacks() (bool, error) {
 		d.packs = store
 		return true, nil
 	}
-	changed, err := d.packs.Reload()
+	changed, err := packReload(d.packs)
 	if err == nil {
 		return changed, nil
 	}
@@ -181,6 +186,13 @@ func (d *DB) Has(id hash.ObjectID) (bool, error) {
 	return d.has(id)
 }
 
+func (d *DB) Contains(id hash.ObjectID) (bool, error) {
+	if _, _, ok := d.cache.raw.get(id); ok {
+		return true, nil
+	}
+	return d.has(id)
+}
+
 func (d *DB) has(id hash.ObjectID) (bool, error) {
 	if store := d.store(); store != nil {
 		ok, err := store.Contains(id)
@@ -259,7 +271,7 @@ func (d *DB) packHeader(id hash.ObjectID) (object.Type, int64, bool, error) {
 	if store == nil {
 		return 0, 0, false, nil
 	}
-	for _, file := range store.Files() {
+	for file := range store.Acquire() {
 		offset, ok, err := file.Index.Lookup(id)
 		if err != nil {
 			return 0, 0, false, err

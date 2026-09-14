@@ -115,10 +115,14 @@ func TestPutRejectsUnknownTypes(t *testing.T) {
 }
 
 func TestPutReportsLookupFailures(t *testing.T) {
-	db := openDB(t, newObjectsDir(t), Options{})
-	swapRootStat(t, always, errInjected)
-	if _, err := db.Put(object.TypeBlob, []byte("lookup fails\n")); !errors.Is(err, errInjected) {
-		t.Fatalf("Put returned %v, want %v", err, errInjected)
+	db := newFixtureDB(t)
+	kind, data, err := db.Get(packFixtureObjects(t)[0].id)
+	if err != nil {
+		t.Fatalf("Get returned error %v", err)
+	}
+	closePackIndexes(t, db)
+	if _, err := db.Put(kind, data); err == nil {
+		t.Fatal("Put ignored a pack index it could not read")
 	}
 }
 
@@ -295,17 +299,21 @@ func TestWriterReportsStreamFailures(t *testing.T) {
 }
 
 func TestWriterReportsLookupFailures(t *testing.T) {
-	db := openDB(t, newObjectsDir(t), Options{})
-	writer, err := db.Writer(object.TypeBlob, 4)
+	db := newFixtureDB(t)
+	kind, data, err := db.Get(packFixtureObjects(t)[0].id)
+	if err != nil {
+		t.Fatalf("Get returned error %v", err)
+	}
+	writer, err := db.Writer(kind, int64(len(data)))
 	if err != nil {
 		t.Fatalf("Writer returned error %v", err)
 	}
-	if _, err := writer.Write([]byte("data")); err != nil {
+	if _, err := writer.Write(data); err != nil {
 		t.Fatalf("Write returned error %v", err)
 	}
-	swapRootStat(t, always, errInjected)
-	if err := writer.Close(); !errors.Is(err, errInjected) {
-		t.Fatalf("Close returned %v, want %v", err, errInjected)
+	closePackIndexes(t, db)
+	if err := writer.Close(); err == nil {
+		t.Fatal("Close ignored a pack index it could not read")
 	}
 }
 
