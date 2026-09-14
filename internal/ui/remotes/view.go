@@ -8,6 +8,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
 
+	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
 	"github.com/oops1/gogit/internal/ui/style"
@@ -193,6 +194,10 @@ func (v *View) validate(name, url, ignoreName string) bool {
 		v.SetError(i18n.T("Dialog.Remotes.Error.Name"))
 		return false
 	}
+	if !validName(name) {
+		v.SetError(i18n.T("Dialog.Remotes.Error.InvalidName"))
+		return false
+	}
 	if url == "" {
 		v.SetError(i18n.T("Dialog.Remotes.Error.URL"))
 		return false
@@ -204,6 +209,10 @@ func (v *View) validate(name, url, ignoreName string) bool {
 		}
 	}
 	return true
+}
+
+func validName(name string) bool {
+	return refs.CheckFormat(refs.RemotesPrefix+name+"/test", 0) == nil
 }
 
 func (v *View) onRemoveClicked() {
