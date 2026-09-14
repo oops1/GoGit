@@ -37,6 +37,7 @@ type Repository struct {
 	ObjectFormat hash.Format
 
 	layout     Layout
+	opts       OpenOptions
 	cfg        *config.Config
 	core       config.Core
 	root       *os.Root
@@ -75,6 +76,7 @@ func OpenLayout(layout Layout, opts OpenOptions) (*Repository, error) {
 	return new(Repository{
 		ObjectFormat: format,
 		layout:       layout,
+		opts:         opts,
 		cfg:          cfg,
 		core:         core,
 		root:         root,
@@ -106,6 +108,7 @@ func (r *Repository) Close() error {
 }
 
 func (r *Repository) Layout() Layout         { return r.layout }
+func (r *Repository) Options() OpenOptions   { return r.opts }
 func (r *Repository) Config() *config.Config { return r.cfg }
 func (r *Repository) Core() config.Core      { return r.core }
 func (r *Repository) Root() *os.Root         { return r.root }
