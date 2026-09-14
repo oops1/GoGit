@@ -33,6 +33,10 @@
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Edit.Commit}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Edit.SaveStash}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Edit.ApplyStash}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Edit.DropStash}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Edit.Compare}"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Branch}">

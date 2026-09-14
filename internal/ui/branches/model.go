@@ -2,13 +2,15 @@ package branches
 
 import (
 	"errors"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 )
 
-const stashRefName = refs.Name("refs/stash")
+const stashSelectorPrefix = "stash@{"
 
 type Branch struct {
 	Name           refs.Name
@@ -28,6 +30,12 @@ type Tag struct {
 	Peeled hash.ObjectID
 }
 
+type Stash struct {
+	Index   int
+	Commit  hash.ObjectID
+	Message string
+}
+
 type Snapshot struct {
 	Current  string
 	Detached bool
@@ -35,7 +43,7 @@ type Snapshot struct {
 	Local    []Branch
 	Remotes  []Remote
 	Tags     []Tag
-	HasStash bool
+	Stashes  []Stash
 }
 
 func Load(store *refs.Store) (Snapshot, error) {
@@ -58,11 +66,11 @@ func Load(store *refs.Store) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snap.Tags = tags
-	hasStash, err := loadHasStash(store)
+	stashes, err := loadStashes(store)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	snap.HasStash = hasStash
+	snap.Stashes = stashes
 	return snap, nil
 }
 
@@ -143,12 +151,34 @@ func loadTags(store *refs.Store) ([]Tag, error) {
 	return out, nil
 }
 
-func loadHasStash(store *refs.Store) (bool, error) {
-	if _, err := store.Lookup(stashRefName); err != nil {
-		if errors.Is(err, refs.ErrNotFound) {
-			return false, nil
+func loadStashes(store *refs.Store) ([]Stash, error) {
+	var out []Stash
+	for entry, err := range store.Reflog(refs.StashName) {
+		if err != nil {
+			return nil, err
 		}
-		return false, err
+		out = append(out, Stash{Commit: entry.New, Message: entry.Message})
 	}
-	return true, nil
+	slices.Reverse(out)
+	for i := range out {
+		out[i].Index = i
+	}
+	return out, nil
+}
+
+func StashRef(index int) refs.Name {
+	return refs.Name(stashSelectorPrefix + strconv.Itoa(index) + "}")
+}
+
+func StashIndex(ref refs.Name) (int, bool) {
+	inner, ok := strings.CutPrefix(string(ref), stashSelectorPrefix)
+	if !ok {
+		return 0, false
+	}
+	digits, ok := strings.CutSuffix(inner, "}")
+	if !ok {
+		return 0, false
+	}
+	index, err := strconv.Atoi(digits)
+	return index, err == nil && index >= 0
 }

@@ -56,7 +56,7 @@ func fullSnapshot(t *testing.T) Snapshot {
 			{Name: refs.TagName("release/1.0"), Target: oid(t, "44"), Peeled: oid(t, "55")},
 			{Name: refs.TagName("v1.0"), Target: oid(t, "66")},
 		},
-		HasStash: true,
+		Stashes: []Stash{{Index: 0, Message: "WIP on main: 1234567 first"}, {Index: 1, Message: "On main: keep"}},
 	}
 }
 
@@ -182,7 +182,7 @@ func TestRenderAddsStashRootOnlyWhenPresent(t *testing.T) {
 	}
 
 	snap := fullSnapshot(t)
-	snap.HasStash = false
+	snap.Stashes = nil
 	v2, tw2 := bound(t)
 	v2.Render(snap)
 	if len(tw2.Tree.Roots()) != 3 {
@@ -484,15 +484,18 @@ func TestRenderUsesTheStashIcon(t *testing.T) {
 func TestStashItemIsTrackedForSelection(t *testing.T) {
 	v, tw := bound(t)
 	v.Render(fullSnapshot(t))
-	item, ok := v.Item(stashRefName)
+	item, ok := v.Item(StashRef(1))
 	if !ok {
 		t.Fatal("stash item not tracked")
+	}
+	if item.DisplayText() != "stash@{1}: On main: keep" {
+		t.Fatalf("stash item text = %q", item.DisplayText())
 	}
 
 	var got refs.Name
 	v.OnActivate = func(ref refs.Name) { got = ref }
 	tw.Tree.OnItemInvoked(treeview.ItemInvokedEvent{Item: item})
-	if got != stashRefName {
+	if got != StashRef(1) {
 		t.Fatalf("OnActivate ref = %q, want refs/stash", got)
 	}
 }

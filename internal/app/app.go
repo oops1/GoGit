@@ -476,6 +476,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.registerRebaseHandlers()
 	a.registerReflogHandlers()
 	a.registerSwitchHandlers()
+	a.registerStashHandlers()
 	a.registerCompareHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
@@ -567,6 +568,16 @@ func (a *App) setHasRemotes(v bool) {
 	}
 }
 
+func (a *App) setHasStashes(v bool) {
+	a.mu.Lock()
+	changed := a.state.HasStashes != v
+	a.state.HasStashes = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
 func (a *App) CloseRepository() {
 	a.stopAutoFetch()
 	a.stopNetOperations()
@@ -624,6 +635,7 @@ func (a *App) ActivateRepository(id string) {
 	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
 	a.branchesView.Render(snap)
+	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(opened)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
@@ -702,6 +714,7 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.branchesView.Render(snap)
+	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))

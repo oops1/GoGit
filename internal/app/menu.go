@@ -101,6 +101,10 @@ func buildEditMenuTree() []menuTreeEntry {
 		{Separator: true},
 		leaf("Menu.Edit.Commit", CmdCommit),
 		{Separator: true},
+		leaf("Menu.Edit.SaveStash", CmdStashSave),
+		leaf("Menu.Edit.ApplyStash", CmdStashApply),
+		leaf("Menu.Edit.DropStash", CmdStashDrop),
+		{Separator: true},
 		leaf("Menu.Edit.Compare", CmdCompareFiles),
 	}
 }

@@ -65,8 +65,8 @@ func (a *App) applyMergeBannerTheme(t *widget.Theme) {
 func (a *App) registerMergeHandlers() {
 	a.handlers[CmdMerge] = func() { a.openMerge("") }
 	a.handlers[CmdAbortMerge] = a.confirmAbortMerge
-	a.branchesView.OnMenu = a.branchMenu
-	a.branchesView.OnActivate = a.checkOutRef
+	a.branchesView.OnMenu = a.refMenu
+	a.branchesView.OnActivate = a.activateRef
 	a.banner.commit.OnClick = func() { a.Dispatch(CmdContinue) }
 	a.banner.abort.OnClick = func() { a.Dispatch(CmdAbortMerge) }
 }

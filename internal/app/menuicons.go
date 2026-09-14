@@ -27,6 +27,9 @@ var commandIcons = map[CommandID]string{
 	CmdUnstage:         "unstage",
 	CmdDiscard:         "discard",
 	CmdCommit:          "commit",
+	CmdStashSave:       "stash_save",
+	CmdStashApply:      "stash_apply",
+	CmdStashDrop:       "stash_drop",
 	CmdCompareFiles:    "compare",
 	CmdMerge:           "merge",
 	CmdAbortMerge:      "merge_abort",
@@ -77,6 +80,9 @@ var contextIcons = map[string]string{
 	"Menu.Context.Reflog":             "history",
 	"Menu.Context.SwitchHere":         "switch",
 	"Menu.Context.CompareWithCurrent": "compare_refs",
+	"Menu.Stash.Apply":                "stash_apply",
+	"Menu.Stash.ApplyDrop":            "stash_apply",
+	"Menu.Stash.Drop":                 "stash_drop",
 }
 
 func commandIcon(id CommandID) image.Image {

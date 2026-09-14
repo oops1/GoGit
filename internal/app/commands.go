@@ -33,6 +33,9 @@ const (
 	CmdUnstage              CommandID = "edit.unstage"
 	CmdDiscard              CommandID = "edit.discard"
 	CmdCommit               CommandID = "local.commit"
+	CmdStashSave            CommandID = "local.stash-save"
+	CmdStashApply           CommandID = "local.stash-apply"
+	CmdStashDrop            CommandID = "local.stash-drop"
 	CmdCompareFiles         CommandID = "edit.compare-files"
 	CmdMerge                CommandID = "branch.merge"
 	CmdRebase               CommandID = "branch.rebase"
@@ -143,6 +146,7 @@ type State struct {
 	HasStagedChanges bool
 	HasChanges       bool
 	HasRemotes       bool
+	HasStashes       bool
 	Merging          bool
 	Rebasing         bool
 	Rewording        bool
@@ -180,6 +184,10 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)
+	case CmdStashSave:
+		return s.ActiveRepository != "" && s.HasChanges && !s.Merging
+	case CmdStashApply, CmdStashDrop:
+		return s.ActiveRepository != "" && s.HasStashes
 	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdFlowStartFeature:
