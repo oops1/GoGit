@@ -524,3 +524,13 @@ func TestLayoutChoicesMapToTheirPositions(t *testing.T) {
 		t.Fatal("an unknown layout does not fall back to the dock panes")
 	}
 }
+
+func TestTheEditorDialogsBelongToTheSettingsDialog(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{})
+
+	owned := v.OwnedDialogs()
+
+	if len(owned) != 2 || owned[0] != v.credentialEditor || owned[1] != v.keyEditor {
+		t.Fatalf("owned = %v, want the credential and the key editors", owned)
+	}
+}
