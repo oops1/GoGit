@@ -37,6 +37,7 @@ type Worktree struct {
 	ignoreMu          sync.Mutex
 	attrs             *attributes.Attributes
 	attrsMu           sync.Mutex
+	env               func(string) string
 	format            hash.Format
 	fileMode          bool
 	symlinks          bool
@@ -102,6 +103,7 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		root:              root,
 		ignore:            ignore,
 		attrs:             attrs,
+		env:               env,
 		format:            opts.DB.Format(),
 		fileMode:          core.FileMode,
 		symlinks:          core.Symlinks,

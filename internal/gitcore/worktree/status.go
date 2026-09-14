@@ -49,7 +49,14 @@ type Entry struct {
 	Size     int64
 	ModTime  time.Time
 
+	Submodule         SubmoduleChange
 	FilterUnsupported bool
+}
+
+type SubmoduleChange struct {
+	CommitChanged bool
+	Modified      bool
+	Untracked     bool
 }
 
 type Status struct {
@@ -108,12 +115,12 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 		stored := entry
 		combined[entryPath] = &stored
 	}
-	for entryPath, code := range unstaged {
+	for entryPath, change := range unstaged {
 		if existing, ok := combined[entryPath]; ok {
-			existing.Unstaged = code
+			existing.Unstaged, existing.Submodule = change.code, change.submodule
 			continue
 		}
-		combined[entryPath] = &Entry{Path: entryPath, Staged: StatusUnmodified, Unstaged: code}
+		combined[entryPath] = &Entry{Path: entryPath, Staged: StatusUnmodified, Unstaged: change.code, Submodule: change.submodule}
 	}
 	for _, entry := range w.conflictEntries() {
 		stored := entry

@@ -158,6 +158,21 @@ func (o *oracle) ourStatus(dir string) Status {
 type porcelainEntry struct {
 	x, y     byte
 	origPath string
+	sub      string
+}
+
+func submoduleField(change SubmoduleChange) string {
+	field := []byte("S...")
+	if change.CommitChanged {
+		field[1] = 'C'
+	}
+	if change.Modified {
+		field[2] = 'M'
+	}
+	if change.Untracked {
+		field[3] = 'U'
+	}
+	return string(field)
 }
 
 func parsePorcelainV2(t *testing.T, out string) (changed map[string]porcelainEntry, untracked map[string]bool) {
@@ -179,7 +194,7 @@ func parsePorcelainV2(t *testing.T, out string) (changed map[string]porcelainEnt
 			if len(parts) != 9 {
 				t.Fatalf("unexpected ordinary record %q", record)
 			}
-			changed[parts[8]] = porcelainEntry{x: parts[1][0], y: parts[1][1]}
+			changed[parts[8]] = porcelainEntry{x: parts[1][0], y: parts[1][1], sub: parts[2]}
 		case '2':
 			parts := strings.SplitN(record, " ", 10)
 			if len(parts) != 10 {
@@ -262,6 +277,13 @@ func compareStatus(t *testing.T, ours Status, wantChanged map[string]porcelainEn
 		}
 		if want.x != x || want.y != y {
 			t.Errorf("%s: our XY = %c%c, git XY = %c%c", entry.Path, x, y, want.x, want.y)
+		}
+		wantSub := want.sub
+		if len(wantSub) > 0 && wantSub[0] == 'N' {
+			wantSub = submoduleField(SubmoduleChange{})
+		}
+		if got := submoduleField(entry.Submodule); wantSub != "" && got != wantSub {
+			t.Errorf("%s: our submodule field = %s, git reports %s", entry.Path, got, wantSub)
 		}
 		if x == 'R' && want.origPath != entry.OrigPath {
 			t.Errorf("%s: our OrigPath = %q, git OrigPath = %q", entry.Path, entry.OrigPath, want.origPath)
