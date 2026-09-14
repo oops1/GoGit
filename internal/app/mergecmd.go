@@ -8,6 +8,7 @@ import (
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -29,6 +30,8 @@ var runAbortMerge = ops.AbortOperation
 var runResolveConflicts = ops.ResolveConflicts
 
 var readMergeState = ops.ReadMergeState
+
+var runResetBisect = ops.ResetBisect
 
 type mergeBanner struct {
 	panel  *widget.DockPanel
@@ -67,7 +70,7 @@ func (a *App) registerMergeHandlers() {
 	a.handlers[CmdAbortMerge] = a.confirmAbortMerge
 	a.branchesView.OnMenu = a.refMenu
 	a.branchesView.OnActivate = a.activateRef
-	a.banner.commit.OnClick = func() { a.Dispatch(CmdContinue) }
+	a.banner.commit.OnClick = a.bannerPrimary
 	a.banner.abort.OnClick = func() { a.Dispatch(CmdAbortMerge) }
 }
 
@@ -261,12 +264,45 @@ func (a *App) workingMergeState() ops.MergeState {
 
 func (a *App) showMergeState(state ops.MergeState, conflicts int) {
 	a.setMerging(state.InProgress(), state.Operation() == ops.OperationRebase)
-	a.banner.panel.SetVisible(state.InProgress())
-	if !state.InProgress() {
+	a.banner.panel.SetVisible(state.InProgress() || state.Bisecting)
+	a.banner.abort.SetVisible(state.InProgress())
+	switch {
+	case state.InProgress():
+		a.banner.text.SetText(bannerText(state, conflicts))
+		a.banner.commit.SetText(i18n.T(bannerActionKey(state.Operation())))
+	case state.Bisecting:
+		a.banner.text.SetText(i18n.Tf("Banner.Bisect.Active", bisectOriginLabel(state.BisectStart)))
+		a.banner.commit.SetText(i18n.T("Banner.Bisect.Reset"))
+	}
+}
+
+func bisectOriginLabel(start string) string {
+	if id, err := hash.Parse(start); err == nil {
+		return shortHash(id)
+	}
+	return start
+}
+
+func (a *App) bannerPrimary() {
+	if a.State().Merging {
+		a.Dispatch(CmdContinue)
 		return
 	}
-	a.banner.text.SetText(bannerText(state, conflicts))
-	a.banner.commit.SetText(i18n.T(bannerActionKey(state.Operation())))
+	a.endBisect()
+}
+
+func (a *App) endBisect() {
+	a.startWrite(func(ctx context.Context, r *gitrepo.Repository) error {
+		return runResetBisect(ctx, r)
+	}, func(err error) {
+		if err != nil {
+			a.log.Warn("end bisect failed", "error", err)
+			a.statusLabel.SetText(i18n.Tf("Status.BisectResetFailed", err))
+			return
+		}
+		a.statusLabel.SetText(i18n.T("Status.BisectReset"))
+		a.RefreshRepository()
+	})
 }
 
 func bannerActionKey(operation ops.Operation) string {

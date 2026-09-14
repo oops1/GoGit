@@ -1,5 +1,7 @@
 {
   "App.Title": "Go.Git",
+  "Banner.Bisect.Active": "Bisecting from %s",
+  "Banner.Bisect.Reset": "End bisect",
   "Banner.CherryPick.Conflicts": "Cherry-pick %s: %d conflicts",
   "Banner.CherryPick.Ready": "Cherry-pick %s: ready to commit",
   "Banner.Merge.Abort": "Abort",
@@ -1029,6 +1031,8 @@
   "Status.AbortMergeFailed": "Could not abort the merge: %s",
   "Status.Ahead": "↑%d",
   "Status.Behind": "↓%d",
+  "Status.BisectReset": "Bisect ended",
+  "Status.BisectResetFailed": "Could not end the bisect: %v",
   "Status.BlameFailed": "The lines could not be traced: %v",
   "Status.BranchDeleteFailed": "Could not delete the branch: %v",
   "Status.BranchDeleted": "Branch %s deleted",

@@ -1,5 +1,7 @@
 {
   "App.Title": "Go.Git",
+  "Banner.Bisect.Active": "Поиск коммита (bisect) от %s",
+  "Banner.Bisect.Reset": "Завершить bisect",
   "Banner.CherryPick.Conflicts": "Cherry-pick %s: конфликтов — %d",
   "Banner.CherryPick.Ready": "Cherry-pick %s: можно делать коммит",
   "Banner.Merge.Abort": "Отменить",
@@ -1029,6 +1031,8 @@
   "Status.AbortMergeFailed": "Не удалось отменить слияние: %s",
   "Status.Ahead": "↑%d",
   "Status.Behind": "↓%d",
+  "Status.BisectReset": "Bisect завершён",
+  "Status.BisectResetFailed": "Не удалось завершить bisect: %v",
   "Status.BlameFailed": "Не удалось проследить строки: %v",
   "Status.BranchDeleteFailed": "Не удалось удалить ветку: %v",
   "Status.BranchDeleted": "Ветка %s удалена",
