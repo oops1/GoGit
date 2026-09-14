@@ -114,19 +114,16 @@ func TestKnownHostsAcceptCreatesParentDirectory(t *testing.T) {
 	}
 }
 
-func TestKnownHostsBuildCallbackPropagatesParseError(t *testing.T) {
+func TestKnownHostsCheckSkipsLinesItCannotParse(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "known_hosts")
-	if err := os.WriteFile(path, []byte("this is not a known_hosts line at all @@@\n"), 0o600); err != nil {
+	signer := generateSSHSigner(t)
+	content := "this is not a known_hosts line at all @@@\n" + sshKnownHostsLine("example.com:22", signer.PublicKey()) + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile returned error %v", err)
 	}
-	signer := generateSSHSigner(t)
 	policy := NewKnownHosts(path, neverConfirm(t))
-	err := policy.Check(t.Context(), hostKeyFor(t, "example.com:22", signer))
-	if err == nil {
-		t.Fatalf("Check succeeded, want a parse error")
-	}
-	if errors.Is(err, ErrHostKeyRejected) || errors.Is(err, ErrHostKeyChanged) {
-		t.Fatalf("Check returned %v, want a raw parse error", err)
+	if err := policy.Check(t.Context(), hostKeyFor(t, "example.com:22", signer)); err != nil {
+		t.Fatalf("Check returned %v, want the valid line to be trusted despite the broken one", err)
 	}
 }
 
