@@ -77,12 +77,16 @@ func ReadConflict(ctx context.Context, r *repo.Repository, path string) (Conflic
 }
 
 func (f *ConflictFile) takeStage(db *odb.DB, entry index.Entry) error {
-	kind, data, err := dbGet(db, entry.ID)
-	if err != nil {
-		return err
-	}
-	if kind != object.TypeBlob {
-		return nil
+	data := []byte("Subproject commit " + entry.ID.String() + "\n")
+	if !entry.Mode.IsSubmodule() {
+		kind, blob, err := dbGet(db, entry.ID)
+		if err != nil {
+			return err
+		}
+		if kind != object.TypeBlob {
+			return nil
+		}
+		data = blob
 	}
 	switch entry.Stage {
 	case index.StageAncestor:

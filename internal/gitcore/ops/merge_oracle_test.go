@@ -649,7 +649,7 @@ func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOpt
 }
 
 func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
-	for _, s := range mergeScenarios() {
+	for _, s := range append(mergeScenarios(), gitlinkMergeScenarios()...) {
 		t.Run(s.name, func(t *testing.T) {
 			o := newOracle(t)
 			sides := [2]*mergeBuilder{}
