@@ -35,7 +35,7 @@ func (a *App) checkRemoteConnection(view *settings.View) {
 	secretsWG.Go(func() {
 		refs, err := lsRemoteRefs(context.Background(), rawURL, a.transportOptions(nil))
 		if err != nil {
-			a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.ConnectionFailed", err.Error()), true)
+			a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.ConnectionFailed", transportErrorText(err)), true)
 			return
 		}
 		a.reportSecretsCheck(view, i18n.Tf("Dialog.Settings.Secrets.Status.ConnectionOk", len(refs)), false)

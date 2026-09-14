@@ -37,7 +37,8 @@ func (a *App) transportOptions(prog progress.Func) transport.Options {
 		UserAgent:   remoteUserAgent,
 		Progress:    prog,
 		HostKeys:    a.hostKeyPolicy(),
-		Keys:        transport.NewAgentKeys(),
+		Keys:        a.sshKeySource(),
+		SSH:         a.sshTransportOptions(),
 	}
 }
 
@@ -71,7 +72,9 @@ func (a *App) runRemoteJob(title string, reloadTree bool, job remoteJob) {
 	}
 	a.RunOperation(title, func(ctx context.Context, reporter OperationReporter) error {
 		prog := newOperationProgress(reporter)
+		a.reportIgnoredSSHArguments(reporter)
 		err := job(ctx, o, prog, reporter)
+		reportTransportError(reporter, err)
 		a.finishRemoteOperation(reloadTree)
 		return err
 	})
@@ -295,7 +298,7 @@ func (a *App) checkCloneURL(view *clone.View, url string) {
 	a.Post(func() {
 		view.SetBusy(false)
 		if err != nil {
-			view.SetStatus(i18n.Tf("Dialog.Clone.Status.Failed", err))
+			view.SetStatus(i18n.Tf("Dialog.Clone.Status.Failed", transportErrorText(err)))
 			return
 		}
 		branchNames, head := cloneBranchesFromRefs(refList)
@@ -323,6 +326,7 @@ func cloneBranchesFromRefs(refList []transport.Ref) ([]string, string) {
 func (a *App) startClone(result clone.Result) {
 	a.RunOperation(i18n.T("Operation.Title.Clone"), func(ctx context.Context, reporter OperationReporter) error {
 		prog := newOperationProgress(reporter)
+		a.reportIgnoredSSHArguments(reporter)
 		r, err := cloneRepository(ctx, result.URL, result.Directory, ops.CloneOptions{
 			Branch:       result.Branch,
 			SingleBranch: result.Branch != "",
@@ -331,6 +335,7 @@ func (a *App) startClone(result clone.Result) {
 			Transport:    a.transportOptions(prog),
 		})
 		if err != nil {
+			reportTransportError(reporter, err)
 			return err
 		}
 		if closeErr := r.Close(); closeErr != nil {
