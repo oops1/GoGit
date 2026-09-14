@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -140,6 +141,9 @@ func fetchV2(ctx context.Context, rt roundTripper, req FetchRequest, neg Negotia
 	if len(req.Wants) == 0 && len(req.WantRefs) == 0 {
 		return nil, fmt.Errorf("%w: fetch request has no wants", ErrProtocol)
 	}
+	if err := requireFetchV2Features(req, caps); err != nil {
+		return nil, err
+	}
 	haveNext := haveIterFunc(negHaves(ctx, neg))
 	var sentHaves []hash.ObjectID
 	resp := &FetchResponse{}
@@ -188,6 +192,25 @@ func fetchV2(ctx context.Context, rt roundTripper, req FetchRequest, neg Negotia
 		}
 		closeQuietly(reader)
 	}
+}
+
+func requireFetchV2Features(req FetchRequest, caps Capabilities) error {
+	value, _ := caps.Value("fetch")
+	features := strings.Fields(value)
+	needs := []struct {
+		feature string
+		used    bool
+	}{
+		{"filter", req.Filter != ""},
+		{"ref-in-want", len(req.WantRefs) > 0},
+		{CapShallow, hasDeepenArgs(req) || len(req.Shallow) > 0},
+	}
+	for _, need := range needs {
+		if need.used && !slices.Contains(features, need.feature) {
+			return fmt.Errorf("%w: the server does not offer fetch %s", ErrProtocol, need.feature)
+		}
+	}
+	return nil
 }
 
 func hasReadyAck(acks []ackLine) bool {

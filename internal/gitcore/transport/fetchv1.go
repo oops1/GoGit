@@ -76,11 +76,12 @@ func fetchV1(ctx context.Context, rt roundTripper, req FetchRequest, neg Negotia
 	if len(req.Wants) == 0 {
 		return nil, fmt.Errorf("%w: fetch request has no wants", ErrProtocol)
 	}
-	prefix := buildV1WantPrefix(req, caps, agent)
+	prefix := appendFlushPkt(buildV1WantPrefix(req, caps, agent))
+	detailed := caps.Has(CapMultiAckDetailed)
 	haveNext := haveIterFunc(negHaves(ctx, neg))
 	var sentHaves []hash.ObjectID
 	resp := &FetchResponse{}
-	forceFinal := false
+	forceFinal, acked := false, false
 	round := 0
 	for {
 		round++
@@ -115,7 +116,7 @@ func fetchV1(ctx context.Context, rt roundTripper, req FetchRequest, neg Negotia
 			return nil, err
 		}
 		dec := NewDecoder(reader)
-		if round == 1 && hasDeepenArgs(req) {
+		if (stateless || round == 1) && hasDeepenArgs(req) {
 			shallow, unshallow, err := readShallowUpdate(dec)
 			if err != nil {
 				closeQuietly(reader)
@@ -123,29 +124,63 @@ func fetchV1(ctx context.Context, rt roundTripper, req FetchRequest, neg Negotia
 			}
 			resp.Shallow, resp.Unshallow = shallow, unshallow
 		}
-		line, typ, err := readOnePktLine(dec)
-		if err != nil {
-			closeQuietly(reader)
-			return nil, err
-		}
-		if typ != PktData {
-			closeQuietly(reader)
-			return nil, fmt.Errorf("%w: expected an ACK/NAK line, got %s", ErrProtocol, typ)
-		}
-		ack, err := parseAckLine(line)
-		if err != nil {
-			closeQuietly(reader)
-			return nil, err
-		}
-		applyAck(neg, ack)
-
 		if final {
+			if !acked || stateless {
+				if err := readFinalAcks(dec, neg); err != nil {
+					closeQuietly(reader)
+					return nil, err
+				}
+			}
 			resp.Pack = wrapPack(reader, caps, req.Progress)
 			return resp, nil
 		}
-		if ack.status == ackReady {
-			forceFinal = true
-		}
+		ready, common, err := readRoundAcks(dec, neg, detailed)
 		closeQuietly(reader)
+		if err != nil {
+			return nil, err
+		}
+		acked = acked || common
+		forceFinal = ready || common
+	}
+}
+
+func readAck(dec *Decoder) (ackLine, error) {
+	line, typ, err := readOnePktLine(dec)
+	if err != nil {
+		return ackLine{}, err
+	}
+	if typ != PktData {
+		return ackLine{}, fmt.Errorf("%w: expected an ACK/NAK line, got %s", ErrProtocol, typ)
+	}
+	return parseAckLine(line)
+}
+
+func readRoundAcks(dec *Decoder, neg Negotiator, detailed bool) (ready, common bool, err error) {
+	for {
+		ack, err := readAck(dec)
+		if err != nil {
+			return false, false, err
+		}
+		applyAck(neg, ack)
+		if !detailed {
+			return false, ack.status != ackNAK, nil
+		}
+		if ack.status == ackNAK {
+			return ready, false, nil
+		}
+		ready = ready || ack.status == ackReady
+	}
+}
+
+func readFinalAcks(dec *Decoder, neg Negotiator) error {
+	for {
+		ack, err := readAck(dec)
+		if err != nil {
+			return err
+		}
+		applyAck(neg, ack)
+		if ack.status == ackNAK || ack.status == ackBare {
+			return nil
+		}
 	}
 }
