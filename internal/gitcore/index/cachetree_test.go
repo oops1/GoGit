@@ -200,6 +200,34 @@ func TestWriteTreeReusesValidSubtrees(t *testing.T) {
 	}
 }
 
+func TestWriteTreeLeavesIntentToAddEntriesOut(t *testing.T) {
+	idx := New(Version2)
+	idx.Add(blobEntry("a.txt", StageMerged))
+	for _, path := range []string{"new.txt", "planned/new.txt"} {
+		entry := blobEntry(path, StageMerged)
+		entry.IntentToAdd = true
+		idx.Add(entry)
+	}
+	expected := New(Version2)
+	expected.Add(blobEntry("a.txt", StageMerged))
+	want, err := expected.WriteTree(newMemoryObjects())
+	if err != nil {
+		t.Fatalf("WriteTree returned error %v", err)
+	}
+
+	objects := newMemoryObjects()
+	got, err := idx.WriteTree(objects)
+	if err != nil || got != want {
+		t.Fatalf("WriteTree = %s, %v; want %s", got, err, want)
+	}
+	if idx.CacheTree.Valid() {
+		t.Fatal("the cache tree was marked valid although entries were left out")
+	}
+	if again, err := idx.WriteTree(objects); err != nil || again != want {
+		t.Fatalf("a second WriteTree = %s, %v", again, err)
+	}
+}
+
 func TestWriteTreeWritesTheEmptyTreeForAnEmptyIndex(t *testing.T) {
 	objects := newMemoryObjects()
 	id, err := New(Version2).WriteTree(objects)
