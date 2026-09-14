@@ -15,6 +15,8 @@ var authHeaderPattern = regexp.MustCompile(`(?i)(authorization:\s*(?:basic|beare
 
 var credentialURLPattern = regexp.MustCompile(`://([^/@:\s]+):([^/@\s]+)@`)
 
+var tokenURLPattern = regexp.MustCompile(`(https?://)[^/@:\s]+@`)
+
 type redactHandler struct {
 	next slog.Handler
 	keys map[string]struct{}
@@ -72,6 +74,9 @@ func (h *redactHandler) redactAttr(a slog.Attr) slog.Attr {
 	if a.Value.Kind() == slog.KindString {
 		return slog.String(a.Key, redactText(a.Value.String()))
 	}
+	if err, ok := a.Value.Any().(error); ok {
+		return slog.String(a.Key, redactText(err.Error()))
+	}
 	return a
 }
 
@@ -83,5 +88,6 @@ func (h *redactHandler) isSecretKey(key string) bool {
 func redactText(s string) string {
 	s = authHeaderPattern.ReplaceAllString(s, "${1}"+redactedValue)
 	s = credentialURLPattern.ReplaceAllString(s, "://$1:"+redactedValue+"@")
+	s = tokenURLPattern.ReplaceAllString(s, "${1}"+redactedValue+"@")
 	return s
 }
