@@ -84,6 +84,7 @@ func (v *View) Item(ref refs.Name) (*treeview.TreeViewItem, bool) {
 
 func (v *View) Render(s Snapshot) {
 	v.captureExpanded()
+	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
 
 	v.tree.BeginUpdate()
 	v.tree.ClearRoots()
@@ -100,6 +101,17 @@ func (v *View) Render(s Snapshot) {
 	}
 
 	v.tree.EndUpdate()
+	if item, ok := v.itemByRef[selected]; ok {
+		selectQuietly(v.tree.Tree, item)
+	}
+	v.tree.ScrollBy(scroll)
+}
+
+func selectQuietly(tree *treeview.TreeView, item *treeview.TreeViewItem) {
+	handler := tree.OnSelectedItemChanged
+	tree.OnSelectedItemChanged = nil
+	tree.SetSelectedItem(item)
+	tree.OnSelectedItemChanged = handler
 }
 
 func (v *View) captureExpanded() {

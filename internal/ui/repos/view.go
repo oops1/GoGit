@@ -261,6 +261,7 @@ func (v *View) Render(reg *repo.Registry, state map[string]State) {
 	defer v.mu.Unlock()
 
 	v.captureExpandedLocked()
+	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
 
 	v.tree.BeginUpdate()
 	v.tree.ClearRoots()
@@ -279,6 +280,13 @@ func (v *View) Render(reg *repo.Registry, state map[string]State) {
 		v.tree.AddRoot(item)
 	}
 	v.tree.EndUpdate()
+	if item, ok := v.itemByID[selected]; ok {
+		handler := v.tree.Tree.OnSelectedItemChanged
+		v.tree.Tree.OnSelectedItemChanged = nil
+		v.tree.Tree.SetSelectedItem(item)
+		v.tree.Tree.OnSelectedItemChanged = handler
+	}
+	v.tree.ScrollBy(scroll)
 }
 
 func (v *View) captureExpandedLocked() {
