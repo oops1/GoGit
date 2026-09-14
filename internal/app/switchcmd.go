@@ -81,7 +81,7 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 		if mode, ok := switchchanges.Automatic(setting); ok {
 			return resolveBlockedSwitch(ctx, r, reporter, name, mode, overwrite.Paths)
 		}
-		a.Post(func() { a.askSwitchChanges(name, overwrite.Paths) })
+		reporter.Then(func() { a.askSwitchChanges(name, overwrite.Paths) })
 		return err
 	})
 }

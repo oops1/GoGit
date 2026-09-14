@@ -268,7 +268,7 @@ func (a *App) finishFlow(kind, name string, model flow.FinishModel) {
 		opts.SkipTag = opts.SkipTag || result.KeptTag != ""
 		if err == nil && result.Finished() && !result.Pushed && opts.Network.Remote != "" {
 			reporter.Log(i18n.Tf("Operation.Log.FlowNotPushed", name))
-			a.Post(func() { a.offerFlowPush(kind, name, opts) })
+			reporter.Then(func() { a.offerFlowPush(kind, name, opts) })
 		}
 		return err
 	})

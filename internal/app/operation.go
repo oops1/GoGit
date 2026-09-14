@@ -42,8 +42,17 @@ var phaseLogKeys = map[string]phaseKeys{
 }
 
 type OperationReporter struct {
-	app  *App
-	view *operation.View
+	app   *App
+	view  *operation.View
+	after *operationFollowUps
+}
+
+type operationFollowUps struct {
+	actions []func()
+}
+
+func (r OperationReporter) Then(action func()) {
+	r.after.actions = append(r.after.actions, action)
 }
 
 func (r OperationReporter) Log(line string) {
@@ -124,7 +133,8 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 	}
 	view.Dialog().CancelAction = cancel
 	a.showModal(view.Dialog(), view)
-	reporter := OperationReporter{app: a, view: view}
+	after := &operationFollowUps{}
+	reporter := OperationReporter{app: a, view: view, after: after}
 	go func() {
 		defer a.netWG.Done()
 		resume := a.holdWatch()
@@ -132,7 +142,13 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 		resume()
 		cancel()
 		a.releaseNetOperation()
-		a.Post(func() { view.Finish(err) })
+		followUps := after.actions
+		a.Post(func() {
+			view.Finish(err)
+			for _, followUp := range followUps {
+				followUp()
+			}
+		})
 	}()
 }
 
