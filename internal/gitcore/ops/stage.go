@@ -179,10 +179,21 @@ func (s *stager) readWorktreeObject(rel string, info fs.FileInfo) (object.Mode, 
 		return 0, nil, err
 	}
 	data = s.wt.checkinConvert(rel, data)
+	if s.keepsSymlinkMode(rel) {
+		return object.ModeSymlink, data, nil
+	}
 	if s.wt.fileMode && info.Mode().Perm()&0o111 != 0 {
 		return object.ModeExecutable, data, nil
 	}
 	return object.ModeBlob, data, nil
+}
+
+func (s *stager) keepsSymlinkMode(rel string) bool {
+	if s.wt.symlinks {
+		return false
+	}
+	entry, ok := s.idx.Get(rel, index.StageMerged)
+	return ok && entry.Mode.IsSymlink()
 }
 
 func statOf(info fs.FileInfo, size int) index.Stat {

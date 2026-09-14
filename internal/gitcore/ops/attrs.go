@@ -15,6 +15,7 @@ type workingTree struct {
 	ignore   *attributes.Matcher
 	attrs    *attributes.Attributes
 	fileMode bool
+	symlinks bool
 }
 
 func openWorkingTree(r *repo.Repository) (*workingTree, error) {
@@ -48,7 +49,7 @@ func openWorkingTree(r *repo.Repository) (*workingTree, error) {
 		AutoCRLF:       core.AutoCRLF,
 		EOL:            core.EOL,
 	})
-	return &workingTree{root: root, ignore: ignore, attrs: attrs, fileMode: core.FileMode}, nil
+	return &workingTree{root: root, ignore: ignore, attrs: attrs, fileMode: core.FileMode, symlinks: core.Symlinks}, nil
 }
 
 func (w *workingTree) close() error {

@@ -23,7 +23,7 @@ func writeWorktreeBlob(wt *workingTree, rel string, mode object.Mode, data []byt
 			return err
 		}
 	}
-	if mode.IsSymlink() {
+	if mode.IsSymlink() && wt.symlinks {
 		_ = fsRootRemove(wt.root, name)
 		return fsRootSymlink(wt.root, string(data), name)
 	}
