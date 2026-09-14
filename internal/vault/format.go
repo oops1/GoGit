@@ -2,6 +2,7 @@ package vault
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -85,6 +86,9 @@ func decodeSlot(data []byte) (Slot, int, error) {
 	m := binary.BigEndian.Uint32(data[off+4 : off+8])
 	threads := data[off+8]
 	off += 9
+	if SlotKind(kind) == SlotPassword && (t < minSlotTime || t > maxSlotTime || m < minSlotMemory || m > maxSlotMemory || threads < 1) {
+		return Slot{}, 0, ErrInvalidFormat
+	}
 	return Slot{
 		Kind:    SlotKind(kind),
 		Salt:    append([]byte(nil), salt...),
@@ -93,6 +97,13 @@ func decodeSlot(data []byte) (Slot, int, error) {
 		Params:  SlotParams{Time: t, Memory: m, Threads: threads},
 	}, off, nil
 }
+
+const (
+	minSlotTime   = 1
+	maxSlotTime   = 64
+	minSlotMemory = 8 * 1024
+	maxSlotMemory = 4 * 1024 * 1024
+)
 
 func encodeHeader(version, flags uint16, slots []Slot) ([]byte, error) {
 	if len(slots) < minSlotCount || len(slots) > maxSlotCount {
@@ -168,11 +179,17 @@ func writeAtomic(path string, data []byte) error {
 		return fmt.Errorf("vault: %w", err)
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	file, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
 		return fmt.Errorf("vault: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("vault: %w", err)
+	_, err = file.Write(data)
+	err = errors.Join(err, file.Sync(), file.Close())
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		return fmt.Errorf("vault: %w", errors.Join(err, os.Remove(tmp)))
 	}
 	return nil
 }

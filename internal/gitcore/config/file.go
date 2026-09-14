@@ -305,7 +305,7 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	_, err = fh.Write(data)
-	err = errors.Join(err, fh.Close())
+	err = errors.Join(err, fh.Sync(), fh.Close())
 	if err == nil {
 		err = os.Rename(lock, path)
 	}
