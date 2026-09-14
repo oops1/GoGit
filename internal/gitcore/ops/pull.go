@@ -116,7 +116,10 @@ func Pull(ctx context.Context, r *repo.Repository, opts PullOptions) (PullResult
 		return PullResult{Fetch: fetchResult}, err
 	}
 
-	trackingName := refs.RemoteBranchName(remoteName, mergeRef.Short())
+	trackingName, tracked := rem.TrackingRef(mergeRef)
+	if !tracked {
+		return PullResult{Fetch: fetchResult}, fmt.Errorf("%w: %s", ErrNoUpstream, mergeRef)
+	}
 	newCommit, found, err := pullTrackingRef(r, trackingName)
 	if err != nil {
 		return PullResult{Fetch: fetchResult}, err
