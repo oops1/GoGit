@@ -45,6 +45,7 @@ type PushResult struct {
 
 type pendingUpdate struct {
 	name    refs.Name
+	src     refs.Name
 	old     hash.ObjectID
 	new     hash.ObjectID
 	created bool
@@ -198,7 +199,7 @@ func newPushPlanner(store *refs.Store, db *odb.DB, rem Remote, opts PushOptions,
 func (p *pushPlanner) plan(specs []refspec.RefSpec) error {
 	for _, spec := range specs {
 		if spec.IsDelete() {
-			if err := p.add(spec.Dst, hash.Zero, spec.Force, true); err != nil {
+			if err := p.add("", spec.Dst, hash.Zero, spec.Force, true); err != nil {
 				return err
 			}
 			continue
@@ -214,7 +215,7 @@ func (p *pushPlanner) plan(specs []refspec.RefSpec) error {
 				p.errs = append(p.errs, fmt.Errorf("remote: src refspec %s does not match any local ref", spec.Src))
 				continue
 			}
-			if err := p.add(spec.Dst, current, spec.Force, false); err != nil {
+			if err := p.add(name, spec.Dst, current, spec.Force, false); err != nil {
 				return err
 			}
 			continue
@@ -228,7 +229,7 @@ func (p *pushPlanner) plan(specs []refspec.RefSpec) error {
 			if !ok {
 				continue
 			}
-			if err := p.add(dst, ref.Target, spec.Force, false); err != nil {
+			if err := p.add(ref.Name, dst, ref.Target, spec.Force, false); err != nil {
 				return err
 			}
 		}
@@ -236,7 +237,7 @@ func (p *pushPlanner) plan(specs []refspec.RefSpec) error {
 	return nil
 }
 
-func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bool) error {
+func (p *pushPlanner) add(src refs.Name, dst string, newID hash.ObjectID, forceSpec, deleted bool) error {
 	if p.seen[dst] {
 		return nil
 	}
@@ -255,7 +256,7 @@ func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bo
 	forced := forceSpec || p.opts.Force
 	if lease, ok := p.opts.ForceWithLease[dst]; ok {
 		var current hash.ObjectID
-		if tracking, tracked := trackingRefFor(p.rem, dst); tracked {
+		if tracking, tracked := p.rem.TrackingRef(refs.Name(dst)); tracked {
 			var err error
 			if current, _, err = lookupCurrent(p.store, tracking); err != nil {
 				return err
@@ -286,6 +287,7 @@ func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bo
 	}
 	p.pending = append(p.pending, pendingUpdate{
 		name:    refs.Name(dst),
+		src:     src,
 		old:     old,
 		new:     newID,
 		created: old.IsZero() && !deleted,
@@ -315,7 +317,7 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 			errs = append(errs, fmt.Errorf("%w: %s: %s", ErrRejected, status.Name, status.Message))
 			continue
 		}
-		tracking, tracked := trackingRefFor(rem, status.Name)
+		tracking, tracked := rem.TrackingRef(refs.Name(status.Name))
 		if !tracked {
 			continue
 		}
@@ -339,25 +341,12 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 		if err := tx.Update(tracking, p.new, current); err != nil {
 			return nil, nil, nil, err
 		}
-		changes = append(changes, Change{Name: tracking, Old: current, New: p.new, Created: !existed, Forced: p.forced})
+		changes = append(changes, Change{Name: tracking, Old: current, New: p.new, Created: !existed, Forced: p.forced, Source: p.src, Pushed: p.name})
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, nil, nil, err
 	}
 	return changes, rejected, errs, nil
-}
-
-func trackingRefFor(rem Remote, dst string) (refs.Name, bool) {
-	specs := rem.Fetch
-	if len(specs) == 0 {
-		specs = []refspec.RefSpec{refspec.DefaultFetch(rem.Name)}
-	}
-	for _, spec := range specs {
-		if tracking, ok := spec.MatchSrc(dst); ok {
-			return refs.Name(tracking), true
-		}
-	}
-	return "", false
 }
 
 func (p *pushPlanner) followTags() error {
@@ -388,7 +377,7 @@ func (p *pushPlanner) followTags() error {
 	slices.SortFunc(follow, func(a, b refs.Ref) int { return strings.Compare(string(a.Name), string(b.Name)) })
 	for _, ref := range follow {
 		p.seen[ref.Name.String()] = true
-		p.pending = append(p.pending, pendingUpdate{name: ref.Name, new: ref.Target, created: true})
+		p.pending = append(p.pending, pendingUpdate{name: ref.Name, src: ref.Name, new: ref.Target, created: true})
 	}
 	return nil
 }
