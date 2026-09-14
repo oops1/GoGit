@@ -146,15 +146,17 @@ func (d *DB) lookupFresh(id hash.ObjectID) (object.Type, []byte, bool, error) {
 }
 
 func (d *DB) lookup(id hash.ObjectID) (object.Type, []byte, bool, error) {
+	var packErr error
+	if store := d.store(); store != nil {
+		kind, data, ok, err := store.Get(id)
+		if ok {
+			return kind, data, true, nil
+		}
+		packErr = err
+	}
 	kind, data, ok, err := d.looseRead(id)
 	if ok || err != nil {
 		return kind, data, ok, err
-	}
-	if store := d.store(); store != nil {
-		kind, data, ok, err = store.Get(id)
-		if ok || err != nil {
-			return kind, data, ok, err
-		}
 	}
 	for _, alternate := range d.alternates {
 		kind, data, ok, err = alternate.lookup(id)
@@ -162,7 +164,7 @@ func (d *DB) lookup(id hash.ObjectID) (object.Type, []byte, bool, error) {
 			return kind, data, ok, err
 		}
 	}
-	return 0, nil, false, nil
+	return 0, nil, false, packErr
 }
 
 func (d *DB) Has(id hash.ObjectID) (bool, error) {
@@ -180,15 +182,15 @@ func (d *DB) Has(id hash.ObjectID) (bool, error) {
 }
 
 func (d *DB) has(id hash.ObjectID) (bool, error) {
-	ok, err := d.looseHas(id)
-	if ok || err != nil {
-		return ok, err
-	}
 	if store := d.store(); store != nil {
-		ok, err = store.Contains(id)
+		ok, err := store.Contains(id)
 		if ok || err != nil {
 			return ok, err
 		}
+	}
+	ok, err := d.looseHas(id)
+	if ok || err != nil {
+		return ok, err
 	}
 	for _, alternate := range d.alternates {
 		ok, err = alternate.has(id)
@@ -235,11 +237,11 @@ func (d *DB) headerFresh(id hash.ObjectID) (object.Type, int64, bool, error) {
 }
 
 func (d *DB) header(id hash.ObjectID) (object.Type, int64, bool, error) {
-	kind, size, ok, err := d.looseHeader(id)
-	if ok || err != nil {
-		return kind, size, ok, err
+	kind, size, ok, packErr := d.packHeader(id)
+	if ok {
+		return kind, size, true, nil
 	}
-	kind, size, ok, err = d.packHeader(id)
+	kind, size, ok, err := d.looseHeader(id)
 	if ok || err != nil {
 		return kind, size, ok, err
 	}
@@ -249,7 +251,7 @@ func (d *DB) header(id hash.ObjectID) (object.Type, int64, bool, error) {
 			return kind, size, ok, err
 		}
 	}
-	return 0, 0, false, nil
+	return 0, 0, false, packErr
 }
 
 func (d *DB) packHeader(id hash.ObjectID) (object.Type, int64, bool, error) {
