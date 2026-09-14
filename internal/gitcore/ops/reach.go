@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +26,8 @@ var (
 )
 
 var reachHeads = []refs.Name{refs.HEAD, refs.OrigHead, refs.MergeHead, refs.CherryPickHead, refs.RebaseHead, refs.BisectHead}
+
+var rebaseRootFiles = []string{"rebase-apply/autostash", "rebase-apply/orig-head", "rebase-merge/autostash", "rebase-merge/orig-head"}
 
 type walkTrouble int
 
@@ -96,6 +99,21 @@ func (w *objectWalk) push(id hash.ObjectID, kind object.Type) {
 	w.stack = append(w.stack, walkItem{id: id, kind: kind})
 }
 
+func (w *objectWalk) pushPresent(id hash.ObjectID, kind object.Type) error {
+	if _, seen := w.seen[id]; seen || id.IsZero() || w.strict {
+		w.push(id, kind)
+		return nil
+	}
+	present, err := w.db.Contains(id)
+	if err != nil {
+		return err
+	}
+	if present {
+		w.push(id, kind)
+	}
+	return nil
+}
+
 func (w *objectWalk) gatherRoots(r *repo.Repository) error {
 	dirs, err := gitDirsOf(r)
 	if err != nil {
@@ -152,7 +170,22 @@ func (w *objectWalk) gatherGitDir(r *repo.Repository, gitDir string) error {
 	if err := w.gatherReflogs(store, gitDir); err != nil {
 		return err
 	}
+	w.gatherRebaseFiles(gitDir)
 	return w.gatherIndex(filepath.Join(gitDir, indexFileName))
+}
+
+func (w *objectWalk) gatherRebaseFiles(gitDir string) {
+	for _, name := range rebaseRootFiles {
+		data, err := os.ReadFile(filepath.Join(gitDir, filepath.FromSlash(name)))
+		if err != nil {
+			continue
+		}
+		id, err := hash.Parse(strings.TrimSpace(string(data)))
+		if err != nil {
+			continue
+		}
+		w.push(id, 0)
+	}
 }
 
 func (w *objectWalk) gatherReflogs(store *refs.Store, gitDir string) error {
@@ -175,8 +208,12 @@ func (w *objectWalk) gatherReflogs(store *refs.Store, gitDir string) error {
 			if err != nil {
 				return err
 			}
-			w.push(record.Old, 0)
-			w.push(record.New, 0)
+			if err := w.pushPresent(record.Old, 0); err != nil {
+				return err
+			}
+			if err := w.pushPresent(record.New, 0); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -194,7 +231,19 @@ func (w *objectWalk) gatherIndex(path string) error {
 		if entry.Mode.IsSubmodule() || entry.IntentToAdd {
 			continue
 		}
-		w.push(entry.ID, entry.Mode.ObjectType())
+		if err := w.pushPresent(entry.ID, entry.Mode.ObjectType()); err != nil {
+			return err
+		}
+	}
+	for _, undo := range idx.ResolveUndo {
+		for stage, id := range undo.IDs {
+			if undo.Modes[stage] == 0 {
+				continue
+			}
+			if err := w.pushPresent(id, object.TypeBlob); err != nil {
+				return err
+			}
+		}
 	}
 	w.pushCacheTree(idx.CacheTree)
 	return nil

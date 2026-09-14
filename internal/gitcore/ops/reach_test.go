@@ -205,10 +205,9 @@ func TestTheWalkRefusesAHistoryWithHoles(t *testing.T) {
 		{"a branch at a missing commit", func(t *testing.T, r *testRepo) {
 			writeGitFile(t, r.repo.CommonDir(), "refs/heads/lost", hash.SumSHA1("commit", []byte("lost")).String()+"\n")
 		}, odb.ErrNotFound},
-		{"a staged blob that was never written", func(t *testing.T, r *testRepo) {
-			idx := r.index()
-			idx.Add(index.Entry{Path: "lost.txt", Mode: object.ModeBlob, ID: hash.SumSHA1("blob", []byte("lost"))})
-			r.saveIndex(idx)
+		{"a tree whose blob was never written", func(t *testing.T, r *testRepo) {
+			tree := putTree(t, r, object.TreeEntry{Mode: object.ModeBlob, Name: "lost.txt", ID: hash.SumSHA1("blob", []byte("lost"))})
+			setMaintRef(t, r, refs.BranchName("holey"), putMaintCommit(t, r, tree))
 		}, odb.ErrNotFound},
 		{"a commit that does not parse", func(t *testing.T, r *testRepo) {
 			id, err := r.db().Put(object.TypeCommit, []byte("garbage"))

@@ -46,7 +46,7 @@ func Prune(ctx context.Context, r *repo.Repository, opts PruneOptions) (PruneRes
 		return PruneResult{}, err
 	}
 	var result PruneResult
-	if err := pruneLoose(ctx, db, walk, opts.DryRun, &result); err != nil {
+	if err := pruneLoose(ctx, db, walk, expire, opts.DryRun, &result); err != nil {
 		return result, err
 	}
 	if err := pruneTemps(db, expire, opts.DryRun, &result); err != nil {
@@ -85,7 +85,7 @@ func extendWithRecent(walk *objectWalk, db *odb.DB, expire time.Time) error {
 	return walk.run()
 }
 
-func pruneLoose(ctx context.Context, db *odb.DB, walk *objectWalk, dryRun bool, result *PruneResult) error {
+func pruneLoose(ctx context.Context, db *odb.DB, walk *objectWalk, expire time.Time, dryRun bool, result *PruneResult) error {
 	for loose, err := range dbLooseObjects(db) {
 		if err != nil {
 			return err
@@ -101,7 +101,7 @@ func pruneLoose(ctx context.Context, db *odb.DB, walk *objectWalk, dryRun bool, 
 		case packed:
 			result.Packed++
 			result.PackedBytes += loose.Size
-		case !walk.reachable(loose.ID):
+		case !walk.reachable(loose.ID) && loose.ModTime.Before(expire):
 			result.Unreachable = append(result.Unreachable, loose.ID)
 			result.UnreachableBytes += loose.Size
 		default:
