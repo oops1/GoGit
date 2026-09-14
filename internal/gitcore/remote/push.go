@@ -272,7 +272,7 @@ func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bo
 	if !deleted && !old.IsZero() {
 		ff, err := isFastForward(p.db, nil, old, newID)
 		if err != nil {
-			if !forced {
+			if !forced && !errors.Is(err, odb.ErrNotFound) {
 				return err
 			}
 			ff = false
