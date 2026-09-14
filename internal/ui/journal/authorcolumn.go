@@ -88,7 +88,7 @@ func (v *View) sameAuthorAbove(index int, author string) bool {
 	return ok && previous.Author == author
 }
 
-func (v *View) resizeAuthorColumn() {
+func (v *View) resizeAuthorColumnLocked() {
 	if v.grid == nil || v.fullAuthorName {
 		return
 	}

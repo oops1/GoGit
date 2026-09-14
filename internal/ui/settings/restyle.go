@@ -30,7 +30,7 @@ func (v *View) fields() []*widget.TextInput {
 }
 
 func (v *View) lists() []*widget.Dropdown {
-	return []*widget.Dropdown{v.language, v.theme, v.credentialSource, v.credentialType}
+	return []*widget.Dropdown{v.language, v.theme, v.credentialSource, v.credentialType, v.switchChanges}
 }
 
 func (v *View) quietButtons() []*widget.Button {

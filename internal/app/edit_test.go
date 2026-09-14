@@ -839,8 +839,21 @@ func TestApplyCommitWithAmendReplacesTheLastCommit(t *testing.T) {
 	if amended.Message != "amended message" {
 		t.Fatalf("message = %q, want amended message", amended.Message)
 	}
-	if got := journalRowCountOnDispatcher(t, a); got != 1 {
-		t.Fatalf("journal row count = %d, want 1 after amend", got)
+	waitForJournalRowCount(t, a, 1)
+}
+
+func waitForJournalRowCount(t *testing.T, a *App, want int) {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		got := journalRowCountOnDispatcher(t, a)
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("journal row count = %d, want %d", got, want)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

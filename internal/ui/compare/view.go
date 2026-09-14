@@ -26,7 +26,7 @@ const (
 
 var ErrWidgetMissing = errors.New("compare: named widget missing")
 
-var loadDialog = dialogs.Load
+var loadDialog = dialogs.LoadResizable
 
 var codeExtensions = map[string]bool{
 	".go": true, ".c": true, ".h": true, ".cpp": true, ".hpp": true, ".cs": true,

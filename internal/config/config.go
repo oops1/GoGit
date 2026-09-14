@@ -21,9 +21,21 @@ const (
 )
 
 const (
+	LayoutDocks   = "docks"
+	LayoutSidebar = "sidebar"
+)
+
+const (
 	PullStrategyFF     = "ff"
 	PullStrategyMerge  = "merge"
 	PullStrategyRebase = "rebase"
+)
+
+const (
+	SwitchChangesAsk       = "ask"
+	SwitchChangesStash     = "stash"
+	SwitchChangesMerge     = "merge"
+	SwitchChangesOverwrite = "overwrite"
 )
 
 const (
@@ -33,8 +45,8 @@ const (
 )
 
 const (
-	MinWindowWidth  = 800
-	MinWindowHeight = 600
+	MinWindowWidth  = 1280
+	MinWindowHeight = 760
 )
 
 type Config struct {
@@ -70,6 +82,7 @@ type Git struct {
 	BanAttribution   bool   `toml:"ban_attribution"`
 	ShallowDepth     int    `toml:"shallow_depth"`
 	CredentialSource string `toml:"credential_source"`
+	SwitchChanges    string `toml:"switch_local_changes"`
 }
 
 type UI struct {
@@ -82,6 +95,7 @@ type UI struct {
 	FilesSubdirectories   bool     `toml:"files_subdirectories"`
 	JournalFullAuthorName bool     `toml:"journal_full_author_name"`
 	CollapsedGroups       []string `toml:"collapsed_groups"`
+	Layout                string   `toml:"layout"`
 }
 
 type Updates struct {
@@ -111,8 +125,8 @@ func Default() *Config {
 		Language: "en",
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
-		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true},
-		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true},
+		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true, SwitchChanges: SwitchChangesAsk},
+		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true, Layout: LayoutDocks},
 	}
 }
 
@@ -147,6 +161,9 @@ func (c *Config) Normalize() {
 	if c.Theme != ThemeLight && c.Theme != ThemeDark {
 		c.Theme = ThemeSystem
 	}
+	if c.UI.Layout != LayoutSidebar {
+		c.UI.Layout = LayoutDocks
+	}
 	if c.Window.Width < MinWindowWidth {
 		c.Window.Width = MinWindowWidth
 	}
@@ -166,6 +183,11 @@ func (c *Config) Normalize() {
 	case PullStrategyMerge, PullStrategyRebase:
 	default:
 		c.Git.PullStrategy = PullStrategyFF
+	}
+	switch c.Git.SwitchChanges {
+	case SwitchChangesStash, SwitchChangesMerge, SwitchChangesOverwrite:
+	default:
+		c.Git.SwitchChanges = SwitchChangesAsk
 	}
 	if c.Git.DefaultRemote == "" {
 		c.Git.DefaultRemote = "origin"

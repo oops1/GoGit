@@ -185,3 +185,18 @@ func TestMenuIconMissing(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestCardIcons(t *testing.T) {
+	for _, name := range []string{"person", "pencil", "arrow_right", "file_text"} {
+		data, err := CardIcon(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(strings.TrimSpace(string(data)), "<svg") {
+			t.Fatalf("card icon %q is not svg", name)
+		}
+	}
+	if _, err := CardIcon("missing"); err == nil {
+		t.Fatal("expected error")
+	}
+}

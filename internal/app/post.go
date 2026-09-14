@@ -1,51 +1,19 @@
 package app
 
+var drivePosts = func(*App) func() { return func() {} }
+
 func (a *App) startPostQueue() {
-	a.postWake = make(chan struct{}, 1)
-	a.postStop = make(chan struct{})
-	a.postWG.Go(a.runPostQueue)
-}
-
-func (a *App) runPostQueue() {
-	for {
-		select {
-		case <-a.postWake:
-			for _, fn := range a.takePosted() {
-				fn()
-			}
-		case <-a.postStop:
-			return
-		}
-	}
-}
-
-func (a *App) takePosted() []func() {
-	a.postMu.Lock()
-	defer a.postMu.Unlock()
-	posted := a.posted
-	a.posted = nil
-	return posted
+	a.stopPostDriver = drivePosts(a)
 }
 
 func (a *App) Post(fn func()) {
-	a.postMu.Lock()
-	if a.postClosed {
-		a.postMu.Unlock()
+	if a.postClosed.Load() {
 		return
 	}
-	a.posted = append(a.posted, fn)
-	a.postMu.Unlock()
-	select {
-	case a.postWake <- struct{}{}:
-	default:
-	}
+	a.eng.Post(fn)
 }
 
 func (a *App) closePostQueue() {
-	a.postMu.Lock()
-	a.postClosed = true
-	a.posted = nil
-	a.postMu.Unlock()
-	close(a.postStop)
-	a.postWG.Wait()
+	a.postClosed.Store(true)
+	a.stopPostDriver()
 }

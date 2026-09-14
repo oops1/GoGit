@@ -80,7 +80,7 @@ func (a *App) leaveCommitView() {
 	a.selectedCommit = hash.ObjectID{}
 	a.setCommitSelected(false)
 	a.journalView.ClearSelection()
-	a.diffView.Clear()
+	a.clearDiff()
 	a.requestWorking()
 }
 

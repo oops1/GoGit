@@ -24,6 +24,9 @@ type switcher struct {
 	wt     *workingTree
 	db     *odb.DB
 	format hash.Format
+	head   map[string]treeEntry
+	target map[string]treeEntry
+	force  bool
 }
 
 func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchOptions) error {
@@ -71,24 +74,28 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 	if err != nil {
 		return err
 	}
+	headTree, err := commitTreeEntries(db, fromCommit)
+	if err != nil {
+		return err
+	}
 
-	if err := layoutWorkingTree(ctx, r, wt, db, targetTree, opts.Force); err != nil {
+	if err := layoutWorkingTree(ctx, r, wt, db, headTree, targetTree, opts.Force); err != nil {
 		return err
 	}
 
 	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
 }
 
-func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, targetTree map[string]treeEntry, force bool) error {
+func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool) error {
 	lock, err := lockIndex(r)
 	if err != nil {
 		return err
 	}
 
-	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format()}
+	sw := &switcher{ctx: ctx, wt: wt, db: db, format: db.Format(), head: headTree, target: targetTree, force: force}
 	currentIndex := indexByPath(lock.idx)
 
-	conflicts, err := sw.computeOverwrites(currentIndex, targetTree)
+	conflicts, err := sw.computeOverwrites(currentIndex)
 	if err != nil {
 		lock.abort()
 		return err
@@ -98,7 +105,7 @@ func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree,
 		return &OverwriteError{Paths: conflicts}
 	}
 
-	if err := sw.apply(lock.idx, currentIndex, targetTree); err != nil {
+	if err := sw.apply(lock.idx, currentIndex); err != nil {
 		lock.abort()
 		return err
 	}
@@ -183,7 +190,30 @@ func indexByPath(idx *index.Index) map[string]*index.Entry {
 	return out
 }
 
-func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targetTree map[string]treeEntry) ([]string, error) {
+func (sw *switcher) carried(rel string) bool {
+	if sw.head == nil || sw.force {
+		return false
+	}
+	old, oldOK := sw.head[rel]
+	tgt, tgtOK := sw.target[rel]
+	return oldOK == tgtOK && (!oldOK || old.mode == tgt.mode && old.id == tgt.id)
+}
+
+func (sw *switcher) staged(rel string, cur *index.Entry, curOK bool) bool {
+	if sw.head == nil {
+		return false
+	}
+	old, oldOK := sw.head[rel]
+	return curOK != oldOK || curOK && (cur.Mode != old.mode || cur.ID != old.id)
+}
+
+func (sw *switcher) indexHoldsTarget(rel string, currentIndex map[string]*index.Entry) bool {
+	cur, curOK := currentIndex[rel]
+	tgt, tgtOK := sw.target[rel]
+	return curOK && tgtOK && cur.Mode == tgt.mode && cur.ID == tgt.id
+}
+
+func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry) ([]string, error) {
 	seen := map[string]bool{}
 	var conflicts []string
 	check := func(rel string) error {
@@ -194,9 +224,12 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targ
 			return err
 		}
 		seen[rel] = true
+		if sw.carried(rel) || sw.indexHoldsTarget(rel, currentIndex) {
+			return nil
+		}
 		cur, curOK := currentIndex[rel]
-		tgt, tgtOK := targetTree[rel]
-		if curOK && tgtOK && cur.Mode == tgt.mode && cur.ID == tgt.id {
+		if sw.staged(rel, cur, curOK) {
+			conflicts = append(conflicts, rel)
 			return nil
 		}
 		dirty, err := sw.isDirty(rel, cur, func(path string) bool { _, ok := currentIndex[path]; return ok })
@@ -213,7 +246,7 @@ func (sw *switcher) computeOverwrites(currentIndex map[string]*index.Entry, targ
 			return nil, err
 		}
 	}
-	for rel := range targetTree {
+	for rel := range sw.target {
 		if err := check(rel); err != nil {
 			return nil, err
 		}
@@ -298,10 +331,10 @@ func (sw *switcher) readWorktreeBytes(rel string, info fs.FileInfo) ([]byte, err
 	return sw.wt.checkinConvert(rel, data), nil
 }
 
-func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry, targetTree map[string]treeEntry) error {
+func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry) error {
 	var removedDirs []string
 	for rel := range currentIndex {
-		if _, ok := targetTree[rel]; ok {
+		if _, ok := sw.target[rel]; ok || sw.carried(rel) {
 			continue
 		}
 		if err := sw.ctx.Err(); err != nil {
@@ -316,9 +349,12 @@ func (sw *switcher) apply(idx *index.Index, currentIndex map[string]*index.Entry
 	for _, rel := range removedDirs {
 		sw.pruneEmptyDirs(parentOf(rel))
 	}
-	for rel, tgt := range targetTree {
+	for rel, tgt := range sw.target {
 		if err := sw.ctx.Err(); err != nil {
 			return err
+		}
+		if sw.carried(rel) || sw.head != nil && !sw.force && sw.indexHoldsTarget(rel, currentIndex) {
+			continue
 		}
 		if err := sw.checkout(rel, tgt); err != nil {
 			return err

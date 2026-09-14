@@ -19,6 +19,7 @@ const (
 type Model struct {
 	Language              string
 	Theme                 string
+	Layout                string
 	ShowToolbar           bool
 	ToolbarCaptions       bool
 	ShowStatusBar         bool
@@ -33,12 +34,14 @@ type Model struct {
 	BanAttribution        bool
 	ShallowDepth          int
 	CredentialSource      string
+	SwitchChanges         string
 }
 
 func FromConfig(cfg *config.Config) Model {
 	m := Model{
 		Language:              cfg.Language,
 		Theme:                 cfg.Theme,
+		Layout:                cfg.UI.Layout,
 		ShowToolbar:           cfg.UI.ShowToolbar,
 		ToolbarCaptions:       cfg.UI.ToolbarCaptions,
 		ShowStatusBar:         cfg.UI.ShowStatusBar,
@@ -53,6 +56,7 @@ func FromConfig(cfg *config.Config) Model {
 		BanAttribution:        cfg.Git.BanAttribution,
 		ShallowDepth:          cfg.Git.ShallowDepth,
 		CredentialSource:      cfg.Git.CredentialSource,
+		SwitchChanges:         cfg.Git.SwitchChanges,
 	}
 	return m.Normalized()
 }
@@ -65,6 +69,9 @@ func (m Model) Normalized() Model {
 	case config.ThemeDark, config.ThemeLight:
 	default:
 		m.Theme = config.ThemeSystem
+	}
+	if m.Layout != config.LayoutSidebar {
+		m.Layout = config.LayoutDocks
 	}
 	m.LogMaxCount = clamp(m.LogMaxCount, MinLogMaxCount, MaxLogMaxCount)
 	m.FetchInterval = clamp(m.FetchInterval, MinFetchInterval, MaxFetchInterval)
@@ -83,6 +90,11 @@ func (m Model) Normalized() Model {
 	default:
 		m.CredentialSource = config.CredentialSourceVault
 	}
+	switch m.SwitchChanges {
+	case config.SwitchChangesStash, config.SwitchChangesMerge, config.SwitchChangesOverwrite:
+	default:
+		m.SwitchChanges = config.SwitchChangesAsk
+	}
 	return m
 }
 
@@ -90,6 +102,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	n := m.Normalized()
 	cfg.Language = n.Language
 	cfg.Theme = n.Theme
+	cfg.UI.Layout = n.Layout
 	cfg.UI.ShowToolbar = n.ShowToolbar
 	cfg.UI.ToolbarCaptions = n.ToolbarCaptions
 	cfg.UI.ShowStatusBar = n.ShowStatusBar
@@ -104,6 +117,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.BanAttribution = n.BanAttribution
 	cfg.Git.ShallowDepth = n.ShallowDepth
 	cfg.Git.CredentialSource = n.CredentialSource
+	cfg.Git.SwitchChanges = n.SwitchChanges
 }
 
 func clamp(v, min, max int) int {

@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
@@ -19,10 +20,19 @@ var loadDialog = dialogs.Load
 
 var themeOrder = []string{config.ThemeSystem, config.ThemeDark, config.ThemeLight}
 
+var layoutOrder = []string{config.LayoutDocks, config.LayoutSidebar}
+
 var credentialSourceOrder = []string{
 	config.CredentialSourceVault,
 	config.CredentialSourceVaultThenHelper,
 	config.CredentialSourceHelper,
+}
+
+var switchChangesOrder = []string{
+	config.SwitchChangesAsk,
+	config.SwitchChangesStash,
+	config.SwitchChangesMerge,
+	config.SwitchChangesOverwrite,
 }
 
 type View struct {
@@ -49,6 +59,7 @@ type View struct {
 
 	language              *widget.Dropdown
 	theme                 *widget.Dropdown
+	layoutMode            *widget.Dropdown
 	showToolbar           *widget.CheckBox
 	toolbarCaptions       *widget.CheckBox
 	showStatusBar         *widget.CheckBox
@@ -62,6 +73,7 @@ type View struct {
 	pruneOnFetch          *widget.CheckBox
 	banAttribution        *widget.CheckBox
 	shallowDepth          *widget.NumericUpDown
+	switchChanges         *widget.Dropdown
 	okBtn                 *widget.Button
 	cancelBtn             *widget.Button
 
@@ -226,6 +238,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.theme, ok = named["theme"].(*widget.Dropdown); !ok {
 		return fmt.Errorf("%w: theme", ErrWidgetMissing)
 	}
+	if v.layoutMode, ok = named["layoutMode"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: layoutMode", ErrWidgetMissing)
+	}
 	if v.showToolbar, ok = named["showToolbar"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: showToolbar", ErrWidgetMissing)
 	}
@@ -252,6 +267,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.pullStrategy, ok = named["pullStrategy"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: pullStrategy", ErrWidgetMissing)
+	}
+	if v.switchChanges, ok = named["switchChanges"].(*widget.Dropdown); !ok {
+		return fmt.Errorf("%w: switchChanges", ErrWidgetMissing)
 	}
 	if v.defaultRemote, ok = named["defaultRemote"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: defaultRemote", ErrWidgetMissing)
@@ -321,6 +339,7 @@ func languageLabel(code string) string {
 func (v *View) apply(m Model) {
 	v.setLanguageSelection(m.Language)
 	v.theme.SetSelected(themeIndex(m.Theme))
+	v.layoutMode.SetSelected(layoutIndex(m.Layout))
 	v.showToolbar.SetChecked(m.ShowToolbar)
 	v.toolbarCaptions.SetChecked(m.ToolbarCaptions)
 	v.showStatusBar.SetChecked(m.ShowStatusBar)
@@ -334,6 +353,7 @@ func (v *View) apply(m Model) {
 	v.pruneOnFetch.SetChecked(m.PruneOnFetch)
 	v.banAttribution.SetChecked(m.BanAttribution)
 	v.shallowDepth.SetValue(float64(m.ShallowDepth))
+	v.switchChanges.SetSelected(orderIndex(switchChangesOrder, m.SwitchChanges))
 	v.credentialSource.SetSelected(credentialSourceIndex(m.CredentialSource))
 }
 
@@ -362,6 +382,20 @@ func themeAt(idx int) string {
 	return themeOrder[idx]
 }
 
+func layoutIndex(layout string) int {
+	if layout == config.LayoutSidebar {
+		return 1
+	}
+	return 0
+}
+
+func layoutAt(idx int) string {
+	if idx < 0 || idx >= len(layoutOrder) {
+		return config.LayoutDocks
+	}
+	return layoutOrder[idx]
+}
+
 func credentialSourceIndex(source string) int {
 	for i, s := range credentialSourceOrder {
 		if s == source {
@@ -378,6 +412,17 @@ func credentialSourceAt(idx int) string {
 	return credentialSourceOrder[idx]
 }
 
+func orderIndex(order []string, value string) int {
+	return max(slices.Index(order, value), 0)
+}
+
+func orderAt(order []string, idx int) string {
+	if idx < 0 || idx >= len(order) {
+		return order[0]
+	}
+	return order[idx]
+}
+
 func (v *View) request() Model {
 	code := ""
 	if idx := v.language.Selected(); idx >= 0 && idx < len(v.languages) {
@@ -386,6 +431,7 @@ func (v *View) request() Model {
 	return Model{
 		Language:              code,
 		Theme:                 themeAt(v.theme.Selected()),
+		Layout:                layoutAt(v.layoutMode.Selected()),
 		ShowToolbar:           v.showToolbar.IsChecked(),
 		ToolbarCaptions:       v.toolbarCaptions.IsChecked(),
 		ShowStatusBar:         v.showStatusBar.IsChecked(),
@@ -399,6 +445,7 @@ func (v *View) request() Model {
 		PruneOnFetch:          v.pruneOnFetch.IsChecked(),
 		BanAttribution:        v.banAttribution.IsChecked(),
 		ShallowDepth:          int(v.shallowDepth.Value()),
+		SwitchChanges:         orderAt(switchChangesOrder, v.switchChanges.Selected()),
 		CredentialSource:      credentialSourceAt(v.credentialSource.Selected()),
 	}.Normalized()
 }

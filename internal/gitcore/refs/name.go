@@ -29,6 +29,8 @@ const (
 	RewrittenPrefix = "refs/rewritten/"
 )
 
+const StashName Name = "refs/stash"
+
 const (
 	lockSuffix       = ".lock"
 	symbolicPrefix   = "ref:"

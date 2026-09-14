@@ -555,6 +555,35 @@ func TestMergeMessageNamesWhatWasMerged(t *testing.T) {
 	}
 }
 
+func TestMergingAnAnnotatedTagAddsItsMessage(t *testing.T) {
+	for tagName, want := range map[string]string{
+		"v2":    "Merge tag 'v2' into side\n\nrelease two\n",
+		"light": "Merge tag 'light' into side\n",
+	} {
+		tr := newTestRepo(t)
+		base := tr.commitFiles("base", map[string]string{"f": "f\n"})
+		tr.createBranch("side", base)
+		tr.commitFiles("two", map[string]string{"g": "g\n"})
+		message := "release two"
+		if tagName == "light" {
+			message = ""
+		}
+		if _, err := CreateTag(t.Context(), tr.repo, tagName, "HEAD", CreateTagOptions{Message: message}); err != nil {
+			t.Fatalf("CreateTag returned error %v", err)
+		}
+		tr.switchTo("side")
+
+		if _, err := Merge(t.Context(), tr.repo, tagName, MergeOptions{Mode: MergeNoFastForward}); err != nil {
+			t.Fatalf("Merge returned error %v", err)
+		}
+
+		commit, err := tr.db().Commit(tr.branchTarget("side"))
+		if err != nil || commit.Message != want {
+			t.Fatalf("%s: merge message = %q, %v; want %q", tagName, commit.Message, err, want)
+		}
+	}
+}
+
 func TestSuppressDestFollowsTheConfig(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.appendConfig("[merge]\n\tsuppressDest = release/*\n\tsuppressDest =\n\tsuppressDest = dev*\n")

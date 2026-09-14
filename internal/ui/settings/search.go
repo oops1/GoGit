@@ -64,16 +64,19 @@ func (v *View) buildSearchIndex() {
 		{section: "general", grid: v.sectionGeneral, rows: []int{5, 6},
 			labelKey: "Dialog.Settings.Theme", hintKey: "Dialog.Settings.Theme.Hint",
 			groupKey: "Dialog.Settings.Group.LanguageAppearance", value: v.theme.SelectedText},
-		{section: "general", grid: v.sectionGeneral, rows: []int{12, 13, 14},
+		{section: "general", grid: v.sectionGeneral, rows: []int{7, 8},
+			labelKey: "Dialog.Settings.Layout", hintKey: "Dialog.Settings.Layout.Hint",
+			groupKey: "Dialog.Settings.Group.LanguageAppearance", value: v.layoutMode.SelectedText},
+		{section: "general", grid: v.sectionGeneral, rows: []int{14, 15, 16},
 			labelKey: "Dialog.Settings.ShowToolbar", hintKey: "Dialog.Settings.ShowToolbar.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
-		{section: "general", grid: v.sectionGeneral, rows: []int{15, 16, 17},
+		{section: "general", grid: v.sectionGeneral, rows: []int{17, 18, 19},
 			labelKey: "Dialog.Settings.ShowStatusBar", hintKey: "Dialog.Settings.ShowStatusBar.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
-		{section: "general", grid: v.sectionGeneral, rows: []int{18, 19, 20},
+		{section: "general", grid: v.sectionGeneral, rows: []int{20, 21, 22},
 			labelKey: "Dialog.Settings.ToolbarCaptions", hintKey: "Dialog.Settings.ToolbarCaptions.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
-		{section: "general", grid: v.sectionGeneral, rows: []int{21, 22},
+		{section: "general", grid: v.sectionGeneral, rows: []int{23, 24},
 			labelKey: "Dialog.Settings.JournalFullAuthorName", hintKey: "Dialog.Settings.JournalFullAuthorName.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
 
@@ -105,6 +108,9 @@ func (v *View) buildSearchIndex() {
 		{section: "git", grid: v.gitAdvancedContent, rows: []int{4, 5},
 			labelKey: "Dialog.Settings.ShallowDepth", hintKey: "Dialog.Settings.ShallowDepth.Hint",
 			groupKey: "Dialog.Settings.Group.Advanced", value: v.shallowDepthText, isAdvanced: true},
+		{section: "git", grid: v.gitAdvancedContent, rows: []int{6, 7},
+			labelKey: "Dialog.Settings.SwitchChanges", hintKey: "Dialog.Settings.SwitchChanges.Hint",
+			groupKey: "Dialog.Settings.Group.Advanced", value: v.switchChanges.SelectedText, isAdvanced: true},
 
 		{section: "credentials", grid: v.sectionCredentials, rows: []int{0, 1, 2, 3, 4, 5, 6, 7, 8},
 			labelKey: "Dialog.Settings.CredentialSource", value: v.credentialSource.SelectedText},
@@ -115,8 +121,8 @@ func (v *View) buildSearchIndex() {
 		rows map[string][]int
 	}{
 		{v.sectionGeneral, map[string][]int{
-			"Dialog.Settings.Group.LanguageAppearance": {0, 1, 2, 6, 7, 8},
-			"Dialog.Settings.Group.Interface":          {9, 10, 11},
+			"Dialog.Settings.Group.LanguageAppearance": {0, 1, 2, 8, 9, 10},
+			"Dialog.Settings.Group.Interface":          {11, 12, 13},
 		}},
 		{v.sectionGit, map[string][]int{
 			"Dialog.Settings.Group.FetchSync": {0, 1, 2},

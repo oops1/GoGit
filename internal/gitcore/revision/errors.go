@@ -8,4 +8,6 @@ var (
 	ErrAmbiguous   = errors.New("revision: abbreviated object id is ambiguous")
 	ErrNotCommit   = errors.New("revision: object is not a commit")
 	ErrUnsupported = errors.New("revision: unsupported revision specification")
+
+	ErrPickaxeConflict = errors.New("revision: search either for a string or for a regular expression, not both")
 )

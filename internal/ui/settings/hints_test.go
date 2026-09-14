@@ -14,6 +14,7 @@ func allHintKeys() []string {
 	return []string{
 		"Dialog.Settings.Language.Hint",
 		"Dialog.Settings.Theme.Hint",
+		"Dialog.Settings.Layout.Hint",
 		"Dialog.Settings.ShowToolbar.Hint",
 		"Dialog.Settings.ShowStatusBar.Hint",
 		"Dialog.Settings.ToolbarCaptions.Hint",

@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 
-	"github.com/oops1/headless-gui/v3/widget"
-
 	"github.com/oops1/gogit/internal/gitcore/ops"
-	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/switchbranch"
+	"github.com/oops1/gogit/internal/ui/switchchanges"
 )
 
 var newSwitchView = switchbranch.NewView
@@ -22,18 +20,6 @@ var runSwitchBranch = ops.Switch
 
 func (a *App) registerSwitchHandlers() {
 	a.handlers[CmdSwitch] = func() { a.openSwitch("") }
-}
-
-func (a *App) switchItems(ref refs.Name) []widget.MenuItem {
-	if !ref.IsBranch() && !ref.IsRemote() {
-		return nil
-	}
-	if ref == refs.BranchName(a.currentBranchName()) {
-		return nil
-	}
-	item := menuItem("Menu.Context.SwitchHere", func() { a.openSwitch(ref.Short()) })
-	item.Disabled = !a.State().Enabled(CmdSwitch)
-	return []widget.MenuItem{item}
 }
 
 func (a *App) openSwitch(selected string) {
@@ -78,6 +64,7 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 	if o == nil {
 		return
 	}
+	setting := a.cfg.Git.SwitchChanges
 	a.RunOperation(i18n.T("Operation.Title.Switch"), func(ctx context.Context, reporter OperationReporter) error {
 		defer a.Post(a.finishMerge)
 		r, err := a.freshRepo(o)
@@ -87,6 +74,14 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 		defer func() { _ = r.Close() }()
 		name, err := switchTo(ctx, r, choice)
 		reportSwitch(reporter, name, err)
+		var overwrite *ops.OverwriteError
+		if !errors.As(err, &overwrite) {
+			return err
+		}
+		if mode, ok := switchchanges.Automatic(setting); ok {
+			return resolveBlockedSwitch(ctx, r, reporter, name, mode, overwrite.Paths)
+		}
+		a.Post(func() { a.askSwitchChanges(name, overwrite.Paths) })
 		return err
 	})
 }

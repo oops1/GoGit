@@ -37,6 +37,9 @@ var (
 	ErrInvalidTagName     = errors.New("ops: invalid tag name")
 	ErrTagExists          = errors.New("ops: tag already exists")
 	ErrTagNotFound        = errors.New("ops: tag not found")
+	ErrNothingToStash     = errors.New("ops: there are no local changes to stash")
+	ErrStashNotFound      = errors.New("ops: stash entry not found")
+	ErrNotAStash          = errors.New("ops: commit is not a stash")
 )
 
 type OverwriteError struct {

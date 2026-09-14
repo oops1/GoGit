@@ -11,6 +11,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/changes"
 )
 
 func waitForDetails(t *testing.T, a *App, want hash.ObjectID) {
@@ -118,7 +119,7 @@ func TestTheDetailsModelNamesWhatHappenedToEachFile(t *testing.T) {
 		MoreFiles: true,
 	})
 
-	if len(model.Changes) != 2 || model.Changes[0].Status != i18n.T("Files.State.Added") {
+	if len(model.Changes) != 2 || model.Changes[0].Status != string(changes.RowAdded) || model.Changes[1].Status != string(changes.RowRenamed) {
 		t.Fatalf("model = %+v", model)
 	}
 	if len(model.Files) != 1 || model.Files[0].Size != 6 || !model.MoreFiles {

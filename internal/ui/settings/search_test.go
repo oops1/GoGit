@@ -34,7 +34,7 @@ func TestSearchMatchesByFieldLabel(t *testing.T) {
 
 	v.applySearch("journal")
 
-	if v.sectionGeneral.RowDefs[21].Value == 0 {
+	if v.sectionGeneral.RowDefs[23].Value == 0 {
 		t.Fatal("journalFullAuthorName row must stay visible: its label matches")
 	}
 	if v.sectionGeneral.RowDefs[3].Value != 0 {
@@ -116,7 +116,7 @@ func TestSearchIsCaseInsensitive(t *testing.T) {
 
 	v.applySearch("JOURNAL")
 
-	if v.sectionGeneral.RowDefs[21].Value == 0 {
+	if v.sectionGeneral.RowDefs[23].Value == 0 {
 		t.Fatal("uppercase query must still match the lowercase label text")
 	}
 }

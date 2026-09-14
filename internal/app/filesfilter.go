@@ -49,6 +49,29 @@ func (a *App) applyFilesFilter() {
 	}
 	a.filesItems.SetItems(items)
 	a.setFilesCounterText(len(filtered), len(rows), len(filtered) != len(rows))
+	a.selectPendingFilesRow(filtered)
+}
+
+func (a *App) selectFilesPathWhenShown(path string) {
+	a.filesMu.Lock()
+	a.filesPendingPath = path
+	a.filesMu.Unlock()
+}
+
+func (a *App) selectPendingFilesRow(rows []changes.Row) {
+	a.filesMu.Lock()
+	path := a.filesPendingPath
+	a.filesMu.Unlock()
+	if path == "" {
+		return
+	}
+	for index, row := range rows {
+		if row.RelPath == path && row.Status != changes.RowConflict {
+			a.selectFilesPathWhenShown("")
+			a.filesGrid.Data().Grid.SetSelectedIndex(index)
+			return
+		}
+	}
 }
 
 func (a *App) setFilesCounterText(shown, total int, filtered bool) {

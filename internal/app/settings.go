@@ -25,6 +25,7 @@ func (a *App) applySettings(m settings.Model, ok bool) {
 	a.setToolbarVisible(a.cfg.UI.ShowToolbar)
 	a.setStatusBarVisible(a.cfg.UI.ShowStatusBar)
 	a.journalView.SetFullAuthorName(a.cfg.UI.JournalFullAuthorName)
+	a.applyLayoutMode(a.cfg.UI.Layout)
 	a.restartWatcherForCurrentRepository()
 	a.restartAutoFetch()
 	if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {

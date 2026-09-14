@@ -106,7 +106,11 @@ func (v *View) apply(m Model) {
 	} else {
 		v.message.SetText(m.Message)
 	}
-	v.stagedLabel.SetText(i18n.Tf("Dialog.Commit.Staged", m.Staged))
+	if m.Files > 0 {
+		v.stagedLabel.SetText(i18n.Tf("Dialog.Commit.Files", m.Files))
+	} else {
+		v.stagedLabel.SetText(i18n.Tf("Dialog.Commit.Staged", m.Staged))
+	}
 	v.refresh()
 }
 

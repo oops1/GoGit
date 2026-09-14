@@ -318,6 +318,10 @@ func (t *Transaction) finish(plan []*update, snapshot *packedSnapshot) error {
 func (t *Transaction) writeReflog(entry *update) error {
 	old, value := entry.resolved, entry.value
 	switch entry.kind {
+	case kindSet:
+		if entry.existed && entry.current == entry.value {
+			return nil
+		}
 	case kindLog:
 		old, value = entry.linked.resolved, entry.linked.value
 	case kindSymbolic:

@@ -371,7 +371,10 @@ func TestDiffViewIsTakenFromTheMainWindow(t *testing.T) {
 
 const journalFilterXAML = `<ComboBox x:Name="journalFilterBranch"/><TextBox x:Name="journalFilterAuthor"/>` +
 	`<TextBox x:Name="journalFilterMessage"/><TextBlock x:Name="journalFilterCount"/>` +
-	`<DockPanel x:Name="journalFilterRow"/>`
+	`<DockPanel x:Name="journalFilterRow"/>` +
+	`<TextBox x:Name="journalFilterPath"/><TextBox x:Name="journalFilterContent"/>` +
+	`<CheckBox x:Name="journalFilterRegexp"/><ComboBox x:Name="journalFilterPeriod"/>` +
+	`<DockPanel x:Name="journalSearchRow"/>`
 
 func completeWindowXAML() string {
 	return `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
@@ -402,6 +405,11 @@ func TestNewFromXAMLNeedsEveryJournalFilterWidget(t *testing.T) {
 		`<TextBox x:Name="journalFilterMessage"/>`,
 		`<TextBlock x:Name="journalFilterCount"/>`,
 		`<DockPanel x:Name="journalFilterRow"/>`,
+		`<TextBox x:Name="journalFilterPath"/>`,
+		`<TextBox x:Name="journalFilterContent"/>`,
+		`<CheckBox x:Name="journalFilterRegexp"/>`,
+		`<ComboBox x:Name="journalFilterPeriod"/>`,
+		`<DockPanel x:Name="journalSearchRow"/>`,
 	} {
 		if _, err := NewFromXAML(config.Default(), config.Paths{Dir: t.TempDir()}, []byte(windowWithout(missing)), nil); !errors.Is(err, ErrWidgetMissing) {
 			t.Errorf("without %s: err = %v", missing, err)

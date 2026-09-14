@@ -24,20 +24,22 @@ const (
 )
 
 type Options struct {
-	Context     Context
-	Include     []hash.ObjectID
-	Exclude     []hash.ObjectID
-	Order       Order
-	Reverse     bool
-	FirstParent bool
-	MaxCount    int
-	Skip        int
-	Since       time.Time
-	Until       time.Time
-	Author      *regexp.Regexp
-	Committer   *regexp.Regexp
-	Grep        *regexp.Regexp
-	Paths       []string
+	Context       Context
+	Include       []hash.ObjectID
+	Exclude       []hash.ObjectID
+	Order         Order
+	Reverse       bool
+	FirstParent   bool
+	MaxCount      int
+	Skip          int
+	Since         time.Time
+	Until         time.Time
+	Author        *regexp.Regexp
+	Committer     *regexp.Regexp
+	Grep          *regexp.Regexp
+	Pickaxe       string
+	PickaxeRegexp *regexp.Regexp
+	Paths         []string
 }
 
 type Commit struct {
@@ -72,6 +74,9 @@ func Walk(ctx context.Context, opts Options) iter.Seq2[*Commit, error] {
 }
 
 func newWalker(opts Options) (*walker, error) {
+	if opts.Pickaxe != "" && opts.PickaxeRegexp != nil {
+		return nil, ErrPickaxeConflict
+	}
 	w := &walker{
 		graph: newGraph(newStore(opts.Context.Objects, opts.Context.Shallow)),
 		opts:  opts,
@@ -224,18 +229,22 @@ func (w *walker) markParentsUninteresting(n *node) {
 	}
 }
 
-func (w *walker) show(n *node) bool {
+func (w *walker) show(ctx context.Context, n *node) (bool, error) {
 	if n.flags&(flagShown|flagUninteresting) != 0 {
-		return false
+		return false, nil
 	}
 	if len(w.paths) > 0 && n.flags&flagTreeSame != 0 {
-		return false
+		return false, nil
 	}
 	if !w.matches(n) {
-		return false
+		return false, nil
+	}
+	found, err := w.pickaxe(ctx, n)
+	if err != nil || !found {
+		return false, err
 	}
 	n.flags |= flagShown
-	return true
+	return true, nil
 }
 
 func (w *walker) matches(n *node) bool {
@@ -301,7 +310,12 @@ func (w *walker) emitStream(ctx context.Context, yield func(*Commit, error) bool
 		if n == nil {
 			return
 		}
-		if !w.show(n) {
+		visible, err := w.show(ctx, n)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		if !visible {
 			continue
 		}
 		take, more := limit.accept()
@@ -334,7 +348,12 @@ func (w *walker) emitBuffered(ctx context.Context, yield func(*Commit, error) bo
 	limit := &limiter{opts: w.opts}
 	var shown []*Commit
 	for _, n := range sortNodes(collected, w.opts.Order) {
-		if !w.show(n) {
+		visible, err := w.show(ctx, n)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		if !visible {
 			continue
 		}
 		take, more := limit.accept()

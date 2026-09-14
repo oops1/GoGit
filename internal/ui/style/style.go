@@ -27,6 +27,8 @@ type Palette struct {
 	AccentHover   color.RGBA
 	AccentPressed color.RGBA
 	OnAccent      color.RGBA
+	AddedText     color.RGBA
+	DeletedText   color.RGBA
 }
 
 func Of(t *widget.Theme) Palette {
@@ -41,6 +43,8 @@ func Of(t *widget.Theme) Palette {
 		AccentHover:   shift(t.Accent, accentHoverShift),
 		AccentPressed: shift(t.Accent, accentPressedShift),
 		OnAccent:      onAccent(t.Accent),
+		AddedText:     t.DiffAddText,
+		DeletedText:   t.DiffDelText,
 	}
 }
 
@@ -96,6 +100,10 @@ func (p Palette) Body(labels ...*widget.Label) {
 	for _, label := range labels {
 		label.TextColor = p.Text
 	}
+}
+
+func (p Palette) Tint(percent int) color.RGBA {
+	return mix(p.Field, p.Accent, percent)
 }
 
 func (p Palette) Hints(labels ...*widget.Label) {

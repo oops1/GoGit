@@ -43,12 +43,13 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	a.filesMu.Lock()
 	mode := a.filesMode
 	files := a.currentFiles
+	db := a.currentFilesDB
 	entries := a.currentEntries
 	a.filesMu.Unlock()
 	a.setFilesSelected(mode == filesModeWorking && row.RelPath != "")
 	if mode == filesModeCommit {
 		if file, ok := fileOf(files, row); ok {
-			a.diffView.SetDocument(changes.FromFile(file))
+			a.showDiff(a.commitTarget(db, file))
 		}
 		return
 	}
@@ -124,19 +125,23 @@ func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
 	a.filesMu.Lock()
 	a.filesMode = filesModeCommit
 	a.currentFiles = files
+	a.currentFilesDB = db
 	a.currentEntries = nil
 	a.filesMu.Unlock()
-	var first diff.File
+	var first diffTarget
 	hasFirst := len(files) > 0
 	if hasFirst {
-		first = files[0]
+		first = a.commitTarget(db, files[0])
 	}
 	a.Post(func() {
+		if ctx.Err() != nil {
+			return
+		}
 		a.setFilesRows(rows)
 		if hasFirst {
-			a.diffView.SetDocument(changes.FromFile(first))
+			a.showDiff(first)
 		} else {
-			a.diffView.Clear()
+			a.clearDiff()
 		}
 	})
 }
@@ -193,6 +198,7 @@ func (a *App) clearChangesPanels() {
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
 	a.currentFiles = nil
+	a.currentFilesDB = nil
 	a.currentEntries = nil
 	a.activeModified = false
 	a.filesDirFilter = ""
@@ -200,7 +206,37 @@ func (a *App) clearChangesPanels() {
 	a.selectedCommit = hash.ObjectID{}
 	a.setCommitSelected(false)
 	a.setFilesRows(nil)
-	a.diffView.Clear()
+	a.clearDiff()
 	a.setFilesSelected(false)
 	a.setHasStagedChanges(false)
+	a.setHasChanges(false)
+}
+
+func (a *App) commitTarget(db *odb.DB, file diff.File) diffTarget {
+	target, err := commitDiffTarget(db, file)
+	if err != nil {
+		a.log.Warn("load commit diff failed", "error", err)
+	}
+	return target
+}
+
+func commitDiffTarget(db *odb.DB, file diff.File) (diffTarget, error) {
+	target := diffTarget{file: file}
+	if db == nil || file.Binary {
+		return target, nil
+	}
+	var err error
+	if target.oldData, err = commitSideData(db, file.OldMode, file.OldID); err != nil {
+		return target, err
+	}
+	target.newData, err = commitSideData(db, file.NewMode, file.NewID)
+	return target, err
+}
+
+func commitSideData(db *odb.DB, mode object.Mode, id hash.ObjectID) ([]byte, error) {
+	if mode == object.ModeSubmodule {
+		return []byte("Subproject commit " + id.String() + "\n"), nil
+	}
+	data, _, err := blobData(db, id)
+	return data, err
 }

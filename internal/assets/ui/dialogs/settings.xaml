@@ -31,6 +31,8 @@
                         <RowDefinition Height="30"/>
                         <RowDefinition Height="12"/>
                         <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="30"/>
                         <RowDefinition Height="16"/>
                         <RowDefinition Height="2"/>
                         <RowDefinition Height="16"/>
@@ -74,19 +76,27 @@
                         <ComboBoxItem Content="{Loc Theme.Light}"/>
                     </ComboBox>
 
-                    <Separator Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="3"/>
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="{Loc Dialog.Settings.Layout}"
+                               Height="18" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="layoutMode" Grid.Row="7" Grid.Column="1"
+                              Height="30" VerticalAlignment="Center">
+                        <ComboBoxItem Content="{Loc Layout.Docks}"/>
+                        <ComboBoxItem Content="{Loc Layout.Sidebar}"/>
+                    </ComboBox>
 
-                    <TextBlock Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"
+                    <Separator Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3"/>
+
+                    <TextBlock Grid.Row="11" Grid.Column="0" Grid.ColumnSpan="3"
                                Text="{Loc Dialog.Settings.Group.Interface}"
                                FontSize="13" FontWeight="Bold"/>
 
-                    <CheckBox x:Name="showToolbar" Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3"
+                    <CheckBox x:Name="showToolbar" Grid.Row="14" Grid.Column="0" Grid.ColumnSpan="3"
                               FontSize="10" Content="{Loc Dialog.Settings.ShowToolbar}"/>
-                    <CheckBox x:Name="showStatusBar" Grid.Row="15" Grid.Column="0" Grid.ColumnSpan="3"
+                    <CheckBox x:Name="showStatusBar" Grid.Row="17" Grid.Column="0" Grid.ColumnSpan="3"
                               FontSize="10" Content="{Loc Dialog.Settings.ShowStatusBar}"/>
-                    <CheckBox x:Name="toolbarCaptions" Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="3"
+                    <CheckBox x:Name="toolbarCaptions" Grid.Row="20" Grid.Column="0" Grid.ColumnSpan="3"
                               FontSize="10" Content="{Loc Dialog.Settings.ToolbarCaptions}"/>
-                    <CheckBox x:Name="journalFullAuthorName" Grid.Row="21" Grid.Column="0" Grid.ColumnSpan="3"
+                    <CheckBox x:Name="journalFullAuthorName" Grid.Row="23" Grid.Column="0" Grid.ColumnSpan="3"
                               FontSize="10" Content="{Loc Dialog.Settings.JournalFullAuthorName}"/>
                 </Grid>
 
@@ -151,8 +161,10 @@
 
                     <Expander x:Name="gitAdvanced" Grid.Row="18" Grid.Column="0" Grid.ColumnSpan="3"
                               Header="{Loc Dialog.Settings.Group.Advanced}">
-                        <Grid x:Name="gitAdvancedContent" Height="138">
+                        <Grid x:Name="gitAdvancedContent" Height="180">
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="30"/>
+                                    <RowDefinition Height="12"/>
                                     <RowDefinition Height="30"/>
                                     <RowDefinition Height="12"/>
                                     <RowDefinition Height="30"/>
@@ -184,6 +196,16 @@
                                 <NumericUpDown x:Name="shallowDepth" Grid.Row="4" Grid.Column="1"
                                                 Height="30" VerticalAlignment="Center"
                                                 Minimum="0" Maximum="100000" Increment="1"/>
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="{Loc Dialog.Settings.SwitchChanges}"
+                                           Height="18" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="switchChanges" Grid.Row="6" Grid.Column="1"
+                                          Height="30" VerticalAlignment="Center">
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Ask}"/>
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Stash}"/>
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Merge}"/>
+                                    <ComboBoxItem Content="{Loc Dialog.Settings.SwitchChanges.Overwrite}"/>
+                                </ComboBox>
                         </Grid>
                     </Expander>
                 </Grid>

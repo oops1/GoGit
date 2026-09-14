@@ -27,23 +27,28 @@ func (a *App) applyToolbarIcons(*widget.Theme) {
 		width, height = a.toolbarCaptionsWidth(), toolbarButtonHeight
 	}
 	for id, name := range toolbarIcons {
-		btn := a.named[toolbarButtons[id]].(*widget.Button)
-		btn.Icon = icons.ToolbarPlain(name, toolbarIconSize)
-		btn.IconSize = toolbarIconSize
-		if captions {
-			btn.IconPos = widget.IconTop
-		} else {
-			btn.IconPos = widget.IconOnly
-		}
-		resizeToolbarButton(btn, width, height)
+		styleToolbarButton(a.named[toolbarButtons[id]].(*widget.Button), name, captions, width, height)
+	}
+	if flow, ok := a.flowButton(); ok {
+		styleToolbarButton(flow.Button, flowToolbarIcon, captions, width, height)
 	}
 	a.relayoutToolbar()
 }
 
+func styleToolbarButton(btn *widget.Button, icon string, captions bool, width, height int) {
+	btn.Icon = icons.ToolbarPlain(icon, toolbarIconSize)
+	btn.IconSize = toolbarIconSize
+	if captions {
+		btn.IconPos = widget.IconTop
+	} else {
+		btn.IconPos = widget.IconOnly
+	}
+	resizeToolbarButton(btn, width, height)
+}
+
 func (a *App) toolbarCaptionsWidth() int {
 	width := toolbarButtonMinWidth
-	for _, name := range toolbarButtons {
-		btn := a.named[name].(*widget.Button)
+	for _, btn := range a.toolbarCaptionButtons() {
 		if w := toolbarCaptionButtonWidth(btn.Text); w > width {
 			width = w
 		}

@@ -180,6 +180,7 @@ func TestModifiedTrackingCoversEveryWiredWidget(t *testing.T) {
 	}{
 		{"language", func(v *View) { v.language.SetSelected(1); v.language.OnChange(1, "ru") }},
 		{"theme", func(v *View) { v.theme.SetSelected(themeIndex(config.ThemeDark)); v.theme.OnChange(0, "") }},
+		{"layoutMode", func(v *View) { v.layoutMode.SetSelected(1); v.layoutMode.OnChange(1, "") }},
 		{"showToolbar", func(v *View) { clickCheckBox(v.showToolbar) }},
 		{"toolbarCaptions", func(v *View) { clickCheckBox(v.toolbarCaptions) }},
 		{"showStatusBar", func(v *View) { clickCheckBox(v.showStatusBar) }},
@@ -192,6 +193,7 @@ func TestModifiedTrackingCoversEveryWiredWidget(t *testing.T) {
 		{"defaultRemote", func(v *View) { v.defaultRemote.SetText("upstream"); v.defaultRemote.OnChange("upstream") }},
 		{"pruneOnFetch", func(v *View) { clickCheckBox(v.pruneOnFetch) }},
 		{"shallowDepth", func(v *View) { v.shallowDepth.SetValue(v.shallowDepth.Value() + 1) }},
+		{"switchChanges", func(v *View) { v.switchChanges.SetSelected(2); v.switchChanges.OnChange(2, "") }},
 		{"credentialSource", func(v *View) { v.credentialSource.SetSelected(1); v.credentialSource.OnChange(1, "") }},
 	}
 	for _, c := range cases {

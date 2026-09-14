@@ -66,7 +66,7 @@ func fileRow(f diff.File) Row {
 	dir, name := splitRelDir(namePath)
 	row := Row{
 		Name:      name,
-		Status:    diffRowStatus(f.Status),
+		Status:    DiffRowStatus(f.Status),
 		State:     diffStatusWord(f.Status),
 		RelDir:    dir,
 		RelPath:   namePath,
@@ -222,7 +222,7 @@ func statusCodeWord(c worktree.StatusCode) string {
 	}
 }
 
-func diffRowStatus(s diff.Status) RowStatus {
+func DiffRowStatus(s diff.Status) RowStatus {
 	switch s {
 	case diff.StatusModified:
 		return RowModified

@@ -363,8 +363,8 @@ func TestLoadDetectsStashPresence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
-	if !snap.HasStash {
-		t.Fatal("HasStash = false, want true")
+	if len(snap.Stashes) != 1 || snap.Stashes[0].Commit != oid(t, "11") || snap.Stashes[0].Index != 0 {
+		t.Fatalf("Stashes = %+v", snap.Stashes)
 	}
 }
 
@@ -376,18 +376,18 @@ func TestLoadReportsNoStashWhenAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load returned error %v", err)
 	}
-	if snap.HasStash {
-		t.Fatal("HasStash = true, want false")
+	if len(snap.Stashes) != 0 {
+		t.Fatalf("Stashes = %+v", snap.Stashes)
 	}
 }
 
 func TestLoadPropagatesStashLookupError(t *testing.T) {
 	r := initTestRepo(t, "main")
 	store := openTestStore(t, r, nil)
-	corruptRef(t, r, "refs/stash")
+	corruptRef(t, r, "logs/refs/stash")
 
-	if _, err := Load(store); !errors.Is(err, refs.ErrMalformedRef) {
-		t.Fatalf("Load returned %v, want ErrMalformedRef", err)
+	if _, err := Load(store); !errors.Is(err, refs.ErrMalformedReflog) {
+		t.Fatalf("Load returned %v, want ErrMalformedReflog", err)
 	}
 }
 

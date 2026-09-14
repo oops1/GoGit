@@ -37,8 +37,8 @@ func details() Details {
 		Branches:  []string{"main", "topic"},
 		Tags:      []string{"v1"},
 		Changes: []Change{
-			{Status: "Modified", Path: "f", Added: 2, Deleted: 1},
-			{Status: "Renamed", Path: "moved", Old: "f"},
+			{Status: "modified", Path: "f", Added: 2, Deleted: 1},
+			{Status: "renamed", Path: "moved", Old: "f"},
 		},
 		Files: []File{{Path: "f", Size: 12}, {Path: "dir/g", Size: 3}},
 	}

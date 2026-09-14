@@ -49,6 +49,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 
 		"language":              widget.NewDropdown(),
 		"theme":                 widget.NewDropdown(),
+		"layoutMode":            widget.NewDropdown(),
 		"showToolbar":           widget.NewCheckBox(""),
 		"toolbarCaptions":       widget.NewCheckBox(""),
 		"showStatusBar":         widget.NewCheckBox(""),
@@ -62,6 +63,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"pruneOnFetch":          widget.NewCheckBox(""),
 		"banAttribution":        widget.NewCheckBox(""),
 		"shallowDepth":          widget.NewNumericUpDown(),
+		"switchChanges":         widget.NewDropdown(),
 		"gitAdvanced":           widget.NewExpander(""),
 		"gitAdvancedContent":    widget.NewGrid(),
 		"ok":                    widget.NewButton(""),
@@ -146,10 +148,10 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 	keys := []string{
 		"root", "search", "sectionArea", "sectionHost", "sectionTitle", "sectionGeneral", "sectionGit", "sectionCredentials", "sectionSSH",
-		"language", "theme", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
+		"language", "theme", "layoutMode", "showToolbar", "toolbarCaptions", "showStatusBar", "journalFullAuthorName",
 		"logMaxCount", "autoFetch", "fetchInterval", "workTreeDepth", "pullStrategy", "defaultRemote", "pruneOnFetch",
 		"banAttribution",
-		"shallowDepth", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
+		"shallowDepth", "switchChanges", "gitAdvanced", "gitAdvancedContent", "ok", "cancel",
 		"credentialSource", "credentialSourceStorePath", "credentialSourceKeyProtection", "credentialSourceHelpers",
 		"credentialsTable", "credentialResource", "credentialUsername", "credentialType", "credentialSecret",
 		"credentialAdd", "credentialEditStatus", "credentialEditOK", "credentialEditCancel",
@@ -215,6 +217,8 @@ func TestNewViewAppliesInitialModelToWidgets(t *testing.T) {
 		PruneOnFetch:          true,
 		ShallowDepth:          15,
 		CredentialSource:      config.CredentialSourceHelper,
+		Layout:                config.LayoutSidebar,
+		SwitchChanges:         config.SwitchChangesAsk,
 	}
 	v := newTestView(t, []string{"en", "ru"}, initial)
 
@@ -360,6 +364,7 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 	v.defaultRemote.SetText("upstream")
 	v.shallowDepth.SetValue(15)
 	v.credentialSource.SetSelected(credentialSourceIndex(config.CredentialSourceHelper))
+	v.layoutMode.SetSelected(layoutIndex(config.LayoutSidebar))
 
 	got := v.request()
 	want := Model{
@@ -377,6 +382,8 @@ func TestRequestReadsCurrentWidgetValues(t *testing.T) {
 		PruneOnFetch:          true,
 		ShallowDepth:          15,
 		CredentialSource:      config.CredentialSourceHelper,
+		Layout:                config.LayoutSidebar,
+		SwitchChanges:         config.SwitchChangesAsk,
 	}
 	if got != want {
 		t.Fatalf("request = %+v, want %+v", got, want)
@@ -504,5 +511,16 @@ func TestNewViewPropagatesAFailureLoadingTheEditors(t *testing.T) {
 		if !errors.Is(err, wantErr) {
 			t.Fatalf("loading %q: err = %v, want %v", failing, err, wantErr)
 		}
+	}
+}
+
+func TestLayoutChoicesMapToTheirPositions(t *testing.T) {
+	for i, layout := range layoutOrder {
+		if layoutIndex(layout) != i || layoutAt(i) != layout {
+			t.Fatalf("layout %q at %d maps to %d and back to %q", layout, i, layoutIndex(layout), layoutAt(i))
+		}
+	}
+	if layoutIndex("floating") != 0 || layoutAt(-1) != config.LayoutDocks || layoutAt(len(layoutOrder)) != config.LayoutDocks {
+		t.Fatal("an unknown layout does not fall back to the dock panes")
 	}
 }

@@ -315,6 +315,28 @@ func TestNormalizeFallsBackToFFForUnknownPullStrategy(t *testing.T) {
 	}
 }
 
+func TestNormalizeKeepsKnownSwitchChangesAndAsksOtherwise(t *testing.T) {
+	if got := Default().Git.SwitchChanges; got != SwitchChangesAsk {
+		t.Fatalf("default SwitchChanges = %q, want %q", got, SwitchChangesAsk)
+	}
+	for _, mode := range []string{SwitchChangesAsk, SwitchChangesStash, SwitchChangesMerge, SwitchChangesOverwrite} {
+		cfg := Default()
+		cfg.Git.SwitchChanges = mode
+		cfg.Normalize()
+		if cfg.Git.SwitchChanges != mode {
+			t.Fatalf("SwitchChanges = %q, want %q", cfg.Git.SwitchChanges, mode)
+		}
+	}
+	for _, mode := range []string{"", "bogus"} {
+		cfg := Default()
+		cfg.Git.SwitchChanges = mode
+		cfg.Normalize()
+		if cfg.Git.SwitchChanges != SwitchChangesAsk {
+			t.Fatalf("SwitchChanges(%q) = %q, want %q", mode, cfg.Git.SwitchChanges, SwitchChangesAsk)
+		}
+	}
+}
+
 func TestNormalizeFallsBackToOriginForEmptyDefaultRemote(t *testing.T) {
 	cfg := Default()
 	cfg.Git.DefaultRemote = ""
@@ -458,5 +480,24 @@ func TestTheAttributionBanIsOnUntilItIsTurnedOff(t *testing.T) {
 	}
 	if off.Git.BanAttribution {
 		t.Fatal("the option must be able to turn the ban off")
+	}
+}
+
+func TestTheLayoutIsDocksUnlessTheSideBarIsAskedFor(t *testing.T) {
+	if Default().UI.Layout != LayoutDocks {
+		t.Fatalf("default layout = %q", Default().UI.Layout)
+	}
+	for text, want := range map[string]string{
+		"[ui]\nlayout = \"sidebar\"\n":  LayoutSidebar,
+		"[ui]\nlayout = \"floating\"\n": LayoutDocks,
+		"":                              LayoutDocks,
+	} {
+		cfg, err := Parse([]byte(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.UI.Layout != want {
+			t.Fatalf("layout from %q = %q, want %q", text, cfg.UI.Layout, want)
+		}
 	}
 }

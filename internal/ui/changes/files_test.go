@@ -358,8 +358,8 @@ func TestDiffStatusWordFallsBackToUnmodifiedForAnUnknownStatus(t *testing.T) {
 }
 
 func TestDiffRowStatusFallsBackToUnchangedForAnUnknownStatus(t *testing.T) {
-	if got := diffRowStatus(diff.Status(99)); got != RowUnchanged {
-		t.Fatalf("diffRowStatus(unknown) = %q, want %q", got, RowUnchanged)
+	if got := DiffRowStatus(diff.Status(99)); got != RowUnchanged {
+		t.Fatalf("DiffRowStatus(unknown) = %q, want %q", got, RowUnchanged)
 	}
 }
 

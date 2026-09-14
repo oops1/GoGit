@@ -65,28 +65,10 @@ func (a *App) applyMergeBannerTheme(t *widget.Theme) {
 func (a *App) registerMergeHandlers() {
 	a.handlers[CmdMerge] = func() { a.openMerge("") }
 	a.handlers[CmdAbortMerge] = a.confirmAbortMerge
-	a.branchesView.OnMenu = a.branchMenu
+	a.branchesView.OnMenu = a.refMenu
+	a.branchesView.OnActivate = a.activateRef
 	a.banner.commit.OnClick = func() { a.Dispatch(CmdContinue) }
 	a.banner.abort.OnClick = func() { a.Dispatch(CmdAbortMerge) }
-}
-
-func (a *App) branchMenu(ref refs.Name) []widget.MenuItem {
-	state := a.State()
-	current := a.currentBranchName()
-	var items []widget.MenuItem
-	if ref != refs.BranchName(current) && mergeable(ref) {
-		item := menuItem("Menu.Context.MergeIntoCurrent", func() { a.openMerge(ref.Short()) })
-		item.Disabled = !state.Enabled(CmdMerge)
-		items = append(items, item)
-	}
-	items = append(items, a.switchItems(ref)...)
-	items = append(items, a.compareItems(ref)...)
-	items = append(items, a.deleteTagItems(ref)...)
-	return append(items, a.reflogItems(ref)...)
-}
-
-func mergeable(ref refs.Name) bool {
-	return ref.IsBranch() || ref.IsRemote() || ref.IsTag()
 }
 
 func (a *App) currentBranchName() string {
@@ -243,6 +225,7 @@ func (a *App) conflictItems(row changes.Row) []widget.MenuItem {
 	}
 	path := row.RelPath
 	return []widget.MenuItem{
+		menuItem("Menu.Context.ResolveConflict", func() { a.openConflictEditor(path) }),
 		menuItem("Menu.Context.TakeOurs", func() { a.takeSide(path, ops.TakeOurs) }),
 		menuItem("Menu.Context.TakeTheirs", func() { a.takeSide(path, ops.TakeTheirs) }),
 		menuItem("Menu.Context.MarkResolved", a.stageSelected),

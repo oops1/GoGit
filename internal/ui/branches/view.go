@@ -16,6 +16,7 @@ const (
 	localGroupKey   = "local"
 	remotesGroupKey = "remotes"
 	tagsGroupKey    = "tags"
+	stashGroupKey   = "stash"
 
 	shortIDLength = 7
 
@@ -94,8 +95,8 @@ func (v *View) Render(s Snapshot) {
 	v.tree.AddRoot(v.buildLocal(s))
 	v.tree.AddRoot(v.buildRemotes(s))
 	v.tree.AddRoot(v.buildTags(s))
-	if s.HasStash {
-		v.tree.AddRoot(v.buildStash())
+	if len(s.Stashes) > 0 {
+		v.tree.AddRoot(v.buildStash(s))
 	}
 
 	v.tree.EndUpdate()
@@ -223,11 +224,14 @@ func (v *View) addTagNodes(parent *treeview.TreeViewItem, key string, nodes []Ta
 	}
 }
 
-func (v *View) buildStash() *treeview.TreeViewItem {
-	item := treeview.NewItem(i18n.T("Pane.Branches.Stash"))
-	item.Icon = icons.Tree("stash", treeIconSize)
-	v.track(item, stashRefName)
-	return item
+func (v *View) buildStash(s Snapshot) *treeview.TreeViewItem {
+	root := v.newGroupItem(stashGroupKey, i18n.T("Pane.Branches.Stash"))
+	root.Icon = icons.Tree("stash", treeIconSize)
+	for _, entry := range s.Stashes {
+		ref := StashRef(entry.Index)
+		root.AddChild(v.leafItem(pathEntry{ref: ref, icon: "stash", label: ref.String() + ": " + entry.Message}, ""))
+	}
+	return root
 }
 
 func (v *View) buildPathTree(root *treeview.TreeViewItem, rootKey string, entries []pathEntry) {

@@ -54,11 +54,12 @@ func TestStartWorkingClearsTheGridWhenTheRepositoryHasNoWorktree(t *testing.T) {
 
 func TestShowWorkingDiffClearsTheDiffViewWithoutAnOpenRepository(t *testing.T) {
 	a := newTestApp(t)
-	a.diffView.SetDocument(changes.FromFile(diff.File{OldPath: "stale.txt"}))
+	a.showDiff(diffTarget{path: "stale.txt", file: diff.File{OldPath: "stale.txt", NewPath: "stale.txt",
+		Hunks: diff.Blobs([]byte("a\n"), []byte("b\n"), diff.Defaults())}, oldData: []byte("a\n"), newData: []byte("b\n")})
 
 	a.showWorkingDiff(worktree.Entry{Path: "x.txt"})
 
-	if doc := a.diffView.Document(); !doc.IsEmpty() {
+	if doc := shownDocumentOf(a); !doc.IsEmpty() || doc.OldName != "" || doc.Left != "" || doc.Right != "" {
 		t.Fatalf("diff view = %+v, want cleared", doc)
 	}
 }

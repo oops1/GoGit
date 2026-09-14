@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/pack"
 	"github.com/oops1/gogit/internal/gitcore/progress"
@@ -28,6 +31,7 @@ type PushOptions struct {
 	Force          bool
 	ForceWithLease map[string]hash.ObjectID
 	Atomic         bool
+	FollowTags     bool
 	Options        []string
 	Progress       progress.Func
 	Transport      transport.Options
@@ -35,6 +39,7 @@ type PushOptions struct {
 
 type PushResult struct {
 	Changes  []Change
+	Tags     []refs.Name
 	Rejected []transport.RefStatus
 }
 
@@ -101,6 +106,11 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 	if err := planner.plan(specs); err != nil {
 		return PushResult{}, err
 	}
+	if opts.FollowTags {
+		if err := planner.followTags(); err != nil {
+			return PushResult{}, err
+		}
+	}
 	result := PushResult{Rejected: planner.rejected}
 	planErr := errors.Join(planner.errs...)
 	if len(planner.pending) == 0 {
@@ -159,6 +169,7 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 		return result, err
 	}
 	result.Changes = changes
+	result.Tags = pushedTags(planner.pending, presp)
 	result.Rejected = append(result.Rejected, rejected...)
 	return result, errors.Join(planErr, errors.Join(applyErrs...))
 }
@@ -171,6 +182,7 @@ type pushPlanner struct {
 	advMap   map[string]hash.ObjectID
 	seen     map[string]bool
 	pending  []pendingUpdate
+	tips     []hash.ObjectID
 	rejected []transport.RefStatus
 	errs     []error
 }
@@ -229,6 +241,9 @@ func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bo
 		return nil
 	}
 	p.seen[dst] = true
+	if !deleted {
+		p.tips = append(p.tips, newID)
+	}
 	old := p.advMap[dst]
 	if deleted {
 		if old.IsZero() {
@@ -239,10 +254,12 @@ func (p *pushPlanner) add(dst string, newID hash.ObjectID, forceSpec, deleted bo
 	}
 	forced := forceSpec || p.opts.Force
 	if lease, ok := p.opts.ForceWithLease[dst]; ok {
-		tracking := refs.RemoteBranchName(p.rem.Name, refs.Name(dst).Short())
-		current, _, err := lookupCurrent(p.store, tracking)
-		if err != nil {
-			return err
+		var current hash.ObjectID
+		if tracking, tracked := trackingRefFor(p.rem, dst); tracked {
+			var err error
+			if current, _, err = lookupCurrent(p.store, tracking); err != nil {
+				return err
+			}
 		}
 		if current != lease {
 			p.rejected = append(p.rejected, transport.RefStatus{Name: dst, Message: "stale info"})
@@ -298,7 +315,10 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 			errs = append(errs, fmt.Errorf("%w: %s: %s", ErrRejected, status.Name, status.Message))
 			continue
 		}
-		tracking := refs.RemoteBranchName(rem.Name, refs.Name(status.Name).Short())
+		tracking, tracked := trackingRefFor(rem, status.Name)
+		if !tracked {
+			continue
+		}
 		current, existed, err := lookupCurrent(store, tracking)
 		if err != nil {
 			return nil, nil, nil, err
@@ -325,4 +345,101 @@ func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, r
 		return nil, nil, nil, err
 	}
 	return changes, rejected, errs, nil
+}
+
+func trackingRefFor(rem Remote, dst string) (refs.Name, bool) {
+	specs := rem.Fetch
+	if len(specs) == 0 {
+		specs = []refspec.RefSpec{refspec.DefaultFetch(rem.Name)}
+	}
+	for _, spec := range specs {
+		if tracking, ok := spec.MatchSrc(dst); ok {
+			return refs.Name(tracking), true
+		}
+	}
+	return "", false
+}
+
+func (p *pushPlanner) followTags() error {
+	if len(p.tips) == 0 {
+		return nil
+	}
+	wanted := map[hash.ObjectID][]refs.Ref{}
+	for ref, err := range p.store.Prefix(refs.TagsPrefix) {
+		if err != nil {
+			return err
+		}
+		if _, known := p.advMap[ref.Name.String()]; known || p.seen[ref.Name.String()] || ref.Peeled.IsZero() {
+			continue
+		}
+		wanted[ref.Peeled] = append(wanted[ref.Peeled], ref)
+	}
+	if len(wanted) == 0 {
+		return nil
+	}
+	found, err := reachableAmong(p.db, p.tips, wanted)
+	if err != nil {
+		return err
+	}
+	var follow []refs.Ref
+	for _, commit := range found {
+		follow = append(follow, wanted[commit]...)
+	}
+	slices.SortFunc(follow, func(a, b refs.Ref) int { return strings.Compare(string(a.Name), string(b.Name)) })
+	for _, ref := range follow {
+		p.seen[ref.Name.String()] = true
+		p.pending = append(p.pending, pendingUpdate{name: ref.Name, new: ref.Target, created: true})
+	}
+	return nil
+}
+
+func reachableAmong(db *odb.DB, tips []hash.ObjectID, wanted map[hash.ObjectID][]refs.Ref) ([]hash.ObjectID, error) {
+	var queue []hash.ObjectID
+	for _, tip := range tips {
+		kind, peeled, err := db.Peel(tip)
+		if err != nil {
+			return nil, err
+		}
+		if kind == object.TypeCommit {
+			queue = append(queue, peeled)
+		}
+	}
+	seen := map[hash.ObjectID]bool{}
+	var found []hash.ObjectID
+	for len(queue) > 0 && len(found) < len(wanted) {
+		id := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if _, ok := wanted[id]; ok {
+			found = append(found, id)
+		}
+		commit, err := db.Commit(id)
+		if errors.Is(err, odb.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		queue = append(queue, commit.Parents...)
+	}
+	return found, nil
+}
+
+func pushedTags(pending []pendingUpdate, resp *transport.PushResult) []refs.Name {
+	sent := map[string]bool{}
+	for _, update := range pending {
+		if !update.deleted && update.name.IsTag() {
+			sent[update.name.String()] = true
+		}
+	}
+	var tags []refs.Name
+	for _, status := range resp.Refs {
+		if status.OK && sent[status.Name] {
+			tags = append(tags, refs.Name(status.Name))
+		}
+	}
+	return tags
 }

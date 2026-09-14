@@ -70,6 +70,7 @@ func (v *View) wireModifiedTracking() {
 	onAny := v.refreshSaveEnabled
 	v.language.OnChange = func(int, string) { onAny() }
 	v.theme.OnChange = func(int, string) { onAny() }
+	v.layoutMode.OnChange = func(int, string) { onAny() }
 	v.showToolbar.OnChange = func(bool) { onAny() }
 	v.toolbarCaptions.OnChange = func(bool) { onAny() }
 	v.showStatusBar.OnChange = func(bool) { onAny() }
@@ -82,6 +83,7 @@ func (v *View) wireModifiedTracking() {
 	v.defaultRemote.OnChange = func(string) { onAny() }
 	v.pruneOnFetch.OnChange = func(bool) { onAny() }
 	v.shallowDepth.OnChange = func(float64) { onAny() }
+	v.switchChanges.OnChange = func(int, string) { onAny() }
 	v.credentialSource.OnChange = func(index int, _ string) {
 		onAny()
 		if v.OnCredentialSource != nil {

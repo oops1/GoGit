@@ -66,6 +66,7 @@ func (a *App) startWorking() {
 		a.setFilesRows(nil)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(false)
+		a.setHasChanges(false)
 		a.showMergeState(ops.MergeState{}, 0)
 		a.clearWorkingFlags()
 		return
@@ -129,8 +130,10 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 			return
 		}
 		a.setFilesRows(rows)
+		a.showSidebarWorkingCounts(len(rows), staged)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
+		a.setHasChanges(modified)
 		a.showMergeState(merging, conflicts)
 		a.syncWatcherSkips()
 	})
@@ -168,7 +171,7 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 	a.stopDiffLocked()
 	o := a.opened()
 	if o == nil || entry.IsDir {
-		a.diffView.Clear()
+		a.clearDiff()
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -179,36 +182,44 @@ func (a *App) showWorkingDiff(entry worktree.Entry) {
 }
 
 func (a *App) runWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) {
-	file, err := buildWorkingDiff(ctx, o, entry)
+	target, err := buildWorkingDiff(ctx, o, entry)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			a.log.Warn("load working diff failed", "error", err)
 		}
 		return
 	}
-	a.Post(func() { a.diffView.SetDocument(changes.FromFile(file)) })
+	a.Post(func() {
+		if ctx.Err() == nil {
+			a.showDiff(target)
+		}
+	})
 }
 
-func buildWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
+func buildWorkingDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diffTarget, error) {
 	if entry.Conflict != worktree.ConflictNone {
 		return conflictDiff(ctx, o, entry)
 	}
 	if entry.Unstaged != worktree.StatusUnmodified {
-		return workTreeDiff(ctx, o, entry)
+		target, err := workTreeDiff(ctx, o, entry)
+		target.kind = diffKindWorktree
+		return target, err
 	}
-	return indexDiff(ctx, o, entry)
+	target, err := indexDiff(ctx, o, entry)
+	target.kind = diffKindIndex
+	return target, err
 }
 
-func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
+func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diffTarget, error) {
 	wt := o.currentWorktree()
 	oldPath := cmp.Or(entry.OrigPath, entry.Path)
 	_, oldID, err := wt.HeadBlob(ctx, oldPath)
 	if err != nil {
-		return diff.File{}, err
+		return diffTarget{}, err
 	}
 	oldData, oldPresent, err := blobData(o.db, oldID)
 	if err != nil {
-		return diff.File{}, err
+		return diffTarget{}, err
 	}
 	var newID hash.ObjectID
 	if ie, ok := wt.Index().Get(entry.Path, index.StageMerged); ok {
@@ -216,12 +227,12 @@ func indexDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (
 	}
 	newData, newPresent, err := blobData(o.db, newID)
 	if err != nil {
-		return diff.File{}, err
+		return diffTarget{}, err
 	}
-	return buildDiffFile(oldPath, entry.Path, oldData, newData, oldPresent, newPresent), nil
+	return newDiffTarget(oldPath, entry.Path, oldData, newData, oldPresent, newPresent), nil
 }
 
-func workTreeDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
+func workTreeDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diffTarget, error) {
 	var oldID hash.ObjectID
 	if ie, ok := o.currentWorktree().Index().Get(entry.Path, index.StageMerged); ok {
 		oldID = ie.ID
@@ -229,7 +240,7 @@ func workTreeDiff(ctx context.Context, o *openedRepository, entry worktree.Entry
 	return blobVsWorktreeDiff(ctx, o, entry.Path, oldID)
 }
 
-func conflictDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diff.File, error) {
+func conflictDiff(ctx context.Context, o *openedRepository, entry worktree.Entry) (diffTarget, error) {
 	var oldID hash.ObjectID
 	for _, stage := range []index.Stage{index.StageOurs, index.StageTheirs, index.StageAncestor} {
 		if ie, ok := o.currentWorktree().Index().Get(entry.Path, stage); ok {
@@ -240,19 +251,28 @@ func conflictDiff(ctx context.Context, o *openedRepository, entry worktree.Entry
 	return blobVsWorktreeDiff(ctx, o, entry.Path, oldID)
 }
 
-func blobVsWorktreeDiff(ctx context.Context, o *openedRepository, path string, oldID hash.ObjectID) (diff.File, error) {
+func blobVsWorktreeDiff(ctx context.Context, o *openedRepository, path string, oldID hash.ObjectID) (diffTarget, error) {
 	oldData, oldPresent, err := blobData(o.db, oldID)
 	if err != nil {
-		return diff.File{}, err
+		return diffTarget{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return diff.File{}, err
+		return diffTarget{}, err
 	}
 	newData, newPresent, err := o.currentWorktree().WorkingFile(path)
 	if err != nil {
-		return diff.File{}, err
+		return diffTarget{}, err
 	}
-	return buildDiffFile(path, path, oldData, newData, oldPresent, newPresent), nil
+	return newDiffTarget(path, path, oldData, newData, oldPresent, newPresent), nil
+}
+
+func newDiffTarget(oldPath, newPath string, oldData, newData []byte, oldPresent, newPresent bool) diffTarget {
+	return diffTarget{
+		path:    newPath,
+		file:    buildDiffFile(oldPath, newPath, oldData, newData, oldPresent, newPresent),
+		oldData: oldData,
+		newData: newData,
+	}
 }
 
 func blobData(db *odb.DB, id hash.ObjectID) ([]byte, bool, error) {

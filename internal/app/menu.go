@@ -101,6 +101,10 @@ func buildEditMenuTree() []menuTreeEntry {
 		{Separator: true},
 		leaf("Menu.Edit.Commit", CmdCommit),
 		{Separator: true},
+		leaf("Menu.Edit.SaveStash", CmdStashSave),
+		leaf("Menu.Edit.ApplyStash", CmdStashApply),
+		leaf("Menu.Edit.DropStash", CmdStashDrop),
+		{Separator: true},
 		leaf("Menu.Edit.Compare", CmdCompareFiles),
 	}
 }
@@ -118,6 +122,8 @@ func buildBranchMenuTree() []menuTreeEntry {
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
+		{Separator: true},
+		{Group: &menuGroupEntry{Key: "Menu.Branch.GitFlow", Items: flowMenuLeaves}},
 	}
 }
 
@@ -187,6 +193,9 @@ func wireMenuTreeEntry(item *widget.MenuItem, entry menuTreeEntry, dispatch func
 	case entry.Group != nil:
 		for i := range min(len(entry.Group.Items), len(item.SubItems)) {
 			cmd := entry.Group.Items[i].Command
+			if cmd == "" {
+				continue
+			}
 			item.SubItems[i].OnClick = func() { dispatch(cmd) }
 		}
 	}
@@ -229,6 +238,7 @@ func (a *App) wireToolbar() {
 		cmd := id
 		btn.OnClick = func() { a.Dispatch(cmd) }
 	}
+	a.wireFlowButton()
 }
 
 func (a *App) refreshCommands() {
@@ -243,15 +253,21 @@ func (a *App) refreshCommands() {
 	for id, name := range toolbarButtons {
 		a.named[name].(*widget.Button).SetEnabled(state.Enabled(id))
 	}
+	a.refreshFlowButton(state)
 	a.applyMenuIcons()
 }
 
 func applyTreeEnabled(subs []widget.MenuItem, tree []menuTreeEntry, state State) {
-	for i, entry := range tree {
-		if i >= len(subs) || entry.Leaf == nil {
-			continue
+	for i := range min(len(subs), len(tree)) {
+		entry := tree[i]
+		switch {
+		case entry.Leaf != nil:
+			subs[i].Disabled = !state.Enabled(entry.Leaf.Command)
+		case entry.Group != nil:
+			for j := range min(len(entry.Group.Items), len(subs[i].SubItems)) {
+				subs[i].SubItems[j].Disabled = !state.Enabled(entry.Group.Items[j].Command)
+			}
 		}
-		subs[i].Disabled = !state.Enabled(entry.Leaf.Command)
 	}
 }
 
