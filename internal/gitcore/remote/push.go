@@ -89,7 +89,7 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 	}
 	defer func() { _ = store.Close() }()
 
-	transportOpts := opts.Transport
+	transportOpts := withRepositoryConfig(opts.Transport, r, rem.Name)
 	transportOpts.Progress = prog
 	prog.Phase("connecting")
 	session, err := dial(ctx, url, transport.ReceivePack, transportOpts)
