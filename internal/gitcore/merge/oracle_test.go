@@ -3,6 +3,7 @@
 package merge
 
 import (
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -90,6 +91,28 @@ func mergeCases() []mergeCase {
 		{"common tail", text("x"), text("OURS", "shared"), text("THEIRS", "shared")},
 		{"wide against narrow", text("a", "b", "c", "d"), text("A", "b", "C", "d"), text("X", "Y", "Z", "d")},
 		{"common head and tail", text("x"), text("head", "OURS", "tail"), text("head", "THEIRS", "tail")},
+		{"shared lines split a conflict", text("a", "b", "c"), text("a", "O1", "s1", "s2", "s3", "s4", "O2", "c"), text("a", "T1", "s1", "s2", "s3", "s4", "T2", "c")},
+		{"a one-sided change keeps conflicts apart", text("a", "b", "c", "d", "e"), text("A", "b", "C", "d", "E"), text("A2", "b", "c", "d", "E2")},
+		{"punctuation between conflicts", text("a", "{", "}", "", "}", ")", "g"), text("OURS", "{", "}", "", "}", ")", "OURS"), text("THEIRS", "{", "}", "", "}", ")", "THEIRS")},
+		{"windows line endings", []byte("a\r\nb\r\nc\r\n"), []byte("a\r\nOURS\r\nc\r\n"), []byte("a\r\nTHEIRS\r\nc\r\n")},
+		{"windows line endings without a final one", []byte("a\r\nb"), []byte("a\r\nOURS"), []byte("a\r\nTHEIRS")},
+	}
+}
+
+func checkAgainstMergeFile(t *testing.T, c mergeCase, style Style, markerSize int) {
+	t.Helper()
+	want, conflicted := gitMergeFile(t, c, style, markerSize)
+	got := File(c.base, c.ours, c.theirs, Options{
+		Style:      style,
+		Labels:     Labels{Ours: "ours", Base: "base", Theirs: "theirs"},
+		MarkerSize: markerSize,
+		Level:      LevelZealousAlnum,
+	})
+	if string(got.Content) != want {
+		t.Fatalf("%s/%d/%d:\nbase %q\nours %q\ntheirs %q\n got %q\nwant %q", c.name, style, markerSize, c.base, c.ours, c.theirs, got.Content, want)
+	}
+	if conflicted != (got.Conflicts > 0) {
+		t.Fatalf("%s/%d/%d: conflicts = %d, git %v", c.name, style, markerSize, got.Conflicts, conflicted)
 	}
 }
 
@@ -97,30 +120,74 @@ func TestOurMergeIsTheOneGitWrites(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}
-	styles := []struct {
-		name  string
-		style Style
-	}{
-		{"merge", StyleMerge},
-		{"diff3", StyleDiff3},
-		{"zdiff3", StyleZDiff3},
-	}
 	for _, c := range mergeCases() {
-		for _, style := range styles {
+		for _, style := range []Style{StyleMerge, StyleDiff3, StyleZDiff3} {
 			for _, markerSize := range []int{0, 3, 10} {
-				want, conflicted := gitMergeFile(t, c, style.style, markerSize)
-				got := File(c.base, c.ours, c.theirs, Options{
-					Style:      style.style,
-					Labels:     Labels{Ours: "ours", Base: "base", Theirs: "theirs"},
-					MarkerSize: markerSize,
-				})
-				if string(got.Content) != want {
-					t.Fatalf("%s/%s/%d:\n got %q\nwant %q", c.name, style.name, markerSize, got.Content, want)
-				}
-				if conflicted != (got.Conflicts > 0) {
-					t.Fatalf("%s/%s/%d: conflicts = %d, git %v", c.name, style.name, markerSize, got.Conflicts, conflicted)
-				}
+				checkAgainstMergeFile(t, c, style, markerSize)
 			}
+		}
+	}
+}
+
+func randomText(r *rand.Rand, lines []string) []byte {
+	eol := "\n"
+	if r.IntN(6) == 0 {
+		eol = "\r\n"
+	}
+	out := strings.Join(lines, eol)
+	if len(lines) > 0 && r.IntN(5) != 0 {
+		out += eol
+	}
+	return []byte(out)
+}
+
+func mutated(r *rand.Rand, base []string) []string {
+	vocabulary := []string{"a", "b", "c", "x", "y", "{", "}", "", "shared", "OURS", "THEIRS"}
+	var out []string
+	for _, line := range base {
+		switch r.IntN(8) {
+		case 0:
+		case 1:
+			out = append(out, vocabulary[r.IntN(len(vocabulary))])
+		case 2:
+			out = append(out, line, vocabulary[r.IntN(len(vocabulary))])
+		default:
+			out = append(out, line)
+		}
+	}
+	if r.IntN(4) == 0 {
+		out = append(out, vocabulary[r.IntN(len(vocabulary))])
+	}
+	return out
+}
+
+func randomMergeCases(seed uint64, count int) []mergeCase {
+	r := rand.New(rand.NewPCG(seed, seed^0x9e3779b97f4a7c15))
+	vocabulary := []string{"a", "b", "c", "d", "e", "f", "{", "}", "", "x"}
+	cases := make([]mergeCase, 0, count)
+	for at := range count {
+		base := make([]string, r.IntN(14))
+		for i := range base {
+			base[i] = vocabulary[r.IntN(len(vocabulary))]
+		}
+		ours, theirs := mutated(r, base), mutated(r, base)
+		cases = append(cases, mergeCase{
+			name:   "random " + strconv.Itoa(at),
+			base:   randomText(r, base),
+			ours:   randomText(r, ours),
+			theirs: randomText(r, theirs),
+		})
+	}
+	return cases
+}
+
+func TestRandomMergesMatchGitMergeFile(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git is not available: %v", err)
+	}
+	for _, c := range randomMergeCases(20260914, 150) {
+		for _, style := range []Style{StyleMerge, StyleDiff3, StyleZDiff3} {
+			checkAgainstMergeFile(t, c, style, 0)
 		}
 	}
 }
