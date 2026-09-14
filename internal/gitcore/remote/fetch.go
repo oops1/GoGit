@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -27,10 +28,16 @@ const (
 )
 
 var (
-	dial     = dialAny
-	odbOpen  = odb.Open
-	refsOpen = refs.Open
+	dial       = dialAny
+	odbOpen    = odb.Open
+	refsOpen   = refs.Open
+	unlockPack = func(keepPath string) { _ = os.Remove(keepPath) }
 )
+
+func fetchKeepMessage() string {
+	host, _ := os.Hostname()
+	return fmt.Sprintf("fetch-pack %d on %s\n", os.Getpid(), host)
+}
 
 type FetchOptions struct {
 	Refspecs    []refspec.RefSpec
@@ -148,10 +155,11 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	defer resp.Pack.Close()
 
 	prog.Phase("receiving")
-	indexed, err := pack.IndexPack(ctx, resp.Pack, r.PackDir(), pack.IndexOptions{Bases: db, FixThin: true, Progress: prog})
+	indexed, err := pack.IndexPack(ctx, resp.Pack, r.PackDir(), pack.IndexOptions{Bases: db, FixThin: true, Progress: prog, KeepName: fetchKeepMessage()})
 	if err != nil {
 		return FetchResult{}, err
 	}
+	defer unlockPack(indexed.KeepPath)
 	result.Objects, result.Bytes = indexed.Objects, indexed.Bytes
 	result.Shallow, result.Unshallow = resp.Shallow, resp.Unshallow
 	if _, err := db.Reload(); err != nil {
