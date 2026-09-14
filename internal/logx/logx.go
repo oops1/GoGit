@@ -125,11 +125,11 @@ func (l *Logger) rotate() error {
 	}
 	for i := l.keep - 1; i >= 1; i-- {
 		if err := renameIfExists(l.rotatedPath(i), l.rotatedPath(i+1)); err != nil {
-			return err
+			return errors.Join(err, l.reopen())
 		}
 	}
 	if err := renameIfExists(l.path, l.rotatedPath(1)); err != nil {
-		return err
+		return errors.Join(err, l.reopen())
 	}
 	l.size = 0
 	return l.reopen()
