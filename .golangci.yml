@@ -61,6 +61,13 @@ linters:
         linters:
           - gosec
         text: "G704"
+      - path: internal/gitcore/transport/httptls\.go
+        linters:
+          - gosec
+        text: "G402"
+      - path: internal/gitcore/transport/httpproxy_test\.go
+        linters:
+          - gosec
       - path: internal/gitcore/credential/exec\.go
         linters:
           - gosec

@@ -286,7 +286,7 @@ func TestHTTPRejectsAnApprovedCredentialWhenALaterRequestIsRefused(t *testing.T)
 }
 
 func TestHTTPCloseWipesTheSuppliedCredential(t *testing.T) {
-	s := newHTTPSession(Endpoint{Scheme: SchemeHTTPS, Host: "example.com", Path: "/repo.git"}, nil, UploadPack, Options{})
+	s, _ := newHTTPSession(Endpoint{Scheme: SchemeHTTPS, Host: "example.com", Path: "/repo.git"}, nil, UploadPack, Options{})
 	password := []byte("secret")
 	s.supplied = &suppliedCredentials{creds: Credentials{Username: "alice", Password: password}}
 	if err := s.Close(); err != nil {
