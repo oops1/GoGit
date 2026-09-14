@@ -204,12 +204,30 @@ func (a *App) setReword(message string, rewording bool) {
 	}
 }
 
+var rebaseErrorKeys = []struct {
+	err error
+	key string
+}{
+	{ops.ErrRebaseStepUnsupported, "Operation.Log.RebaseUnsupported"},
+	{ops.ErrRebaseUncommittedChanges, "Operation.Log.RebaseUncommitted"},
+	{ops.ErrRebaseApplyInProgress, "Operation.Log.RebaseApplyInProgress"},
+}
+
+func reportRebaseError(reporter OperationReporter, err error) {
+	for _, known := range rebaseErrorKeys {
+		if errors.Is(err, known.err) {
+			reporter.Log(i18n.T(known.key))
+		}
+	}
+}
+
 func reportRebase(reporter OperationReporter, result ops.RebaseResult, err error) {
 	var overwrite *ops.OverwriteError
 	switch {
 	case errors.As(err, &overwrite):
 		reporter.Log(i18n.Tf("Operation.Log.RebaseBlocked", overwriteList(overwrite)))
 	case err != nil:
+		reportRebaseError(reporter, err)
 	case result.UpToDate:
 		reporter.Log(i18n.T("Operation.Log.MergeUpToDate"))
 	case result.Amending():
