@@ -66,7 +66,7 @@ func TestKindOfInfoClassifiesEachFileKind(t *testing.T) {
 	}
 }
 
-func TestStatusDetectsTypeChangeFromFileToDirectory(t *testing.T) {
+func TestStatusReportsAFileReplacedByADirectoryAsDeleted(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage("thing.txt", "content\n")
 	tr.commit("initial")
@@ -78,8 +78,8 @@ func TestStatusDetectsTypeChangeFromFileToDirectory(t *testing.T) {
 		t.Fatalf("Status returned error %v", err)
 	}
 	entry, ok := entryMap(status.Entries)["thing.txt"]
-	if !ok || entry.Unstaged != StatusTypeChanged {
-		t.Fatalf("thing.txt entry = %#v, want Unstaged=TypeChanged", entry)
+	if !ok || entry.Unstaged != StatusDeleted {
+		t.Fatalf("thing.txt entry = %#v, want Unstaged=Deleted", entry)
 	}
 }
 

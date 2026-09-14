@@ -20,11 +20,12 @@ func TestEntryMatchesComparesModificationTimeAndSize(t *testing.T) {
 	modified := time.Unix(1700000000, 250)
 	base := Entry{Path: "a", Mode: object.ModeBlob, Stat: Stat{Size: 12, MTime: modified}}
 	cases := []struct {
-		name  string
-		entry Entry
-		info  fs.FileInfo
-		racy  bool
-		want  bool
+		name       string
+		entry      Entry
+		info       fs.FileInfo
+		racy       bool
+		noSymlinks bool
+		want       bool
 	}{
 		{name: "unchanged file", entry: base, info: fakeInfo{size: 12, modified: modified}, want: true},
 		{name: "missing file", entry: base, info: nil},
@@ -82,6 +83,25 @@ func TestEntryMatchesComparesModificationTimeAndSize(t *testing.T) {
 			info:  fakeInfo{size: 5, modified: modified},
 		},
 		{
+			name:       "symlink against a regular file without symlink support",
+			entry:      Entry{Path: "a", Mode: object.ModeSymlink, Stat: Stat{Size: 5, MTime: modified}},
+			info:       fakeInfo{size: 5, modified: modified},
+			noSymlinks: true,
+			want:       true,
+		},
+		{
+			name:       "symlink against a directory without symlink support",
+			entry:      Entry{Path: "a", Mode: object.ModeSymlink, Stat: Stat{Size: 5, MTime: modified}},
+			info:       fakeInfo{size: 5, mode: fs.ModeDir, modified: modified},
+			noSymlinks: true,
+		},
+		{
+			name:       "regular file against a symlink without symlink support",
+			entry:      Entry{Path: "a", Mode: object.ModeBlob, Stat: Stat{Size: 5, MTime: modified}},
+			info:       fakeInfo{size: 5, mode: fs.ModeSymlink, modified: modified},
+			noSymlinks: true,
+		},
+		{
 			name:  "submodule against a directory",
 			entry: Entry{Path: "a", Mode: object.ModeSubmodule},
 			info:  fakeInfo{mode: fs.ModeDir},
@@ -95,7 +115,7 @@ func TestEntryMatchesComparesModificationTimeAndSize(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if got := testCase.entry.Matches(testCase.info, testCase.racy); got != testCase.want {
+			if got := testCase.entry.Matches(testCase.info, testCase.racy, !testCase.noSymlinks); got != testCase.want {
 				t.Fatalf("Matches = %v, want %v", got, testCase.want)
 			}
 		})
@@ -104,7 +124,7 @@ func TestEntryMatchesComparesModificationTimeAndSize(t *testing.T) {
 
 func TestEntryMatchesIgnoresFileInfoOfTheZeroInterface(t *testing.T) {
 	entry := Entry{Path: "a", Mode: object.ModeBlob}
-	if entry.Matches(nil, false) {
+	if entry.Matches(nil, false, true) {
 		t.Fatal("Matches reported an unchanged file for a missing one")
 	}
 }

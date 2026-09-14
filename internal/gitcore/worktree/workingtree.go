@@ -71,17 +71,20 @@ func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
 	if err != nil {
 		return 0, fmt.Errorf("%w: %s: %w", ErrReadWorkingTree, entry.Path, err)
 	}
+	if fi.IsDir() && !entry.Mode.IsSubmodule() {
+		return StatusDeleted, nil
+	}
 	wantKind, actualKind := kindOfMode(entry.Mode), kindOfInfo(fi)
-	if wantKind != actualKind {
+	if wantKind != actualKind && !w.holdsPlainSymlink(wantKind, fi) {
 		return StatusTypeChanged, nil
 	}
-	if w.index.MatchesFile(entry, fi) {
+	if w.index.MatchesFile(entry, fi, w.symlinks) {
 		if w.modeChanged(entry, fi) {
 			return StatusModified, nil
 		}
 		return StatusUnmodified, nil
 	}
-	switch wantKind {
+	switch actualKind {
 	case kindSymlink:
 		target, err := fsReadlinkFile(w.root, name)
 		if err != nil {
@@ -112,6 +115,10 @@ func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
 		}
 		return StatusUnmodified, nil
 	}
+}
+
+func (w *Worktree) holdsPlainSymlink(wantKind entryKind, fi os.FileInfo) bool {
+	return !w.symlinks && wantKind == kindSymlink && fi.Mode().IsRegular()
 }
 
 func (w *Worktree) fillWorkingInfo(e *Entry) {

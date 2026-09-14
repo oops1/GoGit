@@ -149,8 +149,8 @@ func (x *Index) IsRacy(entry *Entry) bool {
 	return x.Timestamp.Nanosecond() <= entry.Stat.MTime.Nanosecond()
 }
 
-func (x *Index) MatchesFile(entry *Entry, fi os.FileInfo) bool {
-	return entry.Matches(fi, x.IsRacy(entry))
+func (x *Index) MatchesFile(entry *Entry, fi os.FileInfo, symlinks bool) bool {
+	return entry.Matches(fi, x.IsRacy(entry), symlinks)
 }
 
 type Writer interface {

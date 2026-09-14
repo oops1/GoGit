@@ -39,6 +39,7 @@ type Worktree struct {
 	attrsMu           sync.Mutex
 	format            hash.Format
 	fileMode          bool
+	symlinks          bool
 	workers           int
 	maxFiles          int
 	includeUnmodified bool
@@ -101,6 +102,7 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		attrs:             attrs,
 		format:            opts.DB.Format(),
 		fileMode:          core.FileMode,
+		symlinks:          core.Symlinks,
 		workers:           workerCount(opts.Workers),
 		maxFiles:          opts.MaxFiles,
 		includeUnmodified: opts.IncludeUnmodified,
