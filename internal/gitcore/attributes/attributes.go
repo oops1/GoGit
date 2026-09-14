@@ -4,6 +4,9 @@ import (
 	"cmp"
 	"maps"
 	"strings"
+
+	"github.com/oops1/gogit/internal/gitcore/config"
+	"github.com/oops1/gogit/internal/gitcore/hash"
 )
 
 const (
@@ -184,6 +187,8 @@ type AttributeOptions struct {
 	AutoCRLF       string
 	EOL            string
 	PlatformEOL    string
+	Config         *config.Config
+	ObjectFormat   hash.Format
 }
 
 type attrNode struct {

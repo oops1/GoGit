@@ -90,6 +90,8 @@ func crlfFromValue(v Value) CRLFAction {
 		return CRLFBinary
 	case v.kind == Valued && v.text == "auto":
 		return CRLFAuto
+	case v.kind == Valued && v.text == "input":
+		return CRLFTextInput
 	}
 	return CRLFUndefined
 }
