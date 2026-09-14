@@ -584,6 +584,7 @@ func (a *App) CloseRepository() {
 	a.stopWatcher()
 	a.stopJournal()
 	a.clearChangesPanels()
+	a.stopWrite()
 	a.closeOpenRepository()
 	a.registry.ClearActive()
 	a.cfg.ActiveRepository = ""
@@ -609,6 +610,7 @@ func (a *App) ActivateRepository(id string) {
 		a.stopWatcher()
 		a.stopJournal()
 		a.clearChangesPanels()
+		a.stopWrite()
 		a.closeOpenRepository()
 		a.registry.ClearActive()
 		a.cfg.ActiveRepository = ""
@@ -627,6 +629,7 @@ func (a *App) ActivateRepository(id string) {
 	a.stopWatcher()
 	a.stopJournal()
 	a.clearChangesPanels()
+	a.stopWrite()
 	a.closeOpenRepository()
 	a.setOpened(opened)
 	_ = a.registry.SetActive(id)
@@ -758,7 +761,6 @@ func (a *App) restoreActiveRepository() {
 	}
 	a.cfg.ActiveRepository = node.ID
 	_ = a.registry.SetActive(node.ID)
-	a.SetActiveRepository(node.ID, node.Kind == repo.KindWorktree)
 	a.reposView.Render(a.registry, a.repoTreeState())
 }
 

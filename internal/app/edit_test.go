@@ -123,6 +123,22 @@ func waitForFileRowState(t *testing.T, a *App, path, want string) {
 	}
 }
 
+func waitForFileRowStatus(t *testing.T, a *App, path string, status changes.RowStatus) {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		for i := range filesRowCountOnDispatcher(t, a) {
+			if row := filesRowOnDispatcher(t, a, i); row.RelPath == path && row.Status == status {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("file %q did not become %s in time", path, status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func waitForFileRowAbsent(t *testing.T, a *App, path string) {
 	t.Helper()
 	deadline := time.Now().Add(testTimeout)
@@ -308,7 +324,7 @@ func TestDiscardWithConfirmationRestoresFileContent(t *testing.T) {
 	}
 	a.writeWG.Wait()
 
-	waitForFileRowAbsent(t, a, "modified.txt")
+	waitForFileRowStatus(t, a, "modified.txt", changes.RowUnchanged)
 	data, err := os.ReadFile(filepath.Join(target, "modified.txt"))
 	if err != nil {
 		t.Fatal(err)
