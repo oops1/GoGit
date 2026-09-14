@@ -1,12 +1,15 @@
 package pack
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,8 +23,13 @@ const (
 	tempPackPattern  = "incoming-*" + packSuffix
 	tempIndexPattern = "incoming-*" + indexSuffix
 	keepSuffix       = ".keep"
+	keepFileMode     = 0o600
 	entryPrealloc    = 4096
 )
+
+var openKeepFile = func(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, keepFileMode)
+}
 
 type IndexOptions struct {
 	Bases    BaseResolver
@@ -34,6 +42,7 @@ type IndexResult struct {
 	Checksum  hash.ObjectID
 	PackPath  string
 	IndexPath string
+	KeepPath  string
 	Objects   int
 	Bytes     int64
 }
@@ -43,28 +52,8 @@ type appendedBase struct {
 	data []byte
 }
 
-type indexResolver struct {
-	pack       *Pack
-	offsetByID map[hash.ObjectID]int64
-	bases      BaseResolver
-	appended   map[hash.ObjectID]appendedBase
-}
-
-func (r *indexResolver) ResolveBase(id hash.ObjectID, depth int) (object.Type, []byte, error) {
-	if offset, ok := r.offsetByID[id]; ok {
-		return r.pack.objectAt(offset, depth)
-	}
-	if r.bases == nil {
-		return 0, nil, fmt.Errorf("%w: %s", ErrBaseNotFound, id)
-	}
-	kind, data, err := r.bases.ResolveBase(id, depth)
-	if err != nil {
-		return 0, nil, err
-	}
-	if _, ok := r.appended[id]; !ok {
-		r.appended[id] = appendedBase{kind: kind, data: data}
-	}
-	return kind, data, nil
+type knownObjects interface {
+	Contains(id hash.ObjectID) (bool, error)
 }
 
 type receivingCounter struct {
@@ -95,34 +84,29 @@ func IndexPack(ctx context.Context, src io.Reader, dir string, opts IndexOptions
 	if err != nil {
 		return IndexResult{}, err
 	}
-
-	entries, offsetByID, deltaPositions, err := readIncomingObjects(ctx, reader)
-	if err != nil {
+	incoming := newIndexer(ctx, opts, reader.Count())
+	if err := incoming.receive(reader); err != nil {
 		return IndexResult{}, err
 	}
-	originalSize := counter.received
-
-	resolver := &indexResolver{offsetByID: offsetByID, bases: opts.Bases, appended: make(map[hash.ObjectID]appendedBase)}
-	tempPack, err := NewPack(temp, originalSize, WithBaseResolver(resolver))
-	if err != nil {
-		return IndexResult{}, err
-	}
-	resolver.pack = tempPack
-
-	if err := resolveDeltas(ctx, tempPack, entries, deltaPositions, offsetByID, opts.Progress); err != nil {
+	size := reader.Offset()
+	incoming.pack = &Pack{source: temp, size: size, version: packVersion, count: reader.Count(), trailer: reader.Trailer(), settings: newSettings(nil)}
+	if err := incoming.resolve(); err != nil {
 		return IndexResult{}, err
 	}
 
 	checksum := reader.Trailer()
-	size := originalSize
-	if opts.FixThin && len(resolver.appended) > 0 {
-		checksum, size, err = appendMissingBases(temp, originalSize, len(entries), resolver.appended, &entries, offsetByID)
+	entries := incoming.entries
+	for _, entry := range entries {
+		delete(incoming.appended, entry.ID)
+	}
+	if opts.FixThin && len(incoming.appended) > 0 {
+		checksum, size, err = appendMissingBases(temp, size, len(entries), incoming.appended, &entries)
 		if err != nil {
 			return IndexResult{}, err
 		}
 	}
 
-	if err := temp.Close(); err != nil {
+	if err := fileClose(temp); err != nil {
 		return IndexResult{}, fmt.Errorf("pack: close %s: %w", tempPath, err)
 	}
 
@@ -138,20 +122,39 @@ func IndexPack(ctx context.Context, src io.Reader, dir string, opts IndexOptions
 		return IndexResult{}, err
 	}
 
-	if opts.KeepName != "" {
-		keepPath := filepath.Join(dir, "pack-"+checksum.String()+keepSuffix)
-		if err := os.WriteFile(keepPath, []byte(opts.KeepName), 0o600); err != nil {
-			return IndexResult{}, fmt.Errorf("pack: write %s: %w", keepPath, err)
-		}
-	}
-
-	return IndexResult{
+	result := IndexResult{
 		Checksum:  checksum,
 		PackPath:  packPath,
 		IndexPath: indexPath,
 		Objects:   len(entries),
 		Bytes:     size,
-	}, nil
+	}
+	if opts.KeepName != "" {
+		keepPath := filepath.Join(dir, "pack-"+checksum.String()+keepSuffix)
+		created, err := writeKeepFile(keepPath, opts.KeepName)
+		if err != nil {
+			return IndexResult{}, err
+		}
+		if created {
+			result.KeepPath = keepPath
+		}
+	}
+	return result, nil
+}
+
+func writeKeepFile(path, content string) (bool, error) {
+	file, err := openKeepFile(path)
+	if errors.Is(err, fs.ErrExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("pack: write %s: %w", path, err)
+	}
+	_, err = io.WriteString(file, content)
+	if err := errors.Join(err, fileClose(file)); err != nil {
+		return false, fmt.Errorf("pack: write %s: %w", path, err)
+	}
+	return true, nil
 }
 
 func createTempFile(dir, pattern string) (*os.File, string, error) {
@@ -169,61 +172,175 @@ func cleanupTempFile(temp *os.File, tempPath string, renamed *bool) {
 	}
 }
 
-func readIncomingObjects(ctx context.Context, reader *Reader) ([]Entry, map[hash.ObjectID]int64, []int, error) {
-	entries := make([]Entry, 0, min(reader.Count(), entryPrealloc))
-	offsetByID := make(map[hash.ObjectID]int64, min(reader.Count(), entryPrealloc))
-	var deltaPositions []int
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil, nil, nil, err
-		}
-		entry, err := reader.NextObject()
-		if errors.Is(err, io.EOF) {
-			return entries, offsetByID, deltaPositions, nil
-		}
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if entry.Header.Kind.IsDelta() {
-			entries = append(entries, Entry{Offset: entry.Header.Offset, CRC32: entry.CRC32})
-			deltaPositions = append(deltaPositions, len(entries)-1)
-			continue
-		}
-		id := hash.SumSHA1(entry.Header.Kind.Type().String(), entry.Data)
-		entries = append(entries, Entry{ID: id, Offset: entry.Header.Offset, CRC32: entry.CRC32})
-		offsetByID[id] = entry.Header.Offset
+type indexer struct {
+	ctx      context.Context
+	bases    BaseResolver
+	known    knownObjects
+	progress progress.Func
+	pack     *Pack
+	entries  []Entry
+	plain    []int
+	byOffset map[int64][]int
+	byName   map[hash.ObjectID][]int
+	deltas   int64
+	resolved int64
+	appended map[hash.ObjectID]appendedBase
+}
+
+type resolveFrame struct {
+	kind     object.Type
+	data     []byte
+	children []int
+}
+
+func newIndexer(ctx context.Context, opts IndexOptions, count int) *indexer {
+	known, _ := opts.Bases.(knownObjects)
+	return &indexer{
+		ctx:      ctx,
+		bases:    opts.Bases,
+		known:    known,
+		progress: opts.Progress,
+		entries:  make([]Entry, 0, min(count, entryPrealloc)),
+		byOffset: make(map[int64][]int),
+		byName:   make(map[hash.ObjectID][]int),
+		appended: make(map[hash.ObjectID]appendedBase),
 	}
 }
 
-func resolveDeltas(ctx context.Context, tempPack *Pack, entries []Entry, positions []int, offsetByID map[hash.ObjectID]int64, prog progress.Func) error {
-	total := int64(len(positions))
-	resolved := int64(0)
-	remaining := positions
-	for len(remaining) > 0 {
-		pending := make([]int, 0, len(remaining))
-		var lastErr error
-		progressed := false
-		for _, position := range remaining {
-			if err := ctx.Err(); err != nil {
+func (x *indexer) receive(reader *Reader) error {
+	for {
+		if err := x.ctx.Err(); err != nil {
+			return err
+		}
+		entry, err := reader.NextObject()
+		if errors.Is(err, io.EOF) {
+			return reader.expectEnd()
+		}
+		if err != nil {
+			return err
+		}
+		position := len(x.entries)
+		x.entries = append(x.entries, Entry{Offset: entry.Header.Offset, CRC32: entry.CRC32})
+		switch entry.Header.Kind {
+		case KindOffsetDelta:
+			x.byOffset[entry.Header.BaseOffset] = append(x.byOffset[entry.Header.BaseOffset], position)
+			x.deltas++
+		case KindRefDelta:
+			x.byName[entry.Header.BaseID] = append(x.byName[entry.Header.BaseID], position)
+			x.deltas++
+		default:
+			kind := entry.Header.Kind.Type()
+			id := hash.SumSHA1(kind.String(), entry.Data)
+			if err := x.checkCollision(id, kind, entry.Data); err != nil {
 				return err
 			}
-			kind, data, err := tempPack.objectAt(entries[position].Offset, 0)
-			if err != nil {
-				pending = append(pending, position)
-				lastErr = err
-				continue
-			}
-			id := hash.SumSHA1(kind.String(), data)
-			entries[position].ID = id
-			offsetByID[id] = entries[position].Offset
-			resolved++
-			prog.Count(progress.PhaseResolving, resolved, total)
-			progressed = true
+			x.entries[position].ID = id
+			x.plain = append(x.plain, position)
 		}
-		if !progressed {
-			return lastErr
+	}
+}
+
+func (x *indexer) resolve() error {
+	for _, position := range x.plain {
+		entry := x.entries[position]
+		children := x.childrenOf(entry.Offset, entry.ID)
+		if len(children) == 0 {
+			continue
 		}
-		remaining = pending
+		kind, data, err := x.pack.objectAt(entry.Offset, 0)
+		if err != nil {
+			return err
+		}
+		if err := x.expand(kind, data, children); err != nil {
+			return err
+		}
+	}
+	if err := x.resolveExternal(); err != nil {
+		return err
+	}
+	if x.resolved != x.deltas {
+		return fmt.Errorf("%w: %d deltas stay unresolved", ErrBaseNotFound, x.deltas-x.resolved)
+	}
+	return nil
+}
+
+func (x *indexer) resolveExternal() error {
+	ids := slices.SortedFunc(maps.Keys(x.byName), func(a, b hash.ObjectID) int { return a.Compare(b) })
+	for _, id := range ids {
+		children, pending := x.byName[id]
+		if !pending {
+			continue
+		}
+		if x.bases == nil {
+			return fmt.Errorf("%w: %s", ErrBaseNotFound, id)
+		}
+		kind, data, err := x.bases.ResolveBase(id, 0)
+		if err != nil {
+			return err
+		}
+		delete(x.byName, id)
+		x.appended[id] = appendedBase{kind: kind, data: data}
+		if err := x.expand(kind, data, children); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (x *indexer) childrenOf(offset int64, id hash.ObjectID) []int {
+	children := slices.Concat(x.byOffset[offset], x.byName[id])
+	delete(x.byOffset, offset)
+	delete(x.byName, id)
+	return children
+}
+
+func (x *indexer) expand(kind object.Type, data []byte, children []int) error {
+	stack := []resolveFrame{{kind: kind, data: data, children: children}}
+	for len(stack) > 0 {
+		top := len(stack) - 1
+		frame := stack[top]
+		child := frame.children[0]
+		if len(frame.children) == 1 {
+			stack[top] = resolveFrame{}
+			stack = stack[:top]
+		} else {
+			stack[top].children = frame.children[1:]
+		}
+		if err := x.ctx.Err(); err != nil {
+			return err
+		}
+		result, err := x.pack.deltaAt(x.entries[child].Offset, frame.data)
+		if err != nil {
+			return err
+		}
+		id := hash.SumSHA1(frame.kind.String(), result)
+		if err := x.checkCollision(id, frame.kind, result); err != nil {
+			return err
+		}
+		x.entries[child].ID = id
+		x.resolved++
+		x.progress.Count(progress.PhaseResolving, x.resolved, x.deltas)
+		if grand := x.childrenOf(x.entries[child].Offset, id); len(grand) > 0 {
+			stack = append(stack, resolveFrame{kind: frame.kind, data: result, children: grand})
+		}
+	}
+	return nil
+}
+
+func (x *indexer) checkCollision(id hash.ObjectID, kind object.Type, data []byte) error {
+	if x.known == nil {
+		return nil
+	}
+	exists, err := x.known.Contains(id)
+	if err != nil || !exists {
+		return err
+	}
+	haveKind, have, err := x.bases.ResolveBase(id, 0)
+	if err != nil {
+		return err
+	}
+	if haveKind != kind || !bytes.Equal(have, data) {
+		return fmt.Errorf("%w: %s", ErrCollision, id)
 	}
 	return nil
 }
@@ -237,12 +354,8 @@ type appendSink interface {
 	Name() string
 }
 
-func appendMissingBases(temp appendSink, originalSize int64, objectCount int, appended map[hash.ObjectID]appendedBase, entries *[]Entry, offsetByID map[hash.ObjectID]int64) (hash.ObjectID, int64, error) {
-	ids := make([]hash.ObjectID, 0, len(appended))
-	for id := range appended {
-		ids = append(ids, id)
-	}
-	slices.SortFunc(ids, func(a, b hash.ObjectID) int { return a.Compare(b) })
+func appendMissingBases(temp appendSink, originalSize int64, objectCount int, appended map[hash.ObjectID]appendedBase, entries *[]Entry) (hash.ObjectID, int64, error) {
+	ids := slices.SortedFunc(maps.Keys(appended), func(a, b hash.ObjectID) int { return a.Compare(b) })
 
 	truncatedSize := originalSize - hash.Size
 	if err := temp.Truncate(truncatedSize); err != nil {
@@ -261,7 +374,6 @@ func appendMissingBases(temp appendSink, originalSize int64, objectCount int, ap
 			return hash.Zero, 0, err
 		}
 		*entries = append(*entries, entry)
-		offsetByID[id] = entry.Offset
 	}
 
 	var count [4]byte
@@ -312,7 +424,7 @@ func writeIndexFile(dir, path string, entries []Entry, checksum hash.ObjectID) e
 	if err := WriteIndex(temp, entries, checksum); err != nil {
 		return err
 	}
-	if err := temp.Close(); err != nil {
+	if err := fileClose(temp); err != nil {
 		return fmt.Errorf("pack: close %s: %w", tempPath, err)
 	}
 	reused, err := placeFile(tempPath, path)

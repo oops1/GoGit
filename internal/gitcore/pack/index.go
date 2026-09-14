@@ -14,12 +14,14 @@ import (
 
 const (
 	indexVersion     = 2
+	indexVersionOne  = 1
 	fanoutEntries    = 256
 	fanoutSize       = fanoutEntries * 4
 	indexHeaderSize  = 8
 	indexTablesAt    = indexHeaderSize + fanoutSize
 	crcSize          = 4
 	offsetSize       = 4
+	entrySizeOne     = offsetSize + hash.Size
 	largeOffsetSize  = 8
 	indexTrailerSize = 2 * hash.Size
 	largeOffsetFlag  = uint32(1) << 31
@@ -35,19 +37,23 @@ type Entry struct {
 }
 
 type Index struct {
-	source     io.ReaderAt
-	closer     io.Closer
-	path       string
-	size       int64
-	count      int
-	fanout     [fanoutEntries]uint32
-	names      int64
-	crcs       int64
-	offsets    int64
-	larges     int64
-	largeCount int64
-	pack       hash.ObjectID
-	self       hash.ObjectID
+	source       io.ReaderAt
+	closer       io.Closer
+	path         string
+	size         int64
+	version      uint32
+	count        int
+	fanoutAt     int64
+	fanout       [fanoutEntries]uint32
+	names        int64
+	nameStride   int64
+	crcs         int64
+	offsets      int64
+	offsetStride int64
+	larges       int64
+	largeCount   int64
+	pack         hash.ObjectID
+	self         hash.ObjectID
 }
 
 func OpenIndex(path string) (*Index, error) {
@@ -78,7 +84,7 @@ func NewIndexFile(file *os.File) (*Index, error) {
 }
 
 func NewIndex(source io.ReaderAt, size int64) (*Index, error) {
-	if size < indexTablesAt+indexTrailerSize {
+	if size < fanoutSize+indexTrailerSize {
 		return nil, fmt.Errorf("%w: pack index holds %d bytes", ErrTruncated, size)
 	}
 	index := &Index{source: source, size: size}
@@ -86,11 +92,8 @@ func NewIndex(source io.ReaderAt, size int64) (*Index, error) {
 	if err := readFull(source, head[:], 0); err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(head[:len(indexMagic)], indexMagic) {
-		return nil, fmt.Errorf("%w: version 1", ErrUnsupportedIndexVersion)
-	}
-	if version := binary.BigEndian.Uint32(head[len(indexMagic):]); version != indexVersion {
-		return nil, fmt.Errorf("%w: version %d", ErrUnsupportedIndexVersion, version)
+	if err := index.detectVersion(head); err != nil {
+		return nil, err
 	}
 	if err := index.readFanout(); err != nil {
 		return nil, err
@@ -107,9 +110,26 @@ func NewIndex(source io.ReaderAt, size int64) (*Index, error) {
 	return index, nil
 }
 
+func (x *Index) detectVersion(head [indexHeaderSize]byte) error {
+	if !bytes.Equal(head[:len(indexMagic)], indexMagic) {
+		x.version = indexVersionOne
+		return nil
+	}
+	version := binary.BigEndian.Uint32(head[len(indexMagic):])
+	if version != indexVersion {
+		return fmt.Errorf("%w: version %d", ErrUnsupportedIndexVersion, version)
+	}
+	if x.size < indexTablesAt+indexTrailerSize {
+		return fmt.Errorf("%w: pack index holds %d bytes", ErrTruncated, x.size)
+	}
+	x.version = indexVersion
+	x.fanoutAt = indexHeaderSize
+	return nil
+}
+
 func (x *Index) readFanout() error {
 	raw := make([]byte, fanoutSize)
-	if err := readFull(x.source, raw, indexHeaderSize); err != nil {
+	if err := readFull(x.source, raw, x.fanoutAt); err != nil {
 		return err
 	}
 	var previous uint32
@@ -126,10 +146,15 @@ func (x *Index) readFanout() error {
 }
 
 func (x *Index) layout() error {
+	if x.version == indexVersionOne {
+		return x.layoutVersionOne()
+	}
 	entries := int64(x.count)
 	x.names = indexTablesAt
+	x.nameStride = hash.Size
 	x.crcs = x.names + entries*hash.Size
 	x.offsets = x.crcs + entries*crcSize
+	x.offsetStride = offsetSize
 	x.larges = x.offsets + entries*offsetSize
 	room := x.size - indexTrailerSize - x.larges
 	if room < 0 {
@@ -142,8 +167,28 @@ func (x *Index) layout() error {
 	return nil
 }
 
+func (x *Index) layoutVersionOne() error {
+	x.offsets = fanoutSize
+	x.offsetStride = entrySizeOne
+	x.names = fanoutSize + offsetSize
+	x.nameStride = entrySizeOne
+	need := int64(x.count) * entrySizeOne
+	room := x.size - indexTrailerSize - fanoutSize
+	if room < need {
+		return fmt.Errorf("%w: %d objects need more than %d bytes", ErrTruncated, x.count, x.size)
+	}
+	if room != need {
+		return fmt.Errorf("%w: version 1 index holds %d bytes past its entries", ErrCorruptIndex, room-need)
+	}
+	return nil
+}
+
 func (x *Index) Path() string {
 	return x.path
+}
+
+func (x *Index) Version() uint32 {
+	return x.version
 }
 
 func (x *Index) Count() int {
@@ -292,15 +337,16 @@ func prefixBounds(prefix []byte, bits int) (hash.ObjectID, hash.ObjectID) {
 
 func (x *Index) Objects() iter.Seq[hash.ObjectID] {
 	return func(yield func(hash.ObjectID) bool) {
-		block := make([]byte, namesChunk*hash.Size)
+		stride := int(x.nameStride)
+		block := make([]byte, namesChunk*stride)
 		for start := 0; start < x.count; start += namesChunk {
 			size := min(namesChunk, x.count-start)
-			chunk := block[:size*hash.Size]
-			if err := readFull(x.source, chunk, x.names+int64(start)*hash.Size); err != nil {
+			chunk := block[:(size-1)*stride+hash.Size]
+			if err := readFull(x.source, chunk, x.names+int64(start)*x.nameStride); err != nil {
 				return
 			}
 			for i := range size {
-				if !yield(hash.ObjectID(chunk[i*hash.Size : (i+1)*hash.Size])) {
+				if !yield(hash.ObjectID(chunk[i*stride : i*stride+hash.Size])) {
 					return
 				}
 			}
@@ -335,13 +381,16 @@ func (x *Index) verifyOrder() error {
 
 func (x *Index) idAt(position int) (hash.ObjectID, error) {
 	var id hash.ObjectID
-	if err := readFull(x.source, id[:], x.names+int64(position)*hash.Size); err != nil {
+	if err := readFull(x.source, id[:], x.names+int64(position)*x.nameStride); err != nil {
 		return hash.Zero, err
 	}
 	return id, nil
 }
 
 func (x *Index) crcAt(position int) (uint32, error) {
+	if x.version == indexVersionOne {
+		return 0, nil
+	}
 	var raw [crcSize]byte
 	if err := readFull(x.source, raw[:], x.crcs+int64(position)*crcSize); err != nil {
 		return 0, err
@@ -351,11 +400,11 @@ func (x *Index) crcAt(position int) (uint32, error) {
 
 func (x *Index) offsetAt(position int) (int64, error) {
 	var raw [offsetSize]byte
-	if err := readFull(x.source, raw[:], x.offsets+int64(position)*offsetSize); err != nil {
+	if err := readFull(x.source, raw[:], x.offsets+int64(position)*x.offsetStride); err != nil {
 		return 0, err
 	}
 	value := binary.BigEndian.Uint32(raw[:])
-	if value&largeOffsetFlag == 0 {
+	if value&largeOffsetFlag == 0 || x.version == indexVersionOne {
 		return int64(value), nil
 	}
 	slot := int64(value &^ largeOffsetFlag)

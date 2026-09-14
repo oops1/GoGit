@@ -184,7 +184,7 @@ func TestNewIndexRejectsBrokenFiles(t *testing.T) {
 		want error
 	}{
 		{"tooShort", shortIndex, ErrTruncated},
-		{"version1", badMagic, ErrUnsupportedIndexVersion},
+		{"headerlessVersionOneWithUnsortedFanout", badMagic, ErrCorruptIndex},
 		{"version3", badVersion, ErrUnsupportedIndexVersion},
 		{"unsortedFanout", badFanout, ErrCorruptIndex},
 		{"countPastTheFile", hugeCount, ErrTruncated},
@@ -361,8 +361,8 @@ func TestOpenIndexReportsMissingFile(t *testing.T) {
 func TestOpenIndexReportsBrokenFile(t *testing.T) {
 	path := writeTemp(t, filepath.Join(t.TempDir(), "broken.idx"),
 		bytes.Repeat([]byte{0}, indexTablesAt+indexTrailerSize))
-	if _, err := OpenIndex(path); !errors.Is(err, ErrUnsupportedIndexVersion) {
-		t.Fatalf("OpenIndex returned %v, want %v", err, ErrUnsupportedIndexVersion)
+	if _, err := OpenIndex(path); !errors.Is(err, ErrCorruptIndex) {
+		t.Fatalf("OpenIndex returned %v, want %v", err, ErrCorruptIndex)
 	}
 }
 

@@ -506,7 +506,7 @@ func TestThinPackNeedsAResolver(t *testing.T) {
 	if kind == 0 || len(data) == 0 {
 		t.Fatalf("ObjectAt gave %s and %d bytes", kind, len(data))
 	}
-	if _, ok := store.snapshot()[0].Index.Find(delta.BaseID); !ok {
+	if _, ok := store.Files()[0].Index.Find(delta.BaseID); !ok {
 		t.Fatalf("the store does not hold the base %s", delta.BaseID)
 	}
 }

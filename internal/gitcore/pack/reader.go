@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	stdhash "hash"
 	"hash/crc32"
@@ -107,6 +108,17 @@ func (r *Reader) finish() error {
 		return fmt.Errorf("%w: packfile declares %s, computed %s", ErrChecksumMismatch, r.trailer, computed)
 	}
 	return nil
+}
+
+func (r *Reader) expectEnd() error {
+	_, err := r.source.source.ReadByte()
+	if err == nil {
+		return fmt.Errorf("%w: data follows the trailer at %d", ErrTrailingData, r.source.position)
+	}
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return fmt.Errorf("pack: read past the trailer: %w", err)
 }
 
 type packCounter struct {

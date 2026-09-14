@@ -21,4 +21,6 @@ var (
 	ErrDeltaSizeMismatch       = errors.New("pack: delta produced an unexpected number of bytes")
 	ErrDeltaChainTooDeep       = errors.New("pack: delta chain is too deep")
 	ErrBaseNotFound            = errors.New("pack: delta base is not available")
+	ErrTrailingData            = errors.New("pack: pack has junk at the end")
+	ErrCollision               = errors.New("pack: object collides with a different existing object")
 )

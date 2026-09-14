@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"errors"
 	"fmt"
 	"iter"
 	"os"
@@ -8,17 +9,50 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
+var statPath = os.Stat
+
 type PackFile struct {
 	Name    string
 	ModTime time.Time
 	Index   *Index
 	Pack    *Pack
+
+	users    atomic.Int64
+	retired  atomic.Bool
+	closing  sync.Once
+	closeErr error
+}
+
+func (f *PackFile) acquire() {
+	f.users.Add(1)
+}
+
+func (f *PackFile) release() {
+	if f.users.Add(-1) == 0 && f.retired.Load() {
+		_ = f.close()
+	}
+}
+
+func (f *PackFile) retire() error {
+	f.retired.Store(true)
+	if f.users.Load() != 0 {
+		return nil
+	}
+	return f.close()
+}
+
+func (f *PackFile) close() error {
+	f.closing.Do(func() {
+		f.closeErr = errors.Join(f.Index.Close(), f.Pack.Close())
+	})
+	return f.closeErr
 }
 
 type Store struct {
@@ -51,9 +85,21 @@ func (s *Store) Files() []*PackFile {
 	return slices.Clone(s.files)
 }
 
+func (s *Store) Acquire() iter.Seq[*PackFile] {
+	return func(yield func(*PackFile) bool) {
+		files := s.acquire()
+		defer release(files)
+		for _, file := range files {
+			if !yield(file) {
+				return
+			}
+		}
+	}
+}
+
 func (s *Store) Count() int {
 	total := 0
-	for _, file := range s.snapshot() {
+	for file := range s.Acquire() {
 		total += file.Index.Count()
 	}
 	return total
@@ -62,7 +108,7 @@ func (s *Store) Count() int {
 func (s *Store) Objects() iter.Seq[hash.ObjectID] {
 	return func(yield func(hash.ObjectID) bool) {
 		seen := make(map[hash.ObjectID]struct{})
-		for _, file := range s.snapshot() {
+		for file := range s.Acquire() {
 			for id := range file.Index.Objects() {
 				if _, ok := seen[id]; ok {
 					continue
@@ -77,16 +123,21 @@ func (s *Store) Objects() iter.Seq[hash.ObjectID] {
 }
 
 func (s *Store) Contains(id hash.ObjectID) (bool, error) {
-	for _, file := range s.snapshot() {
+	_, ok, err := s.Holder(id)
+	return ok, err
+}
+
+func (s *Store) Holder(id hash.ObjectID) (string, bool, error) {
+	for file := range s.Acquire() {
 		_, ok, err := file.Index.Position(id)
 		if err != nil {
-			return false, err
+			return "", false, err
 		}
 		if ok {
-			return true, nil
+			return file.Name, true, nil
 		}
 	}
-	return false, nil
+	return "", false, nil
 }
 
 func (s *Store) Get(id hash.ObjectID) (object.Type, []byte, bool, error) {
@@ -111,7 +162,7 @@ func (s *Store) ResolveBase(id hash.ObjectID, depth int) (object.Type, []byte, e
 }
 
 func (s *Store) Verify() error {
-	for _, file := range s.snapshot() {
+	for file := range s.Acquire() {
 		if err := file.Index.Verify(); err != nil {
 			return err
 		}
@@ -134,27 +185,27 @@ func (s *Store) Reload() (bool, error) {
 		kept[file.Name] = file
 	}
 	files := make([]*PackFile, 0, len(found))
-	var opened []*PackFile
 	changed := false
 	for _, wanted := range found {
-		if file, ok := kept[wanted.name]; ok && file.ModTime.Equal(wanted.modTime) {
+		old, known := kept[wanted.name]
+		if known && old.ModTime.Equal(wanted.modTime) {
 			delete(kept, wanted.name)
-			files = append(files, file)
+			files = append(files, old)
 			continue
 		}
 		file, err := s.openPair(wanted)
 		if err != nil {
-			for _, stale := range opened {
-				s.release(stale)
+			if known {
+				delete(kept, wanted.name)
+				files = append(files, old)
 			}
-			return false, err
+			continue
 		}
-		opened = append(opened, file)
 		files = append(files, file)
 		changed = true
 	}
 	for _, stale := range kept {
-		s.release(stale)
+		_ = s.retire(stale)
 		changed = true
 	}
 	s.files = files
@@ -164,22 +215,16 @@ func (s *Store) Reload() (bool, error) {
 func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var failure error
+	failures := make([]error, 0, len(s.files))
 	for _, file := range s.files {
-		s.settings.cache.dropPack(file.Pack.Checksum())
-		if err := file.Index.Close(); err != nil && failure == nil {
-			failure = err
-		}
-		if err := file.Pack.Close(); err != nil && failure == nil {
-			failure = err
-		}
+		failures = append(failures, s.retire(file))
 	}
 	s.files = nil
-	return failure
+	return errors.Join(failures...)
 }
 
 func (s *Store) get(id hash.ObjectID, depth int) (object.Type, []byte, bool, error) {
-	for _, file := range s.snapshot() {
+	for file := range s.Acquire() {
 		offset, ok, err := file.Index.Lookup(id)
 		if err != nil {
 			return 0, nil, false, err
@@ -196,16 +241,24 @@ func (s *Store) get(id hash.ObjectID, depth int) (object.Type, []byte, bool, err
 	return 0, nil, false, nil
 }
 
-func (s *Store) snapshot() []*PackFile {
+func (s *Store) acquire() []*PackFile {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	for _, file := range s.files {
+		file.acquire()
+	}
 	return s.files
 }
 
-func (s *Store) release(file *PackFile) {
+func release(files []*PackFile) {
+	for _, file := range files {
+		file.release()
+	}
+}
+
+func (s *Store) retire(file *PackFile) error {
 	s.settings.cache.dropPack(file.Pack.Checksum())
-	_ = file.Index.Close()
-	_ = file.Pack.Close()
+	return file.retire()
 }
 
 func (s *Store) openPair(wanted candidate) (*PackFile, error) {
@@ -242,7 +295,10 @@ func (s *Store) scan() ([]candidate, error) {
 		if !ok {
 			continue
 		}
-		info, err := os.Stat(filepath.Join(s.dir, name+indexSuffix))
+		if _, err := statPath(filepath.Join(s.dir, name+indexSuffix)); err != nil {
+			continue
+		}
+		info, err := statPath(filepath.Join(s.dir, entry.Name()))
 		if err != nil {
 			continue
 		}
