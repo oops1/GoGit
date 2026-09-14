@@ -145,6 +145,7 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 	rem := remote.Remote{Name: remoteName, URLs: []string{url}, Fetch: []refspec.RefSpec{spec}}
 	result, err := fetchCloneObjects(ctx, r, rem, remote.FetchOptions{
 		Depth:     opts.Depth,
+		WantHead:  true,
 		Progress:  prog,
 		Transport: opts.Transport,
 	})
@@ -157,7 +158,7 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 		return failClone(r, err)
 	}
 
-	if err := finishCloneRefs(r, opts.Bare, target, url); err != nil {
+	if err := finishCloneRefs(r, opts.Bare, target, remoteName, cloneRemoteHead(opts, remoteName, defaultBranch, result), url); err != nil {
 		return failClone(r, err)
 	}
 	if !target.detached && !opts.Bare && !target.commit.IsZero() {
@@ -341,7 +342,25 @@ func cloneCommitter(r *repo.Repository) func() object.Signature {
 	}
 }
 
-func finishCloneRefs(r *repo.Repository, bare bool, target cloneTarget, url string) error {
+func cloneRemoteHead(opts CloneOptions, remoteName, defaultBranch string, result remote.FetchResult) refs.Name {
+	if opts.Bare {
+		return ""
+	}
+	branch := guessRemoteHead(result.Refs, defaultBranch)
+	if refs.Name(result.Head).IsBranch() {
+		branch = refs.Name(result.Head).Short()
+	}
+	if branch == "" {
+		return ""
+	}
+	tracking := remoteTrackingName(remoteName, branch, false)
+	if _, ok := changeTarget(result.Changes, tracking); !ok {
+		return ""
+	}
+	return tracking
+}
+
+func finishCloneRefs(r *repo.Repository, bare bool, target cloneTarget, remoteName string, remoteHead refs.Name, url string) error {
 	if target.commit.IsZero() {
 		return nil
 	}
@@ -372,6 +391,12 @@ func finishCloneRefs(r *repo.Repository, bare bool, target cloneTarget, url stri
 			}
 		}
 		if err := txSetSymbolic(tx, refs.HEAD, branchRef); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	if remoteHead != "" {
+		if err := txSetSymbolic(tx, refs.Name(refs.RemotesPrefix+remoteName+"/HEAD"), remoteHead); err != nil {
 			tx.Rollback()
 			return err
 		}

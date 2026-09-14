@@ -18,13 +18,15 @@ func cloneOracleState(o *oracle, dir string) string {
 	head, _ := o.attempt(dir, "symbolic-ref", "-q", "HEAD")
 	var refsList []string
 	for line := range strings.SplitSeq(o.run(dir, "for-each-ref", "--format=%(refname) %(objectname)"), "\n") {
-		if line != "" && !strings.HasPrefix(line, "refs/remotes/origin/HEAD ") {
+		if line != "" {
 			refsList = append(refsList, line)
 		}
 	}
 	branches, _ := o.attempt(dir, "config", "--get-regexp", `^branch\.`)
+	remoteHead, _ := o.attempt(dir, "symbolic-ref", "-q", "refs/remotes/origin/HEAD")
 	return strings.Join([]string{
 		"== head\n" + head,
+		"== origin head\n" + remoteHead,
 		"== commit\n" + o.run(dir, "rev-parse", "HEAD"),
 		"== refs\n" + strings.Join(refsList, "\n"),
 		"== branch config\n" + branches,
@@ -58,6 +60,14 @@ func TestOracleCloneOfADetachedHeadGuessesTheBranchLikeGit(t *testing.T) {
 		{"no branch at HEAD", false, func(o *oracle, src string) {
 			cloneOracleCommit(o, src, "second.txt")
 			o.run(src, "checkout", "-q", "--detach", "HEAD~1")
+		}},
+		{"a commit no branch contains", false, func(o *oracle, src string) {
+			o.run(src, "checkout", "-q", "--detach")
+			cloneOracleCommit(o, src, "detached.txt")
+		}},
+		{"a symbolic HEAD", false, func(o *oracle, src string) {
+			o.run(src, "branch", "topic")
+			cloneOracleCommit(o, src, "second.txt")
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {

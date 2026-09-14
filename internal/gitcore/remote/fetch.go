@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ type FetchOptions struct {
 	Tags        TagMode
 	Prune       bool
 	Force       bool
+	WantHead    bool
 	Progress    progress.Func
 	Transport   transport.Options
 }
@@ -116,7 +118,8 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	}
 
 	result := FetchResult{Refs: adv.Refs, Head: adv.Head}
-	if len(matched) == 0 {
+	headWant, wantHead := advertisedHead(adv, opts.WantHead)
+	if len(matched) == 0 && !wantHead {
 		if !opts.Prune {
 			return result, nil
 		}
@@ -134,6 +137,9 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	}
 
 	req := buildFetchRequest(matched, opts, shallow, prog)
+	if wantHead && !slices.Contains(req.Wants, headWant) {
+		req.Wants = append(req.Wants, headWant)
+	}
 	prog.Phase("negotiating")
 	resp, err := session.Fetch(ctx, req, neg)
 	if err != nil {
@@ -175,6 +181,18 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 		errs = append(errs, err)
 	}
 	return result, errors.Join(errs...)
+}
+
+func advertisedHead(adv transport.Advertisement, wanted bool) (hash.ObjectID, bool) {
+	if !wanted {
+		return hash.Zero, false
+	}
+	for _, ref := range adv.Refs {
+		if ref.Name == refs.HEAD.String() && !ref.ID.IsZero() {
+			return ref.ID, true
+		}
+	}
+	return hash.Zero, false
 }
 
 func buildFetchRequest(matched []matchedRef, opts FetchOptions, shallow map[hash.ObjectID]struct{}, prog progress.Func) transport.FetchRequest {
