@@ -132,7 +132,13 @@ func (p *rerereRun) replayOrRemember(cache *rerere.Cache, known *[]rerere.Entry,
 		dropEntry(known, path)
 		return true, nil
 	}
-	index := cache.VariantForAPreimage(conflict.ID)
+	var busy []int
+	for _, entry := range *known {
+		if entry.ID == conflict.ID && entry.Path != path {
+			busy = append(busy, entry.Variant)
+		}
+	}
+	index := cache.VariantForAPreimage(conflict.ID, busy...)
 	if err := cache.WritePreimage(conflict.ID, index, conflict.Preimage); err != nil {
 		return false, err
 	}

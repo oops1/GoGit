@@ -378,6 +378,25 @@ func TestTwoConflictedPathsAreRememberedInOrder(t *testing.T) {
 	}
 }
 
+func TestIdenticalConflictsInOneMergeGetTheirOwnVariants(t *testing.T) {
+	tr := newTestRepo(t)
+	same := tenLines("same")
+	tr.fork(
+		map[string]string{"f": changeLine(same, 4, "OURS"), "g": changeLine(same, 4, "OURS")},
+		map[string]string{"f": changeLine(same, 4, "THEIRS"), "g": changeLine(same, 4, "THEIRS")},
+	)
+	tr.enableRerere(false)
+
+	if _, err := tr.merge("feature", MergeOptions{When: mergeTime}); err != nil {
+		t.Fatalf("merge returned error %v", err)
+	}
+
+	entries := tr.mergeRR()
+	if len(entries) != 2 || entries[0].ID != entries[1].ID || entries[0].Variant == entries[1].Variant {
+		t.Fatalf("MERGE_RR = %+v", entries)
+	}
+}
+
 func TestAStagedFileThatStillHasMarkersStaysRemembered(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.conflictingFork()
