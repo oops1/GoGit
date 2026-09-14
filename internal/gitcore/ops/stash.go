@@ -233,7 +233,10 @@ func (m *merger) stashPush(message string) (hash.ObjectID, error) {
 	if err := m.restore(headState); err != nil {
 		return stash, err
 	}
-	return stash, m.advance(head, head.old, resetToHeadNote)
+	if err := m.advance(head, head.old, resetToHeadNote); err != nil {
+		return stash, err
+	}
+	return stash, errors.Join(writeStateFile(m.r, origHeadFile, head.old.String()+"\n"), clearMergeState(m.r), forgetMergeRR(m.r))
 }
 
 func stashTip(store *refs.Store) (hash.ObjectID, error) {
