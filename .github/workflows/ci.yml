@@ -5,16 +5,22 @@ on:
     branches: [main, develop]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/develop' }}
+
 env:
   CGO_ENABLED: "0"
 
 jobs:
-  test:
+  suites-ubuntu:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    name: ${{ matrix.suite }} (ubuntu-latest)
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        suite: [race, oracle-ops, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash
@@ -23,49 +29,52 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
-      - run: go vet -unsafeptr=false ./...
-      - run: go build ./...
-      - name: race tests
-        env:
-          CGO_ENABLED: "1"
-        run: |
-          set +e
-          go test -count=1 -timeout=40m -race ./... 2>&1 | tee race.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            sed -n '/WARNING: DATA RACE/,/^==================$/p' race.log | head -60 |
-              while IFS= read -r line; do echo "::error::$line"; done
-            grep -E "FAIL|panic:|_test\.go:" race.log | head -40 |
-              while IFS= read -r line; do echo "::error::$line"; done
-          fi
-          exit "$status"
-      - name: oracle tests with coverage
-        run: |
-          set +e
-          go test -count=1 -timeout=40m -tags oracle -coverprofile=cover.out -covermode=atomic ./... 2>&1 | tee oracle.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            grep -E "^(--- )?FAIL|^ +--- FAIL|panic:" oracle.log | head -3 |
-              while IFS= read -r line; do echo "::error::${line:0:400}"; done
-            grep -E "_test\.go:[0-9]+:" oracle.log | head -5 |
-              while IFS= read -r line; do echo "::error::${line:0:1200}"; done
-            {
-              echo '### oracle failures'
-              echo '```'
-              awk '/^--- FAIL/ { seen = 1 } seen' oracle.log | head -200
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-          exit "$status"
+      - run: bash .github/ci/suite.sh ${{ matrix.suite }}
 
-      - name: coverage gate
+  suites-windows:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    name: ${{ matrix.suite }} (windows-latest)
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [race, oracle-ops, oracle-app, oracle-rest]
+    defaults:
+      run:
         shell: bash
-        run: |
-          total=$(go tool cover -func=cover.out | tail -1 | awk '{print $3}' | tr -d '%')
-          echo "total coverage: $total%"
-          awk -v t="$total" 'BEGIN { if (t + 0 < 90) { print "coverage below 90%"; exit 1 } }'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+      - run: bash .github/ci/suite.sh ${{ matrix.suite }}
+
+  test-ubuntu:
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    name: test (ubuntu-latest)
+    needs: suites-ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${{ needs.suites-ubuntu.result }}" != "success" ]; then
+            echo "::error::ubuntu suites ended with ${{ needs.suites-ubuntu.result }}"
+            exit 1
+          fi
+
+  test-windows:
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
+    name: test (windows-latest)
+    needs: suites-windows
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${{ needs.suites-windows.result }}" != "success" ]; then
+            echo "::error::windows suites ended with ${{ needs.suites-windows.result }}"
+            exit 1
+          fi
 
   cross-build:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -77,6 +86,7 @@ jobs:
       - run: GOOS=linux GOARCH=arm64 go build -o dist/gogit-arm64 ./cmd/gogit
 
   lint:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -86,4 +96,3 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.13.2
-          install-mode: goinstall
