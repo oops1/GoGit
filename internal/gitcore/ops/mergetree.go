@@ -70,16 +70,26 @@ func (m *merger) moveTo(from merge.Snapshot, to outcome, cleanIndex bool) error 
 		return err
 	}
 	sw := &switcher{ctx: m.ctx, wt: m.wt, db: m.rc.db, format: m.rc.db.Format()}
+	current := indexByPath(lock.idx)
+	if m.r.Core().IgnoreCase {
+		sw.folded = foldPaths(current)
+	}
 	changed := to.changedFrom(from)
 	checked := changed
 	if cleanIndex {
-		checked = slices.Sorted(maps.Keys(unionKeys(from, indexByPath(lock.idx), to.tree)))
+		checked = slices.Sorted(maps.Keys(unionKeys(from, current, to.tree)))
 	}
 	blocked, err := blockedPaths(sw, lock.idx, from, checked, changed)
 	if err != nil {
 		lock.abort()
 		return err
 	}
+	leading, err := leadingPathBlockers(sw, current, to.tree, changed)
+	if err != nil {
+		lock.abort()
+		return err
+	}
+	blocked = slices.Compact(slices.Sorted(slices.Values(append(blocked, leading...))))
 	if len(blocked) > 0 {
 		lock.abort()
 		return &OverwriteError{Paths: blocked}
@@ -116,6 +126,23 @@ func blockedPaths(sw *switcher, idx *index.Index, from merge.Snapshot, checked, 
 		}
 	}
 	return blocked, nil
+}
+
+func leadingPathBlockers(sw *switcher, current map[string]*index.Entry, written merge.Snapshot, changed []string) ([]string, error) {
+	var blockers []string
+	for _, path := range changed {
+		if _, writes := written[path]; !writes {
+			continue
+		}
+		blocker, err := sw.blockingLeadingPath(path, current)
+		if err != nil {
+			return nil, err
+		}
+		if blocker != "" {
+			blockers = append(blockers, blocker)
+		}
+	}
+	return blockers, nil
 }
 
 func indexHolds(idx *index.Index, path string, want merge.Entry, has bool) bool {
