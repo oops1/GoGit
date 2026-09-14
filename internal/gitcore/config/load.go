@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -326,8 +327,12 @@ func (l *loader) condition(cond, base string) bool {
 	return false
 }
 
+func (l *loader) repositoryDir() string {
+	return cmp.Or(l.opts.WorktreeDir, l.opts.GitDir)
+}
+
 func (l *loader) matchGitDir(pattern, base string, icase bool) bool {
-	if l.opts.GitDir == "" {
+	if l.repositoryDir() == "" {
 		return false
 	}
 	expanded, ok := expandGitDirPattern(pattern, base)
@@ -338,7 +343,7 @@ func (l *loader) matchGitDir(pattern, base string, icase bool) bool {
 	if icase {
 		flags |= wildmatch.CaseFold
 	}
-	return wildmatch.Match(expanded, filepath.ToSlash(realPath(l.opts.GitDir)), flags)
+	return wildmatch.Match(expanded, filepath.ToSlash(realPath(l.repositoryDir())), flags)
 }
 
 func expandGitDirPattern(pattern, base string) (string, bool) {
@@ -406,10 +411,10 @@ func (l *loader) readBranch() string {
 	if l.opts.Branch != "" {
 		return l.opts.Branch
 	}
-	if l.opts.GitDir == "" {
+	if l.repositoryDir() == "" {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(l.opts.GitDir, "HEAD"))
+	data, err := os.ReadFile(filepath.Join(l.repositoryDir(), "HEAD"))
 	if err != nil {
 		return ""
 	}
