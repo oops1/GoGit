@@ -111,3 +111,25 @@ func BenchmarkTrees(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkTreesWithInexactRenames(b *testing.B) {
+	store := newMemoryStore()
+	old, updated := treeFiles{}, treeFiles{}
+	for at := range 150 {
+		var body strings.Builder
+		for line := range 120 {
+			fmt.Fprintf(&body, "file %d line %d with some content to hash\n", at, line)
+		}
+		text := body.String()
+		old[fmt.Sprintf("src/file%03d.txt", at)] = blobSpec(text)
+		updated[fmt.Sprintf("dst/moved%03d.txt", at)] = blobSpec(text + fmt.Sprintf("edited %d\n", at))
+	}
+	oldTree, newTree := buildTree(store, old), buildTree(store, updated)
+	opts := Defaults()
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := Trees(b.Context(), store, oldTree, newTree, opts); err != nil {
+			b.Fatalf("Trees returned error %v", err)
+		}
+	}
+}

@@ -42,6 +42,7 @@ type Options struct {
 	IndentHeuristic  bool
 	DetectRenames    bool
 	DetectCopies     bool
+	NoRenameEmpty    bool
 	RenameThreshold  int
 	RenameLimit      int
 	Paths            []string

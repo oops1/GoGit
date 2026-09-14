@@ -19,6 +19,44 @@ type pair struct {
 	file    File
 	oldData []byte
 	newData []byte
+	oldRead bool
+	newRead bool
+}
+
+func (p *pair) oldContent(source Objects) ([]byte, error) {
+	if !p.oldRead {
+		data, err := blobContent(source, p.file.OldMode, p.file.OldID)
+		if err != nil {
+			return nil, err
+		}
+		p.oldData, p.oldRead = data, true
+	}
+	return p.oldData, nil
+}
+
+func (p *pair) newContent(source Objects) ([]byte, error) {
+	if !p.newRead {
+		data, err := blobContent(source, p.file.NewMode, p.file.NewID)
+		if err != nil {
+			return nil, err
+		}
+		p.newData, p.newRead = data, true
+	}
+	return p.newData, nil
+}
+
+func (p *pair) load(source Objects) error {
+	if p.file.Status != StatusAdded {
+		if _, err := p.oldContent(source); err != nil {
+			return err
+		}
+	}
+	if p.file.Status != StatusDeleted {
+		if _, err := p.newContent(source); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type walker struct {
@@ -30,19 +68,41 @@ type walker struct {
 
 func Trees(ctx context.Context, source Objects, oldTree, newTree hash.ObjectID, opts Options) ([]File, error) {
 	opts = opts.normalized()
+	pairs, err := changedPairs(ctx, source, oldTree, newTree, opts)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]File, 0, len(pairs))
+	for at := range pairs {
+		if err := pairs[at].load(source); err != nil {
+			return nil, err
+		}
+		files = append(files, fillContent(pairs[at], opts))
+	}
+	return files, nil
+}
+
+func TreeChanges(ctx context.Context, source Objects, oldTree, newTree hash.ObjectID, opts Options) ([]File, error) {
+	pairs, err := changedPairs(ctx, source, oldTree, newTree, opts.normalized())
+	if err != nil {
+		return nil, err
+	}
+	files := make([]File, 0, len(pairs))
+	for _, p := range pairs {
+		files = append(files, p.file)
+	}
+	return files, nil
+}
+
+func changedPairs(ctx context.Context, source Objects, oldTree, newTree hash.ObjectID, opts Options) ([]pair, error) {
 	w := &walker{ctx: ctx, source: source, opts: opts}
 	if err := w.walk("", oldTree, newTree); err != nil {
 		return nil, err
 	}
-	pairs := w.pairs
 	if opts.DetectRenames || opts.DetectCopies {
-		pairs = detectRenames(pairs, opts)
+		return detectRenames(w.pairs, source, opts)
 	}
-	files := make([]File, 0, len(pairs))
-	for _, p := range pairs {
-		files = append(files, fillContent(p, opts))
-	}
-	return files, nil
+	return w.pairs, nil
 }
 
 func (w *walker) walk(prefix string, oldID, newID hash.ObjectID) error {
@@ -99,17 +159,11 @@ func (w *walker) removed(prefix string, entry object.TreeEntry) error {
 		}
 		return w.walk(path+"/", entry.ID, hash.Zero)
 	}
-	if !w.include(path) {
-		return nil
+	if w.include(path) {
+		w.pairs = append(w.pairs, pair{
+			file: File{OldPath: path, NewPath: path, OldMode: entry.Mode, OldID: entry.ID, Status: StatusDeleted},
+		})
 	}
-	data, err := w.content(entry.Mode, entry.ID)
-	if err != nil {
-		return err
-	}
-	w.pairs = append(w.pairs, pair{
-		file:    File{OldPath: path, NewPath: path, OldMode: entry.Mode, OldID: entry.ID, Status: StatusDeleted},
-		oldData: data,
-	})
 	return nil
 }
 
@@ -121,17 +175,11 @@ func (w *walker) created(prefix string, entry object.TreeEntry) error {
 		}
 		return w.walk(path+"/", hash.Zero, entry.ID)
 	}
-	if !w.include(path) {
-		return nil
+	if w.include(path) {
+		w.pairs = append(w.pairs, pair{
+			file: File{OldPath: path, NewPath: path, NewMode: entry.Mode, NewID: entry.ID, Status: StatusAdded},
+		})
 	}
-	data, err := w.content(entry.Mode, entry.ID)
-	if err != nil {
-		return err
-	}
-	w.pairs = append(w.pairs, pair{
-		file:    File{OldPath: path, NewPath: path, NewMode: entry.Mode, NewID: entry.ID, Status: StatusAdded},
-		newData: data,
-	})
 	return nil
 }
 
@@ -161,15 +209,7 @@ func (w *walker) matched(prefix string, oldEntry, newEntry object.TreeEntry) err
 	if (oldEntry.Mode^newEntry.Mode)&modeTypeMask != 0 {
 		file.Status = StatusTypeChanged
 	}
-	oldData, err := w.content(oldEntry.Mode, oldEntry.ID)
-	if err != nil {
-		return err
-	}
-	newData, err := w.content(newEntry.Mode, newEntry.ID)
-	if err != nil {
-		return err
-	}
-	w.pairs = append(w.pairs, pair{file: file, oldData: oldData, newData: newData})
+	w.pairs = append(w.pairs, pair{file: file})
 	return nil
 }
 
@@ -191,11 +231,11 @@ func (w *walker) tree(id hash.ObjectID) ([]object.TreeEntry, error) {
 	return tree.Entries, nil
 }
 
-func (w *walker) content(mode object.Mode, id hash.ObjectID) ([]byte, error) {
+func blobContent(source Objects, mode object.Mode, id hash.ObjectID) ([]byte, error) {
 	if mode.IsSubmodule() {
 		return []byte("Subproject commit " + id.String() + "\n"), nil
 	}
-	kind, data, err := w.source.Get(id)
+	kind, data, err := source.Get(id)
 	if err != nil {
 		return nil, err
 	}

@@ -1,11 +1,13 @@
 package diff
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
@@ -220,48 +222,55 @@ func TestCandidateCompareOrdersByScoreThenName(t *testing.T) {
 }
 
 func TestEstimateSimilarityRejectsUnusableSides(t *testing.T) {
-	regular := pair{
-		file:    File{OldMode: object.ModeBlob, NewMode: object.ModeBlob},
-		oldData: []byte(poem("a")),
-		newData: []byte(poem("a")),
+	regularFile := File{OldMode: object.ModeBlob, NewMode: object.ModeBlob}
+	body := []byte(poem("a"))
+	const regular, link, empty, small = 0, 1, 2, 3
+	state := &renameState{
+		pairs: []pair{
+			regular: {file: regularFile, oldData: body, newData: body, oldRead: true, newRead: true},
+			link:    {file: File{OldMode: object.ModeSymlink, NewMode: object.ModeSymlink}},
+			empty:   {file: regularFile, oldRead: true, newRead: true},
+			small:   {file: regularFile, newData: []byte("tiny\n"), oldRead: true, newRead: true},
+		},
+		spans: make([][]spanEntry, 4),
 	}
-	link := pair{file: File{OldMode: object.ModeSymlink, NewMode: object.ModeSymlink}}
-	if got := estimateSimilarity(link, regular, 0); got != 0 {
-		t.Errorf("a symlink source scored %d", got)
+	cases := []struct {
+		name     string
+		src, dst int
+		minScore int
+		want     int
+	}{
+		{"a symlink source", link, regular, 0, 0},
+		{"a symlink destination", regular, link, 0, 0},
+		{"an empty destination", regular, empty, 0, 0},
+		{"a size mismatch", regular, small, int(maxScore), 0},
+		{"identical content", regular, regular, 0, int(maxScore)},
 	}
-	if got := estimateSimilarity(regular, link, 0); got != 0 {
-		t.Errorf("a symlink destination scored %d", got)
-	}
-	empty := pair{file: File{OldMode: object.ModeBlob, NewMode: object.ModeBlob}}
-	if got := estimateSimilarity(regular, empty, 0); got != 0 {
-		t.Errorf("an empty destination scored %d", got)
-	}
-	small := pair{
-		file:    File{OldMode: object.ModeBlob, NewMode: object.ModeBlob},
-		newData: []byte("tiny\n"),
-	}
-	if got := estimateSimilarity(regular, small, int(maxScore)); got != 0 {
-		t.Errorf("a size mismatch scored %d", got)
-	}
-	if got := estimateSimilarity(regular, regular, 0); got != int(maxScore) {
-		t.Errorf("identical content scored %d instead of %d", got, int(maxScore))
+	for _, c := range cases {
+		if got, err := state.estimateSimilarity(c.src, c.dst, c.minScore); err != nil || got != c.want {
+			t.Errorf("%s scored %d, %v instead of %d", c.name, got, err, c.want)
+		}
 	}
 }
 
+func changesOf(src, dst []byte) (copied, added int) {
+	return countChanges(hashChars(src), hashChars(dst))
+}
+
 func TestCountChangesComparesTheContentSpans(t *testing.T) {
-	copied, added := countChanges([]byte("alpha\nbeta\n"), []byte("alpha\nbeta\n"))
+	copied, added := changesOf([]byte("alpha\nbeta\n"), []byte("alpha\nbeta\n"))
 	if copied == 0 || added != 0 {
 		t.Errorf("identical content reported %d copied and %d added bytes", copied, added)
 	}
-	copied, added = countChanges([]byte("alpha\n"), []byte("alpha\nbeta\n"))
+	copied, added = changesOf([]byte("alpha\n"), []byte("alpha\nbeta\n"))
 	if copied == 0 || added == 0 {
 		t.Errorf("an appended line reported %d copied and %d added bytes", copied, added)
 	}
-	copied, added = countChanges([]byte("alpha\nbeta\n"), []byte("alpha\n"))
+	copied, added = changesOf([]byte("alpha\nbeta\n"), []byte("alpha\n"))
 	if copied == 0 || added != 0 {
 		t.Errorf("a removed line reported %d copied and %d added bytes", copied, added)
 	}
-	copied, added = countChanges(nil, []byte("beta\n"))
+	copied, added = changesOf(nil, []byte("beta\n"))
 	if copied != 0 || added == 0 {
 		t.Errorf("an empty source reported %d copied and %d added bytes", copied, added)
 	}
@@ -288,7 +297,7 @@ func TestHashCharsSkipsCarriageReturnsInText(t *testing.T) {
 }
 
 func TestCountChangesSplitsARepeatedSpan(t *testing.T) {
-	copied, added := countChanges([]byte("alpha\n"), []byte("alpha\nalpha\n"))
+	copied, added := changesOf([]byte("alpha\n"), []byte("alpha\nalpha\n"))
 	if copied != 6 || added != 6 {
 		t.Errorf("a duplicated span reported %d copied and %d added bytes instead of 6 and 6", copied, added)
 	}
@@ -352,5 +361,120 @@ func TestUniqueByBaseNameMarksRepeatedNames(t *testing.T) {
 	uniqueByBaseName(paths, "report.txt", 5)
 	if paths["report.txt"] != -1 {
 		t.Errorf("a repeated name was recorded as %d instead of -1", paths["report.txt"])
+	}
+}
+
+func TestEmptyFilesArePairedUnlessRenameEmptyIsOff(t *testing.T) {
+	old := treeFiles{"old/__init__.py": blobSpec(""), "a.txt": blobSpec(poem("a"))}
+	updated := treeFiles{"new/__init__.py": blobSpec("")}
+	want := []string{"D a.txt->a.txt 0", "R old/__init__.py->new/__init__.py 100"}
+	if got := renameSummary(treeDiffOf(t, old, updated, Defaults())); !slices.Equal(got, want) {
+		t.Errorf("the default diff is %q instead of %q", got, want)
+	}
+
+	opts := Defaults()
+	opts.NoRenameEmpty = true
+	want = []string{"A new/__init__.py->new/__init__.py 0", "D a.txt->a.txt 0", "D old/__init__.py->old/__init__.py 0"}
+	if got := renameSummary(treeDiffOf(t, old, updated, opts)); !slices.Equal(got, want) {
+		t.Errorf("without empty renames the diff is %q instead of %q", got, want)
+	}
+}
+
+func TestEmptySourcesAreNotCopiedWhenRenameEmptyIsOff(t *testing.T) {
+	old := treeFiles{"source.txt": blobSpec("")}
+	updated := treeFiles{"source.txt": blobSpec(poem("filled")), "clone.txt": blobSpec(poem("filled"))}
+	opts := Defaults()
+	opts.DetectCopies = true
+	opts.NoRenameEmpty = true
+	want := []string{"A clone.txt->clone.txt 0", "M source.txt->source.txt 0"}
+	if got := renameSummary(treeDiffOf(t, old, updated, opts)); !slices.Equal(got, want) {
+		t.Errorf("the diff is %q instead of %q", got, want)
+	}
+}
+
+func TestTreeChangesReportsRenamesWithoutReadingModifiedBlobs(t *testing.T) {
+	store := newMemoryStore()
+	body := poem("moved")
+	missing := hash.ObjectID{7, 7, 7}
+	oldTree := store.writeTree([]object.TreeEntry{
+		{Mode: object.ModeBlob, Name: "before.txt", ID: store.writeBlob([]byte(body))},
+		{Mode: object.ModeBlob, Name: "edited.txt", ID: hash.ObjectID{6, 6, 6}},
+	})
+	newTree := store.writeTree([]object.TreeEntry{
+		{Mode: object.ModeBlob, Name: "after.txt", ID: store.writeBlob([]byte(body + "tail\n"))},
+		{Mode: object.ModeBlob, Name: "edited.txt", ID: missing},
+	})
+
+	files, err := TreeChanges(t.Context(), store, oldTree, newTree, Defaults())
+	if err != nil {
+		t.Fatalf("TreeChanges returned error %v", err)
+	}
+	want := []string{"M edited.txt->edited.txt 0", "R before.txt->after.txt 99"}
+	if got := renameSummary(files); !slices.Equal(got, want) {
+		t.Errorf("TreeChanges reported %q instead of %q", got, want)
+	}
+	for _, file := range files {
+		if len(file.Hunks) > 0 || file.OldSize > 0 || file.NewSize > 0 {
+			t.Errorf("TreeChanges filled the content of %+v", file)
+		}
+	}
+	if _, err := Trees(t.Context(), store, oldTree, newTree, Defaults()); !errors.Is(err, ErrMissingBlob) {
+		t.Errorf("Trees returned %v for the unreadable edited blob", err)
+	}
+}
+
+func TestTreeChangesReportsUnreadableObjects(t *testing.T) {
+	store := newMemoryStore()
+	base := store.writeTree([]object.TreeEntry{{Mode: object.ModeBlob, Name: "a.txt", ID: store.writeBlob([]byte(poem("a")))}})
+	missingSource := store.writeTree([]object.TreeEntry{{Mode: object.ModeBlob, Name: "b.txt", ID: hash.ObjectID{5}}})
+	if _, err := TreeChanges(t.Context(), store, base, hash.ObjectID{4}, Defaults()); !errors.Is(err, ErrMissingBlob) {
+		t.Errorf("a missing tree returned %v", err)
+	}
+	if _, err := TreeChanges(t.Context(), store, missingSource, base, Defaults()); !errors.Is(err, ErrMissingBlob) {
+		t.Errorf("an unreadable rename source returned %v", err)
+	}
+}
+
+func TestBasenameMatchesReportUnreadableBlobs(t *testing.T) {
+	store := newMemoryStore()
+	oldTree := store.writeTree([]object.TreeEntry{{Mode: object.ModeTree, Name: "one", ID: store.writeTree([]object.TreeEntry{
+		{Mode: object.ModeBlob, Name: "report.txt", ID: hash.ObjectID{3}},
+	})}})
+	newTree := store.writeTree([]object.TreeEntry{{Mode: object.ModeTree, Name: "two", ID: store.writeTree([]object.TreeEntry{
+		{Mode: object.ModeBlob, Name: "report.txt", ID: store.writeBlob([]byte(poem("report")))},
+	})}})
+	if _, err := Trees(t.Context(), store, oldTree, newTree, Defaults()); !errors.Is(err, ErrMissingBlob) {
+		t.Errorf("an unreadable source with a shared basename returned %v", err)
+	}
+}
+
+func TestSpansAreHashedOncePerFile(t *testing.T) {
+	store := newMemoryStore()
+	old, updated := treeFiles{}, treeFiles{}
+	for at := range 3 {
+		old[fmt.Sprintf("src%d.txt", at)] = blobSpec(poem(fmt.Sprintf("file %d", at)))
+		updated[fmt.Sprintf("dst%d.txt", at)] = blobSpec(poem(fmt.Sprintf("file %d", at)) + "tail\n")
+	}
+	w := &walker{ctx: t.Context(), source: store, opts: Defaults()}
+	if err := w.walk("", buildTree(store, old), buildTree(store, updated)); err != nil {
+		t.Fatalf("walk returned error %v", err)
+	}
+	state := &renameState{source: store, pairs: w.pairs, spans: make([][]spanEntry, len(w.pairs))}
+	for src := range w.pairs {
+		for dst := range w.pairs {
+			if w.pairs[src].file.Status != StatusDeleted || w.pairs[dst].file.Status != StatusAdded {
+				continue
+			}
+			if _, err := state.estimateSimilarity(src, dst, 0); err != nil {
+				t.Fatalf("estimateSimilarity returned error %v", err)
+			}
+		}
+	}
+	first := slices.Clone(state.spans)
+	state.spansOf(0, nil)
+	for at := range first {
+		if first[at] == nil || &first[at][0] != &state.spans[at][0] {
+			t.Fatalf("the spans of pair %d were not kept for reuse", at)
+		}
 	}
 }
