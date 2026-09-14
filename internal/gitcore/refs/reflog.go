@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -66,6 +67,61 @@ func (s *Store) ReflogLast(name Name) (ReflogEntry, error) {
 	return last, nil
 }
 
+func (s *Store) DropReflogEntry(name Name, position int) error {
+	if err := name.Validate(); err != nil {
+		return err
+	}
+	from := s.treeFor(name)
+	lock, err := newLock(from, string(name))
+	if err != nil {
+		return err
+	}
+	defer lock.release()
+	var entries []ReflogEntry
+	for entry, err := range s.Reflog(name) {
+		if err != nil {
+			return err
+		}
+		entries = append(entries, entry)
+	}
+	at := len(entries) - 1 - position
+	if position < 0 || at < 0 {
+		return fmt.Errorf("%w: %s@{%d}", ErrNotFound, name, position)
+	}
+	if at+1 < len(entries) {
+		entries[at+1].Old = hash.Zero
+		if at > 0 {
+			entries[at+1].Old = entries[at-1].New
+		}
+	}
+	entries = slices.Delete(entries, at, at+1)
+	if len(entries) == 0 {
+		lock.release()
+		tx := s.Begin()
+		_ = tx.Delete(name, hash.Zero)
+		return tx.Commit()
+	}
+	var text strings.Builder
+	for _, entry := range entries {
+		text.WriteString(formatReflogLine(entry.Old, entry.New, entry.Committer, entry.Message) + "\n")
+	}
+	logLock, err := newLock(from, reflogPath(name))
+	if err != nil {
+		return err
+	}
+	defer logLock.release()
+	if err := logLock.write([]byte(text.String())); err != nil {
+		return err
+	}
+	if err := lock.write([]byte(entries[len(entries)-1].New.String() + "\n")); err != nil {
+		return err
+	}
+	if err := logLock.commit(); err != nil {
+		return err
+	}
+	return lock.commit()
+}
+
 func ParseReflogLine(line []byte) (ReflogEntry, error) {
 	if len(line) < 2*hash.HexSize+2 {
 		return ReflogEntry{}, fmt.Errorf("%w: short line %q", ErrMalformedReflog, line)
@@ -118,7 +174,7 @@ func isReflogSpace(current byte) bool {
 }
 
 func (s *Store) shouldCreateReflog(name Name) bool {
-	if name == HEAD {
+	if name == HEAD || name == StashName {
 		return true
 	}
 	switch s.reflogPolicy() {
@@ -140,6 +196,14 @@ func (s *Store) reflogPolicy() ReflogPolicy {
 	return ReflogEnabled
 }
 
+func formatReflogLine(old, current hash.ObjectID, committer object.Signature, text string) string {
+	line := old.String() + " " + current.String() + " " + committer.String()
+	if text != "" {
+		line += "\t" + text
+	}
+	return line
+}
+
 func (s *Store) appendReflog(name Name, old, current hash.ObjectID, message string) error {
 	from := s.treeFor(name)
 	path := reflogPath(name)
@@ -149,10 +213,7 @@ func (s *Store) appendReflog(name Name, old, current hash.ObjectID, message stri
 	if s.opts.Committer == nil {
 		return fmt.Errorf("%w: %s", ErrMissingCommitter, name)
 	}
-	line := old.String() + " " + current.String() + " " + s.opts.Committer().String()
-	if text := FormatReflogMessage(message); text != "" {
-		line += "\t" + text
-	}
+	line := formatReflogLine(old, current, s.opts.Committer(), FormatReflogMessage(message))
 	file, err := from.create(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND)
 	if err != nil {
 		return fmt.Errorf("%w: %s: %w", ErrWriteFailed, path, err)
