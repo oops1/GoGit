@@ -92,8 +92,12 @@ func clonePayload(p *payload) *payload {
 
 func prefixCandidates(resource string) []string {
 	parts := strings.Split(resource, "/")
+	shortest := 1
+	if idx := strings.Index(resource, "://"); idx > 0 && !strings.Contains(resource[:idx], "/") {
+		shortest = 3
+	}
 	out := make([]string, 0, len(parts))
-	for i := len(parts); i > 0; i-- {
+	for i := len(parts); i >= shortest; i-- {
 		out = append(out, strings.Join(parts[:i], "/"))
 	}
 	return out
