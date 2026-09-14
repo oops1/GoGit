@@ -615,7 +615,7 @@ func swapRootReadlinkForPath(t testing.TB, path, target string) {
 func swapRootSymlinkSucceeds(t testing.TB) {
 	t.Helper()
 	original := fsRootSymlink
-	fsRootSymlink = func(*os.Root, string, string) error { return nil }
+	fsRootSymlink = func(root *os.Root, target, name string) error { return root.WriteFile(name, []byte(target), 0o666) }
 	t.Cleanup(func() { fsRootSymlink = original })
 }
 
