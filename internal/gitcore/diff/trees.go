@@ -3,10 +3,10 @@ package diff
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/pathspec"
 )
 
 const modeTypeMask object.Mode = 0o170000
@@ -63,6 +63,7 @@ type walker struct {
 	ctx    context.Context
 	source Objects
 	opts   Options
+	paths  pathspec.Set
 	pairs  []pair
 }
 
@@ -95,7 +96,11 @@ func TreeChanges(ctx context.Context, source Objects, oldTree, newTree hash.Obje
 }
 
 func changedPairs(ctx context.Context, source Objects, oldTree, newTree hash.ObjectID, opts Options) ([]pair, error) {
-	w := &walker{ctx: ctx, source: source, opts: opts}
+	paths, err := pathspec.Parse(opts.Paths)
+	if err != nil {
+		return nil, err
+	}
+	w := &walker{ctx: ctx, source: source, opts: opts, paths: paths}
 	if err := w.walk("", oldTree, newTree); err != nil {
 		return nil, err
 	}
@@ -246,27 +251,11 @@ func blobContent(source Objects, mode object.Mode, id hash.ObjectID) ([]byte, er
 }
 
 func (w *walker) include(path string) bool {
-	if len(w.opts.Paths) == 0 {
-		return true
-	}
-	for _, spec := range w.opts.Paths {
-		if path == spec || strings.HasPrefix(path, spec+"/") {
-			return true
-		}
-	}
-	return false
+	return w.paths.Match(path)
 }
 
 func (w *walker) descend(dir string) bool {
-	if len(w.opts.Paths) == 0 {
-		return true
-	}
-	for _, spec := range w.opts.Paths {
-		if spec == dir || strings.HasPrefix(spec, dir+"/") || strings.HasPrefix(dir, spec+"/") {
-			return true
-		}
-	}
-	return false
+	return w.paths.MayMatchUnder(dir)
 }
 
 func fillContent(p pair, opts Options) File {
