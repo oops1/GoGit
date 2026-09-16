@@ -267,8 +267,7 @@ func fillContent(p pair, opts Options) File {
 	case binaryFor(newPath, p.oldData, opts) || binaryFor(newPath, p.newData, opts):
 		file.Binary = true
 	case file.OldID != file.NewID:
-		oldData, newData := trimForContext(p.oldData, p.newData, opts)
-		file.Hunks = diffLines(splitLines(oldData), splitLines(newData), opts)
+		file.Hunks = patchHunks(p.oldData, p.newData, opts)
 	}
 	if file.Status == StatusTypeChanged {
 		file.Parts = typeChangeParts(file, p, opts)

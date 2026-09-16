@@ -27,7 +27,7 @@ func blobFile(oldPath, newPath string, oldData, newData []byte, opts Options) (F
 		file.Binary = true
 		return file, true
 	}
-	file.Hunks = Blobs(oldData, newData, opts)
+	file.Hunks = patchHunks(oldData, newData, opts.normalized())
 	return file, true
 }
 

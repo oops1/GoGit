@@ -19,7 +19,7 @@ func TestChangesListTheChangedLineRanges(t *testing.T) {
 	}
 }
 
-func TestTreesTrimTheCommonTailWithoutContextLikeBlobs(t *testing.T) {
+func TestOnlyPatchesTrimTheCommonTailWithoutContext(t *testing.T) {
 	pair := commonTailPair()
 	store := newMemoryStore()
 	oldTree := buildTree(store, treeFiles{"f": blobSpec(pair.old)})
@@ -32,9 +32,12 @@ func TestTreesTrimTheCommonTailWithoutContextLikeBlobs(t *testing.T) {
 	if err != nil || len(files) != 1 {
 		t.Fatalf("Trees returned %+v, %v", files, err)
 	}
-	want := Blobs([]byte(pair.old), []byte(pair.new), opts)
-	if !reflect.DeepEqual(files[0].Hunks, want) || want[1].NewStart != 8 {
-		t.Fatalf("tree hunks %+v differ from blob hunks %+v", files[0].Hunks, want)
+	trimmed := patchHunks([]byte(pair.old), []byte(pair.new), opts)
+	if !reflect.DeepEqual(files[0].Hunks, trimmed) || trimmed[1].NewStart != 8 {
+		t.Fatalf("tree hunks %+v differ from patch hunks %+v", files[0].Hunks, trimmed)
+	}
+	if whole := Blobs([]byte(pair.old), []byte(pair.new), opts); reflect.DeepEqual(whole, trimmed) {
+		t.Fatalf("Blobs trimmed the common tail: %+v", whole)
 	}
 }
 

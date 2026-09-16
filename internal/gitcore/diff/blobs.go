@@ -7,18 +7,16 @@ import (
 )
 
 func Blobs(oldData, newData []byte, opts Options) []Hunk {
-	opts = opts.normalized()
-	oldData, newData = trimForContext(oldData, newData, opts)
-	return diffLines(splitLines(oldData), splitLines(newData), opts)
+	return diffLines(splitLines(oldData), splitLines(newData), opts.normalized())
 }
 
 const tailBlock = 1024
 
-func trimForContext(oldData, newData []byte, opts Options) ([]byte, []byte) {
-	if opts.Context > 0 {
-		return oldData, newData
+func patchHunks(oldData, newData []byte, opts Options) []Hunk {
+	if opts.Context == 0 {
+		oldData, newData = trimCommonTail(oldData, newData)
 	}
-	return trimCommonTail(oldData, newData)
+	return diffLines(splitLines(oldData), splitLines(newData), opts)
 }
 
 func trimCommonTail(a, b []byte) ([]byte, []byte) {
