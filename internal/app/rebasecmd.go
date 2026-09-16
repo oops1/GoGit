@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -58,8 +59,8 @@ func (a *App) openRebase(selected string) {
 }
 
 func (a *App) startRebase(onto string) {
-	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func) (ops.RebaseResult, error) {
-		return runRebase(ctx, r, onto, ops.RebaseOptions{Progress: prog})
+	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func, events hooks.Sink) (ops.RebaseResult, error) {
+		return runRebase(ctx, r, onto, ops.RebaseOptions{Progress: prog, Hooks: ops.HookOptions{Events: events}})
 	})
 }
 
@@ -136,8 +137,8 @@ func plannedSteps(steps []rebasetodo.Step) []ops.RebaseStep {
 
 func (a *App) startRebaseSteps(onto string, steps []rebasetodo.Step) {
 	todo := plannedSteps(steps)
-	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func) (ops.RebaseResult, error) {
-		return runRebase(ctx, r, onto, ops.RebaseOptions{Progress: prog, Todo: todo})
+	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func, events hooks.Sink) (ops.RebaseResult, error) {
+		return runRebase(ctx, r, onto, ops.RebaseOptions{Progress: prog, Todo: todo, Hooks: ops.HookOptions{Events: events}})
 	})
 }
 
@@ -162,18 +163,18 @@ func (a *App) openReword() {
 }
 
 func (a *App) continueRebase(message string) {
-	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func) (ops.RebaseResult, error) {
-		return runContinueRebase(ctx, r, ops.RebaseOptions{Progress: prog, Message: message})
+	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func, events hooks.Sink) (ops.RebaseResult, error) {
+		return runContinueRebase(ctx, r, ops.RebaseOptions{Progress: prog, Message: message, Hooks: ops.HookOptions{Events: events}})
 	})
 }
 
 func (a *App) skipRebaseStep() {
-	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func) (ops.RebaseResult, error) {
-		return runSkipRebase(ctx, r, ops.RebaseOptions{Progress: prog})
+	a.runRebaseJob(func(ctx context.Context, r *gitrepo.Repository, prog progress.Func, events hooks.Sink) (ops.RebaseResult, error) {
+		return runSkipRebase(ctx, r, ops.RebaseOptions{Progress: prog, Hooks: ops.HookOptions{Events: events}})
 	})
 }
 
-type rebaseJob func(ctx context.Context, r *gitrepo.Repository, prog progress.Func) (ops.RebaseResult, error)
+type rebaseJob func(ctx context.Context, r *gitrepo.Repository, prog progress.Func, events hooks.Sink) (ops.RebaseResult, error)
 
 func (a *App) runRebaseJob(job rebaseJob) {
 	o := a.opened()
@@ -187,7 +188,8 @@ func (a *App) runRebaseJob(job rebaseJob) {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		result, err := job(ctx, r, newOperationProgress(reporter))
+		result, err := job(ctx, r, newOperationProgress(reporter), hookEvents(reporter))
+		reportHookRejection(reporter, err)
 		reportRebase(reporter, result, err)
 		a.Post(func() { a.setReword(result.Message, result.Amending()) })
 		return err

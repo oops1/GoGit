@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
@@ -72,7 +73,7 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		name, err := switchTo(ctx, r, choice)
+		name, err := switchTo(ctx, r, choice, hookEvents(reporter))
 		reportSwitch(reporter, name, err)
 		var overwrite *ops.OverwriteError
 		if !errors.As(err, &overwrite) {
@@ -86,11 +87,12 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 	})
 }
 
-func switchTo(ctx context.Context, r *gitrepo.Repository, choice switchbranch.Choice) (string, error) {
+func switchTo(ctx context.Context, r *gitrepo.Repository, choice switchbranch.Choice, events hooks.Sink) (string, error) {
+	hookOpts := ops.HookOptions{Events: events}
 	if !choice.StartsABranch() {
-		return choice.Source, runSwitchBranch(ctx, r, choice.Source, ops.SwitchOptions{})
+		return choice.Source, runSwitchBranch(ctx, r, choice.Source, ops.SwitchOptions{Hooks: hookOpts})
 	}
-	result, err := runStartBranch(ctx, r, choice.Name, choice.Source, ops.StartBranchOptions{Track: choice.Track})
+	result, err := runStartBranch(ctx, r, choice.Name, choice.Source, ops.StartBranchOptions{Track: choice.Track, Hooks: hookOpts})
 	return result.Branch.Short(), err
 }
 
@@ -100,6 +102,7 @@ func reportSwitch(reporter OperationReporter, name string, err error) {
 	case errors.As(err, &overwrite):
 		reporter.Log(i18n.Tf("Operation.Log.SwitchBlocked", overwriteList(overwrite)))
 	case err != nil:
+		reportHookRejection(reporter, err)
 	default:
 		reporter.Log(i18n.Tf("Operation.Log.Switched", name))
 	}

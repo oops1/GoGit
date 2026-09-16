@@ -17,6 +17,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/clone"
 	"github.com/oops1/gogit/internal/ui/merge"
+	pushdialog "github.com/oops1/gogit/internal/ui/push"
 	"github.com/oops1/gogit/internal/ui/remotes"
 )
 
@@ -27,6 +28,7 @@ var (
 	newRemotesView  = remotes.NewView
 	lsRemoteFunc    = remote.LsRemote
 	cloneRepository = ops.Clone
+	newPushView     = pushdialog.NewView
 )
 
 func (a *App) transportOptions(prog progress.Func) transport.Options {
@@ -139,7 +141,32 @@ func (a *App) startPull() {
 }
 
 func (a *App) startPush() {
-	a.runRemoteJob(i18n.T("Operation.Title.Push"), false, a.runPushBody)
+	a.startPushWith(false)
+}
+
+func (a *App) startPushWith(noVerify bool) {
+	a.runRemoteJob(i18n.T("Operation.Title.Push"), false, func(ctx context.Context, o *openedRepository, prog progress.Func, reporter OperationReporter) error {
+		return a.runPushBody(ctx, o, prog, reporter, noVerify)
+	})
+}
+
+func (a *App) openPush() {
+	o := a.opened()
+	if o == nil {
+		return
+	}
+	view, err := newPushView()
+	if err != nil {
+		a.log.Warn("open push dialog failed", "error", err)
+		return
+	}
+	view.SetKnown(pushdialog.Known{Branch: a.currentBranchName(), Remote: a.effectiveDefaultRemote(o.repo)})
+	view.OnOK = func(noVerify bool) {
+		a.eng.CloseModal(view.Dialog())
+		a.startPushWith(noVerify)
+	}
+	view.OnCancel = func() { a.eng.CloseModal(view.Dialog()) }
+	a.showModal(view.Dialog(), view)
 }
 
 func (a *App) startSync() {
@@ -151,7 +178,7 @@ func (a *App) startSync() {
 			reporter.Log(i18n.T("Operation.Log.SyncStoppedOnMerge"))
 			return nil
 		}
-		return a.runPushBody(ctx, o, prog, reporter)
+		return a.runPushBody(ctx, o, prog, reporter, false)
 	})
 }
 
@@ -164,7 +191,9 @@ func (a *App) runPullBody(ctx context.Context, o *openedRepository, prog progres
 	result, err := ops.Pull(ctx, r, ops.PullOptions{
 		Progress: prog,
 		Fetch:    remote.FetchOptions{Progress: prog, Transport: a.transportOptions(prog)},
+		Hooks:    ops.HookOptions{Events: hookEvents(reporter)},
 	})
+	reportHookRejection(reporter, err)
 	switch {
 	case errors.Is(err, ops.ErrNotFastForward):
 		reporter.Log(i18n.T("Operation.Log.NonFastForward"))
@@ -199,7 +228,7 @@ func defaultPushRefspec(o *openedRepository) (refspec.RefSpec, error) {
 	return refspec.RefSpec{Src: branchRef, Dst: branchRef}, nil
 }
 
-func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progress.Func, reporter OperationReporter) error {
+func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progress.Func, reporter OperationReporter, noVerify bool) error {
 	spec, err := defaultPushRefspec(o)
 	if err != nil {
 		return err
@@ -212,13 +241,14 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 	if err := a.banAttribution(ctx, r, refs.Name(spec.Src), reporter); err != nil {
 		return err
 	}
-	result, err := ops.Push(ctx, r, a.effectiveDefaultRemote(r), remote.PushOptions{
+	result, err := ops.PushWithHooks(ctx, r, a.effectiveDefaultRemote(r), remote.PushOptions{
 		Refspecs:   []refspec.RefSpec{spec},
 		FollowTags: true,
 		Progress:   prog,
 		Transport:  a.transportOptions(prog),
-	})
+	}, ops.HookOptions{NoVerify: noVerify, Events: hookEvents(reporter)})
 	if err != nil {
+		reportHookRejection(reporter, err)
 		if errors.Is(err, remote.ErrNonFastForward) || errors.Is(err, remote.ErrRejected) {
 			reporter.Log(i18n.T("Operation.Log.Rejected"))
 		}
@@ -331,17 +361,19 @@ func (a *App) startClone(result clone.Result) {
 			Depth:        result.Depth,
 			Progress:     prog,
 			Transport:    a.transportOptions(prog),
+			Hooks:        ops.HookOptions{Events: hookEvents(reporter)},
 		})
-		if err != nil {
+		if r == nil {
 			reportTransportError(reporter, err)
 			return err
 		}
 		if closeErr := r.Close(); closeErr != nil {
-			return closeErr
+			return errors.Join(err, closeErr)
 		}
 		reporter.Log(i18n.Tf("Operation.Log.Cloned", result.Directory))
 		a.Post(func() { a.addClonedRepository(result.Directory) })
-		return nil
+		reportHookRejection(reporter, err)
+		return err
 	})
 }
 

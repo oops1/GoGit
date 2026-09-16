@@ -225,7 +225,7 @@ func (a *App) registerRemoteHandlers() {
 	a.handlers[CmdClone] = a.openClone
 	a.handlers[CmdFetch] = a.startFetch
 	a.handlers[CmdPull] = a.startPull
-	a.handlers[CmdPush] = a.startPush
+	a.handlers[CmdPush] = a.openPush
 	a.handlers[CmdSync] = a.startSync
 	a.handlers[CmdPrune] = a.startPrune
 	a.handlers[CmdManageRemotes] = a.openManageRemotes

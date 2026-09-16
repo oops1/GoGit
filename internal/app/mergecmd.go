@@ -160,7 +160,10 @@ func (a *App) startMerge(req merge.Request) {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		result, err := runMerge(ctx, r, req.Source, mergeOptions(req, newOperationProgress(reporter)))
+		opts := mergeOptions(req, newOperationProgress(reporter))
+		opts.Hooks.Events = hookEvents(reporter)
+		result, err := runMerge(ctx, r, req.Source, opts)
+		reportHookRejection(reporter, err)
 		reportMerge(reporter, req, result, err)
 		return err
 	})

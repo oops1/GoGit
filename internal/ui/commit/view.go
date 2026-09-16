@@ -39,6 +39,7 @@ type View struct {
 	stagedLabel *widget.Label
 	message     *widget.TextBox
 	amendCheck  *widget.CheckBox
+	bypassCheck *widget.CheckBox
 	okBtn       *widget.Button
 	cancelBtn   *widget.Button
 
@@ -87,6 +88,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.amendCheck, ok = named["amend"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: amend", ErrWidgetMissing)
 	}
+	if v.bypassCheck, ok = named["bypassHooks"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: bypassHooks", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
@@ -101,6 +105,7 @@ func (v *View) apply(m Model) {
 	v.draft = m.Message
 	v.amendCheck.SetChecked(m.Amend && !m.Merging)
 	v.amendCheck.SetEnabled(!m.Merging)
+	v.bypassCheck.SetChecked(m.NoVerify)
 	if m.Amend && !m.Merging {
 		v.message.SetText(m.LastMessage)
 	} else {
@@ -141,6 +146,7 @@ func (v *View) request() Model {
 		Message:     v.message.GetText(),
 		Amend:       v.amendCheck.IsChecked(),
 		LastMessage: v.lastMessage,
+		NoVerify:    v.bypassCheck.IsChecked(),
 	}
 }
 
