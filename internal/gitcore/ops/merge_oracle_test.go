@@ -672,8 +672,13 @@ func mergeStateOf(b *mergeBuilder, refused bool) string {
 		if d.IsDir() {
 			return nil
 		}
-		data, err := os.ReadFile(path)
 		rel, _ := filepath.Rel(b.dir, path)
+		if d.Type()&fs.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			add("link "+filepath.ToSlash(rel), target)
+			return err
+		}
+		data, err := os.ReadFile(path)
 		add("file "+filepath.ToSlash(rel), string(data))
 		return err
 	})
