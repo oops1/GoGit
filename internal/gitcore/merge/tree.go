@@ -56,6 +56,7 @@ type TreeOptions struct {
 	File         Options
 	OurRenames   Renames
 	TheirRenames Renames
+	Depth        int
 }
 
 type TreeResult struct {
@@ -75,6 +76,10 @@ func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (Tree
 	for _, path := range unionPaths(a.base, a.ours, a.theirs) {
 		baseEntry, ourEntry, theirEntry := lookup(a.base, path), lookup(a.ours, path), lookup(a.theirs, path)
 		if distinctTypes(baseEntry, ourEntry, theirEntry) {
+			if opts.Depth > 0 {
+				result.keepBaseOfDistinctTypes(path, baseEntry, ourEntry, theirEntry)
+				continue
+			}
 			result.keepDistinctTypes(path, baseEntry, ourEntry, theirEntry, opts.File.Labels, taken)
 			continue
 		}
@@ -171,6 +176,13 @@ func (r *TreeResult) keepDistinctTypes(path string, base, ours, theirs *Entry, l
 	)
 }
 
+func (r *TreeResult) keepBaseOfDistinctTypes(path string, base, ours, theirs *Entry) {
+	if base != nil {
+		r.Tree[path] = *base
+	}
+	r.Conflicts = append(r.Conflicts, Conflict{Path: path, Kind: ConflictDistinctTypes, Base: base, Ours: ours, Theirs: theirs})
+}
+
 func directoriesOf(tree Snapshot) map[string]bool {
 	directories := map[string]bool{}
 	for path := range tree {
@@ -210,6 +222,13 @@ func same(a, b *Entry) bool {
 	return *a == *b
 }
 
+func (o TreeOptions) virtual(base, side *Entry) *Entry {
+	if o.Depth > 0 {
+		return base
+	}
+	return side
+}
+
 func mergePath(path string, base, ours, theirs *Entry, objects Objects, opts TreeOptions) (*Entry, *Conflict, error) {
 	switch {
 	case same(ours, theirs):
@@ -223,14 +242,14 @@ func mergePath(path string, base, ours, theirs *Entry, objects Objects, opts Tre
 	switch {
 	case ours == nil:
 		conflict.Kind = ConflictDeleteModify
-		return theirs, conflict, nil
+		return opts.virtual(base, theirs), conflict, nil
 	case theirs == nil:
 		conflict.Kind = ConflictModifyDelete
-		return ours, conflict, nil
+		return opts.virtual(base, ours), conflict, nil
 	}
 	if ours.Mode.IsSubmodule() || theirs.Mode.IsSubmodule() {
 		conflict.Kind = ConflictSubmodule
-		return ours, conflict, nil
+		return opts.virtual(base, ours), conflict, nil
 	}
 	if ours.Mode.ObjectType() != theirs.Mode.ObjectType() || ours.Mode.IsSymlink() != theirs.Mode.IsSymlink() {
 		conflict.Kind = ConflictMode
@@ -266,9 +285,9 @@ func mergeContent(path string, base, ours, theirs *Entry, mode object.Mode, mode
 	}
 	if ours.Mode.IsSymlink() {
 		conflict.Kind = ConflictSymlink
-		return ours, conflict, nil
+		return opts.virtual(base, ours), conflict, nil
 	}
-	baseData, err := blobOf(objects, base)
+	baseData, err := blobOf(objects, baseOfKind(base, ours))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -280,18 +299,26 @@ func mergeContent(path string, base, ours, theirs *Entry, mode object.Mode, mode
 	if err != nil {
 		return nil, nil, err
 	}
+	content, conflicted := baseData, true
 	if attributes.IsBinaryContent(baseData) || attributes.IsBinaryContent(ourData) || attributes.IsBinaryContent(theirData) {
 		conflict.Kind = ConflictBinary
-		return ours, conflict, nil
+		if opts.Depth == 0 {
+			return ours, conflict, nil
+		}
+		conflicted = false
+	} else {
+		fileOpts := opts.File
+		fileOpts.MarkerSize = fileOpts.markerSize() + 2*opts.Depth
+		merged := File(baseData, ourData, theirData, fileOpts)
+		content, conflicted = merged.Content, merged.Conflicts > 0
 	}
-	merged := File(baseData, ourData, theirData, opts.File)
-	id, err := objects.Put(object.TypeBlob, merged.Content)
+	id, err := objects.Put(object.TypeBlob, content)
 	if err != nil {
 		return nil, nil, err
 	}
 	entry := &Entry{Mode: mode, ID: id}
 	switch {
-	case merged.Conflicts > 0:
+	case conflicted:
 		return entry, conflict, nil
 	case !modeClean:
 		conflict.Kind = ConflictMode

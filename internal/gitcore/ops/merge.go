@@ -53,7 +53,6 @@ const (
 	oursLabel         = "HEAD"
 	virtualLabelOurs  = "Temporary merge branch 1"
 	virtualLabelTheir = "Temporary merge branch 2"
-	virtualMarkerSize = merge.DefaultMarkerSize + 2
 	mergeStrategyNote = ": Merge made by the 'ort' strategy."
 	fastForwardNote   = ": Fast-forward"
 	resetToHeadNote   = "reset: moving to HEAD"
@@ -407,10 +406,7 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 		}
 		snapshots[i] = s
 	}
-	opts := merge.TreeOptions{File: merge.Options{Labels: labels}}
-	if depth > 0 {
-		opts.File.MarkerSize = virtualMarkerSize
-	}
+	opts := merge.TreeOptions{File: merge.Options{Labels: labels}, Depth: depth}
 	var err error
 	if opts.OurRenames, opts.TheirRenames, err = merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs); err != nil {
 		return merge.TreeResult{}, err

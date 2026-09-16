@@ -186,6 +186,19 @@ func mergeScenarios() []mergeScenario {
 			b.commit("theirs 2", map[string]string{"g": editLine(editLine(g, 0, "THEIRS"), 9, "THEIRS AGAIN")})
 			b.git("checkout", "-q", "main")
 		}},
+		{name: "criss-cross over a binary conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
+			b.write(map[string]string{"bin": "v" + strconv.Itoa(step) + "\x00"})
+		})},
+		{name: "criss-cross over a modify/delete conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
+			if step == 1 {
+				b.write(map[string]string{"f": ""})
+				return
+			}
+			b.write(map[string]string{"f": editLine(f, 4, "V"+strconv.Itoa(step))})
+		})},
+		{name: "criss-cross over a symlink conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
+			b.link("link", "target"+strconv.Itoa(step))
+		})},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "local change in the way", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
@@ -359,6 +372,34 @@ func mergeScenarios() []mergeScenario {
 			forkedHistory(map[string]string{"f": editLine(f, 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": editLine(f, 4, "THEIRS"), "new": "new\n"})(b)
 			b.o.write(b.dir, "keep", "local\n")
 		}, after: abortMerge},
+	}
+}
+
+func (b *mergeBuilder) link(rel, target string) {
+	b.o.t.Helper()
+	b.o.write(b.dir, ".link-target", target)
+	id := strings.TrimSpace(b.git("hash-object", "-w", ".link-target"))
+	b.o.remove(b.dir, ".link-target")
+	b.git("update-index", "--add", "--cacheinfo", "120000,"+id+","+rel)
+	b.git("checkout", "-q", "--", rel)
+}
+
+func crissCrossHistory(set func(b *mergeBuilder, step int)) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		set(b, 0)
+		b.commit("base", map[string]string{"keep": "keep\n", "g": lines("g", 10)})
+		b.git("branch", "other")
+		set(b, 1)
+		b.commit("ours 1", nil)
+		b.git("checkout", "-q", "other")
+		set(b, 2)
+		b.commit("theirs 1", nil)
+		b.git("checkout", "-q", "-b", "feature")
+		b.git("merge", "-q", "-s", "ours", "--no-edit", "main")
+		b.commit("feature", map[string]string{"g": editLine(lines("g", 10), 9, "FEATURE")})
+		b.git("checkout", "-q", "main")
+		b.git("merge", "-q", "-s", "ours", "--no-edit", "other")
+		b.commit("main", map[string]string{"keep": "main\n"})
 	}
 }
 

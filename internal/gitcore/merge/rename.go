@@ -83,6 +83,7 @@ type aligned struct {
 	origins   map[string]origin
 	decided   Snapshot
 	conflicts []Conflict
+	depth     int
 }
 
 func (r Renames) check(base, side Snapshot) error {
@@ -106,6 +107,7 @@ func align(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (*ali
 		theirs:  maps.Clone(theirs),
 		origins: map[string]origin{},
 		decided: Snapshot{},
+		depth:   opts.Depth,
 	}
 	for _, from := range slices.Sorted(maps.Keys(opts.OurRenames)) {
 		ourPath := opts.OurRenames[from]
@@ -141,6 +143,10 @@ func (a *aligned) follow(from, to string, stayed, renamer Snapshot, theirsRename
 			conflict.Ours = &moved
 		}
 		a.conflicts = append(a.conflicts, conflict)
+		if a.depth > 0 {
+			delete(renamer, to)
+			a.decided[to] = a.base[from]
+		}
 		return
 	}
 	if _, taken := stayed[to]; taken {
