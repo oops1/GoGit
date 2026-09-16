@@ -273,6 +273,109 @@ func TestAMergeDiffsOnlyOnceAgainstParentsWithTheSameBlob(t *testing.T) {
 	}
 }
 
+type flakyStore struct {
+	*store
+	flaky hash.ObjectID
+	reads int
+}
+
+func (f *flakyStore) Get(id hash.ObjectID) (object.Type, []byte, error) {
+	if id == f.flaky {
+		f.reads++
+		if f.reads > 1 {
+			return 0, nil, errInjected
+		}
+	}
+	return f.store.Get(id)
+}
+
+func TestABlameCountsALastLineWithoutANewline(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo")}), 1000)
+	head := s.commit("edit", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nTWO")}), 2000, base)
+
+	result, err := File(t.Context(), s, head, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "base:1 edit:2" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestABlameOfAnEntryThatIsNotABlobSaysSo(t *testing.T) {
+	s := newStore()
+	inner := s.tree(map[string]hash.ObjectID{"x": s.blob("x\n")})
+	outer := s.put(&object.Tree{Entries: []object.TreeEntry{{Mode: object.ModeBlob, Name: "f", ID: inner}}})
+	head := s.commit("base", outer, 1000)
+
+	if _, err := File(t.Context(), s, head, "f", Options{}); !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestABlameReportsAParentBlobItCannotRead(t *testing.T) {
+	s := newStore()
+	older := s.blob("one\n")
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": older}), 1000)
+	head := s.commit("edit", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 2000, base)
+	s.fail[older] = errInjected
+
+	if _, err := File(t.Context(), s, head, "f", Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestABlameReportsABlobThatFailsWhenReadAgain(t *testing.T) {
+	s := newStore()
+	shared := s.blob("one\ntwo\n")
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\n")}), 1000)
+	same := s.commit("same", s.tree(map[string]hash.ObjectID{"f": shared}), 2000, base)
+	other := s.commit("other", s.tree(map[string]hash.ObjectID{"f": s.blob("zzz\n")}), 2000, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": shared}), 3000, other, same)
+
+	if _, err := File(t.Context(), &flakyStore{store: s, flaky: shared}, merged, "f", Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestACommitSkipsAPathThatNoLineReached(t *testing.T) {
+	s := newStore()
+	content := "one\ntwo\nthree\n"
+	base := s.commit("a", s.tree(map[string]hash.ObjectID{"f": s.blob("zzz\n"), "g": s.blob(content)}), 1000)
+	moved := s.commit("b", s.tree(map[string]hash.ObjectID{"h": s.blob(content)}), 2000, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob(content + "four\n")}), 3000, base, moved)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "a:1 a:2 a:3 merge:4" {
+		t.Fatalf("blame = %v", got)
+	}
+	if result.Lines[0].Path != "g" {
+		t.Fatalf("path = %q", result.Lines[0].Path)
+	}
+}
+
+func TestAMergeStopsOnceTheFirstParentExplainsEveryLine(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nextra\ntwo\n")}), 1000)
+	other := s.commit("other", s.tree(map[string]hash.ObjectID{"f": s.blob("other\n")}), 1000)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 3000, base, other)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "base:1 base:3" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
 func TestAMergeThatAddedTheFileOnOneSideOnly(t *testing.T) {
 	s := newStore()
 	base := s.commit("base", s.tree(map[string]hash.ObjectID{"keep": s.blob("keep\n")}), 1000)
