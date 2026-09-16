@@ -2,144 +2,203 @@ package credential
 
 import (
 	"errors"
-	"io/fs"
-	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 )
 
-type fakeHelperFileInfo struct {
-	isDir bool
-}
-
-func (f fakeHelperFileInfo) Name() string       { return "" }
-func (f fakeHelperFileInfo) Size() int64        { return 0 }
-func (f fakeHelperFileInfo) Mode() fs.FileMode  { return 0 }
-func (f fakeHelperFileInfo) ModTime() time.Time { return time.Time{} }
-func (f fakeHelperFileInfo) IsDir() bool        { return f.isDir }
-func (f fakeHelperFileInfo) Sys() any           { return nil }
-
-func stubStatHelperCandidate(t *testing.T, fn func(string) (os.FileInfo, error)) {
+func testEnvironment(t *testing.T, content string, vars map[string]string) helperEnvironment {
 	t.Helper()
-	restore := statHelperCandidate
-	statHelperCandidate = fn
-	t.Cleanup(func() { statHelperCandidate = restore })
-}
-
-func TestResolveHelperEmptyValueIsUnsupported(t *testing.T) {
-	if _, err := resolveHelper(""); !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper(\"\") returned %v, want ErrUnsupportedHelper", err)
+	return helperEnvironment{
+		cfg:    loadTestConfig(t, content),
+		query:  Query{Protocol: "https", Host: "example.com"},
+		getenv: func(name string) string { return vars[name] },
 	}
 }
 
-func TestResolveHelperShellCommandIsUnsupported(t *testing.T) {
-	if _, err := resolveHelper("!true"); !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper returned %v, want ErrUnsupportedHelper", err)
-	}
+func emptyEnvironment(t *testing.T) helperEnvironment {
+	t.Helper()
+	return testEnvironment(t, "", nil)
 }
 
-func TestResolveHelperValueWithSpacesIsUnsupported(t *testing.T) {
-	if _, err := resolveHelper("foo --with-arg"); !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper returned %v, want ErrUnsupportedHelper", err)
-	}
-}
-
-func TestResolveHelperPathWithSpacesRunsDirectlyWhenFileExists(t *testing.T) {
-	const path = `C:\Program Files\Git\mingw64\libexec\git-core\git-credential-manager.exe`
-	stubStatHelperCandidate(t, func(name string) (os.FileInfo, error) {
-		if name != path {
-			t.Fatalf("statHelperCandidate called with %q, want %q", name, path)
+func TestResolveHelperRejectsHelpersThatNeedAProcess(t *testing.T) {
+	stubPlatformStores(t, &fakeCredentialManager{}, (&fakeKeyring{}).opener())
+	for _, spec := range []string{
+		"",
+		"   ",
+		"!true",
+		`!C:\Program Files\Git\mingw64\bin\git-credential-manager.exe`,
+		"cache",
+		"cache --timeout=60",
+		"osxkeychain",
+		"foo --with-arg",
+		"manager --no-ui",
+		"/usr/local/bin/my-helper",
+		`C:\Tools\git-credential-custom.exe`,
+		"git-credential-manager",
+	} {
+		if _, err := resolveHelper(spec, emptyEnvironment(t)); !errors.Is(err, ErrUnsupportedHelper) {
+			t.Errorf("resolveHelper(%q) = %v, want ErrUnsupportedHelper", spec, err)
 		}
-		return fakeHelperFileInfo{}, nil
-	})
-	h, err := resolveHelper(path)
+	}
+}
+
+func TestHelperProgramNameReadsPlainNamesAndHelperPaths(t *testing.T) {
+	cases := map[string]string{
+		"manager": "manager",
+		`C:\Program Files\Git\mingw64\bin\git-credential-manager.exe`:              "manager",
+		"C:/Program Files/Git/mingw64/libexec/git-core/git-credential-wincred.EXE": "wincred",
+		"/usr/local/bin/git-credential-manager":                                    "manager",
+		"/usr/share/doc/git/contrib/credential/libsecret/git-credential-libsecret": "libsecret",
+		"/opt/git-credential-manager-core":                                         "manager-core",
+		"/usr/bin/helper":                                                          "",
+		"/usr/bin/.exe":                                                            "",
+	}
+	for spec, want := range cases {
+		if got := helperProgramName(spec); got != want {
+			t.Errorf("helperProgramName(%q) = %q, want %q", spec, got, want)
+		}
+	}
+}
+
+func TestResolveHelperWincredUsesTheCredentialManager(t *testing.T) {
+	manager := &fakeCredentialManager{}
+	stubPlatformStores(t, manager, nil)
+	for _, spec := range []string{"wincred", `C:\Program Files\Git\mingw64\libexec\git-core\git-credential-wincred.exe`} {
+		h, err := resolveHelper(spec, emptyEnvironment(t))
+		if err != nil {
+			t.Fatalf("resolveHelper(%q) returned %v", spec, err)
+		}
+		wh, ok := h.(*wincredHelper)
+		if !ok || wh.manager != manager || wh.Name() != spec {
+			t.Fatalf("resolveHelper(%q) = %#v", spec, h)
+		}
+	}
+}
+
+func TestResolveHelperWincredIsUnsupportedWithoutTheCredentialManager(t *testing.T) {
+	stubPlatformStores(t, nil, (&fakeKeyring{}).opener())
+	if _, err := resolveHelper("wincred", emptyEnvironment(t)); !errors.Is(err, ErrUnsupportedHelper) {
+		t.Fatalf("err = %v, want ErrUnsupportedHelper", err)
+	}
+}
+
+func TestResolveHelperLibsecretUsesTheKeyring(t *testing.T) {
+	stubPlatformStores(t, nil, (&fakeKeyring{}).opener())
+	h, err := resolveHelper("libsecret", emptyEnvironment(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lh, ok := h.(*libsecretHelper); !ok || lh.Name() != "libsecret" || lh.open == nil {
+		t.Fatalf("resolveHelper(libsecret) = %#v", h)
+	}
+}
+
+func TestResolveHelperLibsecretIsUnsupportedWithoutAKeyring(t *testing.T) {
+	stubPlatformStores(t, &fakeCredentialManager{}, nil)
+	if _, err := resolveHelper("libsecret", emptyEnvironment(t)); !errors.Is(err, ErrUnsupportedHelper) {
+		t.Fatalf("err = %v, want ErrUnsupportedHelper", err)
+	}
+}
+
+func managerStore(t *testing.T, spec string, env helperEnvironment) gcmStore {
+	t.Helper()
+	h, err := resolveHelper(spec, env)
 	if err != nil {
 		t.Fatalf("resolveHelper returned %v", err)
 	}
-	eh, ok := h.(*execHelper)
+	mh, ok := h.(*managerHelper)
 	if !ok {
-		t.Fatalf("resolveHelper returned %T, want *execHelper", h)
+		t.Fatalf("resolveHelper returned %T, want *managerHelper", h)
 	}
-	if eh.exe != path {
-		t.Fatalf("exe = %q, want %q", eh.exe, path)
-	}
-	if eh.Name() != path {
-		t.Fatalf("Name() = %q, want %q", eh.Name(), path)
-	}
+	return mh.store
 }
 
-func TestResolveHelperPathWithSpacesIsUnsupportedWhenFileMissing(t *testing.T) {
-	stubStatHelperCandidate(t, func(string) (os.FileInfo, error) {
-		return nil, os.ErrNotExist
+func TestResolveHelperManagerPicksTheConfiguredStore(t *testing.T) {
+	manager := &fakeCredentialManager{}
+	stubPlatformStores(t, manager, (&fakeKeyring{}).opener())
+	root := t.TempDir()
+
+	store := managerStore(t, "manager", testEnvironment(t, "[credential]\n\tcredentialStore = WinCredMan\n", nil))
+	if ws, ok := store.(*gcmWindowsStore); !ok || ws.manager != manager || ws.namespace != "git" {
+		t.Fatalf("wincredman store = %#v", store)
+	}
+
+	store = managerStore(t, "manager-core", testEnvironment(t, "[credential]\n\tcredentialStore = secretservice\n\tnamespace = work\n", nil))
+	if ks, ok := store.(*gcmKeyringStore); !ok || ks.namespace != "work" || ks.open == nil {
+		t.Fatalf("secretservice store = %#v", store)
+	}
+
+	env := testEnvironment(t, "[credential]\n\tcredentialStore = secretservice\n", map[string]string{
+		"GCM_CREDENTIAL_STORE":     "plaintext",
+		"GCM_PLAINTEXT_STORE_PATH": root,
+		"GCM_NAMESPACE":            "env",
 	})
-	_, err := resolveHelper(`C:\Program Files\Missing\git-credential-manager.exe`)
-	if !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper returned %v, want ErrUnsupportedHelper", err)
+	store = managerStore(t, "manager", env)
+	if fs, ok := store.(*gcmFileStore); !ok || fs.root != root || fs.namespace != "env" {
+		t.Fatalf("plaintext store = %#v", store)
 	}
 }
 
-func TestResolveHelperPathWithSpacesIsUnsupportedWhenPathIsDirectory(t *testing.T) {
-	stubStatHelperCandidate(t, func(string) (os.FileInfo, error) {
-		return fakeHelperFileInfo{isDir: true}, nil
-	})
-	_, err := resolveHelper(`C:\Program Files\Git`)
-	if !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper returned %v, want ErrUnsupportedHelper", err)
+func TestResolveHelperManagerHonoursURLScopedStoreSettings(t *testing.T) {
+	stubPlatformStores(t, &fakeCredentialManager{}, (&fakeKeyring{}).opener())
+	content := "[credential]\n\tcredentialStore = secretservice\n" +
+		"[credential \"https://example.com\"]\n\tcredentialStore = plaintext\n\tplaintextStorePath = " + filepath.ToSlash(t.TempDir()) + "\n" +
+		"[credential \"https://other.example\"]\n\tcredentialStore = wincredman\n"
+	store := managerStore(t, "manager", testEnvironment(t, content, nil))
+	if _, ok := store.(*gcmFileStore); !ok {
+		t.Fatalf("store = %T, want the store scoped to the remote url", store)
 	}
 }
 
-func TestResolveHelperShellCommandIsUnsupportedEvenWhenFileExists(t *testing.T) {
-	stubStatHelperCandidate(t, func(string) (os.FileInfo, error) {
-		return fakeHelperFileInfo{}, nil
-	})
-	_, err := resolveHelper(`!C:\Program Files\Git\git-credential-manager.exe`)
-	if !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper returned %v, want ErrUnsupportedHelper", err)
+func TestResolveHelperManagerFallsBackToThePlatformDefaultStore(t *testing.T) {
+	stubPlatformStores(t, &fakeCredentialManager{}, (&fakeKeyring{}).opener())
+	if gcmDefaultStore == "" {
+		if _, err := resolveHelper("manager", emptyEnvironment(t)); !errors.Is(err, ErrUnsupportedHelper) {
+			t.Fatalf("err = %v, want ErrUnsupportedHelper without a configured store", err)
+		}
+		return
+	}
+	if store, ok := managerStore(t, "manager", emptyEnvironment(t)).(*gcmWindowsStore); !ok {
+		t.Fatalf("default store = %#v", store)
 	}
 }
 
-func TestResolveHelperCacheIsUnsupported(t *testing.T) {
-	if _, err := resolveHelper("cache"); !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper(cache) returned %v, want ErrUnsupportedHelper", err)
-	}
-	if _, err := resolveHelper("cache --timeout=60"); !errors.Is(err, ErrUnsupportedHelper) {
-		t.Fatalf("resolveHelper(cache --timeout) returned %v, want ErrUnsupportedHelper", err)
-	}
-}
-
-func TestResolveHelperNameResolvesViaPath(t *testing.T) {
-	stubLookPath(t, nil)
-	stubStatHelperCandidate(t, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
-	h, err := resolveHelper("manager")
-	if err != nil {
-		t.Fatalf("resolveHelper returned %v", err)
-	}
-	eh, ok := h.(*execHelper)
-	if !ok {
-		t.Fatalf("resolveHelper returned %T, want *execHelper", h)
-	}
-	if eh.Name() != "manager" {
-		t.Fatalf("Name() = %q, want %q", eh.Name(), "manager")
-	}
-	if eh.exe != "git-credential-manager" {
-		t.Fatalf("exe = %q, want %q", eh.exe, "git-credential-manager")
+func TestResolveHelperManagerRejectsStoresThatAreNotAvailable(t *testing.T) {
+	stubPlatformStores(t, nil, nil)
+	for _, store := range []string{"wincredman", "secretservice", "dpapi", "gpg", "cache", "keychain", "none", "unknown"} {
+		env := testEnvironment(t, "", map[string]string{"GCM_CREDENTIAL_STORE": store})
+		if _, err := resolveHelper("manager", env); !errors.Is(err, ErrUnsupportedHelper) {
+			t.Errorf("store %q: err = %v, want ErrUnsupportedHelper", store, err)
+		}
 	}
 }
 
-func TestResolveHelperAbsolutePathIsUsedDirectly(t *testing.T) {
-	abs := "/usr/local/bin/foo"
-	if runtime.GOOS == "windows" {
-		abs = `C:\Tools\foo.exe`
+func TestResolveHelperManagerPlaintextDefaultsToTheGCMDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	env := testEnvironment(t, "", map[string]string{"GCM_CREDENTIAL_STORE": "plaintext"})
+	store := managerStore(t, "manager", env)
+	if fs := store.(*gcmFileStore); fs.root != filepath.Join(home, ".gcm", "store") {
+		t.Fatalf("root = %q", fs.root)
 	}
-	h, err := resolveHelper(abs)
-	if err != nil {
-		t.Fatalf("resolveHelper returned %v", err)
+}
+
+func TestResolveHelperManagerPlaintextFailsWithoutHome(t *testing.T) {
+	env := testEnvironment(t, "", map[string]string{"GCM_CREDENTIAL_STORE": "plaintext"})
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	if _, err := resolveHelper("manager", env); err == nil || errors.Is(err, ErrUnsupportedHelper) {
+		t.Fatalf("err = %v, want a home directory error", err)
 	}
-	eh := h.(*execHelper)
-	if eh.exe != abs {
-		t.Fatalf("exe = %q, want %q", eh.exe, abs)
+}
+
+func TestResolveHelperManagerPlaintextFailsOnAnUnexpandablePath(t *testing.T) {
+	env := testEnvironment(t, "", map[string]string{"GCM_CREDENTIAL_STORE": "plaintext", "GCM_PLAINTEXT_STORE_PATH": "~badname/store"})
+	if _, err := resolveHelper("manager", env); err == nil || errors.Is(err, ErrUnsupportedHelper) {
+		t.Fatalf("err = %v, want an expansion error", err)
 	}
 }
 
@@ -147,7 +206,7 @@ func TestResolveHelperStoreDefaultPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	h, err := resolveHelper("store")
+	h, err := resolveHelper("store", emptyEnvironment(t))
 	if err != nil {
 		t.Fatalf("resolveHelper returned %v", err)
 	}
@@ -164,7 +223,7 @@ func TestResolveHelperStoreDefaultPath(t *testing.T) {
 func TestResolveHelperStoreExplicitFile(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "creds.txt")
-	h, err := resolveHelper("store --file=" + target)
+	h, err := resolveHelper("store --file="+target, emptyEnvironment(t))
 	if err != nil {
 		t.Fatalf("resolveHelper returned %v", err)
 	}
@@ -175,17 +234,18 @@ func TestResolveHelperStoreExplicitFile(t *testing.T) {
 }
 
 func TestResolveHelperStoreDefaultPathFailsWithoutHome(t *testing.T) {
+	env := emptyEnvironment(t)
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("HOMEDRIVE", "")
 	t.Setenv("HOMEPATH", "")
-	if _, err := resolveHelper("store"); err == nil {
+	if _, err := resolveHelper("store", env); err == nil {
 		t.Fatalf("resolveHelper(store) succeeded despite no home directory being available")
 	}
 }
 
 func TestResolveHelperStoreInvalidFileExpansionFails(t *testing.T) {
-	if _, err := resolveHelper("store --file=~badname"); err == nil {
+	if _, err := resolveHelper("store --file=~badname", emptyEnvironment(t)); err == nil {
 		t.Fatalf("resolveHelper succeeded despite an unexpandable ~ prefix")
 	}
 }
@@ -194,7 +254,7 @@ func TestResolveHelperStoreExpandsHomeInFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	h, err := resolveHelper(`store --file=~/creds.txt`)
+	h, err := resolveHelper(`store --file=~/creds.txt`, emptyEnvironment(t))
 	if err != nil {
 		t.Fatalf("resolveHelper returned %v", err)
 	}

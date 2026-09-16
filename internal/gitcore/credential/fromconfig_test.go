@@ -32,12 +32,12 @@ func helperNames(infos []HelperInfo) []string {
 }
 
 func TestFromConfigMultiValuedHelperKeepsOrder(t *testing.T) {
-	cfg := loadTestConfig(t, "[credential]\n\thelper = first\n\thelper = second\n")
+	cfg := loadTestConfig(t, "[credential]\n\thelper = store --file=first\n\thelper = store --file=second\n")
 	chain, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"first", "second"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=first", "store --file=second"}) {
 		t.Fatalf("infos = %v, want [first second]", infos)
 	}
 	if len(chain) != 2 {
@@ -46,12 +46,12 @@ func TestFromConfigMultiValuedHelperKeepsOrder(t *testing.T) {
 }
 
 func TestFromConfigEmptyValueResetsAccumulatedList(t *testing.T) {
-	cfg := loadTestConfig(t, "[credential]\n\thelper = first\n\thelper =\n\thelper = second\n")
+	cfg := loadTestConfig(t, "[credential]\n\thelper = store --file=first\n\thelper =\n\thelper = store --file=second\n")
 	chain, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"second"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=second"}) {
 		t.Fatalf("infos = %v, want [second]", infos)
 	}
 	if len(chain) != 1 {
@@ -60,14 +60,14 @@ func TestFromConfigEmptyValueResetsAccumulatedList(t *testing.T) {
 }
 
 func TestFromConfigURLScopedHelperOnlyAppliesWhenHostMatches(t *testing.T) {
-	content := "[credential]\n\thelper = generic\n[credential \"https://example.com\"]\n\thelper = scoped\n"
+	content := "[credential]\n\thelper = store --file=generic\n[credential \"https://example.com\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 
 	_, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"generic", "scoped"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=generic", "store --file=scoped"}) {
 		t.Fatalf("infos = %v, want [generic scoped]", infos)
 	}
 
@@ -75,13 +75,13 @@ func TestFromConfigURLScopedHelperOnlyAppliesWhenHostMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"generic"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=generic"}) {
 		t.Fatalf("infos = %v, want [generic]", infos)
 	}
 }
 
 func TestFromConfigURLScopedHelperSkipsOnProtocolMismatch(t *testing.T) {
-	content := "[credential \"http://example.com\"]\n\thelper = scoped\n"
+	content := "[credential \"http://example.com\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 	_, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestFromConfigURLScopedHelperSkipsOnProtocolMismatch(t *testing.T) {
 }
 
 func TestFromConfigURLScopedHelperSkipsOnUsernameMismatch(t *testing.T) {
-	content := "[credential \"https://alice@example.com\"]\n\thelper = scoped\n"
+	content := "[credential \"https://alice@example.com\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 	_, infos, err := FromConfig(cfg, "https://bob@example.com/repo.git")
 	if err != nil {
@@ -113,43 +113,43 @@ func TestFromConfigResolveErrorPropagates(t *testing.T) {
 }
 
 func TestFromConfigUseHTTPPathControlsPathScopedHelpers(t *testing.T) {
-	content := "[credential]\n\thelper = generic\n\tuseHttpPath = true\n" +
-		"[credential \"https://example.com/org/repo.git\"]\n\thelper = scoped\n"
+	content := "[credential]\n\thelper = store --file=generic\n\tuseHttpPath = true\n" +
+		"[credential \"https://example.com/org/repo.git\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 	_, infos, err := FromConfig(cfg, "https://example.com/org/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"generic", "scoped"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=generic", "store --file=scoped"}) {
 		t.Fatalf("infos = %v, want [generic scoped]", infos)
 	}
 
-	contentNoPath := "[credential]\n\thelper = generic\n" +
-		"[credential \"https://example.com/org/repo.git\"]\n\thelper = scoped\n"
+	contentNoPath := "[credential]\n\thelper = store --file=generic\n" +
+		"[credential \"https://example.com/org/repo.git\"]\n\thelper = store --file=scoped\n"
 	cfgNoPath := loadTestConfig(t, contentNoPath)
 	_, infos, err = FromConfig(cfgNoPath, "https://example.com/org/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"generic"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=generic"}) {
 		t.Fatalf("infos = %v, want [generic] when useHttpPath is off", infos)
 	}
 }
 
 func TestFromConfigDefaultUsernameFeedsURLScopedMatch(t *testing.T) {
-	content := "[credential]\n\tusername = alice\n[credential \"https://alice@example.com\"]\n\thelper = scoped\n"
+	content := "[credential]\n\tusername = alice\n[credential \"https://alice@example.com\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 	_, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"scoped"}) {
+	if !slices.Equal(helperNames(infos), []string{"store --file=scoped"}) {
 		t.Fatalf("infos = %v, want [scoped]", infos)
 	}
 }
 
 func TestFromConfigMarksUnsupportedHelpersButOmitsThemFromChain(t *testing.T) {
-	content := "[credential]\n\thelper = cache\n\thelper = !true\n\thelper = good\n"
+	content := "[credential]\n\thelper = cache\n\thelper = !true\n\thelper = store --file=good\n"
 	cfg := loadTestConfig(t, content)
 	chain, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
@@ -158,7 +158,7 @@ func TestFromConfigMarksUnsupportedHelpersButOmitsThemFromChain(t *testing.T) {
 	want := []HelperInfo{
 		{Name: "cache", Supported: false},
 		{Name: "!true", Supported: false},
-		{Name: "good", Supported: true},
+		{Name: "store --file=good", Supported: true},
 	}
 	if !slices.Equal(infos, want) {
 		t.Fatalf("infos = %+v, want %+v", infos, want)
@@ -169,7 +169,7 @@ func TestFromConfigMarksUnsupportedHelpersButOmitsThemFromChain(t *testing.T) {
 }
 
 func TestFromConfigInvalidURLReturnsError(t *testing.T) {
-	cfg := loadTestConfig(t, "[credential]\n\thelper = good\n")
+	cfg := loadTestConfig(t, "[credential]\n\thelper = store --file=good\n")
 	_, _, err := FromConfig(cfg, "")
 	if err == nil {
 		t.Fatalf("FromConfig succeeded despite an empty url")
@@ -192,5 +192,32 @@ func TestFromConfigNoHelpersReturnsEmptyChain(t *testing.T) {
 	}
 	if len(chain) != 0 || len(infos) != 0 {
 		t.Fatalf("chain = %v, infos = %v, want both empty", chain, infos)
+	}
+}
+
+func TestFromConfigReportsAManagerWithoutAUsableStoreAsUnsupported(t *testing.T) {
+	stubPlatformStores(t, nil, nil)
+	t.Setenv("GCM_CREDENTIAL_STORE", "")
+	cfg := loadTestConfig(t, "[credential]\n\thelper = manager\n\tcredentialStore = gpg\n")
+	chain, infos, err := FromConfig(cfg, "https://example.com/repo.git")
+	if err != nil {
+		t.Fatalf("FromConfig returned %v", err)
+	}
+	if len(chain) != 0 || !slices.Equal(infos, []HelperInfo{{Name: "manager", Supported: false}}) {
+		t.Fatalf("chain = %v, infos = %+v", chain, infos)
+	}
+}
+
+func TestFromConfigReadsManagerSettingsFromTheEnvironmentFirst(t *testing.T) {
+	stubPlatformStores(t, nil, nil)
+	t.Setenv("GCM_CREDENTIAL_STORE", "plaintext")
+	t.Setenv("GCM_PLAINTEXT_STORE_PATH", t.TempDir())
+	cfg := loadTestConfig(t, "[credential]\n\thelper = manager\n\tcredentialStore = gpg\n")
+	chain, infos, err := FromConfig(cfg, "https://example.com/repo.git")
+	if err != nil {
+		t.Fatalf("FromConfig returned %v", err)
+	}
+	if len(chain) != 1 || !slices.Equal(infos, []HelperInfo{{Name: "manager", Supported: true}}) {
+		t.Fatalf("chain = %v, infos = %+v", chain, infos)
 	}
 }

@@ -68,10 +68,10 @@ linters:
       - path: internal/gitcore/transport/httpproxy_test\.go
         linters:
           - gosec
-      - path: internal/gitcore/credential/exec\.go
+      - path: internal/gitcore/credential/wincredapi_windows\.go
         linters:
           - gosec
-        text: "G204"
+        text: "G103"
       - path: internal/gitcore/credential/.*_test\.go
         linters:
           - gosec

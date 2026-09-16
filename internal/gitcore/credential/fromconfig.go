@@ -2,6 +2,7 @@ package credential
 
 import (
 	"errors"
+	"os"
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/config"
@@ -29,11 +30,12 @@ func FromConfig(cfg *config.Config, rawURL string) (Chain, []HelperInfo, error) 
 			q.Username = v
 		}
 	}
+	env := helperEnvironment{cfg: cfg, query: q, getenv: os.Getenv}
 	specs := collectHelperSpecs(cfg, q)
 	chain := make(Chain, 0, len(specs))
 	infos := make([]HelperInfo, 0, len(specs))
 	for _, spec := range specs {
-		h, herr := resolveHelper(spec)
+		h, herr := resolveHelper(spec, env)
 		if herr != nil {
 			if errors.Is(herr, ErrUnsupportedHelper) {
 				infos = append(infos, HelperInfo{Name: spec, Supported: false})
@@ -47,17 +49,34 @@ func FromConfig(cfg *config.Config, rawURL string) (Chain, []HelperInfo, error) 
 	return chain, infos, nil
 }
 
+type helperEnvironment struct {
+	cfg    *config.Config
+	query  Query
+	getenv func(string) string
+}
+
+func (env helperEnvironment) setting(envName, key string) string {
+	if v := env.getenv(envName); v != "" {
+		return v
+	}
+	return credentialSetting(env.cfg, env.query, key)
+}
+
+func credentialSetting(cfg *config.Config, q Query, key string) string {
+	value := ""
+	for e := range cfg.All() {
+		if e.Section == "credential" && e.Key == key && entryAppliesTo(e, q) {
+			value = e.Value
+		}
+	}
+	return value
+}
+
 func collectHelperSpecs(cfg *config.Config, q Query) []string {
 	var specs []string
 	for e := range cfg.All() {
-		if e.Section != "credential" || e.Key != "helper" {
+		if e.Section != "credential" || e.Key != "helper" || !entryAppliesTo(e, q) {
 			continue
-		}
-		if e.HasSubsection {
-			pattern, err := ParseQuery(e.Subsection, true)
-			if err != nil || !patternMatches(pattern, q) {
-				continue
-			}
 		}
 		if !e.HasValue || e.Value == "" {
 			specs = specs[:0]
@@ -66,6 +85,14 @@ func collectHelperSpecs(cfg *config.Config, q Query) []string {
 		specs = append(specs, e.Value)
 	}
 	return specs
+}
+
+func entryAppliesTo(e config.Entry, q Query) bool {
+	if !e.HasSubsection {
+		return true
+	}
+	pattern, err := ParseQuery(e.Subsection, true)
+	return err == nil && patternMatches(pattern, q)
 }
 
 func patternMatches(pattern, q Query) bool {
