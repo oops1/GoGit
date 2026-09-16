@@ -262,9 +262,9 @@ func fillContent(p pair, opts Options) File {
 	file := p.file
 	file.OldSize = len(p.oldData)
 	file.NewSize = len(p.newData)
-	_, newPath := file.paths()
+	oldPath, newPath := file.paths()
 	switch {
-	case binaryFor(newPath, p.oldData, opts) || binaryFor(newPath, p.newData, opts):
+	case binaryFor(oldPath, p.oldData, opts) || binaryFor(newPath, p.newData, opts):
 		file.Binary = true
 	case file.OldID != file.NewID:
 		file.Hunks = patchHunks(p.oldData, p.newData, opts)

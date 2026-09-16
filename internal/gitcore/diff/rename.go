@@ -14,8 +14,7 @@ type spanEntry struct {
 	count   int
 }
 
-func hashChars(data []byte) []spanEntry {
-	text := !isBinary(data)
+func hashChars(data []byte, text bool) []spanEntry {
 	counts := make(map[uint32]int)
 	var accum1, accum2 uint32
 	size := 0
@@ -93,13 +92,13 @@ func (s *renameState) estimateSimilarity(src, dst, minScore int) (int, error) {
 	if dstSize == 0 {
 		return 0, nil
 	}
-	copied, _ := countChanges(s.spansOf(src, srcData), s.spansOf(dst, dstData))
+	copied, _ := countChanges(s.spansOf(src, source.file.OldPath, srcData), s.spansOf(dst, target.file.NewPath, dstData))
 	return int(float64(copied) * maxScore / float64(maxSize)), nil
 }
 
-func (s *renameState) spansOf(at int, data []byte) []spanEntry {
+func (s *renameState) spansOf(at int, path string, data []byte) []spanEntry {
 	if s.spans[at] == nil {
-		s.spans[at] = hashChars(data)
+		s.spans[at] = hashChars(data, !binaryFor(path, data, s.opts))
 	}
 	return s.spans[at]
 }
@@ -169,6 +168,7 @@ type renameState struct {
 	copies   bool
 	relevant func(path string) bool
 	needed   int
+	opts     Options
 }
 
 var emptyBlobID = hash.SumSHA1("blob", nil)
@@ -190,6 +190,7 @@ func detectRelevantRenames(pairs []pair, source Objects, opts Options, relevant 
 		isRename: make([]bool, len(pairs)),
 		minScore: opts.minimumScore(),
 		copies:   opts.DetectCopies,
+		opts:     opts,
 	}
 	for at := range pairs {
 		file := pairs[at].file

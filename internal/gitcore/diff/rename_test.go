@@ -254,7 +254,7 @@ func TestEstimateSimilarityRejectsUnusableSides(t *testing.T) {
 }
 
 func changesOf(src, dst []byte) (copied, added int) {
-	return countChanges(hashChars(src), hashChars(dst))
+	return countChanges(hashChars(src, true), hashChars(dst, true))
 }
 
 func TestCountChangesComparesTheContentSpans(t *testing.T) {
@@ -277,8 +277,11 @@ func TestCountChangesComparesTheContentSpans(t *testing.T) {
 }
 
 func TestHashCharsSkipsCarriageReturnsInText(t *testing.T) {
-	withCRLF := hashChars([]byte("alpha\r\nbeta\r\n"))
-	plain := hashChars([]byte("alpha\nbeta\n"))
+	withCRLF := hashChars([]byte("alpha\r\nbeta\r\n"), true)
+	plain := hashChars([]byte("alpha\nbeta\n"), true)
+	if binary := hashChars([]byte("alpha\r\nbeta\r\n"), false); len(binary) == len(plain) && binary[0] == plain[0] {
+		t.Error("binary content skipped its carriage returns")
+	}
 	if len(withCRLF) != len(plain) {
 		t.Fatalf("the CRLF text produced %d spans and the LF text %d", len(withCRLF), len(plain))
 	}
@@ -291,7 +294,7 @@ func TestHashCharsSkipsCarriageReturnsInText(t *testing.T) {
 	for at := range long {
 		long[at] = byte('a' + at%26)
 	}
-	if len(hashChars(long)) == 0 {
+	if len(hashChars(long, true)) == 0 {
 		t.Error("a long line without newlines produced no spans")
 	}
 }
@@ -471,7 +474,7 @@ func TestSpansAreHashedOncePerFile(t *testing.T) {
 		}
 	}
 	first := slices.Clone(state.spans)
-	state.spansOf(0, nil)
+	state.spansOf(0, "", nil)
 	for at := range first {
 		if first[at] == nil || &first[at][0] != &state.spans[at][0] {
 			t.Fatalf("the spans of pair %d were not kept for reuse", at)
