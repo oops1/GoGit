@@ -71,7 +71,9 @@ type TreeResult struct {
 	Warnings  []Warning
 }
 
-func (r TreeResult) Clean() bool { return len(r.Conflicts) == 0 }
+func (r TreeResult) Clean() bool {
+	return len(r.Conflicts) == 0 && !slices.ContainsFunc(r.Warnings, Warning.Unclean)
+}
 
 func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (TreeResult, error) {
 	var warnings []Warning

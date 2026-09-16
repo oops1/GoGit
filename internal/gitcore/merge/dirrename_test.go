@@ -74,6 +74,10 @@ func TestADirectorySplitWithoutAMajorityIsNotRenamed(t *testing.T) {
 	if !slices.Equal(paths(result.Tree), []string{"lib/new", "x/a", "y/b"}) {
 		t.Fatalf("tree = %v", paths(result.Tree))
 	}
+	want := []Warning{{Kind: WarningDirectoryRenameSplit, Path: "lib"}}
+	if len(result.Conflicts) != 0 || result.Clean() || !slices.Equal(result.Warnings, want) {
+		t.Fatalf("conflicts = %+v, warnings = %+v, want an unclean merge without stages", result.Conflicts, result.Warnings)
+	}
 }
 
 func TestADirectoryTheAddingSideStillHoldsIsRenamedOnlyByTheOtherSide(t *testing.T) {
@@ -98,6 +102,10 @@ func TestFilesThatWouldLandOnOnePathStayWhereTheyWere(t *testing.T) {
 
 	if !slices.Equal(paths(result.Tree), []string{"lib/new", "lib2/new", "src/a", "src/c"}) {
 		t.Fatalf("tree = %v", paths(result.Tree))
+	}
+	want := []Warning{{Kind: WarningDirectoryRenameCollision, Path: "src/new", Sources: "lib/new, lib2/new"}}
+	if result.Clean() || !slices.Equal(result.Warnings, want) {
+		t.Fatalf("warnings = %+v, want %+v", result.Warnings, want)
 	}
 }
 
@@ -184,7 +192,7 @@ func TestDirectoryRenameCountsClimbWhileTheNamesMatch(t *testing.T) {
 		"a/b/c/x": "z/b/c/x", "a/y": "z/y", "quiet/q": "loud/q",
 	}
 
-	got := directoryRenamesOf(renames, base, side, adder)
+	got, _ := directoryRenamesOf(renames, base, side, adder)
 
 	want := map[string]string{"top/lib": "up/lib", "top": "up", "flat": "", "a/b/c": "z/b/c", "a": "z"}
 	if !maps.Equal(got, want) {

@@ -48,7 +48,9 @@ type MergeResult struct {
 	Warnings    []merge.Warning
 }
 
-func (r MergeResult) Clean() bool { return len(r.Conflicts) == 0 }
+func (r MergeResult) Clean() bool {
+	return len(r.Conflicts) == 0 && !slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
+}
 
 const (
 	oursLabel         = "HEAD"
@@ -305,6 +307,9 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 	case m.opts.Mode == MergeSquash:
 		return result, errors.Join(m.stopAfterSquash(head.old, theirs, tree, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	case !result.Clean() || m.opts.NoCommit:
+		if len(result.Conflicts) == 0 && !result.Clean() {
+			message += emptyConflictList
+		}
 		return result, errors.Join(m.stopBeforeCommit(theirs, tree, message, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	}
 	message, edited, err := m.mergeCommitMessage(theirs, tree, message)
@@ -427,7 +432,11 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 	}
 	opts.OurRenames, opts.TheirRenames = detected.Ours, detected.Theirs
 	result, err := merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
-	m.warnings = append(m.warnings, result.Warnings...)
+	for _, warning := range result.Warnings {
+		if depth == 0 || !warning.Unclean() {
+			m.warnings = append(m.warnings, warning)
+		}
+	}
 	return result, err
 }
 

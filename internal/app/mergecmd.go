@@ -202,8 +202,15 @@ func reportMerge(reporter OperationReporter, req merge.Request, result ops.Merge
 }
 
 func mergeWarningText(warning gitmerge.Warning) string {
-	if warning.Kind == gitmerge.WarningRenameLimit {
+	switch warning.Kind {
+	case gitmerge.WarningRenameLimit:
 		return i18n.Tf("Operation.Log.MergeRenameLimit", warning.Needed)
+	case gitmerge.WarningDirectoryRenameSplit:
+		return i18n.Tf("Operation.Log.MergeDirectoryRenameSplit", warning.Path)
+	case gitmerge.WarningDirectoryRenameCollision:
+		return i18n.Tf("Operation.Log.MergeDirectoryRenameCollision", warning.Path, warning.Sources)
+	case gitmerge.WarningDirectoryRenameInTheWay:
+		return i18n.Tf("Operation.Log.MergeDirectoryRenameInTheWay", warning.Path, warning.Sources)
 	}
 	return i18n.Tf("Operation.Log.MergeDriverUnsupported", warning.Driver, warning.Path)
 }

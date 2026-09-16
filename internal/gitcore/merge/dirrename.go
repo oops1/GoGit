@@ -3,6 +3,7 @@ package merge
 import (
 	"maps"
 	"slices"
+	"strings"
 )
 
 type DirectoryRenames int
@@ -13,7 +14,7 @@ const (
 	DirectoryRenamesOff
 )
 
-func directoryRenamesOf(renames Renames, base, side, adder Snapshot) map[string]string {
+func directoryRenamesOf(renames Renames, base, side, adder Snapshot) (map[string]string, []string) {
 	located := relocatableDirectories(base, side, adder)
 	relevant := func(dir string) bool {
 		for at := dir; at != ""; at, _ = splitPath(at) {
@@ -44,6 +45,7 @@ func directoryRenamesOf(renames Renames, base, side, adder Snapshot) map[string]
 		}
 	}
 	out := map[string]string{}
+	var splits []string
 	for oldDir, targets := range counts {
 		best, bestCount, tied := "", 0, false
 		for newDir, count := range targets {
@@ -54,11 +56,14 @@ func directoryRenamesOf(renames Renames, base, side, adder Snapshot) map[string]
 				tied = true
 			}
 		}
-		if !tied {
-			out[oldDir] = best
+		if tied {
+			splits = append(splits, oldDir)
+			continue
 		}
+		out[oldDir] = best
 	}
-	return out
+	slices.Sort(splits)
+	return out, splits
 }
 
 func renamedAncestor(path string, dirRenames map[string]string) (string, string, bool) {
@@ -81,15 +86,17 @@ func (a *aligned) applyDirectoryRenames(opts TreeOptions) (Renames, Renames) {
 	if opts.DirectoryRenames == DirectoryRenamesOff {
 		return opts.OurRenames, opts.TheirRenames
 	}
-	ourDirs := directoryRenamesOf(opts.OurRenames, a.base, a.ours, a.theirs)
-	theirDirs := directoryRenamesOf(opts.TheirRenames, a.base, a.theirs, a.ours)
-	flag := opts.DirectoryRenames == DirectoryRenamesConflict
-	ours := a.moveIntoRenamedDirectories(a.ours, opts.OurRenames, theirDirs, ourDirs, flag)
-	theirs := a.moveIntoRenamedDirectories(a.theirs, opts.TheirRenames, ourDirs, theirDirs, flag)
+	ourDirs, ourSplits := directoryRenamesOf(opts.OurRenames, a.base, a.ours, a.theirs)
+	theirDirs, theirSplits := directoryRenamesOf(opts.TheirRenames, a.base, a.theirs, a.ours)
+	for _, dir := range append(ourSplits, theirSplits...) {
+		opts.warn(Warning{Kind: WarningDirectoryRenameSplit, Path: dir})
+	}
+	ours := a.moveIntoRenamedDirectories(a.ours, opts.OurRenames, theirDirs, ourDirs, opts)
+	theirs := a.moveIntoRenamedDirectories(a.theirs, opts.TheirRenames, ourDirs, theirDirs, opts)
 	return ours, theirs
 }
 
-func (a *aligned) moveIntoRenamedDirectories(side Snapshot, renames Renames, dirRenames, exclusions map[string]string, flag bool) Renames {
+func (a *aligned) moveIntoRenamedDirectories(side Snapshot, renames Renames, dirRenames, exclusions map[string]string, opts TreeOptions) Renames {
 	renames = maps.Clone(renames)
 	if len(dirRenames) == 0 {
 		return renames
@@ -98,7 +105,7 @@ func (a *aligned) moveIntoRenamedDirectories(side Snapshot, renames Renames, dir
 	for from, to := range renames {
 		sources[to] = from
 	}
-	arrivals := map[string]int{}
+	arrivals := map[string][]string{}
 	moves := map[string]string{}
 	for path := range side {
 		if _, existed := a.base[path]; existed {
@@ -109,15 +116,26 @@ func (a *aligned) moveIntoRenamedDirectories(side Snapshot, renames Renames, dir
 			continue
 		}
 		newPath := underDirectory(newDir, path[len(oldDir)+1:])
-		arrivals[newPath]++
+		arrivals[newPath] = append(arrivals[newPath], path)
 		if _, excluded := exclusions[newDir]; !excluded {
 			moves[path] = newPath
 		}
 	}
 	sideDirs := directoriesOf(side)
+	reported := map[string]bool{}
 	for _, path := range slices.Sorted(maps.Keys(moves)) {
 		newPath := moves[path]
-		if arrivals[newPath] > 1 || a.inTheWay(newPath, side, sideDirs) {
+		arrived := strings.Join(slices.Sorted(slices.Values(arrivals[newPath])), ", ")
+		switch {
+		case reported[newPath]:
+			continue
+		case a.inTheWay(newPath, side, sideDirs):
+			reported[newPath] = true
+			opts.warn(Warning{Kind: WarningDirectoryRenameInTheWay, Path: newPath, Sources: arrived})
+			continue
+		case len(arrivals[newPath]) > 1:
+			reported[newPath] = true
+			opts.warn(Warning{Kind: WarningDirectoryRenameCollision, Path: newPath, Sources: arrived})
 			continue
 		}
 		side[newPath] = side[path]
@@ -125,7 +143,7 @@ func (a *aligned) moveIntoRenamedDirectories(side Snapshot, renames Renames, dir
 		if from, renamed := sources[path]; renamed {
 			renames[from] = newPath
 		}
-		if flag {
+		if opts.DirectoryRenames == DirectoryRenamesConflict {
 			a.located[newPath] = true
 		}
 	}

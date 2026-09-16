@@ -219,6 +219,9 @@ func mergeScenarios() []mergeScenario {
 		{name: "renames within the default merge rename limit", target: "feature", setup: forkedHistory(
 			map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
 			map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})},
+		{name: "a directory rename split without a majority", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})},
+		{name: "a directory rename putting two files on one path", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "src/a.go", "lib2/c.go": "src/c.go"}, map[string]string{"lib/new.go": "new\n", "lib2/new.go": "other\n"})},
+		{name: "a directory rename onto a path already there", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "src/a.go", "lib/b.go": "src/b.go"}, map[string]string{"lib/new.go": "new\n", "src/new.go": "other\n"})},
 		{name: "a file added in a directory we renamed", target: "feature", setup: movedDirectoryHistory("")},
 		{name: "a file added in a directory we renamed, moved without asking", target: "feature", setup: movedDirectoryHistory("true")},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
@@ -423,6 +426,26 @@ func fileAgainstDirectoryHistory(directoryOnOurSide bool) func(b *mergeBuilder) 
 		first()
 		b.git("checkout", "-q", "feature")
 		second()
+		b.git("checkout", "-q", "main")
+	}
+}
+
+func uncleanDirectoryRenameHistory(moves, added map[string]string) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		base := map[string]string{"keep": "keep\n"}
+		for from := range moves {
+			base[from] = lines(from, 10)
+		}
+		b.commit("base", base)
+		b.git("branch", "feature")
+		for from, to := range moves {
+			b.o.write(b.dir, to, lines(from, 10))
+			b.git("add", "--", to)
+			b.git("rm", "-q", "--", from)
+		}
+		b.commit("move", nil)
+		b.git("checkout", "-q", "feature")
+		b.commit("add", added)
 		b.git("checkout", "-q", "main")
 	}
 }

@@ -20,13 +20,21 @@ type WarningKind int
 const (
 	WarningExternalDriver WarningKind = iota
 	WarningRenameLimit
+	WarningDirectoryRenameSplit
+	WarningDirectoryRenameCollision
+	WarningDirectoryRenameInTheWay
 )
 
 type Warning struct {
-	Kind   WarningKind
-	Path   string
-	Driver string
-	Needed int
+	Kind    WarningKind
+	Path    string
+	Driver  string
+	Needed  int
+	Sources string
+}
+
+func (w Warning) Unclean() bool {
+	return w.Kind >= WarningDirectoryRenameSplit
 }
 
 func (o TreeOptions) attributesFor(path string) PathAttributes {
