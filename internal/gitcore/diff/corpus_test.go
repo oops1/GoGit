@@ -2,6 +2,7 @@ package diff
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"strings"
 )
 
@@ -48,6 +49,81 @@ func commonTailPair() corpusPair {
 	}
 	return corpusPair{"common-tail-without-context", "a\nb\nb\na\nb\nb\na\n" + tail.String(), "a\nb\nb\na\n{\na\na\n    x\n" + tail.String()}
 }
+
+func tangledPair(name string, lines, alphabet int) corpusPair {
+	rng := rand.New(rand.NewPCG(1, 7))
+	var old, updated strings.Builder
+	for range lines {
+		line := fmt.Sprintf("t%d\n", rng.IntN(alphabet))
+		old.WriteString(line)
+		switch roll := rng.IntN(10); {
+		case roll < 3:
+			fmt.Fprintf(&updated, "t%d\n", rng.IntN(alphabet))
+		case roll < 4:
+		case roll < 5:
+			updated.WriteString(line)
+			fmt.Fprintf(&updated, "t%d\n", rng.IntN(alphabet))
+		default:
+			updated.WriteString(line)
+		}
+	}
+	return corpusPair{name, old.String(), updated.String()}
+}
+
+const patienceOld = `#include <stdio.h>
+
+// Frobs foo heartily
+int frobnitz(int foo)
+{
+    int i;
+    for(i = 0; i < 10; i++)
+    {
+        printf("Your answer is: ");
+        printf("%d\n", foo);
+    }
+}
+
+int fact(int n)
+{
+    if(n > 1)
+    {
+        return fact(n-1) * n;
+    }
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    frobnitz(fact(10));
+}
+`
+
+const patienceNew = `#include <stdio.h>
+
+int fib(int n)
+{
+    if(n > 2)
+    {
+        return fib(n-1) + fib(n-2);
+    }
+    return 1;
+}
+
+// Frobs foo heartily
+int frobnitz(int foo)
+{
+    int i;
+    for(i = 0; i < 10; i++)
+    {
+        printf("%d\n", foo);
+    }
+}
+
+int main(int argc, char **argv)
+{
+    frobnitz(fib(10));
+}
+`
 
 func corpus() []corpusPair {
 	big := repeatLines("line ", 1000)
@@ -161,6 +237,9 @@ func corpus() []corpusPair {
 		{"cr-at-eol-mixed", "a\r\nb\r\nc\rd\nsame\nlast\r", "a\nb\r\r\nc\rd\r\nsame\r\nlast\r\n"},
 		{"cr-at-eol-incomplete", "a\nb", "a\r\nb\r"},
 		{"cr-at-eol-with-space", "a \r\nb\t\r\nc\n", "a\nb\t\nc \r\n"},
+		{"patience-functions", patienceOld, patienceNew},
+		tangledPair("tangled-few-tokens", 1200, 10),
+		tangledPair("tangled-many-tokens", 300, 200),
 	}
 }
 
@@ -196,6 +275,8 @@ func variants() []variant {
 			args: []string{"--ignore-space-at-eol"},
 			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreSpaceAtEOL }),
 		},
+		{name: "patience", args: []string{"--patience"}, opts: withOptions(func(o *Options) { o.Algorithm = AlgorithmPatience })},
+		{name: "minimal", args: []string{"--minimal"}, opts: withOptions(func(o *Options) { o.Algorithm = AlgorithmMinimal })},
 		{
 			name: "ignore-cr-at-eol",
 			args: []string{"--ignore-cr-at-eol"},

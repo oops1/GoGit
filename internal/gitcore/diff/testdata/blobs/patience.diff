@@ -36,11 +36,10 @@ index 4eca417..5640cf3 100644
 -b
  c
 -a
--b
+ b
++a
  b
  a
-+b
-+a
 +c
 === insert-head
 diff --git a/old/insert-head.txt b/new/insert-head.txt
@@ -2979,20 +2978,25 @@ index bd6b2c6..23cc224 100644
  t100
  t160
 -t155
-+t23
- t157
+-t157
 -t4
 -t26
 -t193
- t40
+-t40
 -t70
-+t158
- t18
- t195
- t191
- t73
--t23
+-t18
+-t195
+-t191
+-t73
+ t23
 -t93
++t157
++t40
++t158
++t18
++t195
++t191
++t73
 +t180
 +t62
  t30

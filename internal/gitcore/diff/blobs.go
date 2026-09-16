@@ -60,9 +60,12 @@ func Changes(oldData, newData []byte, opts Options) []Change {
 
 func computeChanges(oldLines, newLines []string, opts Options) (*env, []change) {
 	e := prepareEnv(oldLines, newLines, opts)
-	if opts.Algorithm == AlgorithmHistogram {
+	switch opts.Algorithm {
+	case AlgorithmHistogram:
 		e.histogram(e.a.dstart+1, e.a.dend-e.a.dstart+1, e.b.dstart+1, e.b.dend-e.b.dstart+1)
-	} else {
+	case AlgorithmPatience:
+		e.patience(1, e.a.count(), 1, e.b.count())
+	default:
 		e.myers()
 	}
 	compact(e.a, e.b, opts.IndentHeuristic)

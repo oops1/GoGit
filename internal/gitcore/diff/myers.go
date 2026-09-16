@@ -42,7 +42,7 @@ func (e *env) myers() {
 		snakeCnt: snakeCount,
 		heurMin:  heurMinCost,
 	}
-	e.recsCmp(0, a.nreff, 0, b.nreff, kvd, false, xenv)
+	e.recsCmp(0, a.nreff, 0, b.nreff, kvd, e.opts.Algorithm == AlgorithmMinimal, xenv)
 }
 
 func (e *env) recsCmp(off1, lim1, off2, lim2 int, kvd *kvector, needMin bool, xenv *algoEnv) {

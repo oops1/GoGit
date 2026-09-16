@@ -36,11 +36,10 @@ index 4eca417..5640cf3 100644
 -b
  c
 -a
--b
+ b
++a
  b
  a
-+b
-+a
 +c
 === insert-head
 diff --git a/old/insert-head.txt b/new/insert-head.txt
@@ -244,14 +243,13 @@ index fc7c5a1..4cc69b5 100644
 @@ -1,8 +1,8 @@
  x
  x
--x
--x
- y
++y
+ x
+ x
+-y
  x
  x
  x
-+x
-+x
 === block-move
 diff --git a/old/block-move.txt b/new/block-move.txt
 index b566061..e7fae8f 100644
@@ -1200,35 +1198,35 @@ index 6faa5a3..e3af329 100644
 @@ -1,26 +1,25 @@
  #include <stdio.h>
  
+-// Frobs foo heartily
+-int frobnitz(int foo)
 +int fib(int n)
-+{
-+    if(n > 2)
-+    {
-+        return fib(n-1) + fib(n-2);
-+    }
-+    return 1;
-+}
-+
- // Frobs foo heartily
- int frobnitz(int foo)
  {
-     int i;
-     for(i = 0; i < 10; i++)
+-    int i;
+-    for(i = 0; i < 10; i++)
++    if(n > 2)
      {
 -        printf("Your answer is: ");
-         printf("%d\n", foo);
+-        printf("%d\n", foo);
++        return fib(n-1) + fib(n-2);
      }
++    return 1;
  }
  
 -int fact(int n)
--{
++// Frobs foo heartily
++int frobnitz(int foo)
+ {
 -    if(n > 1)
--    {
++    int i;
++    for(i = 0; i < 10; i++)
+     {
 -        return fact(n-1) * n;
--    }
++        printf("%d\n", foo);
+     }
 -    return 1;
--}
--
+ }
+ 
  int main(int argc, char **argv)
  {
 -    frobnitz(fact(10));
@@ -1359,10 +1357,10 @@ index 4b94828..8c0511a 100644
  t8
  t9
 -t0
- t5
 +t5
-+t1
+ t5
  t1
++t1
  t0
  t9
 -t6
@@ -1477,16 +1475,16 @@ index 4b94828..8c0511a 100644
 +t7
  t2
  t5
--t2
--t4
 +t3
 +t5
 +t7
 +t9
 +t6
  t2
- t6
+-t4
+-t2
 +t6
+ t6
  t3
 +t8
  t3
@@ -1639,8 +1637,8 @@ index 4b94828..8c0511a 100644
  t5
 -t2
 +t3
-+t6
  t6
++t6
 +t2
 +t4
  t7
@@ -1983,8 +1981,8 @@ index 4b94828..8c0511a 100644
  t9
  t5
 -t6
- t3
 -t3
+ t3
 -t1
 -t0
 -t1
@@ -2293,15 +2291,15 @@ index 4b94828..8c0511a 100644
  t6
 -t2
 -t3
-+t7
-+t1
- t3
+-t3
+-t8
+ t7
+-t6
+ t1
++t3
 +t5
 +t8
- t8
--t7
--t6
--t1
++t8
 +t9
 +t2
 +t9
@@ -2360,9 +2358,9 @@ index 4b94828..8c0511a 100644
 +t7
  t9
 -t2
--t1
--t6
  t1
+-t6
+-t1
 -t6
 +t4
 +t4
@@ -2560,17 +2558,17 @@ index 4b94828..8c0511a 100644
  t0
 -t5
 -t1
-+t6
+ t6
 +t8
 +t8
  t6
- t6
 -t1
 -t1
-+t7
  t6
-+t9
  t7
++t6
++t9
++t7
  t4
  t1
 -t1
