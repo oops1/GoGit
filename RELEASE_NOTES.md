@@ -1,60 +1,111 @@
-# Go.Git 1.4.1 — Merges and history
+# Go.Git 1.5.0 — Depth
 
-Merging, rebasing commit by commit, cherry-pick, revert, reset, tags, rerere,
-blame, file history, the reflog, branch comparison, branch switching and a pane
-that explains a commit.
+Staging lines and hunks, stashes, repository maintenance, journal search,
+git-flow the way SmartGit does it, hooks, merges and rebases taken all the way
+to how git behaves on the awkward cases, a faster blame and a sharper diff,
+and a sturdier network and secret store.
 
-## Fixed since 1.4.0
+## Staging and stash
 
-- The operation log no longer paints torn text in its counting line: the list
-  was handed the very slice the window kept rewriting in place, and the
-  renderer read a line while it was being replaced.
+- Lines and hunks can be picked right in the diff pane and applied to the
+  index or the working copy — staging, unstaging and discarding part of a
+  file, not only the whole of it. Checked against `git apply --cached` on 11
+  kinds of selection in both directions.
+- Stash: save, apply, unstage and drop from the Edit menu and from the
+  "Stash" node of the Branches panel; `refs/stash` and its reflog match git.
+  Switching branches over local changes that are in the way offers a choice —
+  carry them along in a stash, bring them over by merging, or overwrite them
+  — and remembers what you picked.
 
-## Merging
+## Repository maintenance
 
-- Three-way merging on our own engine: diff3 and zdiff3, renames, mode changes,
-  modify-against-delete conflicts and a virtual base for histories with more
-  than one merge base. The result matches `git merge` byte for byte across 41
-  oracle scenarios, state files and reflog entries included.
-- Fast-forward, no-fast-forward and squash; `MERGE_HEAD`, `MERGE_MSG`,
-  `MERGE_MODE`, `AUTO_MERGE` and `SQUASH_MSG` are written the way git writes
-  them, so git can finish a merge we started and the other way round.
-- In the app: the Branch menu, "Merge into current" in the branch panel, a
-  dialog for the modes, an operation window, a banner for an unfinished merge
-  with "Commit…" and "Abort", "take ours/theirs", "mark resolved" and the
-  `MERGE_MSG` text waiting in the commit dialog.
-- `rerere`: a conflict is remembered under the same id git uses, the resolution
-  is recorded when you commit, and it comes back on its own when the same
-  conflict appears again; `rerere.autoupdate` stages it for you.
+- Our own `repack`, `gc`, `prune`, `fsck`, `count-objects` and `commit-graph`
+  writing — no system git involved. The reachable object set, the packfiles
+  and the commit-graph file are checked byte for byte against the matching
+  git commands.
 
-## History
+## Journal search
 
-- cherry-pick and revert with `CHERRY_PICK_HEAD`/`REVERT_HEAD`, continue and
-  abort, offered in the journal's context menu.
-- rebase, `--onto`, and commit by commit: pick, reword, edit, squash, fixup and
-  drop. The state in `.git/rebase-merge` is git-compatible — git continues a
-  rebase we stopped, and we continue one git stopped. A dialog picks what
-  happens to each commit and reorders them.
-- `reset` in the soft, mixed and hard modes and for paths, with `ORIG_HEAD` and
-  a reflog entry; started from the journal.
-- Annotated and lightweight tags: created from the journal, deleted from the
-  branch panel.
-- blame that follows renames — line for line what `git blame --porcelain` says;
-  file history with `--follow`; both open from the files panel.
-- A branch's reflog, with the option to put the branch back on any record.
-- A comparison of two branches: how many commits are only here and only there,
-  and the files that differ.
-- A pane for the selected commit: Information (author, hash, dates, parents, the
-  branches and tags around it), Changes and Files.
-- Journal filters by branch, author and message substring, applied as a
-  predicate on the lazy history walk.
+- The journal filter searches by changed content (`-S`, `-G`, with a
+  "regular expression" checkbox) and by path — a second row of the filter
+  bar, alongside the branch, author and message filters from 1.4.0.
 
-## Branches and files
+## Git-flow
 
-- Branch switching from a dialog: a local branch, or a new one from a remote
-  branch that it follows from the start.
-- The Compare files window: two sides, editing and saving, navigation between
-  changes; the files selected in the working copy are filled in for you.
-- Panes torn off into their own windows come back when the layout is reset.
-- The operation log counts objects: "Writing objects: 12 of 35" is rewritten in
-  place instead of repeating the same line over and over.
+- Full git-flow in SmartGit's own style: a "Git-Flow ▾" toolbar button and
+  the same menu under "Branch → Git-Flow" — Start/Finish for Feature,
+  Hotfix, Release and Support Branch, Integrate Develop, a "Configure…"
+  dialog with a Light/Full switch and a change-or-switch-off question window,
+  and a Git-Flow Light mode with no `develop` branch. The command sequence
+  for every branch kind is checked hash for hash against SmartGit's own
+  operation log.
+- A double click switches branches, and the branch and file context menus
+  match SmartGit — including committing changes without staging them first.
+
+## Hooks
+
+- `pre-commit`, `commit-msg`, `post-checkout`, `post-merge`, `pre-rebase` and
+  `pre-push` run as separate processes the way git runs them — on Windows
+  only extensionless scripts and `.exe`, the way Git for Windows does it.
+  The commit and push dialogs show the hook's output and offer to bypass it.
+
+## Submodules and bisect
+
+- `.gitmodules` is checked the way `git fsck` checks it; the commit a
+  submodule is checked out at is tracked through conflicts, staging and
+  checkout, and a moved submodule shows up in working-copy status the way
+  `git status` reports it.
+- A bisect started by another git client is detected and shown in a banner
+  that can end it the way `git bisect reset` does.
+
+## Merges and history
+
+- Merging honours `merge.conflictStyle`, a path's diff attributes and custom
+  version labels in a conflict; directory renames follow
+  `merge.directoryRenames`, and rename detection is capped the same way
+  git's is.
+- Merge, cherry-pick, revert, rebase, applying a stash and git-flow steps now
+  stop with a conflict exactly where git stops — on a split renamed
+  directory, a path that quietly changed type, and names that differ only by
+  case — instead of silently filing something in the wrong place.
+- `rerere` tells apart identical-looking conflicts from the same merge; an
+  interactive rebase keeps commits that started out empty and skips commits
+  already applied upstream, the way git does.
+
+## Blame and diff
+
+- Blame follows only genuine renames onto the blamed path and walks history
+  through a date queue — noticeably faster on long histories; the `patience`
+  and `minimal` algorithms and an `ignore-cr-at-eol` option were added.
+- A path's diff attributes decide what counts as binary and are applied to
+  commit diffs; tree comparisons understand git pathspec magic and globs.
+
+## Network
+
+- An SSH connection offers a key from the vault, from ssh-agent, or from an
+  identity file, with a dialog for the key's passphrase; `core.sshCommand` is
+  parsed, the host key algorithms `known_hosts` lists are honoured, lines it
+  cannot parse are skipped, and the OpenSSH agent pipe is used when nothing
+  else answers.
+- The HTTP transport honours git's proxy, TLS, speed and `extraHeader`
+  settings and `protocol.allow`, sends a git user agent, follows the address
+  discovery redirected to, and can fall back to protocol v0 when the server
+  lacks the v2 features we asked for.
+
+## Passwords and the secret store
+
+- Credential helpers are no longer started as external programs: the Windows
+  Credential Manager (the generic and wincred formats) and Linux's Secret
+  Service (the generic and libsecret formats) are read directly; `credential.<url>`
+  settings apply with the same URL matching git uses.
+- The master password can be changed, a backup password is offered, and
+  keyring failures are explained; a broken `config.toml` is recovered
+  instead of failing to start. Logs mask token headers, URLs of any scheme,
+  keys that look like secrets, and composite values.
+
+## CI
+
+- Oracle tests against system git are split from the unit tests, race tests
+  are split the same way with a build cached per suite; test suites run in
+  parallel and duplicate or superseded runs are stopped; a build on `main`
+  skips suites already run on the same tree on `develop`.
