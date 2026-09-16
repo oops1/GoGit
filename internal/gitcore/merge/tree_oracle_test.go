@@ -44,10 +44,15 @@ func runGit(t *testing.T, dir string, args ...string) string {
 		"GIT_COMMITTER_NAME=oracle", "GIT_COMMITTER_EMAIL=oracle@example.com",
 		"GIT_AUTHOR_DATE=1700000000 +0000", "GIT_COMMITTER_DATE=1700000000 +0000",
 	)
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
-		if _, isExit := err.(*exec.ExitError); !isExit || !slices.Contains(args, "merge-tree") {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+		exit, isExit := err.(*exec.ExitError)
+		if !isExit || !slices.Contains(args, "merge-tree") {
+			var stderr []byte
+			if isExit {
+				stderr = exit.Stderr
+			}
+			t.Fatalf("git %v: %v\n%s%s", args, err, out, stderr)
 		}
 	}
 	return string(out)

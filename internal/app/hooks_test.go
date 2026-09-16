@@ -71,6 +71,7 @@ func commitWithHook(t *testing.T, line string, exit int) (*App, string, []string
 	t.Helper()
 	target := filepath.Join(t.TempDir(), "main")
 	buildStagedFileFixture(t, target)
+	setTestUserIdentity(t, target)
 	writeAppHook(t, target, "pre-commit", line, exit)
 	a := activatedWorkingApp(t, target)
 	waitForWorkingRows(t, a, 1)
