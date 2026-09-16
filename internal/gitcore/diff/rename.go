@@ -167,12 +167,20 @@ type renameState struct {
 	isRename []bool
 	minScore int
 	copies   bool
+	relevant func(path string) bool
+	needed   int
 }
 
 var emptyBlobID = hash.SumSHA1("blob", nil)
 
 func detectRenames(pairs []pair, source Objects, opts Options) ([]pair, error) {
+	out, _, err := detectRelevantRenames(pairs, source, opts, nil)
+	return out, err
+}
+
+func detectRelevantRenames(pairs []pair, source Objects, opts Options, relevant func(path string) bool) ([]pair, int, error) {
 	state := &renameState{
+		relevant: relevant,
 		source:   source,
 		pairs:    pairs,
 		spans:    make([][]spanEntry, len(pairs)),
@@ -198,7 +206,7 @@ func detectRenames(pairs []pair, source Objects, opts Options) ([]pair, error) {
 		}
 	}
 	if len(state.dsts) == 0 || len(state.srcs) == 0 {
-		return pairs, nil
+		return pairs, 0, nil
 	}
 
 	state.exactRenames()
@@ -206,15 +214,15 @@ func detectRenames(pairs []pair, source Objects, opts Options) ([]pair, error) {
 		if !state.copies {
 			state.cullSources()
 			if err := state.basenameMatches(state.minScore + int(0.5*(maxScore-float64(state.minScore)))); err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 			state.cullSources()
 		}
 		if err := state.inexactRenames(opts.RenameLimit); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
-	return state.rebuild(), nil
+	return state.rebuild(), state.needed, nil
 }
 
 func (s *renameState) record(dst, src, score int) {
@@ -225,7 +233,9 @@ func (s *renameState) record(dst, src, score int) {
 }
 
 func (s *renameState) cullSources() {
-	s.srcs = slices.DeleteFunc(s.srcs, func(src int) bool { return s.used[src] > 0 })
+	s.srcs = slices.DeleteFunc(s.srcs, func(src int) bool {
+		return s.used[src] > 0 || s.relevant != nil && !s.relevant(s.pairs[src].file.OldPath)
+	})
 }
 
 func (s *renameState) exactRenames() {
@@ -320,6 +330,7 @@ func (s *renameState) inexactRenames(limit int) error {
 		return nil
 	}
 	if limit > 0 && len(targets)*len(s.srcs) > limit*limit {
+		s.needed = max(len(targets), len(s.srcs))
 		return nil
 	}
 
