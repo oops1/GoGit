@@ -330,14 +330,13 @@ func mergeContent(path string, base, ours, theirs *Entry, mode object.Mode, mode
 	if attrs.Driver == DriverExternal {
 		opts.warn(Warning{Kind: WarningExternalDriver, Path: path, Driver: attrs.Name})
 	}
-	content, conflicted := baseData, true
+	content, conflicted := baseData, false
 	if attrs.Driver == DriverBinary || attrs.Driver == DriverExternal ||
 		attributes.IsBinaryContent(baseData) || attributes.IsBinaryContent(ourData) || attributes.IsBinaryContent(theirData) {
 		conflict.Kind = ConflictBinary
 		if opts.Depth == 0 {
 			return ours, conflict, nil
 		}
-		conflicted = false
 	} else {
 		merged := File(baseData, ourData, theirData, opts.fileOptionsFor(attrs))
 		content, conflicted = merged.Content, merged.Conflicts > 0
