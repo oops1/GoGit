@@ -85,6 +85,7 @@ const (
 	pickRevert      = "revert"
 	pickRebase      = "rebase"
 	pickRebaseByGit = "rebase started by git"
+	pickStashApply  = "stash apply"
 )
 
 func forkedHistory(ours, theirs map[string]string) func(b *mergeBuilder) {
@@ -220,6 +221,13 @@ func mergeScenarios() []mergeScenario {
 			map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
 			map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})},
 		{name: "a directory rename split without a majority", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})},
+		{name: "a cherry-pick into a directory rename split", pick: pickCherry, target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})},
+		{name: "a revert into a directory rename split", pick: pickRevert, target: "HEAD~1", setup: revertedSplitHistory},
+		{name: "a rebase over a directory rename split", pick: pickRebase, target: "main", setup: func(b *mergeBuilder) {
+			uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})(b)
+			b.git("checkout", "-q", "feature")
+		}},
+		{name: "a stash applied over a directory rename split", pick: pickStashApply, setup: stashedSplitHistory},
 		{name: "a directory rename putting two files on one path", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "src/a.go", "lib2/c.go": "src/c.go"}, map[string]string{"lib/new.go": "new\n", "lib2/new.go": "other\n"})},
 		{name: "a directory rename onto a path already there", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "src/a.go", "lib/b.go": "src/b.go"}, map[string]string{"lib/new.go": "new\n", "src/new.go": "other\n"})},
 		{name: "a file added in a directory we renamed", target: "feature", setup: movedDirectoryHistory("")},
@@ -777,16 +785,48 @@ func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOpt
 	switch s.pick {
 	case pickRebase:
 		rebased, err := Rebase(t.Context(), r, s.target, RebaseOptions{When: opts.When, Onto: s.onto})
-		return MergeResult{Conflicts: rebased.Conflicts}, err
+		return MergeResult{Conflicts: rebased.Conflicts, Warnings: rebased.Warnings}, err
 	case pickCherry, pickRevert:
 		run := CherryPick
 		if s.pick == pickRevert {
 			run = Revert
 		}
 		picked, err := run(t.Context(), r, s.target, PickOptions{When: opts.When})
-		return MergeResult{Conflicts: picked.Conflicts}, err
+		return MergeResult{Conflicts: picked.Conflicts, Warnings: picked.Warnings}, err
+	case pickStashApply:
+		applied, err := StashApply(t.Context(), r, 0)
+		return MergeResult{Conflicts: applied.Conflicts, Warnings: applied.Warnings}, err
 	}
 	return Merge(t.Context(), r, s.target, opts)
+}
+
+func splitLibraryMoves(b *mergeBuilder) {
+	b.o.t.Helper()
+	for from, to := range map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"} {
+		b.o.write(b.dir, to, lines(from, 10))
+		b.git("add", "--", to)
+		b.git("rm", "-q", "--", from)
+	}
+	b.commit("move", nil)
+}
+
+func splitLibraryBase() map[string]string {
+	return map[string]string{"keep": "keep\n", "lib/a.go": lines("lib/a.go", 10), "lib/b.go": lines("lib/b.go", 10)}
+}
+
+func revertedSplitHistory(b *mergeBuilder) {
+	base := splitLibraryBase()
+	base["lib/new.go"] = "new\n"
+	b.commit("base", base)
+	b.commit("drop", map[string]string{"lib/new.go": ""})
+	splitLibraryMoves(b)
+}
+
+func stashedSplitHistory(b *mergeBuilder) {
+	b.commit("base", splitLibraryBase())
+	b.write(map[string]string{"lib/new.go": "new\n"})
+	b.git("stash", "-q")
+	splitLibraryMoves(b)
 }
 
 func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
@@ -806,6 +846,8 @@ func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 			gitArgs := append(append([]string{"merge", "--no-edit"}, s.args...), s.target)
 			switch s.pick {
 			case "":
+			case pickStashApply:
+				gitArgs = []string{"stash", "apply"}
 			case pickRebase, pickRebaseByGit:
 				gitArgs = []string{"rebase", s.target}
 				if s.onto != "" {

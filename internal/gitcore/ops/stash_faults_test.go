@@ -51,6 +51,17 @@ func stashFaultScenarios() []faultScenario {
 			stashed(tr)
 			tr.commitFiles("upstream", map[string]string{"a": "upstream\n"})
 		}, pop},
+		{"apply over a directory rename split", func(tr *testRepo) {
+			tr.commitFiles("base", map[string]string{"lib/a": tenLines("a"), "lib/b": tenLines("b")})
+			tr.writeFile("lib/new", "new\n")
+			if err := Stage(tr.t.Context(), tr.repo, []string{"lib/new"}, StageOptions{}); err != nil {
+				tr.t.Fatal(err)
+			}
+			if _, err := StashPush(tr.t.Context(), tr.repo, StashOptions{When: mergeTime}); err != nil {
+				tr.t.Fatal(err)
+			}
+			tr.commitFiles("ours", map[string]string{"lib/a": "", "lib/b": "", "x/a": tenLines("a"), "y/b": tenLines("b")})
+		}, apply},
 		{"drop", stashed, func(ctx context.Context, tr *testRepo) error {
 			return StashDrop(ctx, tr.repo, 0)
 		}},

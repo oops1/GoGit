@@ -87,7 +87,7 @@ func (m *merger) applyRebaseStep(state *RebaseState, result *RebaseResult, step 
 		return false, err
 	}
 	state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
-	if len(picked.conflicts) > 0 {
+	if !picked.clean {
 		return true, m.stopForConflicts(state, result, step.Commit, plan, picked.conflicts)
 	}
 	if picked.empty && !plan.startedEmpty() {
@@ -135,7 +135,7 @@ func (m *merger) foldRebaseStep(state *RebaseState, result *RebaseResult, step R
 		return false, err
 	}
 	state.Todo, state.Done = state.Todo[1:], append(state.Done, step)
-	if len(picked.conflicts) > 0 {
+	if !picked.clean {
 		state.Amend = head.old
 		return true, m.stopForConflicts(state, result, step.Commit, plan, picked.conflicts)
 	}
@@ -188,10 +188,10 @@ func (m *merger) amendHead(head headTarget, previous *object.Commit, tree hash.O
 
 func (m *merger) stopForConflicts(state *RebaseState, result *RebaseResult, stopped hash.ObjectID, plan pickPlan, conflicts []string) error {
 	state.Stopped, state.Message, state.Author = stopped, plan.message, plan.author
-	result.Stopped, result.Conflicts = stopped, conflicts
+	result.Stopped, result.Conflicts, result.Warnings = stopped, conflicts, m.warnings
 	return joinErrors(
 		writeRebaseState(m.r, *state),
-		writeStateFile(m.r, mergeMsgFile, withConflictList(plan.message, conflicts)),
+		writeStateFile(m.r, mergeMsgFile, withConflictHint(plan.message, conflicts)),
 		m.rerere().conflicts(conflicts),
 	)
 }

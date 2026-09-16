@@ -92,6 +92,10 @@ func withConflictList(message string, conflicts []string) string {
 	if len(conflicts) == 0 {
 		return message
 	}
+	return withConflictHint(message, conflicts)
+}
+
+func withConflictHint(message string, conflicts []string) string {
 	var b strings.Builder
 	b.WriteString(message)
 	b.WriteString("\n# Conflicts:\n")

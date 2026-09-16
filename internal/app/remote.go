@@ -200,7 +200,7 @@ func (a *App) runPullBody(ctx context.Context, o *openedRepository, prog progres
 		reporter.Log(i18n.T("Operation.Log.NonFastForward"))
 	case err == nil && result.UpToDate:
 		reporter.Log(i18n.T("Operation.Log.UpToDate"))
-	case len(result.Rebase.Conflicts) > 0:
+	case result.Rebase.Conflicted():
 		reportRebaseStop(reporter, result.Rebase)
 	case err == nil && !result.Rebase.Old.IsZero():
 		reporter.Log(i18n.Tf("Operation.Log.Rebased", result.Rebase.Applied, shortHash(result.Rebase.New)))

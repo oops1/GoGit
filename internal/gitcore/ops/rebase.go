@@ -11,6 +11,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/hooks"
+	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
@@ -56,6 +57,11 @@ type RebaseResult struct {
 	Amend     hash.ObjectID
 	Message   string
 	Conflicts []string
+	Warnings  []merge.Warning
+}
+
+func (r RebaseResult) Conflicted() bool {
+	return len(r.Conflicts) > 0 || slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
 }
 
 func (r RebaseResult) Amending() bool { return !r.Amend.IsZero() }
