@@ -1131,3 +1131,21 @@ index 7986696..7446fd2 100644
 -line 997
 -line 998
 -line 999
+=== common-tail-without-context
+diff --git a/old/common-tail-without-context.txt b/new/common-tail-without-context.txt
+index 54e964f..bbccaff 100644
+--- a/old/common-tail-without-context.txt
++++ b/new/common-tail-without-context.txt
+@@ -2,9 +2,10 @@ a
+ b
+ b
+ a
+-b
+-b
++{
+ a
++a
++    x
+ unique 0
+ unique 9
+ unique 18

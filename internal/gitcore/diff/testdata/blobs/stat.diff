@@ -142,3 +142,6 @@
 === large-truncated
  {old => new}/large-truncated.txt | 500 ---------------------------------------
  1 file changed, 500 deletions(-)
+=== common-tail-without-context
+ {old => new}/common-tail-without-context.txt | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)

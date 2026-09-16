@@ -95,3 +95,5 @@
 1	1	{old => new}/large-one-change.txt
 === large-truncated
 0	500	{old => new}/large-truncated.txt
+=== common-tail-without-context
+3	2	{old => new}/common-tail-without-context.txt

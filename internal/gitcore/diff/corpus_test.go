@@ -36,6 +36,19 @@ func ignorableBlankMix() string {
 	return out.String()
 }
 
+func commonTailPair() corpusPair {
+	tokens := map[byte]string{'a': "a\n", 'b': "b\n", 'n': "\n", 'x': "    x\n", '{': "{\n", '}': "}\n"}
+	var tail strings.Builder
+	for _, token := range []byte("uuuuuuuuub}aubnnuuuuuuuxanuanu{uun{xuu{uu{uu{ua}unu{uu}nuuu}a}uuuuua{uuuuuuuuuu{}uaxu}b{uuxubuuuuuaunuau}uuxauuuunu{{bubuuu{uuuu}uuuuuxunuub{ubuuu") {
+		if token == 'u' {
+			fmt.Fprintf(&tail, "unique %d\n", tail.Len())
+			continue
+		}
+		tail.WriteString(tokens[token])
+	}
+	return corpusPair{"common-tail-without-context", "a\nb\nb\na\nb\nb\na\n" + tail.String(), "a\nb\nb\na\n{\na\na\n    x\n" + tail.String()}
+}
+
 func corpus() []corpusPair {
 	big := repeatLines("line ", 1000)
 	bigChanged := strings.Replace(big, "line 500\n", "changed 500\n", 1)
@@ -144,6 +157,7 @@ func corpus() []corpusPair {
 		{"large-identical", big, big},
 		{"large-one-change", big, bigChanged},
 		{"large-truncated", big, repeatLines("line ", 500)},
+		commonTailPair(),
 	}
 }
 
