@@ -979,6 +979,7 @@
   "Operation.Log.SwitchCarried": "Локальные изменения перенесены на %s",
   "Operation.Log.SwitchCarryConflicts": "Перенос изменений дал конфликты: %s. Stash сохранён",
   "Operation.Log.SSHCommandIgnored": "core.sshCommand или GIT_SSH_COMMAND: Go.Git не поддерживает и пропускает %s",
+  "Operation.Log.CredentialHelperIgnored": "credential.helper: Go.Git не запускает программы-помощники и пропускает %s",
   "Operation.Log.SwitchOverwritten": "Локальные изменения перезаписаны: %s",
   "Operation.Log.SwitchStashed": "Локальные изменения сохранены в %s",
   "Operation.Log.Switched": "Теперь на «%s»",

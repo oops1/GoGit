@@ -7,6 +7,7 @@ import (
 
 	gitconfig "github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/credential"
+	"github.com/oops1/gogit/internal/gitcore/transport"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/settings"
 	"github.com/oops1/gogit/internal/vault"
@@ -93,13 +94,62 @@ func (a *App) openRepositoryHelperEntries() []settings.CredentialHelperEntry {
 }
 
 func defaultRemoteRawURL(cfg *gitconfig.Config, defaultRemote string) string {
+	if raw, ok := configuredRemoteRawURL(cfg, defaultRemote); ok {
+		return raw
+	}
+	return gitHelperProbeRawURL
+}
+
+func configuredRemoteRawURL(cfg *gitconfig.Config, defaultRemote string) (string, bool) {
 	if rem, ok := cfg.Remote(defaultRemote); ok && len(rem.URLs) > 0 {
-		return rem.URLs[0]
+		return rem.URLs[0], true
 	}
 	for _, rem := range cfg.Remotes() {
 		if len(rem.URLs) > 0 {
-			return rem.URLs[0]
+			return rem.URLs[0], true
 		}
 	}
-	return gitHelperProbeRawURL
+	return "", false
+}
+
+func (a *App) remoteRawURLForCredentials(o *openedRepository) string {
+	r, err := a.freshRepo(o)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = r.Close() }()
+	raw, _ := configuredRemoteRawURL(r.Config(), a.effectiveDefaultRemote(r))
+	return raw
+}
+
+func (a *App) reportIgnoredCredentialHelpers(reporter OperationReporter, rawURL string) {
+	if a.cfg.Git.CredentialSource == config.CredentialSourceVault {
+		return
+	}
+	endpoint, password, err := transport.ParseURL(rawURL)
+	password.Wipe()
+	if err != nil || (endpoint.Scheme != transport.SchemeHTTP && endpoint.Scheme != transport.SchemeHTTPS) {
+		return
+	}
+	_, infos, err := credential.FromConfig(a.repositoryConfigForCredentials(), rawURL)
+	if err != nil {
+		return
+	}
+	var ignored []string
+	for _, info := range infos {
+		if !info.Supported {
+			ignored = append(ignored, ignoredHelperLabel(info.Name))
+		}
+	}
+	if len(ignored) > 0 {
+		reporter.Log(i18n.Tf("Operation.Log.CredentialHelperIgnored", strings.Join(ignored, ", ")))
+	}
+}
+
+func ignoredHelperLabel(name string) string {
+	if command, ok := strings.CutPrefix(name, "!"); ok {
+		program, _, _ := strings.Cut(strings.TrimSpace(command), " ")
+		return "!" + program
+	}
+	return name
 }

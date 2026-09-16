@@ -73,6 +73,7 @@ func (a *App) runRemoteJob(title string, reloadTree bool, job remoteJob) {
 	a.RunOperation(title, func(ctx context.Context, reporter OperationReporter) error {
 		prog := newOperationProgress(reporter)
 		a.reportIgnoredSSHArguments(reporter)
+		a.reportIgnoredCredentialHelpers(reporter, a.remoteRawURLForCredentials(o))
 		err := job(ctx, o, prog, reporter)
 		reportTransportError(reporter, err)
 		a.finishRemoteOperation(reloadTree)
@@ -355,6 +356,7 @@ func (a *App) startClone(result clone.Result) {
 	a.RunOperation(i18n.T("Operation.Title.Clone"), func(ctx context.Context, reporter OperationReporter) error {
 		prog := newOperationProgress(reporter)
 		a.reportIgnoredSSHArguments(reporter)
+		a.reportIgnoredCredentialHelpers(reporter, result.URL)
 		r, err := cloneRepository(ctx, result.URL, result.Directory, ops.CloneOptions{
 			Branch:       result.Branch,
 			SingleBranch: result.Branch != "",
