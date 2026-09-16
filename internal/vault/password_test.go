@@ -45,6 +45,20 @@ func TestPasswordUnlockerRejectsKindMismatch(t *testing.T) {
 	}
 }
 
+func TestPasswordUnlockerWipeZeroesItsCopyOfThePassword(t *testing.T) {
+	u := NewPasswordUnlocker([]byte("secret"), TestSlotParams())
+	kept := u.password
+	u.Wipe()
+	if u.password != nil {
+		t.Fatal("password must be dropped")
+	}
+	for _, b := range kept {
+		if b != 0 {
+			t.Fatalf("password copy not zeroed: %v", kept)
+		}
+	}
+}
+
 func TestPasswordUnlockerKind(t *testing.T) {
 	if NewPasswordUnlocker(nil, TestSlotParams()).Kind() != SlotPassword {
 		t.Fatal("wrong kind")

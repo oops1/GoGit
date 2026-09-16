@@ -21,4 +21,8 @@ var (
 	ErrInvalidPath        = errors.New("vault: invalid path")
 	ErrInvalidKeyFile     = errors.New("vault: invalid key file")
 	ErrNilUnlocker        = errors.New("vault: nil unlocker")
+	ErrRollback           = errors.New("vault: the file is older than the last one seen")
+	ErrChangedElsewhere   = errors.New("vault: the file was re-keyed by another process")
+	ErrKeyringLocked      = errors.New("vault: the system keyring is locked")
+	ErrKeyNotStored       = errors.New("vault: the system keyring did not store the key")
 )

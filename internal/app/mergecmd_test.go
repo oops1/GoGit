@@ -14,6 +14,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	gitmerge "github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -440,6 +441,11 @@ func TestTheMergeLogExplainsEveryOutcome(t *testing.T) {
 		{"fast-forward", merge.Request{}, ops.MergeResult{FastForward: true, New: id}, nil, i18n.Tf("Operation.Log.MergeFastForward", shortHash(id))},
 		{"squash", merge.Request{Mode: merge.ModeSquash}, ops.MergeResult{}, nil, i18n.T("Operation.Log.MergeSquashed")},
 		{"no commit", merge.Request{NoCommit: true}, ops.MergeResult{}, nil, i18n.T("Operation.Log.MergeStopped")},
+		{"unsupported driver", merge.Request{}, ops.MergeResult{Committed: true, New: id, Warnings: []gitmerge.Warning{{Kind: gitmerge.WarningExternalDriver, Path: "p", Driver: "custom"}}}, nil, i18n.Tf("Operation.Log.MergeDriverUnsupported", "custom", "p")},
+		{"directory rename split", merge.Request{}, ops.MergeResult{Warnings: []gitmerge.Warning{{Kind: gitmerge.WarningDirectoryRenameSplit, Path: "lib"}}}, nil, i18n.Tf("Operation.Log.MergeDirectoryRenameSplit", "lib")},
+		{"directory rename collision", merge.Request{}, ops.MergeResult{Warnings: []gitmerge.Warning{{Kind: gitmerge.WarningDirectoryRenameCollision, Path: "src/new", Sources: "a/new, b/new"}}}, nil, i18n.Tf("Operation.Log.MergeDirectoryRenameCollision", "src/new", "a/new, b/new")},
+		{"directory rename in the way", merge.Request{}, ops.MergeResult{Warnings: []gitmerge.Warning{{Kind: gitmerge.WarningDirectoryRenameInTheWay, Path: "src/new", Sources: "a/new"}}}, nil, i18n.Tf("Operation.Log.MergeDirectoryRenameInTheWay", "src/new", "a/new")},
+		{"rename limit", merge.Request{}, ops.MergeResult{Committed: true, New: id, Warnings: []gitmerge.Warning{{Kind: gitmerge.WarningRenameLimit, Needed: 9000}}}, nil, i18n.Tf("Operation.Log.MergeRenameLimit", 9000)},
 	} {
 		views := captureOperationViews(t)
 		a.RunOperation(c.name, func(_ context.Context, reporter OperationReporter) error {

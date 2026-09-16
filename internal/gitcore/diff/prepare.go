@@ -75,7 +75,7 @@ func prepareSource(pass int, lines []string, cf *classifier, opts Options) *sour
 	for at, record := range lines {
 		s.ids[at] = cf.classify(pass, lineKey(record, opts.IgnoreWhitespace))
 	}
-	if opts.Algorithm != AlgorithmHistogram {
+	if opts.Algorithm.classic() {
 		s.rindex = make([]int, len(lines))
 		s.ha = make([]int, len(lines))
 	}
@@ -90,7 +90,7 @@ func prepareEnv(linesA, linesB []string, opts Options) *env {
 		cf:   cf,
 		opts: opts,
 	}
-	if opts.Algorithm != AlgorithmHistogram {
+	if opts.Algorithm.classic() {
 		e.trimEnds()
 		e.cleanupRecords()
 	}

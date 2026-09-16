@@ -3,130 +3,52 @@ package vault
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/godbus/dbus/v5"
+
+	"github.com/oops1/gogit/internal/secretservice"
 )
 
 const (
-	secretServiceKEKSize      = 32
-	secretServiceIDSize       = 16
-	secretServiceBusName      = "org.freedesktop.secrets"
-	secretServiceObjectPath   = dbus.ObjectPath("/org/freedesktop/secrets")
-	secretServiceDefaultAlias = dbus.ObjectPath("/org/freedesktop/secrets/aliases/default")
-	secretServiceApplication  = "gogit"
+	secretServiceKEKSize     = 32
+	secretServiceIDSize      = 16
+	secretServiceApplication = "gogit"
+	secretServiceContentType = "application/octet-stream"
 )
 
-type secretServiceSecret struct {
-	Session     dbus.ObjectPath
-	Parameters  []byte
-	Value       []byte
-	ContentType string
-}
-
 type secretBus interface {
-	openSession() (dbus.ObjectPath, error)
-	findItem(attrs map[string]string) (dbus.ObjectPath, bool, error)
-	createItem(session dbus.ObjectPath, label string, attrs map[string]string, secret []byte) error
-	readSecret(session, item dbus.ObjectPath) ([]byte, error)
-	close()
+	OpenSession(ctx context.Context) (dbus.ObjectPath, error)
+	DefaultCollection(ctx context.Context) (dbus.ObjectPath, error)
+	FindItem(ctx context.Context, attrs map[string]string) (item dbus.ObjectPath, locked, found bool, err error)
+	CreateItem(ctx context.Context, collection, session dbus.ObjectPath, label string, attrs map[string]string, secret []byte, contentType string) (item, prompt dbus.ObjectPath, err error)
+	Unlock(ctx context.Context, objects []dbus.ObjectPath) (unlocked []dbus.ObjectPath, prompt dbus.ObjectPath, err error)
+	Prompt(ctx context.Context, prompt dbus.ObjectPath) (dismissed bool, err error)
+	GetSecret(ctx context.Context, session, item dbus.ObjectPath) ([]byte, error)
+	Close()
 }
 
-type dbusSecretBus struct {
-	conn *dbus.Conn
-}
-
-func newDBusSecretBus() (secretBus, error) {
-	conn, err := dbus.ConnectSessionBus()
+func dialDBusSecretBus() (secretBus, error) {
+	conn, err := secretservice.Dial()
 	if err != nil {
 		return nil, fmt.Errorf("vault: %w", err)
 	}
-	return &dbusSecretBus{conn: conn}, nil
+	return conn, nil
 }
 
-func (b *dbusSecretBus) close() {
-	_ = b.conn.Close()
-}
-
-func (b *dbusSecretBus) service() dbus.BusObject {
-	return b.conn.Object(secretServiceBusName, secretServiceObjectPath)
-}
-
-func (b *dbusSecretBus) openSession() (dbus.ObjectPath, error) {
-	var (
-		output  dbus.Variant
-		session dbus.ObjectPath
-	)
-	call := b.service().Call("org.freedesktop.Secret.Service.OpenSession", 0, "plain", dbus.MakeVariant(""))
-	if call.Err != nil {
-		return "", fmt.Errorf("vault: %w", call.Err)
-	}
-	if err := call.Store(&output, &session); err != nil {
-		return "", fmt.Errorf("vault: %w", err)
-	}
-	return session, nil
-}
-
-func (b *dbusSecretBus) findItem(attrs map[string]string) (dbus.ObjectPath, bool, error) {
-	var (
-		unlocked []dbus.ObjectPath
-		locked   []dbus.ObjectPath
-	)
-	call := b.service().Call("org.freedesktop.Secret.Service.SearchItems", 0, attrs)
-	if call.Err != nil {
-		return "", false, fmt.Errorf("vault: %w", call.Err)
-	}
-	if err := call.Store(&unlocked, &locked); err != nil {
-		return "", false, fmt.Errorf("vault: %w", err)
-	}
-	if len(unlocked) == 0 {
-		return "", false, nil
-	}
-	return unlocked[0], true, nil
-}
-
-func (b *dbusSecretBus) createItem(session dbus.ObjectPath, label string, attrs map[string]string, secret []byte) error {
-	properties := map[string]dbus.Variant{
-		"org.freedesktop.Secret.Item.Label":      dbus.MakeVariant(label),
-		"org.freedesktop.Secret.Item.Attributes": dbus.MakeVariant(attrs),
-	}
-	value := secretServiceSecret{
-		Session:     session,
-		Parameters:  []byte{},
-		Value:       secret,
-		ContentType: "application/octet-stream",
-	}
-	collection := b.conn.Object(secretServiceBusName, secretServiceDefaultAlias)
-	call := collection.Call("org.freedesktop.Secret.Collection.CreateItem", 0, properties, value, true)
-	if call.Err != nil {
-		return fmt.Errorf("vault: %w", call.Err)
-	}
-	return nil
-}
-
-func (b *dbusSecretBus) readSecret(session, item dbus.ObjectPath) ([]byte, error) {
-	itemObject := b.conn.Object(secretServiceBusName, item)
-	var secret secretServiceSecret
-	call := itemObject.Call("org.freedesktop.Secret.Item.GetSecret", 0, session)
-	if call.Err != nil {
-		return nil, fmt.Errorf("vault: %w", call.Err)
-	}
-	if err := call.Store(&secret); err != nil {
-		return nil, fmt.Errorf("vault: %w", err)
-	}
-	return secret.Value, nil
-}
-
-var dialSecretBus = newDBusSecretBus
+var dialSecretBus = dialDBusSecretBus
 
 func SecretServiceAvailable() bool {
 	bus, err := dialSecretBus()
 	if err != nil {
 		return false
 	}
-	defer bus.close()
-	_, err = bus.openSession()
+	defer bus.Close()
+	_, err = bus.OpenSession(context.Background())
 	return err == nil
 }
 
@@ -150,12 +72,55 @@ func (u *SecretServiceUnlocker) attributes(id []byte) map[string]string {
 	}
 }
 
-func (u *SecretServiceUnlocker) Wrap(_ context.Context, dek []byte) (Slot, error) {
+func runSecretServicePrompt(ctx context.Context, bus secretBus, prompt dbus.ObjectPath) error {
+	if secretservice.IsNoObject(prompt) {
+		return ErrKeyringLocked
+	}
+	dismissed, err := bus.Prompt(ctx, prompt)
+	if errors.Is(err, secretservice.ErrPromptTimeout) {
+		return fmt.Errorf("%w: %w", ErrKeyringLocked, err)
+	}
+	if err != nil {
+		return err
+	}
+	if dismissed {
+		return ErrKeyringLocked
+	}
+	return nil
+}
+
+func unlockSecretServiceObject(ctx context.Context, bus secretBus, object dbus.ObjectPath) error {
+	unlocked, prompt, err := bus.Unlock(ctx, []dbus.ObjectPath{object})
+	if err != nil {
+		return err
+	}
+	if slices.Contains(unlocked, object) {
+		return nil
+	}
+	return runSecretServicePrompt(ctx, bus, prompt)
+}
+
+func (u *SecretServiceUnlocker) Wrap(ctx context.Context, dek []byte) (Slot, error) {
 	bus, err := dialSecretBus()
 	if err != nil {
 		return Slot{}, ErrSlotUnavailable
 	}
-	defer bus.close()
+	defer bus.Close()
+
+	session, err := bus.OpenSession(ctx)
+	if err != nil {
+		return Slot{}, err
+	}
+	collection, err := bus.DefaultCollection(ctx)
+	if err != nil {
+		return Slot{}, err
+	}
+	if secretservice.IsNoObject(collection) {
+		return Slot{}, ErrSlotUnavailable
+	}
+	if err := unlockSecretServiceObject(ctx, bus, collection); err != nil {
+		return Slot{}, err
+	}
 
 	id := make([]byte, secretServiceIDSize)
 	_, _ = rand.Read(id)
@@ -163,11 +128,16 @@ func (u *SecretServiceUnlocker) Wrap(_ context.Context, dek []byte) (Slot, error
 	_, _ = rand.Read(kek)
 	defer clear(kek)
 
-	session, err := bus.openSession()
+	item, prompt, err := bus.CreateItem(ctx, collection, session, u.label, u.attributes(id), kek, secretServiceContentType)
 	if err != nil {
 		return Slot{}, err
 	}
-	if err := bus.createItem(session, u.label, u.attributes(id), kek); err != nil {
+	if secretservice.IsNoObject(item) {
+		if err := runSecretServicePrompt(ctx, bus, prompt); err != nil {
+			return Slot{}, err
+		}
+	}
+	if err := u.verifyStoredKey(ctx, bus, session, id, kek); err != nil {
 		return Slot{}, err
 	}
 
@@ -186,7 +156,38 @@ func (u *SecretServiceUnlocker) Wrap(_ context.Context, dek []byte) (Slot, error
 	}, nil
 }
 
-func (u *SecretServiceUnlocker) Unwrap(_ context.Context, slot Slot) ([]byte, error) {
+func (u *SecretServiceUnlocker) verifyStoredKey(ctx context.Context, bus secretBus, session dbus.ObjectPath, id, kek []byte) error {
+	got, err := u.readKey(ctx, bus, session, id)
+	if errors.Is(err, ErrWrongKey) {
+		return ErrKeyNotStored
+	}
+	if err != nil {
+		return err
+	}
+	defer clear(got)
+	if subtle.ConstantTimeCompare(got, kek) != 1 {
+		return ErrKeyNotStored
+	}
+	return nil
+}
+
+func (u *SecretServiceUnlocker) readKey(ctx context.Context, bus secretBus, session dbus.ObjectPath, id []byte) ([]byte, error) {
+	item, locked, found, err := bus.FindItem(ctx, u.attributes(id))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, ErrWrongKey
+	}
+	if locked {
+		if err := unlockSecretServiceObject(ctx, bus, item); err != nil {
+			return nil, err
+		}
+	}
+	return bus.GetSecret(ctx, session, item)
+}
+
+func (u *SecretServiceUnlocker) Unwrap(ctx context.Context, slot Slot) ([]byte, error) {
 	if slot.Kind != SlotSecretService {
 		return nil, ErrSlotKindMismatch
 	}
@@ -194,20 +195,13 @@ func (u *SecretServiceUnlocker) Unwrap(_ context.Context, slot Slot) ([]byte, er
 	if err != nil {
 		return nil, ErrSlotUnavailable
 	}
-	defer bus.close()
+	defer bus.Close()
 
-	session, err := bus.openSession()
+	session, err := bus.OpenSession(ctx)
 	if err != nil {
 		return nil, err
 	}
-	item, ok, err := bus.findItem(u.attributes(slot.Salt))
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, ErrWrongKey
-	}
-	kek, err := bus.readSecret(session, item)
+	kek, err := u.readKey(ctx, bus, session, slot.Salt)
 	if err != nil {
 		return nil, err
 	}

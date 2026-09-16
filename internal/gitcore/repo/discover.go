@@ -106,7 +106,25 @@ func walkUp(start string, opts DiscoverOptions) (Layout, error) {
 	}
 }
 
+func DiscoverWorkTree(dir string) (Layout, bool) {
+	layout, found, err := probeDotGit(absClean(dir), DiscoverOptions{Env: noEnvironment})
+	return layout, found && err == nil
+}
+
+func noEnvironment(string) string { return "" }
+
 func probe(dir string, opts DiscoverOptions) (Layout, bool, error) {
+	if layout, found, err := probeDotGit(dir, opts); found || err != nil {
+		return layout, found, err
+	}
+	if common, ok := gitDirectoryCommon(dir); ok {
+		layout, err := buildLayout(dir, common, "", opts)
+		return layout, true, err
+	}
+	return Layout{}, false, nil
+}
+
+func probeDotGit(dir string, opts DiscoverOptions) (Layout, bool, error) {
 	dot := filepath.Join(dir, dotGit)
 	info, err := os.Stat(dot)
 	switch {
@@ -122,10 +140,6 @@ func probe(dir string, opts DiscoverOptions) (Layout, bool, error) {
 		}
 		common, _ := gitDirectoryCommon(target)
 		layout, err := buildLayout(target, common, dir, opts)
-		return layout, true, err
-	}
-	if common, ok := gitDirectoryCommon(dir); ok {
-		layout, err := buildLayout(dir, common, "", opts)
 		return layout, true, err
 	}
 	return Layout{}, false, nil

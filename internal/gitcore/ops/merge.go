@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -32,6 +34,7 @@ type MergeOptions struct {
 	Message  string
 	When     time.Time
 	Progress progress.Func
+	Hooks    HookOptions
 }
 
 type MergeResult struct {
@@ -42,15 +45,17 @@ type MergeResult struct {
 	FastForward bool
 	Committed   bool
 	Conflicts   []string
+	Warnings    []merge.Warning
 }
 
-func (r MergeResult) Clean() bool { return len(r.Conflicts) == 0 }
+func (r MergeResult) Clean() bool {
+	return len(r.Conflicts) == 0 && !slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
+}
 
 const (
 	oursLabel         = "HEAD"
 	virtualLabelOurs  = "Temporary merge branch 1"
 	virtualLabelTheir = "Temporary merge branch 2"
-	virtualMarkerSize = merge.DefaultMarkerSize + 2
 	mergeStrategyNote = ": Merge made by the 'ort' strategy."
 	fastForwardNote   = ": Fast-forward"
 	resetToHeadNote   = "reset: moving to HEAD"
@@ -59,12 +64,14 @@ const (
 )
 
 type merger struct {
-	ctx    context.Context
-	r      *repo.Repository
-	wt     *workingTree
-	rc     *repoContext
-	opts   MergeOptions
-	action string
+	ctx      context.Context
+	r        *repo.Repository
+	wt       *workingTree
+	rc       *repoContext
+	opts     MergeOptions
+	action   string
+	hooks    hookRunner
+	warnings []merge.Warning
 }
 
 func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*merger, error) {
@@ -83,7 +90,7 @@ func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*me
 	if opts.When.IsZero() {
 		opts.When = time.Now()
 	}
-	return &merger{ctx: ctx, r: r, wt: wt, rc: rc, opts: opts}, nil
+	return &merger{ctx: ctx, r: r, wt: wt, rc: rc, opts: opts, hooks: openHooks(r, opts.Hooks)}, nil
 }
 
 func (m *merger) close() {
@@ -150,6 +157,26 @@ func (m *merger) refuseWhileMerging() error {
 }
 
 func (m *merger) integrate(in incoming) (MergeResult, error) {
+	result, err := m.combine(in)
+	if flag, ok := m.postMergeFlag(result); ok && err == nil {
+		m.hooks.notify(m.ctx, hooks.Invocation{Name: hookPostMerge, Args: []string{flag}})
+	}
+	return result, err
+}
+
+func (m *merger) postMergeFlag(result MergeResult) (string, bool) {
+	switch {
+	case result.UpToDate || result.Old.IsZero():
+		return "", false
+	case m.opts.Mode == MergeSquash:
+		return squashMergeFlag, true
+	case result.Committed || result.FastForward:
+		return plainMergeFlag, true
+	}
+	return "", false
+}
+
+func (m *merger) combine(in incoming) (MergeResult, error) {
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return MergeResult{}, err
@@ -258,10 +285,11 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 	if err != nil {
 		return result, err
 	}
-	merged, err := m.mergeTrees(base, oursTree, theirsTree, merge.Labels{Ours: oursLabel, Theirs: in.label}, 0)
+	merged, err := m.mergeTrees(base, oursTree, theirsTree, merge.Labels{Ours: oursLabel, Theirs: in.label, Base: baseLabel(bases)}, 0)
 	if err != nil {
 		return result, err
 	}
+	result.Warnings = m.warnings
 	to := outcomeOf(merged)
 	if err := m.moveTo(ours, to, true); err != nil {
 		return result, err
@@ -279,7 +307,14 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 	case m.opts.Mode == MergeSquash:
 		return result, errors.Join(m.stopAfterSquash(head.old, theirs, tree, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	case !result.Clean() || m.opts.NoCommit:
+		if len(result.Conflicts) == 0 && !result.Clean() {
+			message = withConflictHint(message, nil)
+		}
 		return result, errors.Join(m.stopBeforeCommit(theirs, tree, message, result.Conflicts), m.rerere().conflicts(result.Conflicts))
+	}
+	message, edited, err := m.mergeCommitMessage(theirs, tree, message)
+	if err != nil {
+		return result, err
 	}
 	commit, err := m.writeMergeCommit(tree, head.old, theirs, message)
 	if err != nil {
@@ -289,7 +324,29 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 		return result, err
 	}
 	result.New, result.Committed = commit, true
+	if edited {
+		return result, clearMergeState(m.r)
+	}
 	return result, nil
+}
+
+func (m *merger) mergeCommitMessage(theirs, tree hash.ObjectID, message string) (string, bool, error) {
+	if !m.opts.Hooks.NoVerify {
+		if err := m.hooks.verifyCommit(m.ctx, hookPreMergeCommit); err != nil {
+			return "", false, errors.Join(err, m.stopBeforeCommit(theirs, tree, message, nil))
+		}
+	}
+	if !m.hooks.editsMessage() {
+		return message, false, nil
+	}
+	if err := m.stopBeforeCommit(theirs, tree, message, nil); err != nil {
+		return "", false, err
+	}
+	edited, err := m.hooks.editMessage(m.ctx, mergeMsgFile, strings.TrimSuffix(message, "\n"), messageSourceMerge)
+	if err == nil && edited == "" {
+		err = ErrEmptyMessage
+	}
+	return edited, true, err
 }
 
 type stateFile struct{ name, content string }
@@ -357,21 +414,38 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 		}
 		snapshots[i] = s
 	}
-	opts := merge.TreeOptions{File: merge.Options{Labels: labels}}
-	if depth > 0 {
-		opts.File.MarkerSize = virtualMarkerSize
+	opts := merge.TreeOptions{
+		File:             merge.Options{Labels: labels, Style: conflictStyle(m.r)},
+		Depth:            depth,
+		Attributes:       m.mergeAttributes,
+		DirectoryRenames: directoryRenamesMode(m.r),
 	}
-	var err error
-	if opts.OurRenames, opts.TheirRenames, err = merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs); err != nil {
+	detected, err := merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs, merge.RenameOptions{
+		Limit:            mergeRenameLimit(m.r),
+		DirectoryRenames: opts.DirectoryRenames != merge.DirectoryRenamesOff,
+	})
+	if err != nil {
 		return merge.TreeResult{}, err
 	}
-	return merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
+	if detected.NeededLimit > 0 {
+		m.warnings = append(m.warnings, merge.Warning{Kind: merge.WarningRenameLimit, Needed: detected.NeededLimit})
+	}
+	opts.OurRenames, opts.TheirRenames = detected.Ours, detected.Theirs
+	result, err := merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
+	for _, warning := range result.Warnings {
+		if depth == 0 || !warning.Unclean() {
+			m.warnings = append(m.warnings, warning)
+		}
+	}
+	return result, err
 }
 
 func (m *merger) baseTree(bases []hash.ObjectID, depth int) (hash.ObjectID, error) {
 	if len(bases) == 0 {
 		return hash.Zero, nil
 	}
+	bases = slices.Clone(bases)
+	slices.Reverse(bases)
 	tree, err := m.treeOf(bases[0])
 	if err != nil {
 		return hash.Zero, err
@@ -389,7 +463,7 @@ func (m *merger) baseTree(bases []hash.ObjectID, depth int) (hash.ObjectID, erro
 		if err != nil {
 			return hash.Zero, err
 		}
-		result, err := m.mergeTrees(innerTree, tree, nextTree, merge.Labels{Ours: virtualLabelOurs, Theirs: virtualLabelTheir}, depth+1)
+		result, err := m.mergeTrees(innerTree, tree, nextTree, merge.Labels{Ours: virtualLabelOurs, Theirs: virtualLabelTheir, Base: baseLabel(inner)}, depth+1)
 		if err != nil {
 			return hash.Zero, err
 		}

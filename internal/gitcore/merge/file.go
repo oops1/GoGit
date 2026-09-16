@@ -1,7 +1,6 @@
 package merge
 
 import (
-	"bytes"
 	"slices"
 	"strings"
 
@@ -14,6 +13,13 @@ const (
 	StyleMerge Style = iota
 	StyleDiff3
 	StyleZDiff3
+)
+
+type Level int
+
+const (
+	LevelZealous Level = iota
+	LevelZealousAlnum
 )
 
 const (
@@ -36,6 +42,8 @@ type Options struct {
 	Labels     Labels
 	Diff       diff.Options
 	MarkerSize int
+	Level      Level
+	Union      bool
 }
 
 func (o Options) markerSize() int {
@@ -50,20 +58,6 @@ type Result struct {
 	Conflicts int
 }
 
-type region struct {
-	start int
-	end   int
-	lines []string
-}
-
-type chunk struct {
-	conflict bool
-	ours     []string
-	theirs   []string
-	base     []string
-	merged   []string
-}
-
 type Chunk struct {
 	Conflict bool
 	Ours     []string
@@ -72,261 +66,360 @@ type Chunk struct {
 	Merged   []string
 }
 
+type edit struct {
+	i1, chg1 int
+	i2, chg2 int
+}
+
+const (
+	nodeConflict  = 0
+	nodeOurs      = 1
+	nodeTheirs    = 2
+	nodeUnion     = 3
+	nodeIdentical = 4
+)
+
+type node struct {
+	mode     int
+	i0, chg0 int
+	i1, chg1 int
+	i2, chg2 int
+}
+
+type sides struct {
+	base   []string
+	ours   []string
+	theirs []string
+}
+
 func File(base, ours, theirs []byte, opts Options) Result {
-	return render(prepare(base, ours, theirs, opts), opts)
+	s := sides{base: splitLines(base), ours: splitLines(ours), theirs: splitLines(theirs)}
+	return s.render(s.nodes(base, ours, theirs, opts), opts)
 }
 
 func Chunks(base, ours, theirs []byte, opts Options) []Chunk {
-	prepared := prepare(base, ours, theirs, opts)
-	out := make([]Chunk, 0, len(prepared))
-	for _, c := range prepared {
-		out = append(out, Chunk{Conflict: c.conflict, Ours: c.ours, Base: c.base, Theirs: c.theirs, Merged: c.merged})
+	s := sides{base: splitLines(base), ours: splitLines(ours), theirs: splitLines(theirs)}
+	return s.chunks(s.nodes(base, ours, theirs, opts))
+}
+
+func (s sides) nodes(base, ours, theirs []byte, opts Options) []node {
+	nodes := s.combine(editsOf(base, ours, opts.Diff), editsOf(base, theirs, opts.Diff))
+	switch opts.Style {
+	case StyleDiff3:
+		return nodes
+	case StyleZDiff3:
+		return s.trimConflicts(nodes)
+	}
+	return s.simplify(s.refine(nodes, opts.Diff), opts.Level == LevelZealousAlnum)
+}
+
+func (s sides) combine(ours, theirs []edit) []node {
+	var out []node
+	for len(ours) > 0 && len(theirs) > 0 {
+		c1, c2 := ours[0], theirs[0]
+		if c1.i1+c1.chg1 < c2.i1 {
+			out = appendNode(out, node{mode: nodeOurs, i0: c1.i1, chg0: c1.chg1, i1: c1.i2, chg1: c1.chg2, i2: c2.i2 - c2.i1 + c1.i1, chg2: c1.chg1})
+			ours = ours[1:]
+			continue
+		}
+		if c2.i1+c2.chg1 < c1.i1 {
+			out = appendNode(out, node{mode: nodeTheirs, i0: c2.i1, chg0: c2.chg1, i1: c1.i2 - c1.i1 + c2.i1, chg1: c2.chg1, i2: c2.i2, chg2: c2.chg2})
+			theirs = theirs[1:]
+			continue
+		}
+		if !s.sameEdit(c1, c2) {
+			out = appendNode(out, conflictOf(c1, c2))
+		}
+		end1, end2 := c1.i1+c1.chg1, c2.i1+c2.chg1
+		if end1 >= end2 {
+			theirs = theirs[1:]
+		}
+		if end2 >= end1 {
+			ours = ours[1:]
+		}
+	}
+	for _, c1 := range ours {
+		out = appendNode(out, node{mode: nodeOurs, i0: c1.i1, chg0: c1.chg1, i1: c1.i2, chg1: c1.chg2, i2: c1.i1 + len(s.theirs) - len(s.base), chg2: c1.chg1})
+	}
+	for _, c2 := range theirs {
+		out = appendNode(out, node{mode: nodeTheirs, i0: c2.i1, chg0: c2.chg1, i1: c2.i1 + len(s.ours) - len(s.base), chg1: c2.chg1, i2: c2.i2, chg2: c2.chg2})
 	}
 	return out
 }
 
-func prepare(base, ours, theirs []byte, opts Options) []chunk {
-	chunks := chunksOf(base, ours, theirs, opts)
-	if opts.Style == StyleMerge {
-		chunks = join(chunks)
-	}
-	return chunks
+func (s sides) sameEdit(c1, c2 edit) bool {
+	return c1.i1 == c2.i1 && c1.chg1 == c2.chg1 && c1.chg2 == c2.chg2 &&
+		slices.Equal(s.ours[c1.i2:c1.i2+c1.chg2], s.theirs[c2.i2:c2.i2+c2.chg2])
 }
 
-func chunksOf(base, ours, theirs []byte, opts Options) []chunk {
-	baseLines := splitLines(base)
-	ourChanges := changesOf(base, ours, opts.Diff)
-	theirChanges := changesOf(base, theirs, opts.Diff)
+func conflictOf(c1, c2 edit) node {
+	off := c1.i1 - c2.i1
+	ffo := off + c1.chg1 - c2.chg1
+	i0, i1, i2 := c1.i1, c1.i2, c2.i2
+	if off > 0 {
+		i0 -= off
+		i1 -= off
+	} else {
+		i2 += off
+	}
+	chg0 := c1.i1 + c1.chg1 - i0
+	chg1 := c1.i2 + c1.chg2 - i1
+	chg2 := c2.i2 + c2.chg2 - i2
+	if ffo < 0 {
+		chg0 -= ffo
+		chg1 -= ffo
+	} else {
+		chg2 += ffo
+	}
+	return node{mode: nodeConflict, i0: i0, chg0: chg0, i1: i1, chg1: chg1, i2: i2, chg2: chg2}
+}
 
-	var out []chunk
-	at, i, j := 0, 0, 0
-	for i < len(ourChanges) || j < len(theirChanges) {
-		start := nextStart(ourChanges, theirChanges, i, j)
-		out = appendUntouched(out, baseLines[at:start])
+func appendNode(out []node, n node) []node {
+	if last := len(out) - 1; last >= 0 {
+		m := &out[last]
+		if n.i1 <= m.i1+m.chg1 || n.i2 <= m.i2+m.chg2 {
+			if n.mode != m.mode {
+				m.mode = nodeConflict
+			}
+			m.chg0 = n.i0 + n.chg0 - m.i0
+			m.chg1 = n.i1 + n.chg1 - m.i1
+			m.chg2 = n.i2 + n.chg2 - m.i2
+			return out
+		}
+	}
+	return append(out, n)
+}
 
-		end, takenOurs, takenTheirs := span(ourChanges, theirChanges, i, j)
-		ourSide := applyRegion(baseLines, ourChanges[i:takenOurs], start, end)
-		theirSide := applyRegion(baseLines, theirChanges[j:takenTheirs], start, end)
-		baseSide := baseLines[start:end]
-		i, j, at = takenOurs, takenTheirs, end
+func (s sides) refine(nodes []node, opts diff.Options) []node {
+	out := make([]node, 0, len(nodes))
+	for _, m := range nodes {
+		if m.mode != nodeConflict || m.chg1 == 0 || m.chg2 == 0 {
+			out = append(out, m)
+			continue
+		}
+		edits := editsOf([]byte(strings.Join(s.ours[m.i1:m.i1+m.chg1], "")), []byte(strings.Join(s.theirs[m.i2:m.i2+m.chg2], "")), opts)
+		if len(edits) == 0 {
+			m.mode = nodeIdentical
+			out = append(out, m)
+			continue
+		}
+		for at, e := range edits {
+			piece := node{mode: nodeConflict, i0: m.i0 + m.chg0, i1: m.i1 + e.i1, chg1: e.chg1, i2: m.i2 + e.i2, chg2: e.chg2}
+			if at == 0 {
+				piece.i0, piece.chg0 = m.i0, m.chg0
+			}
+			out = append(out, piece)
+		}
+	}
+	return out
+}
 
+func (s sides) simplify(nodes []node, unlessAlnum bool) []node {
+	out := make([]node, 0, len(nodes))
+	for _, next := range nodes {
+		if last := len(out) - 1; last >= 0 && s.joinable(out[last], next, unlessAlnum) {
+			m := &out[last]
+			m.chg0 = next.i0 + next.chg0 - m.i0
+			m.chg1 = next.i1 + next.chg1 - m.i1
+			m.chg2 = next.i2 + next.chg2 - m.i2
+			continue
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func (s sides) joinable(m, next node, unlessAlnum bool) bool {
+	if m.mode != nodeConflict || next.mode != nodeConflict {
+		return false
+	}
+	begin, end := m.i1+m.chg1, next.i1
+	return end-begin <= joinGap || unlessAlnum && !containsAlnum(s.ours[begin:end])
+}
+
+func containsAlnum(lines []string) bool {
+	for _, line := range lines {
+		for i := range len(line) {
+			c := line[i]
+			if '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s sides) trimConflicts(nodes []node) []node {
+	for at := range nodes {
+		m := &nodes[at]
+		if m.mode != nodeConflict {
+			continue
+		}
+		for m.chg1 > 0 && m.chg2 > 0 && s.ours[m.i1] == s.theirs[m.i2] {
+			m.i1++
+			m.i2++
+			m.chg1--
+			m.chg2--
+		}
+		for m.chg1 > 0 && m.chg2 > 0 && s.ours[m.i1+m.chg1-1] == s.theirs[m.i2+m.chg2-1] {
+			m.chg1--
+			m.chg2--
+		}
+	}
+	return nodes
+}
+
+func (s sides) render(nodes []node, opts Options) Result {
+	var out []string
+	conflicts, i := 0, 0
+	for _, m := range nodes {
+		mode := m.mode
+		if mode == nodeConflict && opts.Union {
+			mode = nodeUnion
+		}
 		switch {
-		case slices.Equal(ourSide, theirSide), slices.Equal(theirSide, baseSide):
-			out = appendClean(out, chunk{ours: ourSide, base: baseSide, theirs: theirSide, merged: ourSide})
-		case slices.Equal(ourSide, baseSide):
-			out = appendClean(out, chunk{ours: ourSide, base: baseSide, theirs: theirSide, merged: theirSide})
+		case mode == nodeConflict:
+			conflicts++
+			out = append(out, s.ours[i:m.i1]...)
+			out = s.conflictHunk(out, m, opts)
+		case mode&nodeUnion != 0:
+			out = append(out, s.ours[i:m.i1]...)
+			if mode&nodeOurs != 0 {
+				out = appendRecords(out, s.ours[m.i1:m.i1+m.chg1], s.needsCR(m), mode&nodeTheirs != 0)
+			}
+			if mode&nodeTheirs != 0 {
+				out = append(out, s.theirs[m.i2:m.i2+m.chg2]...)
+			}
 		default:
-			out = append(out, chunk{conflict: true, ours: ourSide, theirs: theirSide, base: baseSide})
-		}
-	}
-	return appendUntouched(out, baseLines[at:])
-}
-
-func appendUntouched(out []chunk, lines []string) []chunk {
-	return appendClean(out, chunk{ours: lines, base: lines, theirs: lines, merged: lines})
-}
-
-func appendClean(out []chunk, clean chunk) []chunk {
-	if len(clean.merged) == 0 && len(clean.ours) == 0 && len(clean.base) == 0 && len(clean.theirs) == 0 {
-		return out
-	}
-	if last := len(out) - 1; last >= 0 && !out[last].conflict {
-		out[last].ours = append(out[last].ours, clean.ours...)
-		out[last].base = append(out[last].base, clean.base...)
-		out[last].theirs = append(out[last].theirs, clean.theirs...)
-		out[last].merged = append(out[last].merged, clean.merged...)
-		return out
-	}
-	clean.ours = slices.Clone(clean.ours)
-	clean.base = slices.Clone(clean.base)
-	clean.theirs = slices.Clone(clean.theirs)
-	clean.merged = slices.Clone(clean.merged)
-	return append(out, clean)
-}
-
-func join(chunks []chunk) []chunk {
-	for at := 1; at+1 < len(chunks); {
-		if !joinable(chunks, at) {
-			at++
 			continue
 		}
-		chunks[at-1] = joined(chunks[at-1], chunks[at], chunks[at+1])
-		chunks = slices.Delete(chunks, at, at+2)
+		i = m.i1 + m.chg1
 	}
-	return chunks
-}
-
-func joinable(chunks []chunk, at int) bool {
-	return chunks[at-1].conflict && !chunks[at].conflict &&
-		chunks[at+1].conflict && len(chunks[at].merged) <= joinGap
-}
-
-func joined(first, between, second chunk) chunk {
-	return chunk{
-		conflict: true,
-		ours:     concat(first.ours, between.merged, second.ours),
-		theirs:   concat(first.theirs, between.merged, second.theirs),
-		base:     concat(first.base, between.merged, second.base),
-	}
-}
-
-func concat(parts ...[]string) []string {
-	var out []string
-	for _, part := range parts {
-		out = append(out, part...)
-	}
-	return out
-}
-
-func render(chunks []chunk, opts Options) Result {
-	var out []string
-	conflicts := 0
-	for _, current := range chunks {
-		if !current.conflict {
-			out = append(out, current.merged...)
-			continue
-		}
-		conflicts++
-		out = appendConflict(out, current, opts)
-	}
+	out = append(out, s.ours[i:]...)
 	return Result{Content: []byte(strings.Join(out, "")), Conflicts: conflicts}
 }
 
-func appendConflict(out []string, current chunk, opts Options) []string {
-	if opts.Style == StyleDiff3 {
-		return conflictBody(out, current.ours, current.theirs, current.base, opts)
-	}
-	head, ours, theirs, tail := trimCommon(current.ours, current.theirs)
-	out = append(out, head...)
-	return append(conflictBody(out, ours, theirs, current.base, opts), tail...)
-}
-
-func conflictBody(out, ourSide, theirSide, baseSide []string, opts Options) []string {
-	out = append(out, opts.marker(oursMarker, opts.Labels.Ours))
-	out = appendLines(out, ourSide)
+func (s sides) conflictHunk(out []string, m node, opts Options) []string {
+	crlf := s.needsCR(m)
+	out = append(out, opts.marker(oursMarker, opts.Labels.Ours, crlf))
+	out = appendRecords(out, s.ours[m.i1:m.i1+m.chg1], crlf, true)
 	if opts.Style != StyleMerge {
-		out = append(out, opts.marker(baseMarker, opts.Labels.Base))
-		out = appendLines(out, baseSide)
+		out = append(out, opts.marker(baseMarker, opts.Labels.Base, crlf))
+		out = appendRecords(out, s.base[m.i0:m.i0+m.chg0], crlf, true)
 	}
-	out = append(out, opts.marker(middleMarker, ""))
-	out = appendLines(out, theirSide)
-	return append(out, opts.marker(theirsMarker, opts.Labels.Theirs))
+	out = append(out, opts.marker(middleMarker, "", crlf))
+	out = appendRecords(out, s.theirs[m.i2:m.i2+m.chg2], crlf, true)
+	return append(out, opts.marker(theirsMarker, opts.Labels.Theirs, crlf))
 }
 
-func trimCommon(ourSide, theirSide []string) (head, ours, theirs, tail []string) {
-	at := 0
-	for at < len(ourSide) && at < len(theirSide) && ourSide[at] == theirSide[at] {
-		at++
+func appendRecords(out, lines []string, crlf, addNewline bool) []string {
+	out = append(out, lines...)
+	if !addNewline || len(lines) == 0 || strings.HasSuffix(lines[len(lines)-1], "\n") {
+		return out
 	}
-	head = ourSide[:at]
-	ours, theirs = ourSide[at:], theirSide[at:]
-	back := 0
-	for back < len(ours) && back < len(theirs) && ours[len(ours)-1-back] == theirs[len(theirs)-1-back] {
-		back++
-	}
-	tail = ours[len(ours)-back:]
-	return head, ours[:len(ours)-back], theirs[:len(theirs)-back], tail
+	return append(out, lineEnd(crlf))
 }
 
-func appendLines(out, lines []string) []string {
-	for _, line := range lines {
-		if !strings.HasSuffix(line, "\n") {
-			line += "\n"
-		}
-		out = append(out, line)
+func lineEnd(crlf bool) string {
+	if crlf {
+		return "\r\n"
 	}
-	return out
+	return "\n"
 }
 
-func (o Options) marker(sign byte, label string) string {
-	mark := strings.Repeat(string(sign), o.markerSize())
-	if label == "" {
-		return mark + "\n"
+func (s sides) needsCR(m node) bool {
+	crlf := eolIsCRLF(s.ours, max(m.i1-1, 0))
+	if crlf != 0 {
+		crlf = eolIsCRLF(s.theirs, max(m.i2-1, 0))
 	}
-	return mark + " " + label + "\n"
+	if crlf != 0 {
+		crlf = eolIsCRLF(s.base, 0)
+	}
+	return crlf > 0
 }
 
-func nextStart(ours, theirs []region, i, j int) int {
+func eolIsCRLF(lines []string, at int) int {
 	switch {
-	case i >= len(ours):
-		return theirs[j].start
-	case j >= len(theirs):
-		return ours[i].start
-	default:
-		return min(ours[i].start, theirs[j].start)
+	case at < len(lines)-1:
+		return crlfFlag(lines[at])
+	case len(lines) == 0:
+		return -1
+	case strings.HasSuffix(lines[at], "\n"):
+		return crlfFlag(lines[at])
+	case at == 0:
+		return -1
 	}
+	return crlfFlag(lines[at-1])
 }
 
-func span(ours, theirs []region, i, j int) (int, int, int) {
-	start := nextStart(ours, theirs, i, j)
-	end := start
-	for i < len(ours) && ours[i].start == start {
-		end = max(end, ours[i].end)
-		i++
+func crlfFlag(line string) int {
+	if strings.HasSuffix(line, "\r\n") {
+		return 1
 	}
-	for j < len(theirs) && theirs[j].start == start {
-		end = max(end, theirs[j].end)
-		j++
-	}
-	for {
-		grown := false
-		for i < len(ours) && ours[i].start <= end {
-			end = max(end, ours[i].end)
-			i++
-			grown = true
-		}
-		for j < len(theirs) && theirs[j].start <= end {
-			end = max(end, theirs[j].end)
-			j++
-			grown = true
-		}
-		if !grown {
-			return end, i, j
-		}
-	}
+	return 0
 }
 
-func applyRegion(baseLines []string, changes []region, from, to int) []string {
-	var out []string
-	at := from
-	for _, change := range changes {
-		out = append(out, baseLines[at:change.start]...)
-		out = append(out, change.lines...)
-		at = change.end
+func (o Options) marker(sign byte, label string, crlf bool) string {
+	mark := strings.Repeat(string(sign), o.markerSize())
+	if label != "" {
+		mark += " " + label
 	}
-	if at < to {
-		out = append(out, baseLines[at:to]...)
-	}
-	return out
+	return mark + lineEnd(crlf)
 }
 
-func changesOf(base, side []byte, opts diff.Options) []region {
-	if bytes.Equal(base, side) {
-		return nil
+func (s sides) chunks(nodes []node) []Chunk {
+	var out []Chunk
+	p0, p1, p2 := 0, 0, 0
+	for _, m := range nodes {
+		out = appendClean(out, Chunk{Ours: s.ours[p1:m.i1], Base: s.base[p0:m.i0], Theirs: s.theirs[p2:m.i2], Merged: s.ours[p1:m.i1]})
+		current := Chunk{Ours: s.ours[m.i1 : m.i1+m.chg1], Base: s.base[m.i0 : m.i0+m.chg0], Theirs: s.theirs[m.i2 : m.i2+m.chg2]}
+		switch m.mode {
+		case nodeConflict:
+			current.Conflict = true
+			out = append(out, cloneChunk(current))
+		case nodeTheirs:
+			current.Merged = current.Theirs
+			out = appendClean(out, current)
+		default:
+			current.Merged = current.Ours
+			out = appendClean(out, current)
+		}
+		p0, p1, p2 = m.i0+m.chg0, m.i1+m.chg1, m.i2+m.chg2
 	}
+	return appendClean(out, Chunk{Ours: s.ours[p1:], Base: s.base[p0:], Theirs: s.theirs[p2:], Merged: s.ours[p1:]})
+}
+
+func appendClean(out []Chunk, clean Chunk) []Chunk {
+	if len(clean.Merged) == 0 && len(clean.Ours) == 0 && len(clean.Base) == 0 && len(clean.Theirs) == 0 {
+		return out
+	}
+	if last := len(out) - 1; last >= 0 && !out[last].Conflict {
+		out[last].Ours = append(out[last].Ours, clean.Ours...)
+		out[last].Base = append(out[last].Base, clean.Base...)
+		out[last].Theirs = append(out[last].Theirs, clean.Theirs...)
+		out[last].Merged = append(out[last].Merged, clean.Merged...)
+		return out
+	}
+	return append(out, cloneChunk(clean))
+}
+
+func cloneChunk(c Chunk) Chunk {
+	c.Ours = slices.Clone(c.Ours)
+	c.Base = slices.Clone(c.Base)
+	c.Theirs = slices.Clone(c.Theirs)
+	c.Merged = slices.Clone(c.Merged)
+	return c
+}
+
+func editsOf(base, side []byte, opts diff.Options) []edit {
 	opts.Context = 0
 	opts.InterHunkContext = 0
-	var out []region
-	for _, hunk := range diff.Blobs(base, side, opts) {
-		out = append(out, regionOf(hunk))
+	hunks := diff.Blobs(base, side, opts)
+	out := make([]edit, 0, len(hunks))
+	for _, hunk := range hunks {
+		out = append(out, edit{i1: hunk.OldStart - 1, chg1: hunk.OldLines, i2: hunk.NewStart - 1, chg2: hunk.NewLines})
 	}
 	return out
-}
-
-func regionOf(hunk diff.Hunk) region {
-	current := region{start: hunk.OldStart - 1}
-	current.end = current.start + hunk.OldLines
-	for _, line := range hunk.Lines {
-		if line.Kind == diff.KindDel {
-			continue
-		}
-		text := line.Text
-		if !line.NoNewline {
-			text += "\n"
-		}
-		current.lines = append(current.lines, text)
-	}
-	return current
 }
 
 func splitLines(data []byte) []string {

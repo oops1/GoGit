@@ -17,10 +17,17 @@ const maxHavesPerRound = 32
 const defaultAgent = "gogit"
 
 func agentValue(opts Options) string {
-	if opts.UserAgent != "" {
-		return opts.UserAgent
+	if opts.UserAgent == "" {
+		return defaultAgent
 	}
-	return defaultAgent
+	return strings.Map(agentRune, opts.UserAgent)
+}
+
+func agentRune(r rune) rune {
+	if r <= ' ' || r > '~' {
+		return '.'
+	}
+	return r
 }
 
 type ackStatus int

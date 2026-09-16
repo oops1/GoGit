@@ -14,6 +14,7 @@ import (
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/masterpassword"
 	"github.com/oops1/gogit/internal/ui/settings"
 	"github.com/oops1/gogit/internal/ui/unlock"
 	"github.com/oops1/gogit/internal/vault"
@@ -67,7 +68,7 @@ func TestCreateSecretsVaultPicksTheUnlockerMatchingTheDefaultSlotKind(t *testing
 			var gotKind vault.SlotKind
 			stubCreateVaultFileWithPassword(t, &gotKind)
 			if kind == vault.SlotPassword {
-				stubUnlockDialog(t, a, []unlock.Result{{Password: []byte(testVaultPassword)}})
+				stubMasterPasswordDialog(t, a, []masterpassword.Result{{Password: []byte(testVaultPassword)}})
 			}
 
 			v, err := a.createSecretsVault(context.Background())
@@ -89,7 +90,7 @@ func TestCreateSecretsVaultPicksTheUnlockerMatchingTheDefaultSlotKind(t *testing
 func TestCreateSecretsVaultPropagatesSetupCancelledWhenThePasswordPromptIsCancelled(t *testing.T) {
 	a := newTestApp(t)
 	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
-	stubUnlockDialog(t, a, nil)
+	stubMasterPasswordDialog(t, a, nil)
 
 	_, err := a.createSecretsVault(context.Background())
 	if !errors.Is(err, ErrSecretsSetupCancelled) {
@@ -104,7 +105,7 @@ func TestCreateSecretsVaultReturnsTheVaultAlreadyOpenedByAConcurrentCaller(t *te
 
 	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
 	stubCreateVaultFileWithPassword(t, nil)
-	stubUnlockDialog(t, a, []unlock.Result{{Password: []byte(testVaultPassword)}})
+	stubMasterPasswordDialog(t, a, []masterpassword.Result{{Password: []byte(testVaultPassword)}})
 
 	v, err := a.createSecretsVault(context.Background())
 	if err != nil {
@@ -137,17 +138,17 @@ func TestSecretsVaultReportsUnavailableWhenTheFileIsCorrupted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := a.secretsVault(context.Background(), true); !errors.Is(err, ErrSecretsStoreUnavailable) {
+	if _, _, err := a.secretsVault(context.Background(), true); !errors.Is(err, ErrSecretsStoreUnavailable) {
 		t.Fatalf("err = %v, want %v", err, ErrSecretsStoreUnavailable)
 	}
-	if _, err := a.secretsVault(context.Background(), false); !errors.Is(err, ErrSecretsStoreUnavailable) {
+	if _, _, err := a.secretsVault(context.Background(), false); !errors.Is(err, ErrSecretsStoreUnavailable) {
 		t.Fatalf("err = %v, want %v", err, ErrSecretsStoreUnavailable)
 	}
 }
 
 func TestSecretsVaultReturnsNilWithoutErrorWhenMissingAndNotCreating(t *testing.T) {
 	a := newTestApp(t)
-	v, err := a.secretsVault(context.Background(), false)
+	v, _, err := a.secretsVault(context.Background(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,13 +157,13 @@ func TestSecretsVaultReturnsNilWithoutErrorWhenMissingAndNotCreating(t *testing.
 	}
 }
 
-func TestSecretsVaultPropagatesAStatErrorThatIsNotNotExist(t *testing.T) {
+func TestSecretsVaultReportsUnavailableWhenTheStoreCannotBeReached(t *testing.T) {
 	a := newTestApp(t)
 	a.paths = config.Paths{Dir: "bad\x00dir"}
 
-	_, err := a.secretsVault(context.Background(), true)
-	if err == nil || errors.Is(err, ErrSecretsStoreUnavailable) || errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("err = %v, want a raw stat error", err)
+	_, created, err := a.secretsVault(context.Background(), true)
+	if created || !errors.Is(err, ErrSecretsStoreUnavailable) || errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("created = %v, err = %v, want an unavailable store", created, err)
 	}
 }
 
@@ -310,7 +311,7 @@ func TestOnAddCredentialLeavesTheStoreLockedAndDoesNotLogWhenCancelled(t *testin
 func TestOnAddCredentialCreatesAVaultFileWhenNoneExists(t *testing.T) {
 	a := newTestApp(t)
 	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
-	stubUnlockDialog(t, a, []unlock.Result{{Password: []byte(testVaultPassword)}})
+	stubMasterPasswordDialog(t, a, []masterpassword.Result{{Password: []byte(testVaultPassword)}})
 	view := newSecretsTestView(t, a)
 	a.wireSecretsView(view)
 	secretsWG.Wait()
@@ -388,12 +389,11 @@ func TestOnRemoveKeyDeletesFromTheVault(t *testing.T) {
 	}
 }
 
-func TestOnSetMasterPasswordAddsANewPasswordSlot(t *testing.T) {
+func TestOnSetMasterPasswordReplacesTheOldPassword(t *testing.T) {
 	a := newTestApp(t)
 	v := createTestVault(t, a.paths.VaultFile())
 	a.vaultInst = v
-	before := len(v.Slots())
-	stubUnlockDialog(t, a, []unlock.Result{{Password: []byte("a brand new master password")}})
+	requests := stubMasterPasswordDialog(t, a, []masterpassword.Result{{Current: []byte(testVaultPassword), Password: []byte("a brand new master password")}})
 	view := newSecretsTestView(t, a)
 	a.wireSecretsView(view)
 	secretsWG.Wait()
@@ -401,8 +401,21 @@ func TestOnSetMasterPasswordAddsANewPasswordSlot(t *testing.T) {
 	view.OnSetMasterPassword()
 	secretsWG.Wait()
 
-	if len(v.Slots()) != before+1 {
-		t.Fatalf("slots = %d, want %d", len(v.Slots()), before+1)
+	if got := requests(); len(got) != 1 || !got[0].Change {
+		t.Fatalf("requests = %+v, want one change request", got)
+	}
+	if len(v.Slots()) != 1 {
+		t.Fatalf("slots = %d, want the new password only", len(v.Slots()))
+	}
+	reopened, err := vault.Open(vault.Options{Path: a.paths.VaultFile()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.Unlock(context.Background(), vault.NewPasswordUnlocker([]byte(testVaultPassword), vault.SlotParams{})); !errors.Is(err, vault.ErrWrongKey) {
+		t.Fatalf("old password err = %v, want %v", err, vault.ErrWrongKey)
+	}
+	if err := reopened.Unlock(context.Background(), vault.NewPasswordUnlocker([]byte("a brand new master password"), vault.SlotParams{})); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -411,7 +424,7 @@ func TestOnSetMasterPasswordDoesNothingWhenTheNewPasswordPromptIsCancelled(t *te
 	v := createTestVault(t, a.paths.VaultFile())
 	a.vaultInst = v
 	before := len(v.Slots())
-	stubUnlockDialog(t, a, nil)
+	stubMasterPasswordDialog(t, a, nil)
 	view := newSecretsTestView(t, a)
 	a.wireSecretsView(view)
 	secretsWG.Wait()

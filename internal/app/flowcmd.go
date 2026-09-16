@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	gitmerge "github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
@@ -182,23 +183,26 @@ func (a *App) openIntegrateDevelop() {
 
 func (a *App) integrateDevelop(name, feature, develop string, rebase bool) {
 	a.runFlowOperation(i18n.Tf("Operation.Title.IntegrateDevelop", feature), func(ctx context.Context, r *gitrepo.Repository, reporter OperationReporter) error {
-		conflicts, err := runIntegrateDevelop(ctx, r, name, ops.IntegrateDevelopOptions{Rebase: rebase})
+		integrated, err := runIntegrateDevelop(ctx, r, name, ops.IntegrateDevelopOptions{Rebase: rebase})
 		if err != nil {
 			return err
 		}
-		if len(conflicts) == 0 {
+		if integrated.Clean() {
 			reporter.Log(i18n.Tf("Operation.Log.DevelopIntegrated", develop, feature))
 			return nil
 		}
-		logConflicts(reporter, conflicts)
-		reporter.Log(i18n.Tf("Operation.Log.IntegrateStopped", len(conflicts)))
+		logConflicts(reporter, integrated.Conflicts, integrated.Warnings)
+		reporter.Log(i18n.Tf("Operation.Log.IntegrateStopped", len(integrated.Conflicts)))
 		return nil
 	})
 }
 
-func logConflicts(reporter OperationReporter, conflicts []string) {
+func logConflicts(reporter OperationReporter, conflicts []string, warnings []gitmerge.Warning) {
 	for _, path := range conflicts {
 		reporter.Log(i18n.Tf("Operation.Log.MergeConflictPath", path))
+	}
+	for _, warning := range warnings {
+		reporter.Log(mergeWarningText(warning))
 	}
 }
 
@@ -302,7 +306,7 @@ func reportFinishFlow(reporter OperationReporter, kind, name string, result ops.
 	case result.Finished():
 		reporter.Log(i18n.Tf(keys.finished, name))
 	default:
-		logConflicts(reporter, result.Conflicts)
+		logConflicts(reporter, result.Conflicts, result.Warnings)
 		reporter.Log(i18n.Tf(keys.stopped, len(result.Conflicts)))
 	}
 }

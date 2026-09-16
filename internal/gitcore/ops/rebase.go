@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
+	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
@@ -43,6 +45,7 @@ type RebaseOptions struct {
 	Message  string
 	When     time.Time
 	Progress progress.Func
+	Hooks    HookOptions
 }
 
 type RebaseResult struct {
@@ -54,6 +57,11 @@ type RebaseResult struct {
 	Amend     hash.ObjectID
 	Message   string
 	Conflicts []string
+	Warnings  []merge.Warning
+}
+
+func (r RebaseResult) Conflicted() bool {
+	return len(r.Conflicts) > 0 || slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
 }
 
 func (r RebaseResult) Amending() bool { return !r.Amend.IsZero() }
@@ -80,10 +88,10 @@ func Rebase(ctx context.Context, r *repo.Repository, upstream string, opts Rebas
 		}
 		ontoName = opts.Onto
 	}
-	return m.rebaseOnto(base, onto, ontoName, opts.Todo)
+	return m.rebaseOnto(base, onto, ontoName, upstream, opts.Todo)
 }
 
-func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName string, todo []RebaseStep) (RebaseResult, error) {
+func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName, upstreamArg string, todo []RebaseStep) (RebaseResult, error) {
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return RebaseResult{}, err
@@ -94,11 +102,11 @@ func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName string, todo []Re
 	case head.old.IsZero():
 		return RebaseResult{}, ErrUnbornHead
 	}
-	return m.startRebase(head, base, onto, ontoName, todo)
+	return m.startRebase(head, base, onto, ontoName, upstreamArg, todo)
 }
 
 func openRebaser(ctx context.Context, r *repo.Repository, opts RebaseOptions) (*merger, error) {
-	m, err := openMerger(ctx, r, MergeOptions{When: opts.When, Progress: opts.Progress})
+	m, err := openMerger(ctx, r, MergeOptions{When: opts.When, Progress: opts.Progress, Hooks: opts.Hooks})
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +117,7 @@ func openRebaser(ctx context.Context, r *repo.Repository, opts RebaseOptions) (*
 	return m, nil
 }
 
-func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName string, chosen []RebaseStep) (RebaseResult, error) {
+func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName, upstreamArg string, chosen []RebaseStep) (RebaseResult, error) {
 	result := RebaseResult{Old: head.old, New: head.old}
 	todo, upToDate, err := m.rebaseSteps(head.old, base, onto, chosen)
 	if err != nil || upToDate {
@@ -118,6 +126,11 @@ func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName
 	}
 	if err := m.requireCleanWorkTree(); err != nil {
 		return result, err
+	}
+	if !m.opts.Hooks.NoVerify {
+		if err := m.hooks.verify(m.ctx, hooks.Invocation{Name: hookPreRebase, Args: []string{upstreamArg}}); err != nil {
+			return result, err
+		}
 	}
 	if err := writeStateFile(m.r, origHeadFile, head.old.String()+"\n"); err != nil {
 		return result, err
@@ -136,6 +149,7 @@ func (m *merger) startRebase(head headTarget, base, onto hash.ObjectID, ontoName
 	if err := m.detachAt(onto, m.rebaseNote("start")+"checkout "+ontoName); err != nil {
 		return result, err
 	}
+	m.hooks.notify(m.ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{m.hooks.hex(head.old), m.hooks.hex(onto), branchCheckoutFlag}})
 	state := RebaseState{HeadName: head.ref.String(), Onto: onto, OrigHead: head.old, Todo: todo}
 	if err := writeRebaseState(m.r, state); err != nil {
 		return result, err
@@ -260,6 +274,9 @@ func (m *merger) finishRebase(state RebaseState, result RebaseResult) (RebaseRes
 	}
 	if err := m.attachTo(branch, m.rebaseNote("finish")+returningTo+state.HeadName); err != nil {
 		return result, err
+	}
+	if state.Rewritten != "" {
+		m.hooks.notify(m.ctx, hooks.Invocation{Name: hookPostRewrite, Args: []string{rewriteRebase}, Stdin: []byte(state.Rewritten)})
 	}
 	result.New = head.old
 	return result, errors.Join(clearRebaseState(m.r), removeStateFiles(m.r, mergeMsgFile))

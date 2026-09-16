@@ -10,16 +10,69 @@ func Blobs(oldData, newData []byte, opts Options) []Hunk {
 	return diffLines(splitLines(oldData), splitLines(newData), opts.normalized())
 }
 
-func diffLines(oldLines, newLines []string, opts Options) []Hunk {
+const tailBlock = 1024
+
+func patchHunks(oldData, newData []byte, opts Options) []Hunk {
+	if opts.Context == 0 {
+		oldData, newData = trimCommonTail(oldData, newData)
+	}
+	return diffLines(splitLines(oldData), splitLines(newData), opts)
+}
+
+func trimCommonTail(a, b []byte) ([]byte, []byte) {
+	smaller := min(len(a), len(b))
+	trimmed := 0
+	for tailBlock+trimmed <= smaller && bytes.Equal(a[len(a)-trimmed-tailBlock:len(a)-trimmed], b[len(b)-trimmed-tailBlock:len(b)-trimmed]) {
+		trimmed += tailBlock
+	}
+	tail := a[len(a)-trimmed:]
+	recovered := 0
+	for recovered < trimmed {
+		recovered++
+		if tail[recovered-1] == '\n' {
+			break
+		}
+	}
+	cut := trimmed - recovered
+	return a[:len(a)-cut], b[:len(b)-cut]
+}
+
+type Change struct {
+	OldIndex int
+	OldCount int
+	NewIndex int
+	NewCount int
+}
+
+func Changes(oldData, newData []byte, opts Options) []Change {
+	opts = opts.normalized()
+	opts.Context = 0
+	oldData, newData = trimCommonTail(oldData, newData)
+	_, changes := computeChanges(splitLines(oldData), splitLines(newData), opts)
+	out := make([]Change, len(changes))
+	for at, c := range changes {
+		out[at] = Change{OldIndex: c.i1, OldCount: c.chg1, NewIndex: c.i2, NewCount: c.chg2}
+	}
+	return out
+}
+
+func computeChanges(oldLines, newLines []string, opts Options) (*env, []change) {
 	e := prepareEnv(oldLines, newLines, opts)
-	if opts.Algorithm == AlgorithmHistogram {
+	switch opts.Algorithm {
+	case AlgorithmHistogram:
 		e.histogram(e.a.dstart+1, e.a.dend-e.a.dstart+1, e.b.dstart+1, e.b.dend-e.b.dstart+1)
-	} else {
+	case AlgorithmPatience:
+		e.patience(1, e.a.count(), 1, e.b.count())
+	default:
 		e.myers()
 	}
 	compact(e.a, e.b, opts.IndentHeuristic)
 	compact(e.b, e.a, opts.IndentHeuristic)
-	changes := e.script()
+	return e, e.script()
+}
+
+func diffLines(oldLines, newLines []string, opts Options) []Hunk {
+	e, changes := computeChanges(oldLines, newLines, opts)
 	if opts.IgnoreWhitespace&IgnoreBlankLines != 0 {
 		e.markIgnorable(changes)
 	}

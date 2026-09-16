@@ -85,6 +85,7 @@ const (
 	pickRevert      = "revert"
 	pickRebase      = "rebase"
 	pickRebaseByGit = "rebase started by git"
+	pickStashApply  = "stash apply"
 )
 
 func forkedHistory(ours, theirs map[string]string) func(b *mergeBuilder) {
@@ -186,6 +187,51 @@ func mergeScenarios() []mergeScenario {
 			b.commit("theirs 2", map[string]string{"g": editLine(editLine(g, 0, "THEIRS"), 9, "THEIRS AGAIN")})
 			b.git("checkout", "-q", "main")
 		}},
+		{name: "criss-cross over a binary conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
+			b.write(map[string]string{"bin": "v" + strconv.Itoa(step) + "\x00"})
+		})},
+		{name: "criss-cross over a modify/delete conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
+			if step == 1 {
+				b.write(map[string]string{"f": ""})
+				return
+			}
+			b.write(map[string]string{"f": editLine(f, 4, "V"+strconv.Itoa(step))})
+		})},
+		{name: "criss-cross over a symlink conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
+			b.link("link", "target"+strconv.Itoa(step))
+		})},
+		{name: "content conflict in diff3 style", target: "feature", setup: styledHistory("diff3", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
+		{name: "content conflict in zdiff3 style", target: "feature", setup: styledHistory("zdiff3", forkedHistory(map[string]string{"f": editLine(editLine(f, 4, "OURS"), 5, "SHARED")}, map[string]string{"f": editLine(editLine(f, 4, "THEIRS"), 5, "SHARED")}))},
+		{name: "criss-cross text conflict in diff3 style", target: "feature", setup: styledHistory("diff3", crissCrossHistory(func(b *mergeBuilder, step int) {
+			b.write(map[string]string{"f": editLine(f, 4, "V"+strconv.Itoa(step))})
+		}))},
+		{name: "cherry-pick conflict in diff3 style", pick: pickCherry, target: "feature", setup: styledHistory("diff3", pickHistory(true))},
+		{name: "a wider conflict marker set by attributes", target: "feature", setup: attributedHistory("f conflict-marker-size=12\n", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
+		{name: "a union merge set by attributes", target: "feature", setup: attributedHistory("f merge=union\n", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
+		{name: "a text file merged as binary by attributes", target: "feature", setup: attributedHistory("f -merge\n", forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"f": editLine(f, 9, "THEIRS")}))},
+		{name: "a modified file against a directory in its place", target: "feature", setup: fileAgainstDirectoryHistory(false)},
+		{name: "a directory in place of a file they modified", target: "feature", setup: fileAgainstDirectoryHistory(true)},
+		{name: "renames past merge.renameLimit", target: "feature", setup: func(b *mergeBuilder) {
+			b.git("config", "merge.renameLimit", "1")
+			forkedHistory(
+				map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
+				map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})(b)
+		}},
+		{name: "renames within the default merge rename limit", target: "feature", setup: forkedHistory(
+			map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
+			map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})},
+		{name: "a directory rename split without a majority", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})},
+		{name: "a cherry-pick into a directory rename split", pick: pickCherry, target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})},
+		{name: "a revert into a directory rename split", pick: pickRevert, target: "HEAD~1", setup: revertedSplitHistory},
+		{name: "a rebase over a directory rename split", pick: pickRebase, target: "main", setup: func(b *mergeBuilder) {
+			uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"}, map[string]string{"lib/new.go": "new\n"})(b)
+			b.git("checkout", "-q", "feature")
+		}},
+		{name: "a stash applied over a directory rename split", pick: pickStashApply, setup: stashedSplitHistory},
+		{name: "a directory rename putting two files on one path", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "src/a.go", "lib2/c.go": "src/c.go"}, map[string]string{"lib/new.go": "new\n", "lib2/new.go": "other\n"})},
+		{name: "a directory rename onto a path already there", target: "feature", setup: uncleanDirectoryRenameHistory(map[string]string{"lib/a.go": "src/a.go", "lib/b.go": "src/b.go"}, map[string]string{"lib/new.go": "new\n", "src/new.go": "other\n"})},
+		{name: "a file added in a directory we renamed", target: "feature", setup: movedDirectoryHistory("")},
+		{name: "a file added in a directory we renamed, moved without asking", target: "feature", setup: movedDirectoryHistory("true")},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "local change in the way", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
@@ -359,6 +405,104 @@ func mergeScenarios() []mergeScenario {
 			forkedHistory(map[string]string{"f": editLine(f, 4, "OURS"), "gone": "gone\n"}, map[string]string{"f": editLine(f, 4, "THEIRS"), "new": "new\n"})(b)
 			b.o.write(b.dir, "keep", "local\n")
 		}, after: abortMerge},
+	}
+}
+
+func (b *mergeBuilder) link(rel, target string) {
+	b.o.t.Helper()
+	b.o.write(b.dir, ".link-target", target)
+	id := strings.TrimSpace(b.git("hash-object", "-w", ".link-target"))
+	b.o.remove(b.dir, ".link-target")
+	b.git("update-index", "--add", "--cacheinfo", "120000,"+id+","+rel)
+	b.git("checkout", "-q", "--", rel)
+}
+
+func fileAgainstDirectoryHistory(directoryOnOurSide bool) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		b.commit("base", map[string]string{"keep": "keep\n", "d": "d\n"})
+		b.git("branch", "feature")
+		replace := func() {
+			b.write(map[string]string{"d": ""})
+			b.write(map[string]string{"d/x": "x\n"})
+			b.commit("directory", nil)
+		}
+		modify := func() { b.commit("modify", map[string]string{"d": "changed\n"}) }
+		first, second := modify, replace
+		if directoryOnOurSide {
+			first, second = replace, modify
+		}
+		first()
+		b.git("checkout", "-q", "feature")
+		second()
+		b.git("checkout", "-q", "main")
+	}
+}
+
+func uncleanDirectoryRenameHistory(moves, added map[string]string) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		base := map[string]string{"keep": "keep\n"}
+		for from := range moves {
+			base[from] = lines(from, 10)
+		}
+		b.commit("base", base)
+		b.git("branch", "feature")
+		for from, to := range moves {
+			b.o.write(b.dir, to, lines(from, 10))
+			b.git("add", "--", to)
+			b.git("rm", "-q", "--", from)
+		}
+		b.commit("move", nil)
+		b.git("checkout", "-q", "feature")
+		b.commit("add", added)
+		b.git("checkout", "-q", "main")
+	}
+}
+
+func movedDirectoryHistory(setting string) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		if setting != "" {
+			b.git("config", "merge.directoryRenames", setting)
+		}
+		b.commit("base", map[string]string{"keep": "keep\n", "lib/a.go": lines("a", 10), "lib/b.go": lines("b", 10)})
+		b.git("branch", "feature")
+		b.git("mv", "lib", "src")
+		b.commit("move", nil)
+		b.git("checkout", "-q", "feature")
+		b.commit("add", map[string]string{"lib/new.go": "new\n"})
+		b.git("checkout", "-q", "main")
+	}
+}
+
+func styledHistory(style string, setup func(b *mergeBuilder)) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		b.git("config", "merge.conflictStyle", style)
+		setup(b)
+	}
+}
+
+func attributedHistory(attributes string, setup func(b *mergeBuilder)) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		b.write(map[string]string{".gitattributes": attributes})
+		setup(b)
+	}
+}
+
+func crissCrossHistory(set func(b *mergeBuilder, step int)) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		set(b, 0)
+		b.commit("base", map[string]string{"keep": "keep\n", "g": lines("g", 10)})
+		b.git("branch", "other")
+		set(b, 1)
+		b.commit("ours 1", nil)
+		b.git("checkout", "-q", "other")
+		set(b, 2)
+		b.commit("theirs 1", nil)
+		b.git("checkout", "-q", "-b", "feature")
+		b.git("merge", "-q", "-s", "ours", "--no-edit", "main")
+		b.commit("feature", map[string]string{"g": editLine(lines("g", 10), 9, "FEATURE")})
+		b.git("checkout", "-q", "main")
+		b.git("merge", "-q", "-s", "ours", "--no-edit", "other")
+		b.commit("main", map[string]string{"keep": "main\n"})
 	}
 }
 
@@ -559,8 +703,13 @@ func mergeStateOf(b *mergeBuilder, refused bool) string {
 		if d.IsDir() {
 			return nil
 		}
-		data, err := os.ReadFile(path)
 		rel, _ := filepath.Rel(b.dir, path)
+		if d.Type()&fs.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			add("link "+filepath.ToSlash(rel), target)
+			return err
+		}
+		data, err := os.ReadFile(path)
 		add("file "+filepath.ToSlash(rel), string(data))
 		return err
 	})
@@ -636,20 +785,52 @@ func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOpt
 	switch s.pick {
 	case pickRebase:
 		rebased, err := Rebase(t.Context(), r, s.target, RebaseOptions{When: opts.When, Onto: s.onto})
-		return MergeResult{Conflicts: rebased.Conflicts}, err
+		return MergeResult{Conflicts: rebased.Conflicts, Warnings: rebased.Warnings}, err
 	case pickCherry, pickRevert:
 		run := CherryPick
 		if s.pick == pickRevert {
 			run = Revert
 		}
 		picked, err := run(t.Context(), r, s.target, PickOptions{When: opts.When})
-		return MergeResult{Conflicts: picked.Conflicts}, err
+		return MergeResult{Conflicts: picked.Conflicts, Warnings: picked.Warnings}, err
+	case pickStashApply:
+		applied, err := StashApply(t.Context(), r, 0)
+		return MergeResult{Conflicts: applied.Conflicts, Warnings: applied.Warnings}, err
 	}
 	return Merge(t.Context(), r, s.target, opts)
 }
 
+func splitLibraryMoves(b *mergeBuilder) {
+	b.o.t.Helper()
+	for from, to := range map[string]string{"lib/a.go": "x/a.go", "lib/b.go": "y/b.go"} {
+		b.o.write(b.dir, to, lines(from, 10))
+		b.git("add", "--", to)
+		b.git("rm", "-q", "--", from)
+	}
+	b.commit("move", nil)
+}
+
+func splitLibraryBase() map[string]string {
+	return map[string]string{"keep": "keep\n", "lib/a.go": lines("lib/a.go", 10), "lib/b.go": lines("lib/b.go", 10)}
+}
+
+func revertedSplitHistory(b *mergeBuilder) {
+	base := splitLibraryBase()
+	base["lib/new.go"] = "new\n"
+	b.commit("base", base)
+	b.commit("drop", map[string]string{"lib/new.go": ""})
+	splitLibraryMoves(b)
+}
+
+func stashedSplitHistory(b *mergeBuilder) {
+	b.commit("base", splitLibraryBase())
+	b.write(map[string]string{"lib/new.go": "new\n"})
+	b.git("stash", "-q")
+	splitLibraryMoves(b)
+}
+
 func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
-	for _, s := range mergeScenarios() {
+	for _, s := range append(mergeScenarios(), gitlinkMergeScenarios()...) {
 		t.Run(s.name, func(t *testing.T) {
 			o := newOracle(t)
 			sides := [2]*mergeBuilder{}
@@ -665,6 +846,8 @@ func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
 			gitArgs := append(append([]string{"merge", "--no-edit"}, s.args...), s.target)
 			switch s.pick {
 			case "":
+			case pickStashApply:
+				gitArgs = []string{"stash", "apply"}
 			case pickRebase, pickRebaseByGit:
 				gitArgs = []string{"rebase", s.target}
 				if s.onto != "" {

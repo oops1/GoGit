@@ -21,13 +21,14 @@ const deleted = "\x00deleted"
 type side map[string]string
 
 type treeCase struct {
-	name       string
-	base       side
-	ours       side
-	theirs     side
-	executable map[string]string
-	renames    bool
-	moves      map[string][2]string
+	name             string
+	base             side
+	ours             side
+	theirs           side
+	executable       map[string]string
+	renames          bool
+	moves            map[string][2]string
+	directoryRenames string
 }
 
 func runGit(t *testing.T, dir string, args ...string) string {
@@ -43,10 +44,15 @@ func runGit(t *testing.T, dir string, args ...string) string {
 		"GIT_COMMITTER_NAME=oracle", "GIT_COMMITTER_EMAIL=oracle@example.com",
 		"GIT_AUTHOR_DATE=1700000000 +0000", "GIT_COMMITTER_DATE=1700000000 +0000",
 	)
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
-		if _, isExit := err.(*exec.ExitError); !isExit || !slices.Contains(args, "merge-tree") {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
+		exit, isExit := err.(*exec.ExitError)
+		if !isExit || !slices.Contains(args, "merge-tree") {
+			var stderr []byte
+			if isExit {
+				stderr = exit.Stderr
+			}
+			t.Fatalf("git %v: %v\n%s%s", args, err, out, stderr)
 		}
 	}
 	return string(out)
@@ -55,9 +61,31 @@ func runGit(t *testing.T, dir string, args ...string) string {
 func apply(t *testing.T, dir string, files side) {
 	t.Helper()
 	for name, content := range files {
-		full := filepath.Join(dir, filepath.FromSlash(name))
 		if content == deleted {
 			runGit(t, dir, "rm", "-q", "-r", "--", name)
+		}
+	}
+	for name, content := range files {
+		full := filepath.Join(dir, filepath.FromSlash(name))
+		if content == deleted {
+			continue
+		}
+		if info, err := os.Lstat(full); err == nil && info.IsDir() {
+			runGit(t, dir, "rm", "-q", "-r", "--cached", "--ignore-unmatch", "--", name)
+			if err := os.RemoveAll(full); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if id, ok := strings.CutPrefix(content, gitlinkPrefix); ok {
+			replaceIndexEntry(t, dir, name, "160000", id)
+			continue
+		}
+		if target, ok := strings.CutPrefix(content, symlinkPrefix); ok {
+			blob := filepath.Join(t.TempDir(), "target")
+			if err := os.WriteFile(blob, []byte(target), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			replaceIndexEntry(t, dir, name, "120000", strings.TrimSpace(runGit(t, dir, "hash-object", "-w", blob)))
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -117,11 +145,21 @@ func buildBranches(t *testing.T, c treeCase) string {
 	return dir
 }
 
-func gitMergeTree(t *testing.T, dir string, renames bool) (string, []string) {
+func directoryRenamesSetting(settings []string) string {
+	for _, setting := range settings {
+		if setting != "" {
+			return setting
+		}
+	}
+	return "false"
+}
+
+func gitMergeTree(t *testing.T, dir string, renames bool, directoryRenames ...string) (string, []string) {
 	t.Helper()
-	args := []string{"-c", "merge.directoryRenames=false", "merge-tree", "--write-tree", "-X", "no-renames", "ours", "theirs"}
+	setting := "merge.directoryRenames=" + directoryRenamesSetting(directoryRenames)
+	args := []string{"-c", setting, "merge-tree", "--write-tree", "-X", "no-renames", "ours", "theirs"}
 	if renames {
-		args = []string{"-c", "merge.directoryRenames=false", "merge-tree", "--write-tree", "ours", "theirs"}
+		args = []string{"-c", setting, "merge-tree", "--write-tree", "ours", "theirs"}
 	}
 	out := runGit(t, dir, args...)
 	lines := strings.Split(strings.ReplaceAll(out, "\r\n", "\n"), "\n")
@@ -153,7 +191,7 @@ func stagesOf(conflicts []Conflict) []string {
 	return stages
 }
 
-func ourMergeTree(t *testing.T, dir string, renames bool) (string, []string) {
+func ourMergeTree(t *testing.T, dir string, renames bool, directoryRenames ...string) (string, []string) {
 	t.Helper()
 	db, err := odb.Open(filepath.Join(dir, ".git", "objects"), odb.Options{})
 	if err != nil {
@@ -183,7 +221,11 @@ func ourMergeTree(t *testing.T, dir string, renames bool) (string, []string) {
 		}
 		return s
 	}
-	opts := TreeOptions{File: Options{Labels: Labels{Ours: "ours", Theirs: "theirs"}}}
+	modes := map[string]DirectoryRenames{"false": DirectoryRenamesOff, "true": DirectoryRenamesApply, "conflict": DirectoryRenamesConflict}
+	opts := TreeOptions{
+		File:             Options{Labels: Labels{Ours: "ours", Theirs: "theirs"}},
+		DirectoryRenames: modes[directoryRenamesSetting(directoryRenames)],
+	}
 	if renames {
 		treeOf := func(commit hash.ObjectID) hash.ObjectID {
 			c, err := db.Commit(commit)
@@ -192,12 +234,14 @@ func ourMergeTree(t *testing.T, dir string, renames bool) (string, []string) {
 			}
 			return c.Tree
 		}
-		if opts.OurRenames, err = DetectRenames(t.Context(), db, treeOf(bases[0]), treeOf(ours)); err != nil {
+		detected, err := DetectSideRenames(t.Context(), db, treeOf(bases[0]), treeOf(ours), treeOf(theirs), RenameOptions{
+			Limit:            DefaultRenameLimit,
+			DirectoryRenames: opts.DirectoryRenames != DirectoryRenamesOff,
+		})
+		if err != nil {
 			t.Fatal(err)
 		}
-		if opts.TheirRenames, err = DetectRenames(t.Context(), db, treeOf(bases[0]), treeOf(theirs)); err != nil {
-			t.Fatal(err)
-		}
+		opts.OurRenames, opts.TheirRenames = detected.Ours, detected.Theirs
 	}
 	result, err := Trees(snapshot(bases[0]), snapshot(ours), snapshot(theirs), db, opts)
 	if err != nil {
@@ -240,6 +284,15 @@ func treeCases() []treeCase {
 		{name: "rename onto a path they added", renames: true, base: side{"a": long("a")}, moves: map[string][2]string{"a": {"b", ""}}, theirs: side{"b": long("b")}},
 		{name: "renamed apart with edits", renames: true, base: side{"a": long("a")}, moves: map[string][2]string{"a": {"b", "c"}}, ours: side{"b": edited(long("a"), 0, "OURS")}, theirs: side{"c": edited(long("a"), 0, "THEIRS")}},
 		{name: "two renames at once", renames: true, base: side{"a": long("a"), "x": long("x")}, moves: map[string][2]string{"a": {"b", ""}, "x": {"", "y"}}, ours: side{"x": edited(long("x"), 5, "OURS")}, theirs: side{"a": edited(long("a"), 5, "THEIRS")}},
+		{name: "renamed into one path", renames: true, base: side{"a": long("a"), "b": long("b")}, moves: map[string][2]string{"a": {"c", ""}, "b": {"", "c"}}, ours: side{"b": edited(long("b"), 1, "OURS B")}, theirs: side{"a": edited(long("a"), 8, "THEIRS A")}},
+		{name: "renamed into one path with clashing edits", renames: true, base: side{"a": long("a"), "b": long("b")}, moves: map[string][2]string{"a": {"c", ""}, "b": {"", "c"}}, ours: side{"c": edited(long("a"), 0, "OURS")}, theirs: side{"a": edited(long("a"), 0, "THEIRS")}},
+		{name: "a modified file against a directory in its place", base: side{"d": text("d"), "k": text("k")}, ours: side{"d": text("changed")}, theirs: side{"d": deleted, "d/x": text("x")}},
+		{name: "a directory in place of a file they modified", base: side{"d": text("d"), "k": text("k")}, ours: side{"d": deleted, "d/x": text("x")}, theirs: side{"d": text("changed")}},
+		{name: "a file added in a directory we renamed", renames: true, directoryRenames: "conflict", base: side{"lib/a.go": long("a"), "lib/b.go": long("b"), "k": text("k")}, moves: map[string][2]string{"lib/a.go": {"src/a.go", ""}, "lib/b.go": {"src/b.go", ""}}, theirs: side{"lib/new.go": text("new")}},
+		{name: "a file added in a directory we renamed, moved", renames: true, directoryRenames: "true", base: side{"lib/a.go": long("a"), "lib/b.go": long("b"), "k": text("k")}, moves: map[string][2]string{"lib/a.go": {"src/a.go", ""}, "lib/b.go": {"src/b.go", ""}}, theirs: side{"lib/new.go": text("new")}},
+		{name: "a file added in a directory we renamed, left alone", renames: true, directoryRenames: "false", base: side{"lib/a.go": long("a"), "lib/b.go": long("b"), "k": text("k")}, moves: map[string][2]string{"lib/a.go": {"src/a.go", ""}, "lib/b.go": {"src/b.go", ""}}, theirs: side{"lib/new.go": text("new")}},
+		{name: "a file we added in a directory they renamed", renames: true, directoryRenames: "true", base: side{"lib/a.go": long("a"), "lib/b.go": long("b"), "k": text("k")}, moves: map[string][2]string{"lib/a.go": {"", "src/a.go"}, "lib/b.go": {"", "src/b.go"}}, ours: side{"lib/deep/new.go": text("new")}},
+		{name: "a file renamed into a directory the other side renamed", renames: true, directoryRenames: "conflict", base: side{"lib/a.go": long("a"), "lib/b.go": long("b"), "old/x.go": long("x")}, moves: map[string][2]string{"lib/a.go": {"src/a.go", ""}, "lib/b.go": {"src/b.go", ""}, "old/x.go": {"", "lib/x.go"}}, ours: side{"old/x.go": edited(long("x"), 0, "OURS")}, theirs: side{"lib/x.go": edited(long("x"), 9, "THEIRS")}},
 		{name: "delete against a rename", renames: true, base: side{"a": long("a"), "k": text("k")}, moves: map[string][2]string{"a": {"", "b"}}, ours: side{"a": deleted}},
 	}
 }
@@ -267,8 +320,8 @@ func TestOurTreeMergeIsTheOneGitWrites(t *testing.T) {
 	for _, c := range treeCases() {
 		t.Run(c.name, func(t *testing.T) {
 			dir := buildBranches(t, c)
-			wantTree, wantConflicts := gitMergeTree(t, dir, c.renames)
-			gotTree, gotConflicts := ourMergeTree(t, dir, c.renames)
+			wantTree, wantConflicts := gitMergeTree(t, dir, c.renames, c.directoryRenames)
+			gotTree, gotConflicts := ourMergeTree(t, dir, c.renames, c.directoryRenames)
 			if gotTree != wantTree {
 				t.Errorf("tree = %s, git wrote %s\n%s", gotTree, wantTree, runGit(t, dir, "ls-tree", "-r", wantTree))
 			}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -67,6 +68,12 @@ func Parse(data []byte) (*File, error) {
 		return nil, err
 	}
 	return &File{items: p.items}, nil
+}
+
+func ParseVariables(data []byte) ([]Variable, error) {
+	p := &parser{src: string(data), line: 1}
+	err := p.run()
+	return slices.Collect((&File{items: p.items}).Variables()), err
 }
 
 func (p *parser) fail(base error) error {

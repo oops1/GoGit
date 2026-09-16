@@ -82,7 +82,7 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	specs := fetchRefspecs(rem, opts)
 	prog := opts.Progress
 
-	transportOpts := opts.Transport
+	transportOpts := withRepositoryConfig(opts.Transport, r, rem.Name)
 	transportOpts.Progress = prog
 	prog.Phase("connecting")
 	session, err := dial(ctx, url, transport.UploadPack, transportOpts)
@@ -418,6 +418,13 @@ func writeFetchHead(r *repo.Repository, url string, applied []matchedRef, head s
 }
 
 func LsRemote(ctx context.Context, url string, opts transport.Options) ([]transport.Ref, error) {
+	if opts.Config == nil {
+		cfg, err := loadUserConfig()
+		if err != nil {
+			return nil, err
+		}
+		opts.Config = cfg
+	}
 	session, err := dial(ctx, url, transport.UploadPack, opts)
 	if err != nil {
 		return nil, err

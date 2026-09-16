@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -52,28 +51,6 @@ func TestDiscardLeavesNestedRepositoriesAndConflictedFilesAlone(t *testing.T) {
 	}
 	if !tr.exists("f") {
 		t.Fatal("Discard removed a file with an unresolved conflict")
-	}
-}
-
-func TestStageSkipsNestedRepositories(t *testing.T) {
-	tr := newTestRepo(t)
-	tr.commitFiles("base", map[string]string{"a": "a\n"})
-	tr.writeFile("vendor/lib/.git/HEAD", "ref: refs/heads/main\n")
-	tr.writeFile("vendor/lib/x.txt", "x\n")
-	tr.writeFile("vendor/own.txt", "own\n")
-
-	if err := Stage(t.Context(), tr.repo, []string{"vendor"}, StageOptions{}); err != nil {
-		t.Fatalf("Stage returned error %v", err)
-	}
-
-	idx := tr.index()
-	if _, ok := entryOf(t, idx, "vendor/own.txt"); !ok {
-		t.Fatal("Stage skipped a regular file")
-	}
-	for entry := range idx.Entries() {
-		if strings.HasPrefix(entry.Path, "vendor/lib/") {
-			t.Fatalf("Stage added %s from a nested repository", entry.Path)
-		}
 	}
 }
 

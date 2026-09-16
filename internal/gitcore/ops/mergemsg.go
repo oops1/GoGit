@@ -92,8 +92,15 @@ func withConflictList(message string, conflicts []string) string {
 	if len(conflicts) == 0 {
 		return message
 	}
+	return withConflictHint(message, conflicts)
+}
+
+func withConflictHint(message string, conflicts []string) string {
 	var b strings.Builder
 	b.WriteString(message)
+	if message != "" && !strings.HasSuffix(message, "\n") {
+		b.WriteString("\n")
+	}
 	b.WriteString("\n# Conflicts:\n")
 	for _, path := range conflicts {
 		b.WriteString("#\t" + path + "\n")

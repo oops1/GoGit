@@ -37,10 +37,13 @@ func (e StashEntry) Selector() string {
 
 type StashApplyResult struct {
 	Conflicts []string
+	Warnings  []merge.Warning
 	Dropped   bool
 }
 
-func (r StashApplyResult) Clean() bool { return len(r.Conflicts) == 0 }
+func (r StashApplyResult) Clean() bool {
+	return len(r.Conflicts) == 0 && !slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
+}
 
 type SwitchMergeResult struct {
 	Stashed   bool
@@ -335,10 +338,15 @@ func (m *merger) stashApply(position int) (StashApplyResult, error) {
 	if err := m.moveTo(ours, to, false); err != nil {
 		return StashApplyResult{}, err
 	}
-	if conflicts := to.conflicted(); len(conflicts) > 0 {
-		return StashApplyResult{Conflicts: conflicts}, nil
+	result := StashApplyResult{Conflicts: to.conflicted(), Warnings: m.warnings}
+	if !merged.Clean() {
+		tree, err := merged.Tree.Write(m.store())
+		if err != nil {
+			return result, err
+		}
+		return result, writeStateFile(m.r, autoMergeFile, tree.String()+"\n")
 	}
-	return StashApplyResult{}, m.unstageApplied(ours, to)
+	return result, m.unstageApplied(ours, to)
 }
 
 func (m *merger) stashCommit(position int) (*object.Commit, error) {

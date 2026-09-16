@@ -40,6 +40,9 @@ var (
 	ErrNothingToStash     = errors.New("ops: there are no local changes to stash")
 	ErrStashNotFound      = errors.New("ops: stash entry not found")
 	ErrNotAStash          = errors.New("ops: commit is not a stash")
+	ErrNoCommitCheckedOut = errors.New("ops: the nested repository has no commit checked out")
+	ErrNotBisecting       = errors.New("ops: no bisect is in progress")
+	ErrBranchBisected     = errors.New("ops: branch is being bisected")
 )
 
 type OverwriteError struct {

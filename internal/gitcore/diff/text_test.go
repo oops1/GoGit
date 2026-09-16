@@ -53,6 +53,10 @@ func TestLineKeyAppliesTheWhitespaceOption(t *testing.T) {
 		{"all space wins over the other flags", " a ", IgnoreAllSpace | IgnoreSpaceChange, "a"},
 		{"a record without space is returned as is", "ab\n", IgnoreAllSpace, "ab"},
 		{"an inner tab collapses to one space", "a\t\tb", IgnoreSpaceChange, "a b"},
+		{"a carriage return before the newline is dropped", "a \r\n", IgnoreCRAtEOL, "a "},
+		{"a complete line loses only its newline", "a\r\r\n", IgnoreCRAtEOL, "a\r"},
+		{"an incomplete line keeps its carriage return", "a\r", IgnoreCRAtEOL, "a\r"},
+		{"space at the end wins over the carriage return flag", "a \r\n", IgnoreSpaceAtEOL | IgnoreCRAtEOL, "a"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

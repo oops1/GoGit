@@ -95,3 +95,17 @@
 1	1	{old => new}/large-one-change.txt
 === large-truncated
 0	500	{old => new}/large-truncated.txt
+=== common-tail-without-context
+3	2	{old => new}/common-tail-without-context.txt
+=== cr-at-eol-mixed
+5	5	{old => new}/cr-at-eol-mixed.txt
+=== cr-at-eol-incomplete
+2	2	{old => new}/cr-at-eol-incomplete.txt
+=== cr-at-eol-with-space
+3	3	{old => new}/cr-at-eol-with-space.txt
+=== patience-functions
+10	11	{old => new}/patience-functions.txt
+=== tangled-few-tokens
+388	390	{old => new}/tangled-few-tokens.txt
+=== tangled-many-tokens
+110	98	{old => new}/tangled-many-tokens.txt

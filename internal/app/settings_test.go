@@ -229,6 +229,7 @@ func TestSetToolbarAndStatusBarVisibleIgnoreWidgetsWithoutVisibilitySupport(t *t
 func TestDefaultShowSettingsShowsModalWithoutPanicking(t *testing.T) {
 	a := newTestApp(t)
 	a.showSettings(settings.FromConfig(a.Config()), func(settings.Model, bool) {})
+	secretsWG.Wait()
 }
 
 func TestDefaultShowSettingsLogsWarningWhenViewCreationFails(t *testing.T) {

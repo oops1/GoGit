@@ -1,6 +1,9 @@
 package blame
 
 import (
+	"bytes"
+	"cmp"
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -19,8 +22,8 @@ type Objects interface {
 }
 
 type Options struct {
-	Diff          diff.Options
-	FollowRenames bool
+	Diff            diff.Options
+	NoFollowRenames bool
 }
 
 type Line struct {
@@ -38,28 +41,77 @@ type Result struct {
 	Lines []Line
 }
 
+const modeTypeMask object.Mode = 0o170000
+
 type span struct {
 	result int
 	source int
 	count  int
 }
 
-type work struct {
-	commit *object.Commit
-	id     hash.ObjectID
-	path   string
-	data   []byte
-	spans  []span
+type node struct {
+	id      hash.ObjectID
+	commit  *object.Commit
+	origins []*origin
+}
+
+type origin struct {
+	node  *node
+	path  string
+	entry object.TreeEntry
+	data  []byte
+	read  bool
+	spans []span
+}
+
+type queued struct {
+	node *node
+	when int64
+	seq  int
+}
+
+type queue []queued
+
+func (q queue) Len() int { return len(q) }
+
+func (q queue) Less(i, j int) bool {
+	if q[i].when != q[j].when {
+		return q[i].when > q[j].when
+	}
+	return q[i].seq < q[j].seq
+}
+
+func (q queue) Swap(i, j int) { q[i], q[j] = q[j], q[i] }
+
+func (q *queue) Push(x any) { *q = append(*q, x.(queued)) }
+
+func (q *queue) Pop() any {
+	old := *q
+	last := old[len(old)-1]
+	*q = old[:len(old)-1]
+	return last
+}
+
+type entryKey struct {
+	tree hash.ObjectID
+	name string
+}
+
+type entryResult struct {
+	entry object.TreeEntry
+	found bool
 }
 
 type blamer struct {
-	ctx   context.Context
-	src   Objects
-	opts  Options
-	lines []string
-	out   []Line
-	queue []*work
-	known map[string]*work
+	ctx     context.Context
+	src     Objects
+	opts    Options
+	lines   []string
+	out     []Line
+	pending queue
+	seq     int
+	nodes   map[hash.ObjectID]*node
+	entries map[entryKey]entryResult
 }
 
 func File(ctx context.Context, src Objects, start hash.ObjectID, path string, opts Options) (Result, error) {
@@ -67,12 +119,20 @@ func File(ctx context.Context, src Objects, start hash.ObjectID, path string, op
 		opts.Diff = diff.Defaults()
 	}
 	opts.Diff.Context = 0
-	b := &blamer{ctx: ctx, src: src, opts: opts, known: map[string]*work{}}
-	first, err := b.commit(start)
+	b := &blamer{ctx: ctx, src: src, opts: opts, nodes: map[hash.ObjectID]*node{}, entries: map[entryKey]entryResult{}}
+	first, err := b.node(start)
 	if err != nil {
 		return Result{}, err
 	}
-	data, err := b.blobAt(first.Tree, path)
+	entry, found, err := b.entryAt(first.commit.Tree, path)
+	if err != nil {
+		return Result{}, err
+	}
+	if !found || entry.Mode.IsTree() || entry.Mode.IsSubmodule() {
+		return Result{}, fmt.Errorf("%w: %s", ErrPathNotFound, path)
+	}
+	top := first.origin(path, entry)
+	data, err := b.dataOf(top)
 	if err != nil {
 		return Result{}, err
 	}
@@ -81,158 +141,210 @@ func File(ctx context.Context, src Objects, start hash.ObjectID, path string, op
 	if len(b.lines) == 0 {
 		return Result{Path: path}, nil
 	}
-	b.push(first, start, path, data, []span{{result: 1, source: 1, count: len(b.lines)}})
-	for len(b.queue) > 0 {
+	b.queue(top, []span{{result: 1, source: 1, count: len(b.lines)}})
+	for b.pending.Len() > 0 {
 		if err := b.ctx.Err(); err != nil {
 			return Result{}, err
 		}
-		if err := b.step(b.take()); err != nil {
+		next := heap.Pop(&b.pending).(queued)
+		if err := b.process(next.node); err != nil {
 			return Result{}, err
 		}
 	}
 	return Result{Path: path, Lines: b.out}, nil
 }
 
-func (b *blamer) push(commit *object.Commit, id hash.ObjectID, path string, data []byte, spans []span) {
-	key := id.String() + "\x00" + path
-	if known, seen := b.known[key]; seen {
-		known.spans = append(known.spans, spans...)
-		return
-	}
-	item := &work{commit: commit, id: id, path: path, data: data, spans: spans}
-	b.known[key] = item
-	b.queue = append(b.queue, item)
-}
-
-func (b *blamer) take() *work {
-	newest := 0
-	for i, item := range b.queue {
-		if item.commit.Committer.When.After(b.queue[newest].commit.Committer.When) {
-			newest = i
+func (n *node) origin(path string, entry object.TreeEntry) *origin {
+	for _, o := range n.origins {
+		if o.path == path {
+			return o
 		}
 	}
-	item := b.queue[newest]
-	b.queue = slices.Delete(b.queue, newest, newest+1)
-	delete(b.known, item.id.String()+"\x00"+item.path)
-	return item
+	o := &origin{node: n, path: path, entry: entry}
+	n.origins = append(n.origins, o)
+	return o
 }
 
-func (b *blamer) step(item *work) error {
-	left := item.spans
-	for _, id := range item.commit.Parents {
-		if len(left) == 0 {
-			break
-		}
-		parent, err := b.commit(id)
-		if err != nil {
-			return err
-		}
-		path, older, found, err := b.parentVersion(parent, item.commit.Tree, item.path)
-		if err != nil {
-			return err
-		}
-		if !found {
+func (b *blamer) queue(o *origin, spans []span) {
+	if len(o.spans) == 0 {
+		heap.Push(&b.pending, queued{node: o.node, when: o.node.commit.Committer.When.Unix(), seq: b.seq})
+		b.seq++
+	}
+	o.spans = append(o.spans, spans...)
+}
+
+func (b *blamer) process(n *node) error {
+	for _, o := range n.origins {
+		if len(o.spans) == 0 {
 			continue
 		}
-		passed, kept := splitSpans(left, lineMap(older, item.data, b.opts.Diff))
-		if len(passed) > 0 {
-			b.push(parent, id, path, older, passed)
+		if err := b.passBlame(o); err != nil {
+			return err
 		}
-		left = kept
+		b.assign(o)
+		o.spans, o.data, o.read = nil, nil, false
 	}
-	b.assign(item.commit, item.id, item.path, left)
 	return nil
 }
 
-func (b *blamer) assign(commit *object.Commit, id hash.ObjectID, path string, spans []span) {
-	for _, s := range spans {
-		for i := range s.count {
-			number := s.result + i
-			b.out[number-1] = Line{
-				Commit:  id,
-				Author:  commit.Author,
-				Summary: summaryOf(commit.Message),
-				Path:    path,
-				Source:  s.source + i,
-				Number:  number,
-				Text:    b.lines[number-1],
-			}
-		}
-	}
-}
-
-func summaryOf(message string) string {
-	line, _, _ := strings.Cut(strings.TrimLeft(message, "\n"), "\n")
-	return line
-}
-
-func (b *blamer) parentVersion(parent *object.Commit, childTree hash.ObjectID, path string) (string, []byte, bool, error) {
-	data, err := b.blobAt(parent.Tree, path)
-	switch {
-	case err == nil:
-		return path, data, true, nil
-	case !errors.Is(err, ErrPathNotFound):
-		return "", nil, false, err
-	case !b.opts.FollowRenames:
-		return "", nil, false, nil
-	}
-	older, err := b.renamedFrom(parent.Tree, childTree, path)
-	if err != nil || older == "" {
-		return "", nil, false, err
-	}
-	data, err = b.blobAt(parent.Tree, older)
-	if err != nil {
-		return "", nil, false, err
-	}
-	return older, data, true, nil
-}
-
-func (b *blamer) renamedFrom(oldTree, newTree hash.ObjectID, path string) (string, error) {
-	opts := b.opts.Diff
-	opts.DetectRenames, opts.Paths = true, nil
-	files, err := diff.Trees(b.ctx, b.src, oldTree, newTree, opts)
-	if err != nil {
-		return "", err
-	}
-	for _, file := range files {
-		if file.NewPath == path && file.Status == diff.StatusRenamed {
-			return file.OldPath, nil
-		}
-	}
-	return "", nil
-}
-
-func lineMap(older, newer []byte, opts diff.Options) map[int]int {
-	hunks := diff.Blobs(older, newer, opts)
-	same := map[int]int{}
-	oldLine, newLine := 1, 1
-	for _, hunk := range hunks {
-		for newLine < hunk.NewStart {
-			same[newLine] = oldLine
-			oldLine++
-			newLine++
-		}
-		oldLine, newLine = hunk.OldStart+hunk.OldLines, hunk.NewStart+hunk.NewLines
-	}
-	total := len(splitLines(newer))
-	for newLine <= total {
-		same[newLine] = oldLine
-		oldLine++
-		newLine++
-	}
-	return same
-}
-
-func splitSpans(spans []span, same map[int]int) (passed, kept []span) {
-	for _, s := range spans {
-		for i := range s.count {
-			result, source := s.result+i, s.source+i
-			older, unchanged := same[source]
-			if unchanged {
-				passed = add(passed, span{result: result, source: older, count: 1})
+func (b *blamer) passBlame(o *origin) error {
+	parents := o.node.commit.Parents
+	found := make([]*origin, len(parents))
+	for pass := range b.passes() {
+		for at, id := range parents {
+			if found[at] != nil {
 				continue
 			}
-			kept = add(kept, span{result: result, source: source, count: 1})
+			parent, err := b.node(id)
+			if err != nil {
+				return err
+			}
+			older, err := b.find(parent, o, pass == 1)
+			if err != nil {
+				return err
+			}
+			if older == nil {
+				continue
+			}
+			if older.entry.ID == o.entry.ID {
+				b.queue(older, o.spans)
+				o.spans = nil
+				return nil
+			}
+			if !slices.ContainsFunc(found[:at], func(f *origin) bool { return f != nil && f.entry.ID == older.entry.ID }) {
+				found[at] = older
+			}
+		}
+	}
+	for _, older := range found {
+		if older == nil {
+			continue
+		}
+		if err := b.passToParent(o, older); err != nil {
+			return err
+		}
+		if len(o.spans) == 0 {
+			return nil
+		}
+	}
+	return nil
+}
+
+func (b *blamer) passes() int {
+	if b.opts.NoFollowRenames {
+		return 1
+	}
+	return 2
+}
+
+func (b *blamer) find(parent *node, o *origin, renamed bool) (*origin, error) {
+	if renamed {
+		return b.findRename(parent, o)
+	}
+	entry, found, err := b.entryAt(parent.commit.Tree, o.path)
+	if err != nil || !found || (entry.Mode^o.entry.Mode)&modeTypeMask != 0 {
+		return nil, err
+	}
+	return parent.origin(o.path, entry), nil
+}
+
+func (b *blamer) findRename(parent *node, o *origin) (*origin, error) {
+	opts := b.opts.Diff
+	opts.DetectRenames, opts.DetectCopies, opts.Paths = false, false, nil
+	files, err := diff.TreeChanges(b.ctx, b.src, parent.commit.Tree, o.node.commit.Tree, opts)
+	if err != nil {
+		return nil, err
+	}
+	added := false
+	for _, file := range files {
+		switch {
+		case file.Status == diff.StatusDeleted:
+			opts.Paths = append(opts.Paths, ":(literal)"+file.OldPath)
+			if !strings.HasPrefix(o.path, file.OldPath+"/") {
+				opts.Paths = append(opts.Paths, ":(exclude,literal)"+file.OldPath+"/")
+			}
+		case file.Status == diff.StatusAdded && file.NewPath == o.path:
+			added = true
+		}
+	}
+	if !added || len(opts.Paths) == 0 {
+		return nil, nil
+	}
+	opts.DetectRenames, opts.Paths = true, append(opts.Paths, ":(literal)"+o.path)
+	if files, err = diff.TreeChanges(b.ctx, b.src, parent.commit.Tree, o.node.commit.Tree, opts); err != nil {
+		return nil, err
+	}
+	for _, file := range files {
+		if file.NewPath == o.path && file.Status == diff.StatusRenamed {
+			return parent.origin(file.OldPath, object.TreeEntry{Mode: file.OldMode, ID: file.OldID}), nil
+		}
+	}
+	return nil, nil
+}
+
+func (b *blamer) passToParent(o, older *origin) error {
+	newer, err := b.dataOf(o)
+	if err != nil {
+		return err
+	}
+	previous, err := b.dataOf(older)
+	if err != nil {
+		return err
+	}
+	passed, kept := splitSpans(o.spans, unchangedSegments(diff.Changes(previous, newer, b.opts.Diff), lineCount(newer)))
+	if len(passed) > 0 {
+		b.queue(older, passed)
+	}
+	o.spans = kept
+	return nil
+}
+
+type segment struct {
+	newer int
+	older int
+	count int
+}
+
+func unchangedSegments(changes []diff.Change, total int) []segment {
+	var segments []segment
+	newer, older := 0, 0
+	for _, c := range changes {
+		if c.NewIndex > newer {
+			segments = append(segments, segment{newer: newer, older: older, count: c.NewIndex - newer})
+		}
+		newer, older = c.NewIndex+c.NewCount, c.OldIndex+c.OldCount
+	}
+	if total > newer {
+		segments = append(segments, segment{newer: newer, older: older, count: total - newer})
+	}
+	return segments
+}
+
+func splitSpans(spans []span, segments []segment) (passed, kept []span) {
+	slices.SortFunc(spans, func(x, y span) int {
+		return cmp.Or(cmp.Compare(x.source, y.source), cmp.Compare(x.result, y.result))
+	})
+	first := 0
+	for _, s := range spans {
+		start, end := s.source-1, s.source-1+s.count
+		for first < len(segments) && segments[first].newer+segments[first].count <= start {
+			first++
+		}
+		at := start
+		for _, seg := range segments[first:] {
+			if seg.newer >= end {
+				break
+			}
+			if seg.newer > at {
+				kept = add(kept, span{result: s.result + at - start, source: at + 1, count: seg.newer - at})
+				at = seg.newer
+			}
+			stop := min(end, seg.newer+seg.count)
+			passed = add(passed, span{result: s.result + at - start, source: seg.older + at - seg.newer + 1, count: stop - at})
+			at = stop
+		}
+		if at < end {
+			kept = add(kept, span{result: s.result + at - start, source: at + 1, count: end - at})
 		}
 	}
 	return passed, kept
@@ -249,7 +361,34 @@ func add(spans []span, next span) []span {
 	return append(spans, next)
 }
 
-func (b *blamer) commit(id hash.ObjectID) (*object.Commit, error) {
+func (b *blamer) assign(o *origin) {
+	commit := o.node.commit
+	summary := summaryOf(commit.Message)
+	for _, s := range o.spans {
+		for i := range s.count {
+			number := s.result + i
+			b.out[number-1] = Line{
+				Commit:  o.node.id,
+				Author:  commit.Author,
+				Summary: summary,
+				Path:    o.path,
+				Source:  s.source + i,
+				Number:  number,
+				Text:    b.lines[number-1],
+			}
+		}
+	}
+}
+
+func summaryOf(message string) string {
+	line, _, _ := strings.Cut(strings.TrimLeft(message, "\n"), "\n")
+	return line
+}
+
+func (b *blamer) node(id hash.ObjectID) (*node, error) {
+	if n, seen := b.nodes[id]; seen {
+		return n, nil
+	}
 	kind, data, err := b.src.Get(id)
 	if err != nil {
 		return nil, err
@@ -257,57 +396,78 @@ func (b *blamer) commit(id hash.ObjectID) (*object.Commit, error) {
 	if kind != object.TypeCommit {
 		return nil, fmt.Errorf("blame: %s is a %s, not a commit", id, kind)
 	}
-	return object.ParseCommit(data)
-}
-
-func (b *blamer) blobAt(tree hash.ObjectID, path string) ([]byte, error) {
-	id, err := b.entryAt(tree, path)
+	commit, err := object.ParseCommit(data)
 	if err != nil {
 		return nil, err
 	}
-	kind, data, err := b.src.Get(id)
+	n := &node{id: id, commit: commit}
+	b.nodes[id] = n
+	return n, nil
+}
+
+func (b *blamer) dataOf(o *origin) ([]byte, error) {
+	if o.read {
+		return o.data, nil
+	}
+	kind, data, err := b.src.Get(o.entry.ID)
 	if err != nil {
 		return nil, err
 	}
 	if kind != object.TypeBlob {
-		return nil, fmt.Errorf("%w: %s is a %s", ErrPathNotFound, path, kind)
+		return nil, fmt.Errorf("%w: %s is a %s", ErrPathNotFound, o.path, kind)
 	}
+	o.data, o.read = data, true
 	return data, nil
 }
 
-func (b *blamer) entryAt(tree hash.ObjectID, path string) (hash.ObjectID, error) {
-	name, rest, deeper := strings.Cut(path, "/")
-	kind, data, err := b.src.Get(tree)
-	if err != nil {
-		return hash.Zero, err
+func lineCount(data []byte) int {
+	count := bytes.Count(data, []byte{'\n'})
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		count++
 	}
-	if kind != object.TypeTree {
-		return hash.Zero, fmt.Errorf("%w: %s", ErrPathNotFound, path)
-	}
-	parsed, err := object.ParseTree(data)
-	if err != nil {
-		return hash.Zero, err
-	}
-	for _, entry := range parsed.Entries {
-		if entry.Name != name {
-			continue
-		}
-		if !deeper {
-			return entry.ID, nil
-		}
-		return b.entryAt(entry.ID, rest)
-	}
-	return hash.Zero, fmt.Errorf("%w: %s", ErrPathNotFound, path)
+	return count
 }
 
 func splitLines(data []byte) []string {
-	if len(data) == 0 {
-		return nil
+	lines := strings.SplitAfter(string(data), "\n")
+	return lines[:lineCount(data)]
+}
+
+func (b *blamer) entryAt(tree hash.ObjectID, path string) (object.TreeEntry, bool, error) {
+	for {
+		name, rest, deeper := strings.Cut(path, "/")
+		entry, found, err := b.lookup(tree, name)
+		if err != nil || !found || !deeper {
+			return entry, found, err
+		}
+		if !entry.Mode.IsTree() {
+			return object.TreeEntry{}, false, nil
+		}
+		tree, path = entry.ID, rest
 	}
-	text := string(data)
-	lines := strings.SplitAfter(text, "\n")
-	if last := len(lines) - 1; lines[last] == "" {
-		lines = lines[:last]
+}
+
+func (b *blamer) lookup(tree hash.ObjectID, name string) (object.TreeEntry, bool, error) {
+	key := entryKey{tree: tree, name: name}
+	if known, seen := b.entries[key]; seen {
+		return known.entry, known.found, nil
 	}
-	return lines
+	kind, data, err := b.src.Get(tree)
+	if err != nil {
+		return object.TreeEntry{}, false, err
+	}
+	var result entryResult
+	if kind == object.TypeTree {
+		for entry, err := range object.ParseTreeSeq(data) {
+			if err != nil {
+				return object.TreeEntry{}, false, err
+			}
+			if entry.Name == name {
+				result = entryResult{entry: entry, found: true}
+				break
+			}
+		}
+	}
+	b.entries[key] = result
+	return result.entry, result.found, nil
 }

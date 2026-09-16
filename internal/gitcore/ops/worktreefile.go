@@ -30,6 +30,13 @@ func prepareWorktreeWrite(wt *workingTree, rel string, mode object.Mode) (string
 	return filepath.FromSlash(rel), nil
 }
 
+func writeGitlinkDirectory(wt *workingTree, rel string) error {
+	if err := index.VerifyPath(rel, object.ModeSubmodule, writeGuardRules); err != nil {
+		return err
+	}
+	return ensureDirectories(wt.root, rel)
+}
+
 func openRegularWorktreeFile(wt *workingTree, name string, perm fs.FileMode) (*os.File, error) {
 	if info, err := fsRootLstat(wt.root, name); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		if err := fsRootRemove(wt.root, name); err != nil {

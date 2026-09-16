@@ -40,6 +40,10 @@ func (x *Index) AddVerified(entry Entry, rules PathRules) error {
 	return nil
 }
 
+func IsDotGitmodules(name string) bool {
+	return PathRules{}.isHFSDotGeneric(name, "gitmodules") || isNTFSDotGeneric(name, "gitmodules", "gi7eba")
+}
+
 func (r PathRules) separator(c byte) bool {
 	return c == '/' || r.Windows && c == '\\'
 }

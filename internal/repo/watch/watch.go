@@ -24,7 +24,7 @@ const (
 	defaultMaxEntries  = 5000
 )
 
-var stateFileNames = []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"}
+var stateFileNames = []string{"MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_START", "BISECT_LOG"}
 
 var stateDirNames = []string{"rebase-merge", "rebase-apply", "sequencer"}
 

@@ -52,7 +52,29 @@ func BenchmarkDetectRenamesOnBothSides(b *testing.B) {
 	base, ours, theirs := renameBenchmarkSides(b, s, 150)
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, _, err := DetectSideRenames(b.Context(), s, base, ours, theirs); err != nil {
+		if _, err := DetectSideRenames(b.Context(), s, base, ours, theirs, RenameOptions{Limit: DefaultRenameLimit, DirectoryRenames: true}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDetectRenamesSkipsSourcesTheOtherSideLeftAlone(b *testing.B) {
+	s := newStore()
+	base, ours, _ := renameBenchmarkSides(b, s, 150)
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := DetectSideRenames(b.Context(), s, base, ours, base, RenameOptions{Limit: DefaultRenameLimit, DirectoryRenames: true}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDetectRenamesWithEveryPairingRelevant(b *testing.B) {
+	s := newStore()
+	base, ours, _ := renameBenchmarkSides(b, s, 150)
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := DetectRenames(b.Context(), s, base, ours); err != nil {
 			b.Fatal(err)
 		}
 	}

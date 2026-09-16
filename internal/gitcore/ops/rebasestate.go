@@ -298,10 +298,12 @@ func writeRebaseState(r *repo.Repository, s RebaseState) error {
 		{rebasePath(rebaseDone), formatTodo(s.Done)},
 		{rebasePath(rebaseMsgNum), strconv.Itoa(len(s.Done)) + "\n"},
 		{rebasePath(rebaseEnd), strconv.Itoa(len(s.Done)+len(s.Todo)) + "\n"},
-		{rebasePath(rebaseRewritten), s.Rewritten},
 		{rebasePath(rebaseInteractive), ""},
 		{rebasePath(rebaseDropRedundant), ""},
 		{rebasePath(rebaseNoReschedule), ""},
+	}
+	if s.Rewritten != "" {
+		files = append(files, stateFile{rebasePath(rebaseRewritten), s.Rewritten})
 	}
 	if s.Stopped.IsZero() {
 		return errors.Join(writeStateFiles(r, files), removeStateFiles(r, rebasePath(rebaseStopped), rebasePath(rebaseMessage), rebasePath(rebaseAuthorScript), rebasePath(rebaseAmend), rebaseHeadFile))

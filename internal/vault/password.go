@@ -22,6 +22,11 @@ func NewPasswordUnlocker(password []byte, params SlotParams) *PasswordUnlocker {
 	}
 }
 
+func (u *PasswordUnlocker) Wipe() {
+	clear(u.password)
+	u.password = nil
+}
+
 func (u *PasswordUnlocker) Kind() SlotKind {
 	return SlotPassword
 }

@@ -30,6 +30,10 @@ func fixedGoldenSlot() Slot {
 	}
 }
 
+func goldenHeader(slots ...Slot) header {
+	return header{version: formatVersion, generation: 7, slots: slots}
+}
+
 func TestSlotEncodingGolden(t *testing.T) {
 	golden := filepath.Join("testdata", "slot.golden")
 	got := encodeSlot(fixedGoldenSlot())
@@ -92,42 +96,83 @@ func TestDecodeSlotRejectsTruncation(t *testing.T) {
 }
 
 func TestEncodeHeaderRejectsSlotCount(t *testing.T) {
-	if _, err := encodeHeader(formatVersion, 0, nil); !errors.Is(err, ErrSlotCount) {
+	if _, err := encodeHeader(goldenHeader()); !errors.Is(err, ErrSlotCount) {
 		t.Fatalf("empty slots: got %v, want ErrSlotCount", err)
 	}
 	tooMany := make([]Slot, maxSlotCount+1)
 	for i := range tooMany {
 		tooMany[i] = fixedGoldenSlot()
 	}
-	if _, err := encodeHeader(formatVersion, 0, tooMany); !errors.Is(err, ErrSlotCount) {
+	if _, err := encodeHeader(goldenHeader(tooMany...)); !errors.Is(err, ErrSlotCount) {
 		t.Fatalf("too many slots: got %v, want ErrSlotCount", err)
 	}
 }
 
+func TestHeaderRoundTripKeepsTheGeneration(t *testing.T) {
+	data, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, n, err := decodeHeader(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(data) || h.version != formatVersion || h.generation != 7 || len(h.slots) != 1 {
+		t.Fatalf("decoded %+v after %d of %d bytes", h, n, len(data))
+	}
+}
+
+func TestUnnumberedHeaderDecodesWithGenerationZero(t *testing.T) {
+	data, err := encodeHeader(header{version: formatVersionUnnumbered, generation: 99, slots: []Slot{fixedGoldenSlot()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data[headerFixedSize-1] != 1 {
+		t.Fatalf("version 1 header must not carry a generation: %x", data[:headerFixedSize])
+	}
+	h, n, err := decodeHeader(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(data) || h.version != formatVersionUnnumbered || h.generation != 0 {
+		t.Fatalf("decoded %+v", h)
+	}
+}
+
 func TestDecodeHeaderRejectsBadMagic(t *testing.T) {
-	data, err := encodeHeader(formatVersion, 0, []Slot{fixedGoldenSlot()})
+	data, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data[0] ^= 0xFF
-	if _, _, _, _, err := decodeHeader(data); !errors.Is(err, ErrInvalidFormat) {
+	if _, _, err := decodeHeader(data); !errors.Is(err, ErrInvalidFormat) {
 		t.Fatalf("got %v, want ErrInvalidFormat", err)
 	}
 }
 
 func TestDecodeHeaderRejectsShort(t *testing.T) {
-	if _, _, _, _, err := decodeHeader([]byte("short")); !errors.Is(err, ErrInvalidFormat) {
+	if _, _, err := decodeHeader([]byte("short")); !errors.Is(err, ErrInvalidFormat) {
+		t.Fatalf("got %v, want ErrInvalidFormat", err)
+	}
+}
+
+func TestDecodeHeaderRejectsTruncatedGeneration(t *testing.T) {
+	data, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := decodeHeader(data[:headerFixedSize+generationSize-1]); !errors.Is(err, ErrInvalidFormat) {
 		t.Fatalf("got %v, want ErrInvalidFormat", err)
 	}
 }
 
 func TestDecodeHeaderRejectsBadVersion(t *testing.T) {
-	data, err := encodeHeader(formatVersion, 0, []Slot{fixedGoldenSlot()})
+	data, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data[8] = 0xFF
-	if _, _, _, _, err := decodeHeader(data); !errors.Is(err, ErrUnsupportedVersion) {
+	if _, _, err := decodeHeader(data); !errors.Is(err, ErrUnsupportedVersion) {
 		t.Fatalf("got %v, want ErrUnsupportedVersion", err)
 	}
 }
@@ -135,30 +180,30 @@ func TestDecodeHeaderRejectsBadVersion(t *testing.T) {
 func TestDecodeHeaderRejectsBadSlotCount(t *testing.T) {
 	slot := fixedGoldenSlot()
 	for _, count := range []byte{0, maxSlotCount + 1, 255} {
-		data, err := encodeHeader(formatVersion, 0, []Slot{slot})
+		data, err := encodeHeader(goldenHeader(slot))
 		if err != nil {
 			t.Fatal(err)
 		}
-		data[12] = count
-		if _, _, _, _, err := decodeHeader(data); !errors.Is(err, ErrInvalidFormat) {
+		data[headerFixedSize-1+generationSize] = count
+		if _, _, err := decodeHeader(data); !errors.Is(err, ErrInvalidFormat) {
 			t.Fatalf("count %d: got %v, want ErrInvalidFormat", count, err)
 		}
 	}
 }
 
 func TestDecodeHeaderRejectsTruncatedSlots(t *testing.T) {
-	data, err := encodeHeader(formatVersion, 0, []Slot{fixedGoldenSlot()})
+	data, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, _, err := decodeHeader(data[:len(data)-1]); err == nil {
+	if _, _, err := decodeHeader(data[:len(data)-1]); err == nil {
 		t.Fatal("expected error for truncated slot data")
 	}
 }
 
 func TestHeaderEveryByteCorruptionFails(t *testing.T) {
 	slot := fixedGoldenSlot()
-	headerBytes, err := encodeHeader(formatVersion, 0, []Slot{slot})
+	headerBytes, err := encodeHeader(goldenHeader(slot))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +220,7 @@ func TestHeaderEveryByteCorruptionFails(t *testing.T) {
 	for i := 0; i < len(headerBytes); i++ {
 		corrupt := append([]byte(nil), original...)
 		corrupt[i] ^= 0xFF
-		version, flags, slots, n, hErr := decodeHeader(corrupt)
+		h, n, hErr := decodeHeader(corrupt)
 		if hErr != nil {
 			continue
 		}
@@ -185,92 +230,47 @@ func TestHeaderEveryByteCorruptionFails(t *testing.T) {
 		}
 		gotNonce := rest[:payloadNonceSize]
 		gotCipher := rest[payloadNonceSize:]
-		if version == formatVersion && flags == 0 && len(slots) == 1 &&
+		if h.version == formatVersion && h.flags == 0 && h.generation == 7 && len(h.slots) == 1 &&
 			bytes.Equal(gotNonce, nonce) && bytes.Equal(gotCipher, ciphertext) &&
-			slots[0].Kind == slot.Kind && bytes.Equal(slots[0].Salt, slot.Salt) &&
-			bytes.Equal(slots[0].Nonce, slot.Nonce) && bytes.Equal(slots[0].Wrapped, slot.Wrapped) &&
-			slots[0].Params == slot.Params {
+			h.slots[0].Kind == slot.Kind && bytes.Equal(h.slots[0].Salt, slot.Salt) &&
+			bytes.Equal(h.slots[0].Nonce, slot.Nonce) && bytes.Equal(h.slots[0].Wrapped, slot.Wrapped) &&
+			h.slots[0].Params == slot.Params {
 			t.Fatalf("byte %d corruption was not observable in decoded header", i)
 		}
 	}
 }
 
-func TestReadVaultFileMissing(t *testing.T) {
-	_, _, _, _, _, err := readVaultFile(filepath.Join(t.TempDir(), "missing.bin"))
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestReadVaultFileTooShortPayload(t *testing.T) {
-	headerBytes, err := encodeHeader(formatVersion, 0, []Slot{fixedGoldenSlot()})
+func TestParseVaultFileTooShortPayload(t *testing.T) {
+	headerBytes, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "vault.bin")
-	if err := os.WriteFile(path, append(headerBytes, make([]byte, payloadNonceSize)...), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, _, _, _, err := readVaultFile(path); !errors.Is(err, ErrInvalidFormat) {
+	if _, err := parseVaultFile(append(headerBytes, make([]byte, payloadNonceSize)...)); !errors.Is(err, ErrInvalidFormat) {
 		t.Fatalf("got %v, want ErrInvalidFormat", err)
 	}
 }
 
-func TestReadVaultFileInvalidHeader(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "vault.bin")
-	if err := os.WriteFile(path, []byte("not a vault file"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, _, _, _, err := readVaultFile(path); !errors.Is(err, ErrInvalidFormat) {
+func TestParseVaultFileInvalidHeader(t *testing.T) {
+	if _, err := parseVaultFile([]byte("not a vault file")); !errors.Is(err, ErrInvalidFormat) {
 		t.Fatalf("got %v, want ErrInvalidFormat", err)
 	}
 }
 
-func TestWriteAtomicRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "vault.bin")
-	if err := writeAtomic(path, []byte("data")); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(path)
+func TestParseVaultFileSplitsHeaderNonceAndCiphertext(t *testing.T) {
+	headerBytes, err := encodeHeader(goldenHeader(fixedGoldenSlot()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "data" {
-		t.Fatalf("got %q", got)
-	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Fatalf("expected .tmp to be gone, stat err = %v", err)
-	}
-}
-
-func TestWriteAtomicFailsWhenDirIsFile(t *testing.T) {
-	dir := t.TempDir()
-	blocker := filepath.Join(dir, "file")
-	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+	nonce := bytes.Repeat([]byte{1}, payloadNonceSize)
+	data := append(append(append([]byte(nil), headerBytes...), nonce...), 9, 9, 9)
+	file, err := parseVaultFile(data)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := writeAtomic(filepath.Join(blocker, "vault.bin"), []byte("x")); err == nil {
-		t.Fatal("expected error")
+	if !bytes.Equal(file.headerRaw, headerBytes) || !bytes.Equal(file.nonce, nonce) || !bytes.Equal(file.ciphertext, []byte{9, 9, 9}) {
+		t.Fatalf("unexpected split: %+v", file)
 	}
-}
-
-func TestWriteAtomicFailsWhenTargetIsDirectory(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "vault.bin")
-	if err := os.Mkdir(target, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeAtomic(target, []byte("x")); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestWriteAtomicFailsWhenTempIsDirectory(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "vault.bin.tmp"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeAtomic(filepath.Join(dir, "vault.bin"), []byte("x")); err == nil {
-		t.Fatal("expected error")
+	if file.header.generation != 7 {
+		t.Fatalf("generation = %d", file.header.generation)
 	}
 }

@@ -373,6 +373,11 @@ func treeVariants() []treeVariant {
 		},
 		{name: "renames", args: []string{"-p", "-M"}, opts: Defaults()},
 		{
+			name: "context0",
+			args: []string{"-p", "-M", "-U0"},
+			opts: withOptions(func(o *Options) { o.Context = 0 }),
+		},
+		{
 			name: "no-renames",
 			args: []string{"-p", "--no-renames"},
 			opts: withOptions(func(o *Options) { o.DetectRenames = false }),

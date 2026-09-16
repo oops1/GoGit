@@ -8,37 +8,61 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/godbus/dbus/v5"
+
+	"github.com/oops1/gogit/internal/secretservice"
 )
+
+const fakeCollectionPath = dbus.ObjectPath("/org/freedesktop/secrets/collection/login")
 
 type fakeSecretItem struct {
 	attrs  map[string]string
 	secret []byte
+	locked bool
 }
 
 type fakeSecretBus struct {
-	items       []fakeSecretItem
-	sessionErr  error
-	searchErr   error
-	createErr   error
-	readErr     error
-	closeCalls  int
-	sessionPath dbus.ObjectPath
+	items             []fakeSecretItem
+	sessionErr        error
+	collectionErr     error
+	searchErr         error
+	createErr         error
+	readErr           error
+	unlockErr         error
+	promptErr         error
+	collection        dbus.ObjectPath
+	collectionLocked  bool
+	createNeedsPrompt bool
+	createNoPrompt    bool
+	dropCreated       bool
+	corruptStored     bool
+	unlockNoPrompt    bool
+	dismiss           bool
+	pending           func()
+	prompts           int
+	closeCalls        int
+	sessionPath       dbus.ObjectPath
 }
 
 func newFakeSecretBus() *fakeSecretBus {
-	return &fakeSecretBus{sessionPath: dbus.ObjectPath("/session/1")}
+	return &fakeSecretBus{sessionPath: dbus.ObjectPath("/session/1"), collection: fakeCollectionPath}
 }
 
-func (b *fakeSecretBus) openSession() (dbus.ObjectPath, error) {
+func (b *fakeSecretBus) OpenSession(context.Context) (dbus.ObjectPath, error) {
 	if b.sessionErr != nil {
 		return "", b.sessionErr
 	}
 	return b.sessionPath, nil
+}
+
+func (b *fakeSecretBus) DefaultCollection(context.Context) (dbus.ObjectPath, error) {
+	if b.collectionErr != nil {
+		return "", b.collectionErr
+	}
+	return b.collection, nil
 }
 
 func attrsEqual(a, b map[string]string) bool {
@@ -53,43 +77,127 @@ func attrsEqual(a, b map[string]string) bool {
 	return true
 }
 
-func (b *fakeSecretBus) findItem(attrs map[string]string) (dbus.ObjectPath, bool, error) {
+func itemPathFor(i int) dbus.ObjectPath {
+	return dbus.ObjectPath("/item/" + strconv.Itoa(i))
+}
+
+func (b *fakeSecretBus) FindItem(_ context.Context, attrs map[string]string) (dbus.ObjectPath, bool, bool, error) {
 	if b.searchErr != nil {
-		return "", false, b.searchErr
+		return "", false, false, b.searchErr
 	}
 	for i, it := range b.items {
 		if attrsEqual(it.attrs, attrs) {
-			return dbus.ObjectPath(itemPathFor(i)), true, nil
+			return itemPathFor(i), it.locked, true, nil
 		}
 	}
-	return "", false, nil
+	return "", false, false, nil
 }
 
-func itemPathFor(i int) string {
-	return "/item/" + string(rune('a'+i))
-}
-
-func (b *fakeSecretBus) createItem(_ dbus.ObjectPath, _ string, attrs map[string]string, secret []byte) error {
-	if b.createErr != nil {
-		return b.createErr
+func (b *fakeSecretBus) store(attrs map[string]string, secret []byte) dbus.ObjectPath {
+	kept := append([]byte(nil), secret...)
+	if b.corruptStored {
+		kept[0] ^= 0xFF
 	}
-	b.items = append(b.items, fakeSecretItem{attrs: attrs, secret: append([]byte(nil), secret...)})
-	return nil
+	b.items = append(b.items, fakeSecretItem{attrs: attrs, secret: kept})
+	return itemPathFor(len(b.items) - 1)
 }
 
-func (b *fakeSecretBus) readSecret(_, item dbus.ObjectPath) ([]byte, error) {
+func (b *fakeSecretBus) CreateItem(_ context.Context, _, _ dbus.ObjectPath, _ string, attrs map[string]string, secret []byte, _ string) (dbus.ObjectPath, dbus.ObjectPath, error) {
+	switch {
+	case b.createErr != nil:
+		return "", "", b.createErr
+	case b.createNoPrompt:
+		return secretservice.NoObject, secretservice.NoObject, nil
+	case b.createNeedsPrompt:
+		kept := append([]byte(nil), secret...)
+		b.pending = func() { b.store(attrs, kept) }
+		return secretservice.NoObject, dbus.ObjectPath("/prompt/create"), nil
+	case b.dropCreated:
+		return itemPathFor(99), secretservice.NoObject, nil
+	default:
+		return b.store(attrs, secret), secretservice.NoObject, nil
+	}
+}
+
+func (b *fakeSecretBus) Unlock(_ context.Context, objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, error) {
+	if b.unlockErr != nil {
+		return nil, "", b.unlockErr
+	}
+	if b.unlockNoPrompt {
+		return nil, secretservice.NoObject, nil
+	}
+	var locked []dbus.ObjectPath
+	for _, object := range objects {
+		if b.isLocked(object) {
+			locked = append(locked, object)
+		}
+	}
+	if len(locked) == 0 {
+		return objects, secretservice.NoObject, nil
+	}
+	b.pending = func() {
+		for _, object := range locked {
+			b.setLocked(object, false)
+		}
+	}
+	return nil, dbus.ObjectPath("/prompt/unlock"), nil
+}
+
+func (b *fakeSecretBus) isLocked(object dbus.ObjectPath) bool {
+	if object == b.collection {
+		return b.collectionLocked
+	}
+	for i, it := range b.items {
+		if itemPathFor(i) == object {
+			return it.locked
+		}
+	}
+	return false
+}
+
+func (b *fakeSecretBus) setLocked(object dbus.ObjectPath, locked bool) {
+	if object == b.collection {
+		b.collectionLocked = locked
+	}
+	for i := range b.items {
+		if itemPathFor(i) == object {
+			b.items[i].locked = locked
+		}
+	}
+}
+
+func (b *fakeSecretBus) Prompt(context.Context, dbus.ObjectPath) (bool, error) {
+	b.prompts++
+	pending := b.pending
+	b.pending = nil
+	if b.promptErr != nil {
+		return false, b.promptErr
+	}
+	if b.dismiss {
+		return true, nil
+	}
+	if pending != nil {
+		pending()
+	}
+	return false, nil
+}
+
+func (b *fakeSecretBus) GetSecret(_ context.Context, _, item dbus.ObjectPath) ([]byte, error) {
 	if b.readErr != nil {
 		return nil, b.readErr
 	}
 	for i, it := range b.items {
-		if dbus.ObjectPath(itemPathFor(i)) == item {
+		if itemPathFor(i) == item {
+			if it.locked {
+				return nil, errors.New("item is locked")
+			}
 			return append([]byte(nil), it.secret...), nil
 		}
 	}
 	return nil, errors.New("item not found")
 }
 
-func (b *fakeSecretBus) close() {
+func (b *fakeSecretBus) Close() {
 	b.closeCalls++
 }
 
@@ -107,44 +215,163 @@ func withUnavailableSecretBus(t *testing.T) {
 	t.Cleanup(func() { dialSecretBus = prev })
 }
 
-func TestSecretServiceUnlockerRoundTrip(t *testing.T) {
-	withFakeSecretBus(t, newFakeSecretBus())
-	u := NewSecretServiceUnlocker("gogit-vault")
-	dek := []byte("0123456789abcdef0123456789abcdef")[:32]
-	slot, err := u.Wrap(context.Background(), dek)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if slot.Kind != SlotSecretService {
-		t.Fatalf("kind = %v", slot.Kind)
-	}
-	got, err := u.Unwrap(context.Background(), slot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != string(dek) {
-		t.Fatal("unwrapped dek mismatch")
-	}
+func testDEK() []byte {
+	return []byte("0123456789abcdef0123456789abcdef")
 }
 
-func TestSecretServiceUnlockerReopensExistingItem(t *testing.T) {
-	bus := newFakeSecretBus()
+func wrapWithFake(t *testing.T, bus *fakeSecretBus) (Slot, error) {
+	t.Helper()
 	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	dek := make([]byte, 32)
-	slot, err := u.Wrap(context.Background(), dek)
+	return NewSecretServiceUnlocker("gogit-vault").Wrap(context.Background(), testDEK())
+}
+
+func TestSecretServiceUnlockerRoundTrip(t *testing.T) {
+	bus := newFakeSecretBus()
+	slot, err := wrapWithFake(t, bus)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(bus.items) != 1 {
-		t.Fatalf("items = %d, want 1", len(bus.items))
+	if slot.Kind != SlotSecretService || len(bus.items) != 1 || bus.prompts != 0 {
+		t.Fatalf("slot = %+v, items = %d, prompts = %d", slot, len(bus.items), bus.prompts)
 	}
 	got, err := NewSecretServiceUnlocker("gogit-vault").Unwrap(context.Background(), slot)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != string(dek) {
-		t.Fatal("reopened dek mismatch")
+	if string(got) != string(testDEK()) {
+		t.Fatal("unwrapped dek mismatch")
+	}
+	if bus.closeCalls != 2 {
+		t.Fatalf("close calls = %d, want 2", bus.closeCalls)
+	}
+}
+
+func TestSecretServiceWrapAsksToUnlockALockedCollectionFirst(t *testing.T) {
+	bus := newFakeSecretBus()
+	bus.collectionLocked = true
+	if _, err := wrapWithFake(t, bus); err != nil {
+		t.Fatal(err)
+	}
+	if bus.prompts != 1 || bus.collectionLocked || len(bus.items) != 1 {
+		t.Fatalf("prompts = %d, locked = %v, items = %d", bus.prompts, bus.collectionLocked, len(bus.items))
+	}
+}
+
+func TestSecretServiceWrapWaitsForTheCreatePrompt(t *testing.T) {
+	bus := newFakeSecretBus()
+	bus.createNeedsPrompt = true
+	slot, err := wrapWithFake(t, bus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bus.prompts != 1 || len(bus.items) != 1 {
+		t.Fatalf("prompts = %d, items = %d", bus.prompts, len(bus.items))
+	}
+	if _, err := NewSecretServiceUnlocker("gogit-vault").Unwrap(context.Background(), slot); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSecretServiceWrapFailures(t *testing.T) {
+	boom := errors.New("boom")
+	cases := []struct {
+		name  string
+		setup func(*fakeSecretBus)
+		want  error
+	}{
+		{"session fails", func(b *fakeSecretBus) { b.sessionErr = boom }, boom},
+		{"alias lookup fails", func(b *fakeSecretBus) { b.collectionErr = boom }, boom},
+		{"no default collection", func(b *fakeSecretBus) { b.collection = secretservice.NoObject }, ErrSlotUnavailable},
+		{"empty default collection", func(b *fakeSecretBus) { b.collection = "" }, ErrSlotUnavailable},
+		{"unlock call fails", func(b *fakeSecretBus) { b.unlockErr = boom }, boom},
+		{"locked collection without prompt", func(b *fakeSecretBus) { b.collectionLocked, b.unlockNoPrompt = true, true }, ErrKeyringLocked},
+		{"unlock prompt dismissed", func(b *fakeSecretBus) { b.collectionLocked, b.dismiss = true, true }, ErrKeyringLocked},
+		{"unlock prompt fails", func(b *fakeSecretBus) { b.collectionLocked, b.promptErr = true, boom }, boom},
+		{"unlock prompt times out", func(b *fakeSecretBus) { b.collectionLocked, b.promptErr = true, secretservice.ErrPromptTimeout }, ErrKeyringLocked},
+		{"create fails", func(b *fakeSecretBus) { b.createErr = boom }, boom},
+		{"create prompt dismissed", func(b *fakeSecretBus) { b.createNeedsPrompt, b.dismiss = true, true }, ErrKeyringLocked},
+		{"create returns neither item nor prompt", func(b *fakeSecretBus) { b.createNoPrompt = true }, ErrKeyringLocked},
+		{"keyring drops the key", func(b *fakeSecretBus) { b.dropCreated = true }, ErrKeyNotStored},
+		{"keyring stores a different key", func(b *fakeSecretBus) { b.corruptStored = true }, ErrKeyNotStored},
+		{"read back fails", func(b *fakeSecretBus) { b.readErr = boom }, boom},
+		{"search while verifying fails", func(b *fakeSecretBus) { b.searchErr = boom }, boom},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			bus := newFakeSecretBus()
+			c.setup(bus)
+			if _, err := wrapWithFake(t, bus); !errors.Is(err, c.want) {
+				t.Fatalf("err = %v, want %v", err, c.want)
+			}
+		})
+	}
+}
+
+func TestSecretServiceWrapFailsWhenAEADConstructionFails(t *testing.T) {
+	withFailingAEAD(t)
+	if _, err := wrapWithFake(t, newFakeSecretBus()); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestSecretServiceUnwrapUnlocksALockedItem(t *testing.T) {
+	bus := newFakeSecretBus()
+	slot, err := wrapWithFake(t, bus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus.items[0].locked = true
+	got, err := NewSecretServiceUnlocker("gogit-vault").Unwrap(context.Background(), slot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(testDEK()) || bus.prompts != 1 {
+		t.Fatalf("prompts = %d", bus.prompts)
+	}
+}
+
+func TestSecretServiceUnwrapFailures(t *testing.T) {
+	boom := errors.New("boom")
+	cases := []struct {
+		name  string
+		setup func(*fakeSecretBus, *Slot)
+		want  error
+	}{
+		{"session fails", func(b *fakeSecretBus, _ *Slot) { b.sessionErr = boom }, boom},
+		{"search fails", func(b *fakeSecretBus, _ *Slot) { b.searchErr = boom }, boom},
+		{"item missing", func(b *fakeSecretBus, _ *Slot) { b.items = nil }, ErrWrongKey},
+		{"locked item prompt dismissed", func(b *fakeSecretBus, _ *Slot) { b.items[0].locked, b.dismiss = true, true }, ErrKeyringLocked},
+		{"locked item unlock fails", func(b *fakeSecretBus, _ *Slot) { b.items[0].locked, b.unlockErr = true, boom }, boom},
+		{"read fails", func(b *fakeSecretBus, _ *Slot) { b.readErr = boom }, boom},
+		{"wrapper corrupted", func(_ *fakeSecretBus, s *Slot) {
+			s.Wrapped = append([]byte(nil), s.Wrapped...)
+			s.Wrapped[0] ^= 0xFF
+		}, ErrWrongKey},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			bus := newFakeSecretBus()
+			slot, err := wrapWithFake(t, bus)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.setup(bus, &slot)
+			if _, err := NewSecretServiceUnlocker("gogit-vault").Unwrap(context.Background(), slot); !errors.Is(err, c.want) {
+				t.Fatalf("err = %v, want %v", err, c.want)
+			}
+		})
+	}
+}
+
+func TestSecretServiceUnwrapFailsWhenStoredKeyHasWrongSize(t *testing.T) {
+	bus := newFakeSecretBus()
+	slot, err := wrapWithFake(t, bus)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bus.items[0].secret = []byte("too short")
+	if _, err := NewSecretServiceUnlocker("gogit-vault").Unwrap(context.Background(), slot); err == nil {
+		t.Fatal("expected error")
 	}
 }
 
@@ -159,120 +386,30 @@ func TestSecretServiceUnlockerNoServiceIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestSecretServiceUnlockerWrapsBusErrors(t *testing.T) {
-	sessionErr := errors.New("session failed")
-	bus := newFakeSecretBus()
-	bus.sessionErr = sessionErr
-	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	if _, err := u.Wrap(context.Background(), make([]byte, 32)); !errors.Is(err, sessionErr) {
-		t.Fatalf("got %v, want wrapped %v", err, sessionErr)
-	}
-	if _, err := u.Unwrap(context.Background(), Slot{Kind: SlotSecretService}); !errors.Is(err, sessionErr) {
-		t.Fatalf("got %v, want wrapped %v", err, sessionErr)
-	}
-}
-
-func TestSecretServiceUnlockerCreateItemErrorPropagates(t *testing.T) {
-	createErr := errors.New("create failed")
-	bus := newFakeSecretBus()
-	bus.createErr = createErr
-	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	if _, err := u.Wrap(context.Background(), make([]byte, 32)); !errors.Is(err, createErr) {
-		t.Fatalf("got %v, want wrapped %v", err, createErr)
-	}
-}
-
-func TestSecretServiceUnlockerSearchErrorPropagates(t *testing.T) {
-	searchErr := errors.New("search failed")
-	bus := newFakeSecretBus()
-	bus.searchErr = searchErr
-	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	if _, err := u.Unwrap(context.Background(), Slot{Kind: SlotSecretService}); !errors.Is(err, searchErr) {
-		t.Fatalf("got %v, want wrapped %v", err, searchErr)
-	}
-}
-
-func TestSecretServiceUnlockerReadSecretErrorPropagates(t *testing.T) {
-	readErr := errors.New("read failed")
-	bus := newFakeSecretBus()
-	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	dek := make([]byte, 32)
-	slot, err := u.Wrap(context.Background(), dek)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bus.readErr = readErr
-	if _, err := u.Unwrap(context.Background(), slot); !errors.Is(err, readErr) {
-		t.Fatalf("got %v, want wrapped %v", err, readErr)
-	}
-}
-
-func TestSecretServiceUnlockerMissingItemIsWrongKey(t *testing.T) {
-	withFakeSecretBus(t, newFakeSecretBus())
-	slot := Slot{
-		Kind:  SlotSecretService,
-		Salt:  []byte{1, 2, 3, 4},
-		Nonce: make([]byte, slotNonceSize),
-	}
-	u := NewSecretServiceUnlocker("gogit-vault")
-	if _, err := u.Unwrap(context.Background(), slot); !errors.Is(err, ErrWrongKey) {
-		t.Fatalf("got %v, want ErrWrongKey", err)
-	}
-}
-
-func TestSecretServiceUnlockerCorruptedWrapperIsWrongKey(t *testing.T) {
-	bus := newFakeSecretBus()
-	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	dek := make([]byte, 32)
-	slot, err := u.Wrap(context.Background(), dek)
-	if err != nil {
-		t.Fatal(err)
-	}
-	slot.Wrapped = append([]byte(nil), slot.Wrapped...)
-	slot.Wrapped[0] ^= 0xFF
-	if _, err := u.Unwrap(context.Background(), slot); !errors.Is(err, ErrWrongKey) {
-		t.Fatalf("got %v, want ErrWrongKey", err)
-	}
-}
-
-func TestSecretServiceUnlockerUnwrapFailsWhenStoredKeyHasWrongSize(t *testing.T) {
-	bus := newFakeSecretBus()
-	withFakeSecretBus(t, bus)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	slot, err := u.Wrap(context.Background(), make([]byte, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	bus.items[0].secret = []byte("too short")
-	if _, err := u.Unwrap(context.Background(), slot); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestSecretServiceUnlockerWrapFailsWhenAEADConstructionFails(t *testing.T) {
-	withFakeSecretBus(t, newFakeSecretBus())
-	withFailingAEAD(t)
-	u := NewSecretServiceUnlocker("gogit-vault")
-	if _, err := u.Wrap(context.Background(), make([]byte, 32)); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 func TestSecretServiceUnlockerRejectsKindMismatch(t *testing.T) {
 	u := NewSecretServiceUnlocker("gogit-vault")
 	if _, err := u.Unwrap(context.Background(), Slot{Kind: SlotFile}); !errors.Is(err, ErrSlotKindMismatch) {
 		t.Fatalf("got %v, want ErrSlotKindMismatch", err)
 	}
+	if u.Kind() != SlotSecretService {
+		t.Fatal("wrong kind")
+	}
 }
 
-func TestSecretServiceUnlockerKind(t *testing.T) {
-	if NewSecretServiceUnlocker("gogit-vault").Kind() != SlotSecretService {
-		t.Fatal("wrong kind")
+func TestSecretServiceVaultSurvivesAKeyringThatDropsNewItems(t *testing.T) {
+	bus := newFakeSecretBus()
+	bus.dropCreated = true
+	withFakeSecretBus(t, bus)
+	path := t.TempDir() + "/vault.bin"
+	if _, err := Create(context.Background(), Options{Path: path}, NewSecretServiceUnlocker("gogit-vault")); !errors.Is(err, ErrKeyNotStored) {
+		t.Fatalf("err = %v, want ErrKeyNotStored", err)
+	}
+	v, _ := createTestVault(t, "p")
+	if err := v.AddSlot(context.Background(), NewSecretServiceUnlocker("gogit-vault")); !errors.Is(err, ErrKeyNotStored) {
+		t.Fatalf("err = %v, want ErrKeyNotStored", err)
+	}
+	if v.HasSlot(SlotSecretService) {
+		t.Fatal("a slot whose key exists nowhere must not be written")
 	}
 }
 
@@ -297,120 +434,6 @@ func TestSecretServiceAvailableFalseWhenSessionFails(t *testing.T) {
 	if SecretServiceAvailable() {
 		t.Fatal("expected unavailable when opening a session fails")
 	}
-}
-
-type dbusFakeItem struct {
-	svc *dbusFakeService
-	idx int
-}
-
-func (it *dbusFakeItem) GetSecret(_ dbus.ObjectPath) (secretServiceSecret, *dbus.Error) {
-	it.svc.mu.Lock()
-	defer it.svc.mu.Unlock()
-	if it.svc.getSecretErr != nil {
-		return secretServiceSecret{}, it.svc.getSecretErr
-	}
-	return it.svc.items[it.idx], nil
-}
-
-type dbusFakeService struct {
-	mu             sync.Mutex
-	conn           *dbus.Conn
-	attrs          []map[string]string
-	items          []secretServiceSecret
-	openSessionErr *dbus.Error
-	searchErr      *dbus.Error
-	createErr      *dbus.Error
-	getSecretErr   *dbus.Error
-}
-
-func (s *dbusFakeService) OpenSession(_ string, _ dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.openSessionErr != nil {
-		return dbus.Variant{}, "", s.openSessionErr
-	}
-	return dbus.MakeVariant(""), dbus.ObjectPath("/session/1"), nil
-}
-
-func (s *dbusFakeService) SearchItems(attrs map[string]string) ([]dbus.ObjectPath, []dbus.ObjectPath, *dbus.Error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.searchErr != nil {
-		return nil, nil, s.searchErr
-	}
-	var unlocked []dbus.ObjectPath
-	for i, a := range s.attrs {
-		if attrsEqual(a, attrs) {
-			unlocked = append(unlocked, dbusFakeItemPath(i))
-		}
-	}
-	return unlocked, nil, nil
-}
-
-func (s *dbusFakeService) CreateItem(properties map[string]dbus.Variant, secret secretServiceSecret, _ bool) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
-	attrsValue, _ := properties["org.freedesktop.Secret.Item.Attributes"].Value().(map[string]string)
-	s.mu.Lock()
-	if s.createErr != nil {
-		err := s.createErr
-		s.mu.Unlock()
-		return "", "", err
-	}
-	idx := len(s.items)
-	s.items = append(s.items, secret)
-	s.attrs = append(s.attrs, attrsValue)
-	s.mu.Unlock()
-	path := dbusFakeItemPath(idx)
-	if err := s.conn.Export(&dbusFakeItem{svc: s, idx: idx}, path, "org.freedesktop.Secret.Item"); err != nil {
-		return "", "", dbus.MakeFailedError(err)
-	}
-	return path, dbus.ObjectPath("/"), nil
-}
-
-type dbusMalformedOpenSessionService struct{}
-
-func (dbusMalformedOpenSessionService) OpenSession(_ string, _ dbus.Variant) (string, *dbus.Error) {
-	return "wrong-shape", nil
-}
-
-type dbusMalformedSearchItemsService struct{}
-
-func (dbusMalformedSearchItemsService) SearchItems(_ map[string]string) (string, *dbus.Error) {
-	return "wrong-shape", nil
-}
-
-type dbusMalformedItem struct{}
-
-func (dbusMalformedItem) GetSecret(_ dbus.ObjectPath) (string, *dbus.Error) {
-	return "wrong-shape", nil
-}
-
-func dbusFakeItemPath(i int) dbus.ObjectPath {
-	return dbus.ObjectPath("/item/" + strconv.Itoa(i))
-}
-
-func (s *dbusFakeService) setOpenSessionErr(err *dbus.Error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.openSessionErr = err
-}
-
-func (s *dbusFakeService) setSearchErr(err *dbus.Error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.searchErr = err
-}
-
-func (s *dbusFakeService) setCreateErr(err *dbus.Error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.createErr = err
-}
-
-func (s *dbusFakeService) setGetSecretErr(err *dbus.Error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.getSecretErr = err
 }
 
 func startPrivateSessionBus(t *testing.T) {
@@ -451,223 +474,18 @@ func startPrivateSessionBus(t *testing.T) {
 	}
 }
 
-func startFakeDBusSecretService(t *testing.T) *dbusFakeService {
-	t.Helper()
-	conn := ownSecretServiceBusName(t)
-	svc := &dbusFakeService{conn: conn}
-	if err := conn.Export(svc, secretServiceObjectPath, "org.freedesktop.Secret.Service"); err != nil {
-		t.Fatal(err)
-	}
-	if err := conn.Export(svc, secretServiceDefaultAlias, "org.freedesktop.Secret.Collection"); err != nil {
-		t.Fatal(err)
-	}
-	return svc
-}
-
-func ownSecretServiceBusName(t *testing.T) *dbus.Conn {
-	t.Helper()
-	conn, err := dbus.ConnectSessionBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	reply, err := conn.RequestName(secretServiceBusName, dbus.NameFlagDoNotQueue)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reply != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatalf("could not own %s: %v", secretServiceBusName, reply)
-	}
-	return conn
-}
-
-func TestNewDBusSecretBusFailsWhenAddressUnreachable(t *testing.T) {
+func TestDialDBusSecretBusFailsWhenAddressUnreachable(t *testing.T) {
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/gogit-vault-test.sock")
-	if _, err := newDBusSecretBus(); err == nil {
+	if _, err := dialDBusSecretBus(); err == nil {
 		t.Fatal("expected error when the session bus address is unreachable")
 	}
 }
 
-func TestDBusSecretBusWireProtocolAgainstFakeService(t *testing.T) {
+func TestDialDBusSecretBusConnectsToTheSessionBus(t *testing.T) {
 	startPrivateSessionBus(t)
-	startFakeDBusSecretService(t)
-
-	bus, err := newDBusSecretBus()
+	bus, err := dialDBusSecretBus()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bus.close()
-
-	session, err := bus.openSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if session == "" {
-		t.Fatal("expected non-empty session path")
-	}
-
-	attrs := map[string]string{"application": secretServiceApplication, "label": "gogit-vault", "id": "abc"}
-	if err := bus.createItem(session, "gogit-vault", attrs, []byte("secretbytes")); err != nil {
-		t.Fatal(err)
-	}
-
-	item, ok, err := bus.findItem(attrs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("expected item to be found")
-	}
-
-	got, err := bus.readSecret(session, item)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != "secretbytes" {
-		t.Fatalf("got %q", got)
-	}
-
-	if _, ok, err := bus.findItem(map[string]string{"application": "nope"}); err != nil || ok {
-		t.Fatalf("expected miss, got ok=%v err=%v", ok, err)
-	}
-}
-
-func TestDBusSecretBusOpenSessionFailsWhenServerReturnsError(t *testing.T) {
-	startPrivateSessionBus(t)
-	svc := startFakeDBusSecretService(t)
-	svc.setOpenSessionErr(dbus.NewError("test.Error", []interface{}{"boom"}))
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if _, err := bus.openSession(); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDBusSecretBusOpenSessionFailsWhenReplyShapeIsWrong(t *testing.T) {
-	startPrivateSessionBus(t)
-	conn := ownSecretServiceBusName(t)
-	if err := conn.Export(dbusMalformedOpenSessionService{}, secretServiceObjectPath, "org.freedesktop.Secret.Service"); err != nil {
-		t.Fatal(err)
-	}
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if _, err := bus.openSession(); err == nil {
-		t.Fatal("expected error decoding a malformed reply")
-	}
-}
-
-func TestDBusSecretBusFindItemFailsWhenServerReturnsError(t *testing.T) {
-	startPrivateSessionBus(t)
-	svc := startFakeDBusSecretService(t)
-	svc.setSearchErr(dbus.NewError("test.Error", []interface{}{"boom"}))
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if _, _, err := bus.findItem(map[string]string{}); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDBusSecretBusFindItemFailsWhenReplyShapeIsWrong(t *testing.T) {
-	startPrivateSessionBus(t)
-	conn := ownSecretServiceBusName(t)
-	if err := conn.Export(dbusMalformedSearchItemsService{}, secretServiceObjectPath, "org.freedesktop.Secret.Service"); err != nil {
-		t.Fatal(err)
-	}
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if _, _, err := bus.findItem(map[string]string{}); err == nil {
-		t.Fatal("expected error decoding a malformed reply")
-	}
-}
-
-func TestDBusSecretBusCreateItemFailsWhenServerReturnsError(t *testing.T) {
-	startPrivateSessionBus(t)
-	svc := startFakeDBusSecretService(t)
-	svc.setCreateErr(dbus.NewError("test.Error", []interface{}{"boom"}))
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if err := bus.createItem("/session/1", "gogit-vault", map[string]string{}, []byte("s")); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDBusSecretBusReadSecretFailsWhenServerReturnsError(t *testing.T) {
-	startPrivateSessionBus(t)
-	svc := startFakeDBusSecretService(t)
-	svc.setGetSecretErr(dbus.NewError("test.Error", []interface{}{"boom"}))
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if err := bus.createItem("/session/1", "gogit-vault", map[string]string{"k": "v"}, []byte("s")); err != nil {
-		t.Fatal(err)
-	}
-	item, ok, err := bus.findItem(map[string]string{"k": "v"})
-	if err != nil || !ok {
-		t.Fatalf("findItem: ok=%v err=%v", ok, err)
-	}
-	if _, err := bus.readSecret("/session/1", item); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestDBusSecretBusReadSecretFailsWhenReplyShapeIsWrong(t *testing.T) {
-	startPrivateSessionBus(t)
-	conn := ownSecretServiceBusName(t)
-	if err := conn.Export(dbusMalformedItem{}, dbus.ObjectPath("/item/0"), "org.freedesktop.Secret.Item"); err != nil {
-		t.Fatal(err)
-	}
-
-	bus, err := newDBusSecretBus()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bus.close()
-	if _, err := bus.readSecret("/session/1", "/item/0"); err == nil {
-		t.Fatal("expected error decoding a malformed reply")
-	}
-}
-
-func TestSecretServiceUnlockerRoundTripsOverRealDBus(t *testing.T) {
-	startPrivateSessionBus(t)
-	startFakeDBusSecretService(t)
-	prev := dialSecretBus
-	dialSecretBus = newDBusSecretBus
-	t.Cleanup(func() { dialSecretBus = prev })
-
-	u := NewSecretServiceUnlocker("gogit-vault")
-	dek := []byte("0123456789abcdef0123456789abcdef")[:32]
-	slot, err := u.Wrap(context.Background(), dek)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := u.Unwrap(context.Background(), slot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(got) != string(dek) {
-		t.Fatal("round trip mismatch over real dbus wiring")
-	}
+	bus.Close()
 }

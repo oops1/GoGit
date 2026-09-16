@@ -53,15 +53,33 @@ linters:
         linters:
           - gosec
         text: "G103"
+      - path: internal/gitcore/transport/agent_windows\.go
+        linters:
+          - gosec
+        text: "G103"
       - path: internal/gitcore/transport/agent_other\.go
         linters:
           - gosec
         text: "G704"
-      - path: internal/gitcore/credential/exec\.go
+      - path: internal/gitcore/transport/httptls\.go
+        linters:
+          - gosec
+        text: "G402"
+      - path: internal/gitcore/transport/httpproxy_test\.go
+        linters:
+          - gosec
+      - path: internal/gitcore/credential/wincredapi_windows\.go
+        linters:
+          - gosec
+        text: "G103"
+      - path: internal/gitcore/credential/.*_test\.go
+        linters:
+          - gosec
+      - path: internal/gitcore/hooks/.*\.go
         linters:
           - gosec
         text: "G204"
-      - path: internal/gitcore/credential/.*_test\.go
+      - path: internal/gitcore/hooks/.*_test\.go
         linters:
           - gosec
       - path: internal/app/openurl_(windows|linux)\.go

@@ -257,7 +257,7 @@ func (s testSignerKeySource) Keys(context.Context, string) ([]Key, error) {
 	return []Key{{Path: "test-signer"}}, nil
 }
 
-func (s testSignerKeySource) listSigners(context.Context, string) ([]ssh.Signer, error) {
+func (s testSignerKeySource) listSigners(context.Context, SSHTarget, *closerSet) ([]ssh.Signer, error) {
 	return []ssh.Signer{s.signer}, nil
 }
 
@@ -785,25 +785,25 @@ func TestSSHUsernameFallsBackToEmptyWhenCurrentUserFails(t *testing.T) {
 	}
 }
 
-func TestSignersFromKeysReturnsErrNoKeysForEmptySlice(t *testing.T) {
-	_, err := signersFromKeys(nil)
+func TestCollectSignersReturnsErrNoKeysForAnEmptySource(t *testing.T) {
+	_, err := collectSigners(t.Context(), fixedKeySource{})
 	if !errors.Is(err, ErrNoKeys) {
-		t.Fatalf("signersFromKeys returned %v, want ErrNoKeys", err)
+		t.Fatalf("collectSigners returned %v, want ErrNoKeys", err)
 	}
 }
 
-func TestGatherSignersReturnsErrNoKeysForNilSource(t *testing.T) {
-	_, err := gatherSigners(t.Context(), "host", nil)
+func TestCollectSignersReturnsErrNoKeysForNilSource(t *testing.T) {
+	_, err := collectSigners(t.Context(), nil)
 	if !errors.Is(err, ErrNoKeys) {
-		t.Fatalf("gatherSigners returned %v, want ErrNoKeys", err)
+		t.Fatalf("collectSigners returned %v, want ErrNoKeys", err)
 	}
 }
 
-func TestGatherSignersPropagatesKeySourceError(t *testing.T) {
+func TestCollectSignersPropagatesKeySourceError(t *testing.T) {
 	wantErr := fmt.Errorf("boom")
-	_, err := gatherSigners(t.Context(), "host", erroringKeySource{err: wantErr})
+	_, err := collectSigners(t.Context(), erroringKeySource{err: wantErr})
 	if !errors.Is(err, wantErr) {
-		t.Fatalf("gatherSigners returned %v, want %v", err, wantErr)
+		t.Fatalf("collectSigners returned %v, want %v", err, wantErr)
 	}
 }
 
@@ -811,9 +811,9 @@ func TestMultiKeysCombinesMultipleSources(t *testing.T) {
 	signerA := generateSSHSigner(t)
 	signerB := generateSSHSigner(t)
 	source := MultiKeys(testSignerKeySource{signerA}, testSignerKeySource{signerB})
-	signers, err := gatherSigners(t.Context(), "host", source)
+	signers, err := collectSigners(t.Context(), source)
 	if err != nil {
-		t.Fatalf("gatherSigners returned error %v", err)
+		t.Fatalf("collectSigners returned error %v", err)
 	}
 	if len(signers) != 2 {
 		t.Fatalf("len(signers) = %d, want 2", len(signers))
@@ -823,9 +823,9 @@ func TestMultiKeysCombinesMultipleSources(t *testing.T) {
 func TestMultiKeysSkipsNilSourcesAndFailingSources(t *testing.T) {
 	good := generateSSHSigner(t)
 	source := MultiKeys(nil, erroringKeySource{err: fmt.Errorf("boom")}, testSignerKeySource{good})
-	signers, err := gatherSigners(t.Context(), "host", source)
+	signers, err := collectSigners(t.Context(), source)
 	if err != nil {
-		t.Fatalf("gatherSigners returned error %v", err)
+		t.Fatalf("collectSigners returned error %v", err)
 	}
 	if len(signers) != 1 {
 		t.Fatalf("len(signers) = %d, want 1", len(signers))
@@ -834,9 +834,9 @@ func TestMultiKeysSkipsNilSourcesAndFailingSources(t *testing.T) {
 
 func TestMultiKeysReturnsErrNoKeysWhenAllSourcesEmpty(t *testing.T) {
 	source := MultiKeys(fixedKeySource{}, fixedKeySource{})
-	_, err := gatherSigners(t.Context(), "host", source)
+	_, err := collectSigners(t.Context(), source)
 	if !errors.Is(err, ErrNoKeys) {
-		t.Fatalf("gatherSigners returned %v, want ErrNoKeys", err)
+		t.Fatalf("collectSigners returned %v, want ErrNoKeys", err)
 	}
 }
 
@@ -858,9 +858,9 @@ func TestMultiKeysKeysAggregatesAndIgnoresFailingSources(t *testing.T) {
 
 func TestMultiKeysListSignersReturnsErrNoKeysWhenAllSourcesNil(t *testing.T) {
 	source := MultiKeys(nil, nil)
-	_, err := gatherSigners(t.Context(), "host", source)
+	_, err := collectSigners(t.Context(), source)
 	if !errors.Is(err, ErrNoKeys) {
-		t.Fatalf("gatherSigners returned %v, want ErrNoKeys", err)
+		t.Fatalf("collectSigners returned %v, want ErrNoKeys", err)
 	}
 }
 
@@ -929,7 +929,7 @@ func TestAgentKeysUsesInjectedDialerForSigners(t *testing.T) {
 	}
 	t.Cleanup(func() { agentDialer = restore })
 
-	signers, err := NewAgentKeys().(signerLister).listSigners(t.Context(), "host")
+	signers, err := NewAgentKeys().(signerLister).listSigners(t.Context(), SSHTarget{Host: "host"}, &closerSet{})
 	if err != nil {
 		t.Fatalf("listSigners returned error %v", err)
 	}
@@ -1474,7 +1474,7 @@ func TestAgentSignersWrapsErrorWhenAgentReturnsGarbageResponse(t *testing.T) {
 	agentDialer = func() (io.ReadWriteCloser, error) { return clientEnd, nil }
 	t.Cleanup(func() { agentDialer = restore })
 
-	_, err := agentSigners(t.Context())
+	_, err := agentSigners(t.Context(), SSHTarget{}, &closerSet{})
 	if !errors.Is(err, ErrNoKeys) {
 		t.Fatalf("agentSigners returned %v, want ErrNoKeys", err)
 	}
@@ -1664,7 +1664,7 @@ func TestAgentSignersCanceledByContextWhileWaitingForAgentReply(t *testing.T) {
 	var err error
 	go func() {
 		defer close(done)
-		_, err = agentSigners(ctx)
+		_, err = agentSigners(ctx, SSHTarget{}, &closerSet{})
 	}()
 
 	select {

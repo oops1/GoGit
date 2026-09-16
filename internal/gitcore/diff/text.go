@@ -46,9 +46,18 @@ func lineKey(record string, ws Whitespace) string {
 		return collapseSpace(record)
 	case ws&IgnoreSpaceAtEOL != 0:
 		return strings.TrimRight(record, spaceChars)
+	case ws&IgnoreCRAtEOL != 0:
+		return withoutCRAtEOL(record)
 	default:
 		return record
 	}
+}
+
+func withoutCRAtEOL(record string) string {
+	if body, complete := strings.CutSuffix(record, "\n"); complete {
+		return strings.TrimSuffix(body, "\r")
+	}
+	return record
 }
 
 func stripSpace(record string) string {

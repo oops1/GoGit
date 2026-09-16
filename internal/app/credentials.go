@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
-	"io/fs"
 	"sync"
 	"time"
 
@@ -218,18 +217,9 @@ func defaultCredentialChainAndQuery(a *App, resource string) (credential.Chain, 
 }
 
 func credentialQueryFor(cfg *gitconfig.Config, rawURL string) credential.Query {
-	useHTTPPath, err := cfg.GetBool("credential.usehttppath")
-	if err != nil {
-		useHTTPPath = false
-	}
-	q, err := credential.ParseQuery(rawURL, useHTTPPath)
+	q, err := credential.QueryFromConfig(cfg, rawURL)
 	if err != nil {
 		return credential.Query{}
-	}
-	if q.Username == "" {
-		if v, ok := cfg.Get("credential.username"); ok {
-			q.Username = v
-		}
 	}
 	return q
 }
@@ -332,19 +322,7 @@ func (a *App) forgetVaultCredential(entry string, secret []byte) {
 }
 
 func (a *App) vaultIfOpen() *vault.Vault {
-	a.vaultMu.Lock()
-	defer a.vaultMu.Unlock()
-	if a.vaultInst != nil {
-		return a.vaultInst
-	}
-	v, err := openVaultFile(vault.Options{Path: a.paths.VaultFile(), IdleTime: vaultIdleTime})
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			a.log.Warn("open vault failed", "error", err)
-		}
-		return nil
-	}
-	a.vaultInst = v
+	v, _ := a.openVault()
 	return v
 }
 
@@ -410,6 +388,13 @@ func (a *App) rememberCredential(ctx context.Context, resource, username string,
 }
 
 func (a *App) unlockVault(ctx context.Context, v *vault.Vault) (bool, error) {
+	silentErr := a.trySilentUnlock(ctx, v)
+	if silentErr == nil {
+		return true, nil
+	}
+	if !v.HasSlot(vault.SlotPassword) {
+		return false, errors.Join(ErrSecretsKeyUnavailable, silentErr)
+	}
 	retry := false
 	for {
 		password, ok := a.askUnlockPassword(ctx, retry)

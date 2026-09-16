@@ -187,15 +187,16 @@ func TestTheSameContentWithModesChangedApartConflicts(t *testing.T) {
 	}
 }
 
-func TestAFileAgainstALinkConflictsOnTheMode(t *testing.T) {
+func TestAFileRenamedAgainstALinkConflictsOnTheMode(t *testing.T) {
 	s := newStore()
 	base := s.blob(t, "1\n2\n3\n4\n5\n6\n7\n")
+	ours := Entry{Mode: object.ModeExecutable, ID: s.blob(t, "ONE\n2\n3\n4\n5\n6\n7\n").ID}
+	theirs := Entry{Mode: object.ModeSymlink, ID: s.blob(t, "1\n2\n3\n4\n5\n6\nSEVEN\n").ID}
 
-	result := mergeOf(t, s, Snapshot{"f": base},
-		Snapshot{"f": {Mode: object.ModeExecutable, ID: s.blob(t, "ONE\n2\n3\n4\n5\n6\n7\n").ID}},
-		Snapshot{"f": {Mode: object.ModeSymlink, ID: s.blob(t, "1\n2\n3\n4\n5\n6\nSEVEN\n").ID}})
-	if c := onlyConflict(t, result); c.Kind != ConflictMode {
-		t.Fatalf("conflict = %+v, want a mode conflict between a file and a link", c)
+	merged, conflict, err := mergePath("f", &base, &ours, &theirs, s, TreeOptions{})
+
+	if err != nil || conflict == nil || conflict.Kind != ConflictMode || *merged != ours {
+		t.Fatalf("merged = %+v, conflict = %+v, err = %v; want a mode conflict keeping ours", merged, conflict, err)
 	}
 }
 

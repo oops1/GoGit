@@ -7,6 +7,8 @@ const (
 	PhaseReceiving   = "receiving"
 	PhaseResolving   = "resolving"
 	PhaseCheckout    = "checkout"
+
+	PhaseTLSVerifyDisabled = "tls-verify-disabled"
 )
 
 type Report struct {

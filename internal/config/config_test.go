@@ -255,13 +255,23 @@ func TestSaveFailsWhenTargetIsDirectory(t *testing.T) {
 	}
 }
 
-func TestSaveFailsWhenTempIsDirectory(t *testing.T) {
+func TestSaveFailsWhenTheLockCannotBeTaken(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Mkdir(filepath.Join(dir, "config.toml.tmp"), 0o700); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "config.toml.lock"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := Default().Save(filepath.Join(dir, "config.toml")); err == nil {
-		t.Fatal("expected write error")
+		t.Fatal("expected lock error")
+	}
+}
+
+func TestLoadFailsWhenTheLockCannotBeTaken(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "config.toml.lock"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(filepath.Join(dir, "config.toml")); err == nil {
+		t.Fatal("expected lock error")
 	}
 }
 

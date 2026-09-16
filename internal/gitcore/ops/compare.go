@@ -63,9 +63,9 @@ func Compare(ctx context.Context, r *repo.Repository, left, right string, opts C
 	if err != nil {
 		return CompareResult{}, err
 	}
-	options := opts.Diff
-	if options.RenameThreshold == 0 {
-		options = diff.Defaults()
+	options, err := repoDiffOptions(r, opts.Diff)
+	if err != nil {
+		return CompareResult{}, err
 	}
 	if result.Changes, err = diff.Trees(ctx, store, leftTree, rightTree, options); err != nil {
 		return CompareResult{}, err

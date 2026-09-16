@@ -11,6 +11,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -52,6 +53,7 @@ type CloneOptions struct {
 	Progress     progress.Func
 	Transport    transport.Options
 	Report       *CheckoutReport
+	Hooks        HookOptions
 }
 
 type cloneTarget struct {
@@ -69,11 +71,11 @@ func Clone(ctx context.Context, url, dir string, opts CloneOptions) (*repo.Repos
 		return nil, err
 	}
 	r, err := cloneInto(ctx, url, dir, opts)
-	if err != nil {
+	if err != nil && r == nil {
 		cleanupCloneDirectory(dir, created)
 		return nil, err
 	}
-	return r, nil
+	return r, err
 }
 
 func cloneRemoteName(opts CloneOptions) string {
@@ -179,6 +181,8 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 		if err := CheckoutTree(ctx, r, target.commit, CheckoutOptions{Progress: prog, Report: opts.Report}); err != nil {
 			return failClone(r, err)
 		}
+		runner := openHooks(r, opts.Hooks)
+		return r, runner.verify(ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{runner.zero(), target.commit.String(), branchCheckoutFlag}})
 	}
 	return r, nil
 }

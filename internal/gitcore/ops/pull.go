@@ -22,6 +22,7 @@ type PullOptions struct {
 	Fetch    remote.FetchOptions
 	Progress progress.Func
 	When     time.Time
+	Hooks    HookOptions
 }
 
 type PullResult struct {
@@ -143,7 +144,7 @@ func Pull(ctx context.Context, r *repo.Repository, opts PullOptions) (PullResult
 		message: func(head headTarget) string {
 			return pullMergeMessage(r, mergeRef, rem.FetchURL(), head)
 		},
-	}, MergeOptions{Mode: mode, Progress: opts.Progress, When: opts.When})
+	}, MergeOptions{Mode: mode, Progress: opts.Progress, When: opts.When, Hooks: opts.Hooks})
 	result := PullResult{Fetch: fetchResult, Old: oldCommit, New: merged.New, Merge: merged, Updated: merged.FastForward || merged.Committed}
 	if errors.Is(err, ErrCannotFastForward) && rebase {
 		result.Rebase, err = pullRebase(ctx, r, newCommit, opts)
@@ -173,13 +174,13 @@ func pullMerge(ctx context.Context, r *repo.Repository, in incoming, opts MergeO
 }
 
 func pullRebase(ctx context.Context, r *repo.Repository, upstream hash.ObjectID, opts PullOptions) (RebaseResult, error) {
-	m, err := openRebaser(ctx, r, RebaseOptions{When: opts.When, Progress: opts.Progress})
+	m, err := openRebaser(ctx, r, RebaseOptions{When: opts.When, Progress: opts.Progress, Hooks: HookOptions{Events: opts.Hooks.Events}})
 	if err != nil {
 		return RebaseResult{}, err
 	}
 	defer m.close()
 	m.action = pullNote
-	return m.rebaseOnto(upstream, upstream, upstream.String(), nil)
+	return m.rebaseOnto(upstream, upstream, upstream.String(), upstream.String(), nil)
 }
 
 func pullIntoBare(r *repo.Repository, branchRef refs.Name, oldCommit, newCommit hash.ObjectID, fetchResult remote.FetchResult) (PullResult, error) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/pathspec"
 )
 
 func treeOf(t *testing.T, store *memoryStore, files treeFiles) hash.ObjectID {
@@ -79,6 +80,17 @@ func TestTreesHonoursThePathFilter(t *testing.T) {
 				t.Errorf("Trees reported %q instead of %q", got, c.want)
 			}
 		})
+	}
+}
+
+func TestTreesRejectsAnInvalidPathspec(t *testing.T) {
+	store := newMemoryStore()
+	old := treeOf(t, store, treeFiles{"a.txt": blobSpec("a\n")})
+	updated := treeOf(t, store, treeFiles{"a.txt": blobSpec("b\n")})
+	opts := Defaults()
+	opts.Paths = []string{":(bogus)a.txt"}
+	if _, err := Trees(t.Context(), store, old, updated, opts); !errors.Is(err, pathspec.ErrMagic) {
+		t.Fatalf("Trees returned %v instead of a pathspec error", err)
 	}
 }
 

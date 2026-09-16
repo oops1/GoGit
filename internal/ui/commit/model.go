@@ -9,6 +9,7 @@ type Model struct {
 	Files       int
 	LastMessage string
 	Merging     bool
+	NoVerify    bool
 }
 
 func (m Model) CanConfirm() bool {

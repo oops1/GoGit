@@ -36,6 +36,98 @@ func ignorableBlankMix() string {
 	return out.String()
 }
 
+func commonTailPair() corpusPair {
+	tokens := map[byte]string{'a': "a\n", 'b': "b\n", 'n': "\n", 'x': "    x\n", '{': "{\n", '}': "}\n"}
+	var tail strings.Builder
+	for _, token := range []byte("uuuuuuuuub}aubnnuuuuuuuxanuanu{uun{xuu{uu{uu{ua}unu{uu}nuuu}a}uuuuua{uuuuuuuuuu{}uaxu}b{uuxubuuuuuaunuau}uuxauuuunu{{bubuuu{uuuu}uuuuuxunuub{ubuuu") {
+		if token == 'u' {
+			fmt.Fprintf(&tail, "unique %d\n", tail.Len())
+			continue
+		}
+		tail.WriteString(tokens[token])
+	}
+	return corpusPair{"common-tail-without-context", "a\nb\nb\na\nb\nb\na\n" + tail.String(), "a\nb\nb\na\n{\na\na\n    x\n" + tail.String()}
+}
+
+func tangledPair(name string, lines, alphabet int) corpusPair {
+	state := uint64(17)
+	next := func(n int) int {
+		state = state*6364136223846793005 + 1442695040888963407
+		return int((state >> 33) % uint64(n))
+	}
+	var old, updated strings.Builder
+	for range lines {
+		line := fmt.Sprintf("t%d\n", next(alphabet))
+		old.WriteString(line)
+		switch roll := next(10); {
+		case roll < 3:
+			fmt.Fprintf(&updated, "t%d\n", next(alphabet))
+		case roll < 4:
+		case roll < 5:
+			updated.WriteString(line)
+			fmt.Fprintf(&updated, "t%d\n", next(alphabet))
+		default:
+			updated.WriteString(line)
+		}
+	}
+	return corpusPair{name, old.String(), updated.String()}
+}
+
+const patienceOld = `#include <stdio.h>
+
+// Frobs foo heartily
+int frobnitz(int foo)
+{
+    int i;
+    for(i = 0; i < 10; i++)
+    {
+        printf("Your answer is: ");
+        printf("%d\n", foo);
+    }
+}
+
+int fact(int n)
+{
+    if(n > 1)
+    {
+        return fact(n-1) * n;
+    }
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    frobnitz(fact(10));
+}
+`
+
+const patienceNew = `#include <stdio.h>
+
+int fib(int n)
+{
+    if(n > 2)
+    {
+        return fib(n-1) + fib(n-2);
+    }
+    return 1;
+}
+
+// Frobs foo heartily
+int frobnitz(int foo)
+{
+    int i;
+    for(i = 0; i < 10; i++)
+    {
+        printf("%d\n", foo);
+    }
+}
+
+int main(int argc, char **argv)
+{
+    frobnitz(fib(10));
+}
+`
+
 func corpus() []corpusPair {
 	big := repeatLines("line ", 1000)
 	bigChanged := strings.Replace(big, "line 500\n", "changed 500\n", 1)
@@ -144,6 +236,13 @@ func corpus() []corpusPair {
 		{"large-identical", big, big},
 		{"large-one-change", big, bigChanged},
 		{"large-truncated", big, repeatLines("line ", 500)},
+		commonTailPair(),
+		{"cr-at-eol-mixed", "a\r\nb\r\nc\rd\nsame\nlast\r", "a\nb\r\r\nc\rd\r\nsame\r\nlast\r\n"},
+		{"cr-at-eol-incomplete", "a\nb", "a\r\nb\r"},
+		{"cr-at-eol-with-space", "a \r\nb\t\r\nc\n", "a\nb\t\nc \r\n"},
+		{"patience-functions", patienceOld, patienceNew},
+		tangledPair("tangled-few-tokens", 1200, 10),
+		tangledPair("tangled-many-tokens", 300, 200),
 	}
 }
 
@@ -178,6 +277,18 @@ func variants() []variant {
 			name: "ignore-space-at-eol",
 			args: []string{"--ignore-space-at-eol"},
 			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreSpaceAtEOL }),
+		},
+		{name: "patience", args: []string{"--patience"}, opts: withOptions(func(o *Options) { o.Algorithm = AlgorithmPatience })},
+		{name: "minimal", args: []string{"--minimal"}, opts: withOptions(func(o *Options) { o.Algorithm = AlgorithmMinimal })},
+		{
+			name: "ignore-cr-at-eol",
+			args: []string{"--ignore-cr-at-eol"},
+			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreCRAtEOL }),
+		},
+		{
+			name: "ignore-cr-at-eol-blank-lines",
+			args: []string{"--ignore-cr-at-eol", "--ignore-blank-lines"},
+			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreCRAtEOL | IgnoreBlankLines }),
 		},
 		{
 			name: "ignore-blank-lines",

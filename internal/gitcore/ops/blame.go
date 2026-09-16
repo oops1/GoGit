@@ -14,8 +14,8 @@ import (
 )
 
 type BlameOptions struct {
-	Follow bool
-	Diff   diff.Options
+	NoFollow bool
+	Diff     diff.Options
 }
 
 func Blame(ctx context.Context, r *repo.Repository, rev, path string, opts BlameOptions) (blame.Result, error) {
@@ -36,7 +36,7 @@ func Blame(ctx context.Context, r *repo.Repository, rev, path string, opts Blame
 	if err != nil {
 		return blame.Result{}, err
 	}
-	return blame.File(ctx, mergeStore{db: rc.db}, commit, clean, blame.Options{Diff: opts.Diff, FollowRenames: opts.Follow})
+	return blame.File(ctx, mergeStore{db: rc.db}, commit, clean, blame.Options{Diff: opts.Diff, NoFollowRenames: opts.NoFollow})
 }
 
 func resolveCommittish(rc *repoContext, rev string) (hash.ObjectID, error) {

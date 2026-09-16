@@ -120,9 +120,9 @@ func pointsAt(ref refs.Ref, commit hash.ObjectID) bool {
 }
 
 func changesOfCommit(ctx context.Context, rc *repoContext, commit *object.Commit, opts DetailsOptions) ([]diff.File, error) {
-	options := opts.Diff
-	if options.RenameThreshold == 0 {
-		options = diff.Defaults()
+	options, err := repoDiffOptions(rc.repo, opts.Diff)
+	if err != nil {
+		return nil, err
 	}
 	parentTree := hash.Zero
 	if len(commit.Parents) > 0 {

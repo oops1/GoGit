@@ -1,33 +1,57 @@
 package transport
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/oops1/gogit/internal/gitcore/progress"
 )
 
-const defaultUserAgent = "git/2.0 (gogit)"
+const defaultUserAgent = "git/2.45.0 (Go.Git)"
 
-func defaultHTTPClient() *http.Client {
+var (
+	discoveryHeaderTimeout  = 30 * time.Second
+	errProxyChallenge       = errors.New("transport: the proxy asked for authentication")
+	errUnsupportedMediaType = errors.New("transport: the server refused the request encoding")
+)
+
+func newHTTPClient(settings httpSettings, proxy *proxySelector) (*http.Client, error) {
+	tlsConfig, err := buildTLSConfig(settings)
+	if err != nil {
+		return nil, err
+	}
 	return &http.Client{
 		Transport: &http.Transport{
+			Proxy:                  proxy.proxy,
+			OnProxyConnectResponse: rejectProxyChallenge,
 			DialContext: (&net.Dialer{
 				Timeout:   15 * time.Second,
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
+			TLSClientConfig:       tlsConfig,
 			TLSHandshakeTimeout:   15 * time.Second,
-			ResponseHeaderTimeout: 30 * time.Second,
 			ExpectContinueTimeout: 5 * time.Second,
 		},
+	}, nil
+}
+
+func rejectProxyChallenge(_ context.Context, _ *url.URL, _ *http.Request, resp *http.Response) error {
+	if resp.StatusCode == http.StatusProxyAuthRequired {
+		return errProxyChallenge
 	}
+	return nil
 }
 
 func httpBaseURL(e Endpoint) string {
@@ -38,22 +62,35 @@ func httpBaseURL(e Endpoint) string {
 	return string(e.Scheme) + "://" + host + strings.TrimSuffix(e.Path, "/")
 }
 
+func hasMediaType(header, want string) bool {
+	mediaType, _, err := mime.ParseMediaType(header)
+	if err != nil && !errors.Is(err, mime.ErrInvalidMediaParameter) {
+		return false
+	}
+	return strings.EqualFold(mediaType, want)
+}
+
 type httpSession struct {
-	mu           sync.Mutex
-	endpoint     Endpoint
-	password     Password
-	service      Service
-	opts         Options
-	client       *http.Client
-	baseURL      string
-	resource     string
-	advertised   bool
-	version      int
-	caps         Capabilities
-	authHeader   string
-	supplied     *suppliedCredentials
-	credAttempts int
-	closed       bool
+	mu            sync.Mutex
+	endpoint      Endpoint
+	password      Password
+	service       Service
+	opts          Options
+	settings      httpSettings
+	proxy         *proxySelector
+	client        *http.Client
+	baseURL       string
+	resource      string
+	advertised    bool
+	version       int
+	caps          Capabilities
+	authHeader    string
+	supplied      *suppliedCredentials
+	credAttempts  int
+	proxySupplied *suppliedCredentials
+	proxyAttempts int
+	plainRequests bool
+	closed        bool
 }
 
 type suppliedCredentials struct {
@@ -62,20 +99,35 @@ type suppliedCredentials struct {
 	approved bool
 }
 
-func newHTTPSession(endpoint Endpoint, password Password, service Service, opts Options) *httpSession {
+func newHTTPSession(endpoint Endpoint, password Password, service Service, opts Options) (*httpSession, error) {
+	settings, err := resolveHTTPSettings(opts.Config, opts.RemoteName, endpoint)
+	if err != nil {
+		password.Wipe()
+		return nil, err
+	}
+	proxy := newProxySelector(settings)
 	client := opts.HTTPClient
 	if client == nil {
-		client = defaultHTTPClient()
+		client, err = newHTTPClient(settings, proxy)
+		if err != nil {
+			password.Wipe()
+			return nil, err
+		}
+		if !settings.sslVerify && endpoint.Scheme == SchemeHTTPS {
+			opts.Progress.Phase(progress.PhaseTLSVerifyDisabled)
+		}
 	}
 	return &httpSession{
 		endpoint: endpoint,
 		password: password,
 		service:  service,
 		opts:     opts,
+		settings: settings,
+		proxy:    proxy,
 		client:   client,
 		baseURL:  httpBaseURL(endpoint),
 		resource: CredentialResource(endpoint),
-	}
+	}, nil
 }
 
 func (s *httpSession) Close() error {
@@ -87,36 +139,37 @@ func (s *httpSession) Close() error {
 	s.closed = true
 	s.password.Wipe()
 	s.authHeader = ""
-	s.forgetSupplied()
+	forgetCredential(&s.supplied)
+	forgetCredential(&s.proxySupplied)
 	return nil
 }
 
-func (s *httpSession) forgetSupplied() {
-	if s.supplied == nil {
+func forgetCredential(slot **suppliedCredentials) {
+	if *slot == nil {
 		return
 	}
-	s.supplied.creds.Wipe()
-	s.supplied = nil
+	(*slot).creds.Wipe()
+	*slot = nil
 }
 
-func (s *httpSession) approveSupplied(ctx context.Context) {
-	if s.supplied == nil || s.supplied.approved {
+func (s *httpSession) approveCredential(ctx context.Context, supplied *suppliedCredentials) {
+	if supplied == nil || supplied.approved {
 		return
 	}
-	s.supplied.approved = true
+	supplied.approved = true
 	if feedback, ok := s.opts.Credentials.(CredentialFeedback); ok {
-		feedback.Approve(ctx, s.supplied.resource, s.supplied.creds)
+		feedback.Approve(ctx, supplied.resource, supplied.creds)
 	}
 }
 
-func (s *httpSession) rejectSupplied(ctx context.Context) {
-	if s.supplied == nil {
+func (s *httpSession) rejectCredential(ctx context.Context, slot **suppliedCredentials) {
+	if *slot == nil {
 		return
 	}
 	if feedback, ok := s.opts.Credentials.(CredentialFeedback); ok {
-		feedback.Reject(ctx, s.supplied.resource, s.supplied.creds)
+		feedback.Reject(ctx, (*slot).resource, (*slot).creds)
 	}
-	s.forgetSupplied()
+	forgetCredential(slot)
 }
 
 func (s *httpSession) applyAuthHeader(req *http.Request) {
@@ -145,58 +198,150 @@ func (s *httpSession) authenticate(ctx context.Context) error {
 	return nil
 }
 
-func (s *httpSession) attempt(ctx context.Context, method, url, contentType string, bodyFactory func() io.Reader, headers map[string]string) (*http.Response, error) {
-	var body io.Reader
-	if bodyFactory != nil {
-		body = bodyFactory()
+func (s *httpSession) authenticateProxy(ctx context.Context) error {
+	resource := s.proxy.resource()
+	if s.opts.Credentials == nil || resource == "" || s.proxyAttempts >= 2 {
+		return ErrProxyAuthRequired
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	creds, err := s.opts.Credentials.Credentials(ctx, resource, s.proxyAttempts > 0)
+	s.proxyAttempts++
 	if err != nil {
-		return nil, err
+		return err
 	}
+	secret := creds.Password
+	if len(creds.Token) > 0 {
+		secret = creds.Token
+	}
+	s.proxy.authenticate(url.UserPassword(creds.Username, string(secret)))
+	s.proxySupplied = &suppliedCredentials{resource: resource, creds: creds}
+	return nil
+}
+
+func (s *httpSession) applyHeaders(req *http.Request, contentType string, headers map[string]string) {
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	if s.opts.UserAgent != "" {
-		req.Header.Set("User-Agent", s.opts.UserAgent)
-	} else {
-		req.Header.Set("User-Agent", defaultUserAgent)
+	req.Header.Set("User-Agent", cmp.Or(s.opts.UserAgent, defaultUserAgent))
+	for _, line := range s.settings.extraHeaders {
+		if name, value, ok := strings.Cut(line, ":"); ok {
+			req.Header.Add(strings.TrimSpace(name), strings.TrimSpace(value))
+		}
 	}
 	s.applyAuthHeader(req)
-	return s.client.Do(req)
 }
 
-func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType string, bodyFactory func() io.Reader, headers map[string]string) (*http.Response, error) {
-	resp, err := s.attempt(ctx, method, s.baseURL+suffix, contentType, bodyFactory, headers)
+func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
-	s.adoptRedirect(resp.Request)
-	for resp.StatusCode == http.StatusUnauthorized && s.credAttempts < 2 && s.opts.Credentials != nil {
+	reqCtx, cancel := context.WithCancelCause(ctx)
+	req = req.WithContext(reqCtx)
+	watch := startLowSpeedWatch(s.settings.lowSpeedLimit, s.settings.lowSpeedTime, cancel)
+	if body != nil {
+		if err := attachBody(req, body, watch); err != nil {
+			watch.stop()
+			cancel(nil)
+			return nil, err
+		}
+	}
+	s.applyHeaders(req, contentType, headers)
+	stopHeaderTimer := func() bool { return false }
+	if method == http.MethodGet {
+		stopHeaderTimer = time.AfterFunc(discoveryHeaderTimeout, func() { cancel(ErrHeaderTimeout) }).Stop
+	}
+	resp, err := s.client.Do(req)
+	stopHeaderTimer()
+	if err != nil {
+		watch.stop()
+		cause := context.Cause(reqCtx)
+		cancel(nil)
+		return nil, transferError(err, cause)
+	}
+	resp.Body = &responseBody{ReadCloser: resp.Body, watch: watch, ctx: reqCtx, cancel: cancel}
+	return resp, nil
+}
+
+func proxyChallenged(resp *http.Response, err error) bool {
+	if err != nil {
+		return errors.Is(err, errProxyChallenge)
+	}
+	return resp.StatusCode == http.StatusProxyAuthRequired
+}
+
+func (s *httpSession) send(ctx context.Context, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
+	for {
+		resp, err := s.attempt(ctx, method, s.baseURL+suffix, contentType, body, headers)
+		if !proxyChallenged(resp, err) {
+			if err != nil {
+				return nil, err
+			}
+			s.approveCredential(ctx, s.proxySupplied)
+			s.adoptRedirect(resp.Request)
+			return resp, nil
+		}
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		s.rejectCredential(ctx, &s.proxySupplied)
+		if err := s.authenticateProxy(ctx); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func onlyUnsupportedChallenges(h http.Header) bool {
+	values := h.Values("WWW-Authenticate")
+	if len(values) == 0 {
+		return false
+	}
+	for _, value := range values {
+		for part := range strings.SplitSeq(value, ",") {
+			scheme, _, _ := strings.Cut(strings.TrimSpace(part), " ")
+			if strings.EqualFold(scheme, "Basic") || strings.EqualFold(scheme, "Bearer") {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (s *httpSession) unauthorizedError(h http.Header) error {
+	switch {
+	case onlyUnsupportedChallenges(h):
+		return ErrAuthSchemeUnsupported
+	case s.opts.Credentials == nil:
+		return ErrNoCredentials
+	}
+	return ErrAuthRequired
+}
+
+func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
+	resp, err := s.send(ctx, method, suffix, contentType, body, headers)
+	if err != nil {
+		return nil, err
+	}
+	for resp.StatusCode == http.StatusUnauthorized && s.credAttempts < 2 && s.opts.Credentials != nil && !onlyUnsupportedChallenges(resp.Header) {
 		_ = resp.Body.Close()
-		s.rejectSupplied(ctx)
+		s.rejectCredential(ctx, &s.supplied)
 		if err := s.authenticate(ctx); err != nil {
 			return nil, err
 		}
-		resp, err = s.attempt(ctx, method, s.baseURL+suffix, contentType, bodyFactory, headers)
+		resp, err = s.send(ctx, method, suffix, contentType, body, headers)
 		if err != nil {
 			return nil, err
 		}
-		s.adoptRedirect(resp.Request)
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		_ = resp.Body.Close()
-		s.rejectSupplied(ctx)
-		if s.opts.Credentials == nil {
-			return nil, ErrNoCredentials
-		}
-		return nil, ErrAuthRequired
+		s.rejectCredential(ctx, &s.supplied)
+		return nil, s.unauthorizedError(resp.Header)
 	}
 	if resp.StatusCode == http.StatusOK {
-		s.approveSupplied(ctx)
+		s.approveCredential(ctx, s.supplied)
 	}
 	return s.checkStatus(resp)
 }
@@ -211,6 +356,9 @@ func (s *httpSession) checkStatus(resp *http.Response) (*http.Response, error) {
 	case http.StatusNotFound:
 		_ = resp.Body.Close()
 		return nil, ErrRepositoryNotFound
+	case http.StatusUnsupportedMediaType:
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("%w: %w", ErrProtocol, errUnsupportedMediaType)
 	default:
 		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%w: unexpected http status %s", ErrProtocol, resp.Status)
@@ -256,7 +404,7 @@ func (s *httpSession) advertiseLocked(ctx context.Context) (Advertisement, error
 	}
 	defer func() { _ = resp.Body.Close() }()
 	wantCT := "application/x-" + string(s.service) + "-advertisement"
-	if ct := resp.Header.Get("Content-Type"); ct != wantCT {
+	if ct := resp.Header.Get("Content-Type"); !hasMediaType(ct, wantCT) {
 		return Advertisement{}, fmt.Errorf("%w: unexpected content type %q for the advertisement", ErrProtocol, ct)
 	}
 	if err := expectServiceHeader(resp.Body, s.service); err != nil {
@@ -303,7 +451,7 @@ func (s *httpSession) adoptRedirect(final *http.Request) {
 		s.endpoint.User = ""
 		s.password.Wipe()
 		s.authHeader = ""
-		s.forgetSupplied()
+		forgetCredential(&s.supplied)
 		s.credAttempts = 0
 	}
 	s.baseURL = base
@@ -321,19 +469,36 @@ type httpRoundTripper struct {
 	session *httpSession
 }
 
+func (s *httpSession) compressesRequest(body []byte) bool {
+	return s.service == UploadPack && s.version != 2 && !s.plainRequests && len(body) > gzipRequestThreshold
+}
+
 func (rt httpRoundTripper) round(ctx context.Context, body []byte) (io.ReadCloser, error) {
 	s := rt.session
-	reqCT := "application/x-" + string(s.service) + "-request"
 	headers := map[string]string{}
 	if s.version == 2 {
 		headers["Git-Protocol"] = "version=2"
 	}
-	resp, err := s.doRequest(ctx, http.MethodPost, "/"+string(s.service), reqCT, func() io.Reader { return bytes.NewReader(body) }, headers)
+	if s.compressesRequest(body) {
+		compressed := maps.Clone(headers)
+		compressed["Content-Encoding"] = "gzip"
+		result, err := s.post(ctx, bytesBody(gzipBytes(body)), compressed)
+		if !errors.Is(err, errUnsupportedMediaType) {
+			return result, err
+		}
+		s.plainRequests = true
+	}
+	return s.post(ctx, bytesBody(body), headers)
+}
+
+func (s *httpSession) post(ctx context.Context, body *requestBody, headers map[string]string) (io.ReadCloser, error) {
+	reqCT := "application/x-" + string(s.service) + "-request"
+	resp, err := s.doRequest(ctx, http.MethodPost, "/"+string(s.service), reqCT, body, headers)
 	if err != nil {
 		return nil, err
 	}
 	wantCT := "application/x-" + string(s.service) + "-result"
-	if ct := resp.Header.Get("Content-Type"); ct != wantCT {
+	if ct := resp.Header.Get("Content-Type"); !hasMediaType(ct, wantCT) {
 		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%w: unexpected content type %q for %s", ErrProtocol, ct, s.service)
 	}
@@ -366,22 +531,19 @@ func (s *httpSession) Push(ctx context.Context, req PushRequest) (*PushResult, e
 	if err := s.ensureAdvertised(ctx); err != nil {
 		return nil, err
 	}
-	packBytes, err := io.ReadAll(req.Pack)
-	if err != nil {
-		return nil, fmt.Errorf("%w: reading the push pack: %w", ErrProtocol, err)
-	}
 	prefix, _ := buildPushRequest(req, s.caps, agentValue(s.opts))
-	reqCT := "application/x-" + string(ReceivePack) + "-request"
-	bodyFactory := func() io.Reader {
-		return io.MultiReader(bytes.NewReader(prefix), bytes.NewReader(packBytes))
+	body, cleanup, err := pushBody(prefix, req.Pack, s.settings.postBuffer, s.opts.Credentials != nil)
+	if err != nil {
+		return nil, err
 	}
-	resp, err := s.doRequest(ctx, http.MethodPost, "/"+string(ReceivePack), reqCT, bodyFactory, nil)
+	defer cleanup()
+	resp, err := s.doRequest(ctx, http.MethodPost, "/"+string(ReceivePack), "application/x-"+string(ReceivePack)+"-request", body, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	wantCT := "application/x-" + string(ReceivePack) + "-result"
-	if ct := resp.Header.Get("Content-Type"); ct != wantCT {
+	if ct := resp.Header.Get("Content-Type"); !hasMediaType(ct, wantCT) {
 		return nil, fmt.Errorf("%w: unexpected content type %q for the push result", ErrProtocol, ct)
 	}
 	return finishPush(resp.Body, s.caps)

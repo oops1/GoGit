@@ -20,6 +20,7 @@ type CommitOptions struct {
 	AllowEmpty bool
 	When       time.Time
 	Author     *object.Signature
+	Hooks      HookOptions
 }
 
 type CreateBranchOptions struct {
@@ -29,4 +30,5 @@ type CreateBranchOptions struct {
 type SwitchOptions struct {
 	Force  bool
 	Report *CheckoutReport
+	Hooks  HookOptions
 }

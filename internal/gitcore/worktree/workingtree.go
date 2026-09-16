@@ -20,8 +20,8 @@ var (
 	fsReadFileFile = (*os.Root).ReadFile
 )
 
-func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry) (map[string]StatusCode, error) {
-	results := make(map[string]StatusCode, len(entries))
+func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry) (map[string]unstagedChange, error) {
+	results := make(map[string]unstagedChange, len(entries))
 	var (
 		mu      sync.Mutex
 		wg      sync.WaitGroup
@@ -37,16 +37,16 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry)
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			code, err := w.compareToWorktree(entry)
+			change, err := w.unstagedChangeOf(ctx, entry)
 			if err != nil {
 				fail(err)
 				return
 			}
-			if code == StatusUnmodified {
+			if change.code == StatusUnmodified {
 				return
 			}
 			mu.Lock()
-			results[entry.Path] = code
+			results[entry.Path] = change
 			mu.Unlock()
 		})
 	}

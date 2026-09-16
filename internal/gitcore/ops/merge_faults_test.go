@@ -433,7 +433,7 @@ func mergeFaultScenarios() []faultScenario {
 			return err
 		}},
 		{"blame a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {
-			_, err := Blame(ctx, tr.repo, "HEAD", "moved", BlameOptions{Follow: true})
+			_, err := Blame(ctx, tr.repo, "HEAD", "moved", BlameOptions{})
 			return err
 		}},
 		{"the history of a file", func(tr *testRepo) { tr.movedHistory() }, func(ctx context.Context, tr *testRepo) error {

@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -23,9 +24,12 @@ type PickResult struct {
 	Picked    hash.ObjectID
 	Commit    hash.ObjectID
 	Conflicts []string
+	Warnings  []merge.Warning
 }
 
-func (r PickResult) Clean() bool { return len(r.Conflicts) == 0 }
+func (r PickResult) Clean() bool {
+	return len(r.Conflicts) == 0 && !slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
+}
 
 const (
 	pickNote          = "cherry-pick: "
@@ -129,6 +133,7 @@ type pickedTree struct {
 	tree      hash.ObjectID
 	empty     bool
 	conflicts []string
+	clean     bool
 }
 
 func (m *merger) applyPick(head headTarget, id hash.ObjectID, plan pickPlan) (PickResult, error) {
@@ -137,12 +142,12 @@ func (m *merger) applyPick(head headTarget, id hash.ObjectID, plan pickPlan) (Pi
 	if err != nil {
 		return result, err
 	}
-	result.Conflicts = picked.conflicts
+	result.Conflicts, result.Warnings = picked.conflicts, m.warnings
 	switch {
-	case !result.Clean():
+	case !picked.clean:
 		return result, errors.Join(writeStateFiles(m.r, []stateFile{
 			{plan.stateFile, id.String() + "\n"},
-			{mergeMsgFile, withConflictList(plan.message, result.Conflicts)},
+			{mergeMsgFile, withConflictHint(plan.message, result.Conflicts)},
 		}), m.rerere().conflicts(result.Conflicts))
 	case picked.empty:
 		return result, ErrNothingToCommit
@@ -171,7 +176,7 @@ func (m *merger) mergePick(head headTarget, plan pickPlan) (pickedTree, error) {
 	if err := writeStateFile(m.r, autoMergeFile, tree.String()+"\n"); err != nil {
 		return pickedTree{}, err
 	}
-	return pickedTree{tree: tree, empty: tree == oursTree, conflicts: to.conflicted()}, nil
+	return pickedTree{tree: tree, empty: tree == oursTree, conflicts: to.conflicted(), clean: merged.Clean()}, nil
 }
 
 func (m *merger) commitPick(head headTarget, plan pickPlan, tree hash.ObjectID) (hash.ObjectID, error) {

@@ -388,6 +388,22 @@ func TestTakeDetectsALooseRefFile(t *testing.T) {
 	}
 }
 
+func TestTakeWatchesTheFilesOfABisect(t *testing.T) {
+	layout := newTestLayout(t, false)
+	for _, name := range []string{"BISECT_START", "BISECT_LOG"} {
+		path := gitPath(layout, name)
+		if e := take(layout, Options{}.normalize())[path]; e.Exists || e.Kind != State {
+			t.Fatalf("%s before the bisect = %+v", name, e)
+		}
+		if err := os.WriteFile(path, []byte("main\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile returned error %v", err)
+		}
+		if e := take(layout, Options{}.normalize())[path]; !e.Exists || e.Kind != State {
+			t.Fatalf("%s entry = %+v", name, e)
+		}
+	}
+}
+
 func TestTakeDetectsStateFilesAndDirectories(t *testing.T) {
 	layout := newTestLayout(t, false)
 	mergeHead := gitPath(layout, "MERGE_HEAD")

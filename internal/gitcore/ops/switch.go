@@ -13,6 +13,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -91,7 +92,11 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		return err
 	}
 
-	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
+	if err := updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID); err != nil {
+		return err
+	}
+	runner := openHooks(r, opts.Hooks)
+	return runner.verify(ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{runner.hex(fromCommit), runner.hex(commitID), branchCheckoutFlag}})
 }
 
 func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool, report *CheckoutReport) error {
@@ -346,12 +351,10 @@ func (sw *switcher) isDirty(rel string, idxEntry *index.Entry, tracked func(stri
 			return sw.isDirty(twin.Path, twin, tracked)
 		}
 		return true, nil
-	case idxEntry.SkipWorktree:
+	case idxEntry.SkipWorktree, idxEntry.Mode.IsSubmodule():
 		return false, nil
 	case notExist:
 		return true, nil
-	case idxEntry.Mode.IsSubmodule():
-		return false, nil
 	}
 	data, err := sw.readWorktreeBytes(rel, info)
 	if err != nil {
@@ -470,7 +473,7 @@ func (sw *switcher) removeTracked(rel string, entry *index.Entry) error {
 
 func (sw *switcher) checkout(rel string, tgt treeEntry) (index.Stat, error) {
 	if tgt.mode.IsSubmodule() {
-		return index.Stat{}, nil
+		return index.Stat{}, writeGitlinkDirectory(sw.wt, rel)
 	}
 	kind, data, err := sw.db.Get(tgt.id)
 	if err != nil {

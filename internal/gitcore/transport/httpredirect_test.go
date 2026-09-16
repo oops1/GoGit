@@ -98,7 +98,7 @@ func TestHTTPAsksForCredentialsOfTheHostItWasRedirectedTo(t *testing.T) {
 }
 
 func TestHTTPIgnoresAResponseWithoutItsRequest(t *testing.T) {
-	s := newHTTPSession(Endpoint{Scheme: "https", Host: "example.com", Path: "/repo.git"}, nil, UploadPack, Options{})
+	s, _ := newHTTPSession(Endpoint{Scheme: "https", Host: "example.com", Path: "/repo.git"}, nil, UploadPack, Options{})
 	s.adoptRedirect(nil)
 	if s.baseURL != "https://example.com/repo.git" {
 		t.Fatalf("baseURL = %q", s.baseURL)

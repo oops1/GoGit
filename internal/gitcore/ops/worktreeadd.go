@@ -126,7 +126,7 @@ func checkBranchIsFree(r *repo.Repository, branch refs.Name) error {
 			return fmt.Errorf("%w: %s is checked out at %s", ErrBranchCheckedOut, branch.Short(), wt.Path)
 		}
 	}
-	return nil
+	return refuseBisectedBranch(r, branch, false, ErrBranchCheckedOut)
 }
 
 func freeWorktreeID(r *repo.Repository, base string) (string, error) {

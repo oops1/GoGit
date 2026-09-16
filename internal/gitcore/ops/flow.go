@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/config"
+	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/refspec"
@@ -304,20 +305,37 @@ type IntegrateDevelopOptions struct {
 	When   time.Time
 }
 
-func IntegrateDevelop(ctx context.Context, r *repo.Repository, name string, opts IntegrateDevelopOptions) ([]string, error) {
+type FlowMergeResult struct {
+	Conflicts []string
+	Warnings  []merge.Warning
+}
+
+func (r FlowMergeResult) Clean() bool {
+	return len(r.Conflicts) == 0 && !slices.ContainsFunc(r.Warnings, merge.Warning.Unclean)
+}
+
+func flowMergeOf(result MergeResult) FlowMergeResult {
+	return FlowMergeResult{Conflicts: result.Conflicts, Warnings: result.Warnings}
+}
+
+func flowRebaseOf(result RebaseResult) FlowMergeResult {
+	return FlowMergeResult{Conflicts: result.Conflicts, Warnings: result.Warnings}
+}
+
+func IntegrateDevelop(ctx context.Context, r *repo.Repository, name string, opts IntegrateDevelopOptions) (FlowMergeResult, error) {
 	_, branch, err := configuredFlow(r, FlowKindFeature, name)
 	if err != nil {
-		return nil, err
+		return FlowMergeResult{}, err
 	}
 	if err := Switch(ctx, r, branch.Prefix+name, SwitchOptions{}); err != nil {
-		return nil, err
+		return FlowMergeResult{}, err
 	}
 	if opts.Rebase {
 		result, err := Rebase(ctx, r, branch.Base, RebaseOptions{When: opts.When})
-		return result.Conflicts, err
+		return flowRebaseOf(result), err
 	}
 	result, err := Merge(ctx, r, branch.Base, MergeOptions{When: opts.When})
-	return result.Conflicts, err
+	return flowMergeOf(result), err
 }
 
 type FinishFlowOptions struct {
@@ -338,6 +356,7 @@ type FinishFlowResult struct {
 	KeptTag   string
 	Pushed    bool
 	Conflicts []string
+	Warnings  []merge.Warning
 	Stopped   FlowStep
 }
 
@@ -469,12 +488,12 @@ func (f *flowFinisher) fetchTargets(targets []string) error {
 
 func (f *flowFinisher) run() (FinishFlowResult, error) {
 	for ; f.state.step <= FlowStepDeleteBranch; f.state.step++ {
-		conflicts, err := f.do(f.state.step)
+		outcome, err := f.do(f.state.step)
 		if err != nil {
 			return f.result, err
 		}
-		if len(conflicts) > 0 {
-			f.result.Conflicts, f.result.Stopped = conflicts, f.state.step
+		if !outcome.Clean() {
+			f.result.Conflicts, f.result.Warnings, f.result.Stopped = outcome.Conflicts, outcome.Warnings, f.state.step
 			return f.result, writeStateFile(f.r, flowStateFile, f.state.encode())
 		}
 	}
@@ -487,39 +506,39 @@ func (f *flowFinisher) message() string {
 	return cmp.Or(f.state.message, DefaultFlowMessage(f.state.name))
 }
 
-func (f *flowFinisher) do(step FlowStep) ([]string, error) {
+func (f *flowFinisher) do(step FlowStep) (FlowMergeResult, error) {
 	switch step {
 	case FlowStepMergeMaster:
 		if !f.tagged() {
-			return nil, nil
+			return FlowMergeResult{}, nil
 		}
 		return flowMerge(f.ctx, f.r, f.cfg.Master, f.branch, f.message(), MergeNoFastForward, f.when)
 	case FlowStepTag:
 		if f.state.tag == "" {
-			return nil, nil
+			return FlowMergeResult{}, nil
 		}
-		return nil, f.tagMaster()
+		return FlowMergeResult{}, f.tagMaster()
 	case FlowStepRebase:
 		if f.state.integration != FlowRebase {
-			return nil, nil
+			return FlowMergeResult{}, nil
 		}
 		if err := Switch(f.ctx, f.r, f.branch, SwitchOptions{}); err != nil {
-			return nil, err
+			return FlowMergeResult{}, err
 		}
 		result, err := Rebase(f.ctx, f.r, f.cfg.Develop, RebaseOptions{When: f.when})
-		return result.Conflicts, err
+		return flowRebaseOf(result), err
 	case FlowStepMergeDevelop:
 		if !f.state.develop {
-			return nil, nil
+			return FlowMergeResult{}, nil
 		}
 		return f.mergeDevelop()
 	case FlowStepPush:
-		return nil, f.pushResults()
+		return FlowMergeResult{}, f.pushResults()
 	default:
 		if !f.state.deleteBranch {
-			return nil, nil
+			return FlowMergeResult{}, nil
 		}
-		return nil, flowDeleteBranch(f.ctx, f.r, f.branch, true)
+		return FlowMergeResult{}, flowDeleteBranch(f.ctx, f.r, f.branch, true)
 	}
 }
 
@@ -564,7 +583,7 @@ func flowTagPlace(r *repo.Repository, tag, master string) (exists, elsewhere boo
 	return true, tagged != tip, err
 }
 
-func (f *flowFinisher) mergeDevelop() ([]string, error) {
+func (f *flowFinisher) mergeDevelop() (FlowMergeResult, error) {
 	source := f.branch
 	if f.state.tag != "" {
 		source = f.state.tag
@@ -575,12 +594,12 @@ func (f *flowFinisher) mergeDevelop() ([]string, error) {
 	case f.state.integration == FlowRebase:
 		return flowMerge(f.ctx, f.r, f.cfg.Develop, source, "", MergeFastForwardOnly, f.when)
 	case f.state.integration == FlowSquash:
-		conflicts, err := flowMerge(f.ctx, f.r, f.cfg.Develop, source, f.message(), MergeSquash, f.when)
-		if err != nil || len(conflicts) > 0 {
-			return conflicts, err
+		squashed, err := flowMerge(f.ctx, f.r, f.cfg.Develop, source, f.message(), MergeSquash, f.when)
+		if err != nil || !squashed.Clean() {
+			return squashed, err
 		}
 		_, err = Commit(f.ctx, f.r, CommitOptions{Message: f.message(), When: f.when})
-		return nil, err
+		return FlowMergeResult{}, err
 	}
 	return flowMerge(f.ctx, f.r, f.cfg.Develop, source, f.message(), MergeNoFastForward, f.when)
 }
@@ -686,12 +705,12 @@ func flowNotBehind(r *repo.Repository, net FlowNetwork, branch string) error {
 	return nil
 }
 
-func flowMerge(ctx context.Context, r *repo.Repository, onto, source, message string, mode MergeMode, when time.Time) ([]string, error) {
+func flowMerge(ctx context.Context, r *repo.Repository, onto, source, message string, mode MergeMode, when time.Time) (FlowMergeResult, error) {
 	if err := Switch(ctx, r, onto, SwitchOptions{}); err != nil {
-		return nil, err
+		return FlowMergeResult{}, err
 	}
 	result, err := Merge(ctx, r, source, MergeOptions{Mode: mode, Message: message, When: when})
-	return result.Conflicts, err
+	return flowMergeOf(result), err
 }
 
 type flowState struct {

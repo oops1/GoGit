@@ -1,13 +1,39 @@
 package diff
 
-import "github.com/oops1/gogit/internal/gitcore/hash"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/oops1/gogit/internal/gitcore/hash"
+)
 
 type Algorithm uint8
 
 const (
 	AlgorithmMyers Algorithm = iota
 	AlgorithmHistogram
+	AlgorithmPatience
+	AlgorithmMinimal
 )
+
+func ParseAlgorithm(name string) (Algorithm, error) {
+	switch strings.ToLower(name) {
+	case "myers", "default":
+		return AlgorithmMyers, nil
+	case "minimal":
+		return AlgorithmMinimal, nil
+	case "patience":
+		return AlgorithmPatience, nil
+	case "histogram":
+		return AlgorithmHistogram, nil
+	default:
+		return AlgorithmMyers, fmt.Errorf("%w: %q", ErrUnknownAlgorithm, name)
+	}
+}
+
+func (a Algorithm) classic() bool {
+	return a != AlgorithmHistogram && a != AlgorithmPatience
+}
 
 type Whitespace uint8
 
@@ -16,6 +42,7 @@ const (
 	IgnoreSpaceChange
 	IgnoreSpaceAtEOL
 	IgnoreBlankLines
+	IgnoreCRAtEOL
 )
 
 const (
@@ -92,7 +119,7 @@ func (o Options) normalized() Options {
 }
 
 func (w Whitespace) ignoresSpace() bool {
-	return w&(IgnoreAllSpace|IgnoreSpaceChange|IgnoreSpaceAtEOL) != 0
+	return w&(IgnoreAllSpace|IgnoreSpaceChange|IgnoreSpaceAtEOL|IgnoreCRAtEOL) != 0
 }
 
 func (o Options) minimumScore() int {

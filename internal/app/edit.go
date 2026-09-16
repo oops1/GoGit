@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"slices"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -234,35 +236,73 @@ func (a *App) applyCommit(m commit.Model, ok bool) {
 	a.commitFiles(m, ok, nil)
 }
 
+var commitHookNames = []string{"pre-commit", "prepare-commit-msg", "commit-msg", "post-commit", "post-rewrite"}
+
+func commitHasHooks(r *gitrepo.Repository) bool {
+	return slices.ContainsFunc(commitHookNames, hooks.New(r, nil).Present)
+}
+
 func (a *App) commitFiles(m commit.Model, ok bool, paths []string) {
-	if !ok || a.opened() == nil {
+	o := a.opened()
+	if !ok || o == nil {
+		return
+	}
+	if commitHasHooks(o.repo) {
+		a.commitInOperation(o, m, paths)
 		return
 	}
 	var newID hash.ObjectID
 	started := a.startWrite(func(ctx context.Context, r *gitrepo.Repository) error {
-		if len(paths) > 0 {
-			if err := stageForCommit(ctx, r, paths, ops.StageOptions{}); err != nil {
-				return err
-			}
-		}
-		id, err := ops.Commit(ctx, r, ops.CommitOptions{Message: m.Message, Amend: m.Amend})
+		id, err := commitChanges(ctx, r, m, paths, nil)
 		newID = id
 		return err
-	}, func(err error) {
-		if err != nil {
-			a.log.Warn("commit failed", "error", err)
-			a.statusLabel.SetText(i18n.Tf("Status.CommitFailed", err))
-			return
-		}
-		a.clearFilesSelection()
-		a.startJournal()
-		if !newID.IsZero() {
-			a.statusLabel.SetText(i18n.Tf("Status.Committed", shortHash(newID)))
-		}
-	})
+	}, func(err error) { a.finishCommit(newID, err) })
 	if !started {
 		a.log.Warn("commit skipped: another write operation is already running")
 	}
+}
+
+func commitChanges(ctx context.Context, r *gitrepo.Repository, m commit.Model, paths []string, events hooks.Sink) (hash.ObjectID, error) {
+	if len(paths) > 0 {
+		if err := stageForCommit(ctx, r, paths, ops.StageOptions{}); err != nil {
+			return hash.Zero, err
+		}
+	}
+	return ops.Commit(ctx, r, ops.CommitOptions{
+		Message: m.Message,
+		Amend:   m.Amend,
+		Hooks:   ops.HookOptions{NoVerify: m.NoVerify, Events: events},
+	})
+}
+
+func (a *App) commitInOperation(o *openedRepository, m commit.Model, paths []string) {
+	a.RunOperation(i18n.T("Operation.Title.Commit"), func(ctx context.Context, reporter OperationReporter) error {
+		id, err := commitChanges(ctx, o.repo, m, paths, hookEvents(reporter))
+		reportHookRejection(reporter, err)
+		reporter.Then(func() {
+			if err == nil {
+				a.reloadWorktree()
+			}
+			a.refreshWorkingStatus()
+			a.finishCommit(id, err)
+		})
+		return err
+	})
+}
+
+func (a *App) finishCommit(id hash.ObjectID, err error) {
+	if err != nil {
+		a.log.Warn("commit failed", "error", err)
+		text, hooked := hookFailureText(err)
+		if !hooked {
+			text = i18n.Tf("Status.CommitFailed", err)
+		}
+		a.statusLabel.SetText(text)
+		return
+	}
+	a.clearFilesSelection()
+	a.startJournal()
+	a.statusLabel.SetText(i18n.Tf("Status.Committed", shortHash(id)))
 }
 
 func (a *App) defaultShowCommit(initial commit.Model, cb func(commit.Model, bool)) {

@@ -1,6 +1,8 @@
 package diff
 
 import (
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -98,6 +100,47 @@ func TestNormalizedClampsOutOfRangeSettings(t *testing.T) {
 	}
 }
 
+func TestParseAlgorithmAcceptsTheGitNames(t *testing.T) {
+	cases := map[string]Algorithm{
+		"myers":     AlgorithmMyers,
+		"Default":   AlgorithmMyers,
+		"MINIMAL":   AlgorithmMinimal,
+		"patience":  AlgorithmPatience,
+		"Histogram": AlgorithmHistogram,
+	}
+	for name, want := range cases {
+		if got, err := ParseAlgorithm(name); err != nil || got != want {
+			t.Errorf("ParseAlgorithm(%q) returned %d, %v instead of %d", name, got, err, want)
+		}
+	}
+	if _, err := ParseAlgorithm("fancy"); !errors.Is(err, ErrUnknownAlgorithm) {
+		t.Errorf("ParseAlgorithm of an unknown name returned %v", err)
+	}
+}
+
+func TestTheCraftedPairsSeparateTheAlgorithms(t *testing.T) {
+	byName := map[string]corpusPair{}
+	for _, pair := range corpus() {
+		byName[pair.name] = pair
+	}
+	cases := []struct {
+		pair      string
+		algorithm Algorithm
+	}{
+		{"patience-functions", AlgorithmPatience},
+		{"tangled-many-tokens", AlgorithmPatience},
+		{"tangled-few-tokens", AlgorithmMinimal},
+	}
+	for _, c := range cases {
+		pair := byName[c.pair]
+		plain := Blobs([]byte(pair.old), []byte(pair.new), Defaults())
+		other := Blobs([]byte(pair.old), []byte(pair.new), withOptions(func(o *Options) { o.Algorithm = c.algorithm }))
+		if reflect.DeepEqual(plain, other) {
+			t.Errorf("%s gives the same hunks with algorithm %d as with Myers", c.pair, c.algorithm)
+		}
+	}
+}
+
 func TestIgnoresSpaceCoversOnlyTheSpaceFlags(t *testing.T) {
 	cases := []struct {
 		value Whitespace
@@ -108,6 +151,7 @@ func TestIgnoresSpaceCoversOnlyTheSpaceFlags(t *testing.T) {
 		{IgnoreSpaceChange, true},
 		{IgnoreSpaceAtEOL, true},
 		{IgnoreBlankLines, false},
+		{IgnoreCRAtEOL, true},
 		{IgnoreBlankLines | IgnoreAllSpace, true},
 	}
 	for _, c := range cases {

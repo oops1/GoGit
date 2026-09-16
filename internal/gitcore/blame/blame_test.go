@@ -202,11 +202,11 @@ func TestWithoutFollowingRenamesTheMoveTakesTheBlame(t *testing.T) {
 	first := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob(text)}), 1000)
 	second := s.commit("move", s.tree(map[string]hash.ObjectID{"moved": s.blob(text)}), 2000, first)
 
-	plain, err := File(t.Context(), s, second, "moved", Options{})
+	plain, err := File(t.Context(), s, second, "moved", Options{NoFollowRenames: true})
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
 	}
-	followed, err := File(t.Context(), s, second, "moved", Options{FollowRenames: true})
+	followed, err := File(t.Context(), s, second, "moved", Options{})
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
 	}
@@ -236,6 +236,183 @@ func TestAMergeKeepsTheBlameOfEachSide(t *testing.T) {
 	}
 	if got := blamedOn(t, result); strings.Join(got, " ") != "ours:1 base:2 theirs:3" {
 		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestAMergeHandsEverythingToTheParentWithTheSameBlob(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("a\n")}), 1000)
+	main := s.commit("main", s.tree(map[string]hash.ObjectID{"f": s.blob("a\nb\nX\n")}), 2000, base)
+	feature := s.commit("feature", s.tree(map[string]hash.ObjectID{"f": s.blob("a\nb\n")}), 2000, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob("a\nb\n")}), 3000, main, feature)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "base:1 feature:2" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestAMergeDiffsOnlyOnceAgainstParentsWithTheSameBlob(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 1000)
+	left := s.commit("left", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nTWO\n")}), 2000, base)
+	right := s.commit("right", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nTWO\n")}), 2500, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob("ONE\nTWO\n")}), 3000, left, right)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "merge:1 left:2" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+type flakyStore struct {
+	*store
+	flaky hash.ObjectID
+	reads int
+}
+
+func (f *flakyStore) Get(id hash.ObjectID) (object.Type, []byte, error) {
+	if id == f.flaky {
+		f.reads++
+		if f.reads > 1 {
+			return 0, nil, errInjected
+		}
+	}
+	return f.store.Get(id)
+}
+
+func TestABlameCountsALastLineWithoutANewline(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo")}), 1000)
+	head := s.commit("edit", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nTWO")}), 2000, base)
+
+	result, err := File(t.Context(), s, head, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "base:1 edit:2" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestABlameOfAnEntryThatIsNotABlobSaysSo(t *testing.T) {
+	s := newStore()
+	inner := s.tree(map[string]hash.ObjectID{"x": s.blob("x\n")})
+	outer := s.put(&object.Tree{Entries: []object.TreeEntry{{Mode: object.ModeBlob, Name: "f", ID: inner}}})
+	head := s.commit("base", outer, 1000)
+
+	if _, err := File(t.Context(), s, head, "f", Options{}); !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestABlameReportsAParentBlobItCannotRead(t *testing.T) {
+	s := newStore()
+	older := s.blob("one\n")
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": older}), 1000)
+	head := s.commit("edit", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 2000, base)
+	s.fail[older] = errInjected
+
+	if _, err := File(t.Context(), s, head, "f", Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestABlameReportsABlobThatFailsWhenReadAgain(t *testing.T) {
+	s := newStore()
+	shared := s.blob("one\ntwo\n")
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\n")}), 1000)
+	same := s.commit("same", s.tree(map[string]hash.ObjectID{"f": shared}), 2000, base)
+	other := s.commit("other", s.tree(map[string]hash.ObjectID{"f": s.blob("zzz\n")}), 2000, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": shared}), 3000, other, same)
+
+	if _, err := File(t.Context(), &flakyStore{store: s, flaky: shared}, merged, "f", Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestACommitSkipsAPathThatNoLineReached(t *testing.T) {
+	s := newStore()
+	content := "one\ntwo\nthree\n"
+	base := s.commit("a", s.tree(map[string]hash.ObjectID{"f": s.blob("zzz\n"), "g": s.blob(content)}), 1000)
+	moved := s.commit("b", s.tree(map[string]hash.ObjectID{"h": s.blob(content)}), 2000, base)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob(content + "four\n")}), 3000, base, moved)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "a:1 a:2 a:3 merge:4" {
+		t.Fatalf("blame = %v", got)
+	}
+	if result.Lines[0].Path != "g" {
+		t.Fatalf("path = %q", result.Lines[0].Path)
+	}
+}
+
+func TestAMergeStopsOnceTheFirstParentExplainsEveryLine(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"f": s.blob("one\nextra\ntwo\n")}), 1000)
+	other := s.commit("other", s.tree(map[string]hash.ObjectID{"f": s.blob("other\n")}), 1000)
+	merged := s.commit("merge", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 3000, base, other)
+
+	result, err := File(t.Context(), s, merged, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "base:1 base:3" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestABlameFindsAFileInsideADirectory(t *testing.T) {
+	s := newStore()
+	inner := s.tree(map[string]hash.ObjectID{"f": s.blob("one\n")})
+	outer := s.put(&object.Tree{Entries: []object.TreeEntry{{Mode: object.ModeTree, Name: "dir", ID: inner}}})
+	head := s.commit("base", outer, 1000)
+
+	result, err := File(t.Context(), s, head, "dir/f", Options{})
+
+	if err != nil || strings.Join(blamedOn(t, result), " ") != "base:1" {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+}
+
+func TestAFileNextToAnUnrelatedDeletionIsNotARename(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"old": s.blob("alpha\nbeta\ngamma\n")}), 1000)
+	head := s.commit("swap", s.tree(map[string]hash.ObjectID{"new": s.blob("one\ntwo\nthree\n")}), 2000, base)
+
+	result, err := File(t.Context(), s, head, "new", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "swap:1 swap:2 swap:3" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestFollowingRenamesReportsADeletedBlobItCannotRead(t *testing.T) {
+	s := newStore()
+	gone := s.blob("alpha\nbeta\ngamma\n")
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"old": gone}), 1000)
+	head := s.commit("swap", s.tree(map[string]hash.ObjectID{"new": s.blob("alpha\nbeta\nGAMMA\n")}), 2000, base)
+	s.fail[gone] = errInjected
+
+	if _, err := File(t.Context(), s, head, "new", Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -356,7 +533,7 @@ func TestFollowingRenamesKeepsTheCommitThatAddedTheFile(t *testing.T) {
 	base := s.commit("base", s.tree(map[string]hash.ObjectID{"keep": s.blob("keep\n")}), 1000)
 	head := s.commit("add", s.tree(map[string]hash.ObjectID{"keep": s.blob("keep\n"), "f": s.blob("one\ntwo\n")}), 2000, base)
 
-	result, err := File(t.Context(), s, head, "f", Options{FollowRenames: true})
+	result, err := File(t.Context(), s, head, "f", Options{})
 
 	if err != nil {
 		t.Fatalf("File returned error %v", err)
@@ -373,7 +550,7 @@ func TestFollowingRenamesReportsATreeItCannotWalk(t *testing.T) {
 	parent := s.commit("base", bogus, 1000)
 	head := s.commit("move", s.tree(map[string]hash.ObjectID{"moved": s.blob(text)}), 2000, parent)
 
-	if _, err := File(t.Context(), s, head, "moved", Options{FollowRenames: true}); err == nil {
+	if _, err := File(t.Context(), s, head, "moved", Options{}); err == nil {
 		t.Fatal("a broken tree was walked for renames")
 	}
 }

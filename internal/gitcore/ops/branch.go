@@ -37,13 +37,18 @@ func CreateBranch(ctx context.Context, r *repo.Repository, name string, startPoi
 	if err := validateBranchName(name); err != nil {
 		return err
 	}
+	ref := refs.BranchName(name)
+	if opts.Force {
+		if err := refuseBisectedBranch(r, ref, false, ErrBranchCheckedOut); err != nil {
+			return err
+		}
+	}
 	rc, err := openRepoContext(r)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rc.close() }()
 
-	ref := refs.BranchName(name)
 	tx := rc.refs.Begin()
 	tx.SetMessage("branch: Created from " + startPoint.String())
 	var txErr error
@@ -86,6 +91,9 @@ func DeleteBranch(ctx context.Context, r *repo.Repository, name string, force bo
 	}
 	if current == ref {
 		return fmt.Errorf("%w: %s", ErrBranchCheckedOut, name)
+	}
+	if err := refuseBisectedBranch(r, ref, false, ErrBranchCheckedOut); err != nil {
+		return err
 	}
 
 	target, err := rc.refs.Lookup(ref)
@@ -136,6 +144,9 @@ func RenameBranch(ctx context.Context, r *repo.Repository, from, to string, forc
 		return err
 	}
 	fromRef, toRef := refs.BranchName(from), refs.BranchName(to)
+	if err := refuseBisectedBranch(r, fromRef, true, ErrBranchBisected); err != nil {
+		return err
+	}
 
 	rc, err := openRepoContext(r)
 	if err != nil {

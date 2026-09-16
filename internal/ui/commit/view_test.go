@@ -82,16 +82,28 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"staged":  widget.NewWin10Label(""),
-		"message": widget.NewTextBox(""),
-		"amend":   widget.NewCheckBox(""),
-		"ok":      widget.NewButton(""),
-		"cancel":  widget.NewButton(""),
+		"staged":      widget.NewWin10Label(""),
+		"message":     widget.NewTextBox(""),
+		"amend":       widget.NewCheckBox(""),
+		"bypassHooks": widget.NewCheckBox(""),
+		"ok":          widget.NewButton(""),
+		"cancel":      widget.NewButton(""),
+	}
+}
+
+func TestBypassHooksStartsFromTheModelAndReachesTheRequest(t *testing.T) {
+	v := newTestView(t, Model{Message: "fix", NoVerify: true})
+	if !v.bypassCheck.IsChecked() || !v.request().NoVerify {
+		t.Fatal("the bypass choice of the model must be shown and returned")
+	}
+	clickCheckBox(v.bypassCheck)
+	if v.request().NoVerify {
+		t.Fatal("clearing the checkbox must run the hooks again")
 	}
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	for _, key := range []string{"staged", "message", "amend", "ok", "cancel"} {
+	for _, key := range []string{"staged", "message", "amend", "bypassHooks", "ok", "cancel"} {
 		named := fullNamedWidgets()
 		delete(named, key)
 		v := &View{}
@@ -99,7 +111,7 @@ func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
 			t.Fatalf("missing %q: expected error", key)
 		}
 	}
-	for _, key := range []string{"message", "amend", "ok", "cancel"} {
+	for _, key := range []string{"message", "amend", "bypassHooks", "ok", "cancel"} {
 		named := fullNamedWidgets()
 		named[key] = widget.NewWin10Label("wrong-type")
 		v := &View{}

@@ -9,4 +9,5 @@ var (
 	ErrReadWorkingTree  = errors.New("worktree: read working tree")
 	ErrReadHead         = errors.New("worktree: read HEAD commit")
 	ErrReadHeadTree     = errors.New("worktree: read HEAD tree")
+	ErrReadSubmodule    = errors.New("worktree: read the status of a submodule")
 )

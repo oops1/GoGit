@@ -14,6 +14,7 @@ import (
 type StartBranchOptions struct {
 	Force bool
 	Track bool
+	Hooks HookOptions
 }
 
 type StartBranchResult struct {
@@ -49,7 +50,7 @@ func StartBranch(ctx context.Context, r *repo.Repository, name, start string, op
 		}
 		result.Upstream = upstream
 	}
-	if err := Switch(ctx, r, name, SwitchOptions{Force: opts.Force}); err != nil {
+	if err := Switch(ctx, r, name, SwitchOptions{Force: opts.Force, Hooks: opts.Hooks}); err != nil {
 		return result, err
 	}
 	return result, nil

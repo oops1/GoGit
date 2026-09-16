@@ -23,4 +23,13 @@ var (
 	ErrAdvertisementMalformed = errors.New("transport: malformed reference advertisement")
 
 	ErrInvalidURL = errors.New("transport: invalid url")
+
+	ErrAuthSchemeUnsupported = errors.New("transport: the server accepts only an unsupported authentication scheme")
+	ErrProxyAuthRequired     = errors.New("transport: proxy authentication required")
+	ErrInvalidProxy          = errors.New("transport: invalid or unsupported proxy")
+	ErrTLSConfig             = errors.New("transport: invalid tls configuration")
+	ErrClientKeyEncrypted    = errors.New("transport: the tls client key is encrypted")
+	ErrLowSpeed              = errors.New("transport: transfer speed stayed below http.lowSpeedLimit")
+	ErrHeaderTimeout         = errors.New("transport: no response headers from the server in time")
+	ErrProtocolNotAllowed    = errors.New("transport: protocol is not allowed")
 )

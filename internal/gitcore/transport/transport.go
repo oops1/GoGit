@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 )
@@ -128,6 +129,9 @@ type Options struct {
 	Progress    progress.Func
 	HostKeys    HostKeyPolicy
 	Keys        KeySource
+	SSH         SSHOptions
+	Config      *config.Config
+	RemoteName  string
 }
 
 type HostKey struct {
@@ -159,7 +163,7 @@ func Dial(ctx context.Context, rawURL string, service Service, opts Options) (Se
 	}
 	switch endpoint.Scheme {
 	case SchemeHTTP, SchemeHTTPS:
-		return newHTTPSession(endpoint, password, service, opts), nil
+		return newHTTPSession(endpoint, password, service, opts)
 	case SchemeGit:
 		password.Wipe()
 		return newGitSession(endpoint, service, opts), nil
