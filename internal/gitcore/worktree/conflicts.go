@@ -5,12 +5,12 @@ import "github.com/oops1/gogit/internal/gitcore/index"
 func (w *Worktree) conflictEntries() []Entry {
 	seen := map[string]bool{}
 	var out []Entry
-	for entry := range w.index.Entries() {
+	for entry := range w.currentIndex().Entries() {
 		if entry.Stage == index.StageMerged || seen[entry.Path] {
 			continue
 		}
 		seen[entry.Path] = true
-		kind := classifyConflict(w.index.Conflicts(entry.Path))
+		kind := classifyConflict(w.currentIndex().Conflicts(entry.Path))
 		out = append(out, Entry{Path: entry.Path, Staged: StatusUnmerged, Unstaged: StatusUnmerged, Conflict: kind})
 	}
 	return out

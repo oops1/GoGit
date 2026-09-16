@@ -77,7 +77,7 @@ func (w *Worktree) collectHeadTree(ctx context.Context, id hash.ObjectID) (map[s
 
 func (w *Worktree) stagedStatus(headTree map[string]headEntry) map[string]Entry {
 	indexPaths := map[string]*index.Entry{}
-	for entry := range w.index.Entries() {
+	for entry := range w.currentIndex().Entries() {
 		if entry.Stage == index.StageMerged {
 			indexPaths[entry.Path] = entry
 		}

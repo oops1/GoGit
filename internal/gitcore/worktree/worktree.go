@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/config"
@@ -32,6 +33,8 @@ type Worktree struct {
 	refs              *refs.Store
 	ownRefs           bool
 	index             *index.Index
+	indexStamp        indexStamp
+	indexMu           sync.RWMutex
 	root              *os.Root
 	ignore            *attributes.Matcher
 	ignoreMu          sync.Mutex
@@ -57,6 +60,7 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 	if env == nil {
 		env = os.Getenv
 	}
+	stamp := stampIndex(r.IndexFile())
 	idx, err := loadIndex(r.IndexFile())
 	if err != nil {
 		return nil, err
@@ -100,6 +104,7 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		refs:              refsStore,
 		ownRefs:           ownRefs,
 		index:             idx,
+		indexStamp:        stamp,
 		root:              root,
 		ignore:            ignore,
 		attrs:             attrs,
@@ -111,6 +116,49 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		maxFiles:          opts.MaxFiles,
 		includeUnmodified: opts.IncludeUnmodified,
 	}, nil
+}
+
+type indexStamp struct {
+	size    int64
+	modTime time.Time
+	exists  bool
+}
+
+func stampIndex(path string) indexStamp {
+	info, err := os.Stat(path)
+	if err != nil {
+		return indexStamp{}
+	}
+	return indexStamp{size: info.Size(), modTime: info.ModTime(), exists: true}
+}
+
+func (s indexStamp) same(other indexStamp) bool {
+	return s.exists == other.exists && s.size == other.size && s.modTime.Equal(other.modTime)
+}
+
+func (w *Worktree) currentIndex() *index.Index {
+	w.indexMu.RLock()
+	defer w.indexMu.RUnlock()
+	return w.index
+}
+
+func (w *Worktree) refreshIndex() error {
+	path := w.repo.IndexFile()
+	stamp := stampIndex(path)
+	w.indexMu.RLock()
+	unchanged := stamp.same(w.indexStamp)
+	w.indexMu.RUnlock()
+	if unchanged {
+		return nil
+	}
+	idx, err := loadIndex(path)
+	if err != nil {
+		return err
+	}
+	w.indexMu.Lock()
+	w.index, w.indexStamp = idx, stamp
+	w.indexMu.Unlock()
+	return nil
 }
 
 func loadIndex(path string) (*index.Index, error) {
@@ -193,6 +241,6 @@ func (w *Worktree) policy(path string) attributes.Policy {
 	return w.attrs.Policy(path)
 }
 
-func (w *Worktree) Index() *index.Index { return w.index }
+func (w *Worktree) Index() *index.Index { return w.currentIndex() }
 
 func (w *Worktree) Repository() *repo.Repository { return w.repo }

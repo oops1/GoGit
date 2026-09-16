@@ -71,6 +71,9 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	if err := ctx.Err(); err != nil {
 		return Status{}, err
 	}
+	if err := w.refreshIndex(); err != nil {
+		return Status{}, err
+	}
 	branch, detached, headCommit, err := w.resolveHead()
 	if err != nil {
 		return Status{}, err
@@ -91,7 +94,7 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	var mergedEntries []*index.Entry
 	trackedFiles := map[string]bool{}
 	trackedDirs := map[string]bool{}
-	for entry := range w.index.Entries() {
+	for entry := range w.currentIndex().Entries() {
 		trackedFiles[entry.Path] = true
 		for dir := path.Dir(entry.Path); dir != "." && dir != "/" && !trackedDirs[dir]; dir = path.Dir(dir) {
 			trackedDirs[dir] = true

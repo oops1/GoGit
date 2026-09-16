@@ -79,7 +79,7 @@ func (w *Worktree) compareToWorktree(entry *index.Entry) (StatusCode, error) {
 	if wantKind != actualKind && !w.holdsPlainSymlink(wantKind, fi) {
 		return StatusTypeChanged, nil
 	}
-	if w.index.MatchesFile(entry, fi, w.symlinks) {
+	if w.currentIndex().MatchesFile(entry, fi, w.symlinks) {
 		if w.modeChanged(entry, fi) {
 			return StatusModified, nil
 		}
@@ -155,6 +155,6 @@ func (w *Worktree) modeChanged(entry *index.Entry, fi os.FileInfo) bool {
 
 func (w *Worktree) convertForCheckin(path string, data []byte) []byte {
 	return w.policy(path).CompareToGit(data, func() ([]byte, bool) {
-		return w.index.ContentBlob(w.db, path)
+		return w.currentIndex().ContentBlob(w.db, path)
 	})
 }
