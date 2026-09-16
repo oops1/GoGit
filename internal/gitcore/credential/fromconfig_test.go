@@ -1,6 +1,7 @@
 package credential
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -112,8 +113,8 @@ func TestFromConfigResolveErrorPropagates(t *testing.T) {
 	}
 }
 
-func TestFromConfigUseHTTPPathControlsPathScopedHelpers(t *testing.T) {
-	content := "[credential]\n\thelper = store --file=generic\n\tuseHttpPath = true\n" +
+func TestFromConfigMatchesPathScopesBeforeUseHTTPPathDropsThePath(t *testing.T) {
+	content := "[credential]\n\thelper = store --file=generic\n" +
 		"[credential \"https://example.com/org/repo.git\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 	_, infos, err := FromConfig(cfg, "https://example.com/org/repo.git")
@@ -123,28 +124,65 @@ func TestFromConfigUseHTTPPathControlsPathScopedHelpers(t *testing.T) {
 	if !slices.Equal(helperNames(infos), []string{"store --file=generic", "store --file=scoped"}) {
 		t.Fatalf("infos = %v, want [generic scoped]", infos)
 	}
-
-	contentNoPath := "[credential]\n\thelper = store --file=generic\n" +
-		"[credential \"https://example.com/org/repo.git\"]\n\thelper = store --file=scoped\n"
-	cfgNoPath := loadTestConfig(t, contentNoPath)
-	_, infos, err = FromConfig(cfgNoPath, "https://example.com/org/repo.git")
-	if err != nil {
-		t.Fatalf("FromConfig returned %v", err)
-	}
-	if !slices.Equal(helperNames(infos), []string{"store --file=generic"}) {
-		t.Fatalf("infos = %v, want [generic] when useHttpPath is off", infos)
+	q, err := QueryFromConfig(cfg, "https://example.com/org/repo.git")
+	if err != nil || q.Path != "" {
+		t.Fatalf("query = %+v, %v; the path is dropped only after matching", q, err)
 	}
 }
 
-func TestFromConfigDefaultUsernameFeedsURLScopedMatch(t *testing.T) {
+func TestFromConfigConfiguredUsernameDoesNotSelectUserScopes(t *testing.T) {
 	content := "[credential]\n\tusername = alice\n[credential \"https://alice@example.com\"]\n\thelper = store --file=scoped\n"
 	cfg := loadTestConfig(t, content)
 	_, infos, err := FromConfig(cfg, "https://example.com/repo.git")
 	if err != nil {
 		t.Fatalf("FromConfig returned %v", err)
 	}
-	if !slices.Equal(helperNames(infos), []string{"store --file=scoped"}) {
-		t.Fatalf("infos = %v, want [scoped]", infos)
+	if len(infos) != 0 {
+		t.Fatalf("infos = %v, want none: git matches scopes against the url before applying credential.username", infos)
+	}
+	_, infos, err = FromConfig(cfg, "https://alice@example.com/repo.git")
+	if err != nil || !slices.Equal(helperNames(infos), []string{"store --file=scoped"}) {
+		t.Fatalf("infos = %v, %v; want the user scope for the url user", infos, err)
+	}
+}
+
+func TestQueryFromConfigAppliesScopedSettings(t *testing.T) {
+	content := "[credential \"https://dev.azure.com\"]\n\tuseHttpPath = true\n" +
+		"[credential \"https://*.example.com\"]\n\tusername = carol\n" +
+		"[credential \"example.org\"]\n\tusername = dave\n"
+	cfg := loadTestConfig(t, content)
+	cases := map[string]Query{
+		"https://dev.azure.com/org/project/_git/repo": {Protocol: "https", Host: "dev.azure.com", Path: "org/project/_git/repo"},
+		"https://git.example.com/repo.git":            {Protocol: "https", Host: "git.example.com", Username: "carol"},
+		"https://bob@git.example.com/repo.git":        {Protocol: "https", Host: "git.example.com", Username: "bob"},
+		"https://example.org/repo.git":                {Protocol: "https", Host: "example.org", Username: "dave"},
+		"ssh://example.org/repo.git":                  {Protocol: "ssh", Host: "example.org", Path: "repo.git", Username: "dave"},
+		"https://example.com/repo.git":                {Protocol: "https", Host: "example.com"},
+	}
+	for rawURL, want := range cases {
+		if got, err := QueryFromConfig(cfg, rawURL); err != nil || got != want {
+			t.Errorf("QueryFromConfig(%q) = %+v, %v; want %+v", rawURL, got, err, want)
+		}
+	}
+}
+
+func TestQueryFromConfigRejectsInvalidInput(t *testing.T) {
+	if _, err := QueryFromConfig(loadTestConfig(t, ""), ""); err == nil {
+		t.Fatal("an empty url must fail")
+	}
+	cfg := loadTestConfig(t, "[credential \"https://example.com\"]\n\thelper\n")
+	if _, err := QueryFromConfig(cfg, "https://example.com/repo.git"); !errors.Is(err, ErrMissingConfigValue) {
+		t.Fatalf("err = %v, want ErrMissingConfigValue", err)
+	}
+	if _, err := QueryFromConfig(cfg, "https://other.com/repo.git"); err != nil {
+		t.Fatalf("a valueless setting for another url must be ignored, got %v", err)
+	}
+}
+
+func TestFromConfigMissingValueReturnsError(t *testing.T) {
+	cfg := loadTestConfig(t, "[credential]\n\tusername\n")
+	if _, _, err := FromConfig(cfg, "https://example.com/repo.git"); !errors.Is(err, ErrMissingConfigValue) {
+		t.Fatalf("err = %v, want ErrMissingConfigValue", err)
 	}
 }
 

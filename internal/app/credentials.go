@@ -217,18 +217,9 @@ func defaultCredentialChainAndQuery(a *App, resource string) (credential.Chain, 
 }
 
 func credentialQueryFor(cfg *gitconfig.Config, rawURL string) credential.Query {
-	useHTTPPath, err := cfg.GetBool("credential.usehttppath")
-	if err != nil {
-		useHTTPPath = false
-	}
-	q, err := credential.ParseQuery(rawURL, useHTTPPath)
+	q, err := credential.QueryFromConfig(cfg, rawURL)
 	if err != nil {
 		return credential.Query{}
-	}
-	if q.Username == "" {
-		if v, ok := cfg.Get("credential.username"); ok {
-			q.Username = v
-		}
 	}
 	return q
 }

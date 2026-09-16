@@ -1118,6 +1118,23 @@ func TestVaultLookupsForAURLResource(t *testing.T) {
 	}
 }
 
+func TestCredentialQueryForAppliesURLScopedSettings(t *testing.T) {
+	cfg := loadRawConfig(t, "[credential \"https://dev.azure.com\"]\n\tusehttppath = true\n[credential \"https://*.example.com\"]\n\tusername = carol\n")
+	if q := credentialQueryFor(cfg, "https://dev.azure.com/org/project/_git/repo"); q.Path != "org/project/_git/repo" {
+		t.Fatalf("azure query = %+v, want the path kept by the scoped usehttppath", q)
+	}
+	if q := credentialQueryFor(cfg, "https://git.example.com/repo.git"); q.Username != "carol" || q.Path != "" {
+		t.Fatalf("query = %+v, want the wildcard-scoped username", q)
+	}
+}
+
+func TestCredentialQueryForReturnsZeroValueOnAnInvalidSetting(t *testing.T) {
+	cfg := loadRawConfig(t, "[credential]\n\tusehttppath = maybe\n")
+	if got := credentialQueryFor(cfg, "https://example.com/repo.git"); got != (credential.Query{}) {
+		t.Fatalf("query = %+v, want the zero value", got)
+	}
+}
+
 func TestCredentialQueryForUsesUseHTTPPathFromConfig(t *testing.T) {
 	cfg := loadRawConfig(t, "[credential]\n\tusehttppath = true\n")
 	q := credentialQueryFor(cfg, "https://example.com/org/repo.git")

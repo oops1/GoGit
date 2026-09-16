@@ -8,10 +8,13 @@ import (
 
 func testEnvironment(t *testing.T, content string, vars map[string]string) helperEnvironment {
 	t.Helper()
+	applied, err := applyCredentialConfig(loadTestConfig(t, content), "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
 	return helperEnvironment{
-		cfg:    loadTestConfig(t, content),
-		query:  Query{Protocol: "https", Host: "example.com"},
-		getenv: func(name string) string { return vars[name] },
+		settings: applied.settings,
+		getenv:   func(name string) string { return vars[name] },
 	}
 }
 
