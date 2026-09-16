@@ -35,6 +35,15 @@ type PushOptions struct {
 	Options        []string
 	Progress       progress.Func
 	Transport      transport.Options
+	BeforeSend     func(context.Context, []PushUpdate) error
+}
+
+type PushUpdate struct {
+	Source  refs.Name
+	New     hash.ObjectID
+	Target  refs.Name
+	Old     hash.ObjectID
+	Deleted bool
 }
 
 type PushResult struct {
@@ -110,6 +119,11 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 	if opts.FollowTags {
 		if err := planner.followTags(); err != nil {
 			return PushResult{}, err
+		}
+	}
+	if opts.BeforeSend != nil {
+		if err := opts.BeforeSend(ctx, planner.updates()); err != nil {
+			return PushResult{Rejected: planner.rejected}, err
 		}
 	}
 	result := PushResult{Rejected: planner.rejected}
@@ -295,6 +309,14 @@ func (p *pushPlanner) add(src refs.Name, dst string, newID hash.ObjectID, forceS
 		forced:  forcedApplied,
 	})
 	return nil
+}
+
+func (p *pushPlanner) updates() []PushUpdate {
+	updates := make([]PushUpdate, 0, len(p.pending))
+	for _, u := range p.pending {
+		updates = append(updates, PushUpdate{Source: u.src, New: u.new, Target: u.name, Old: u.old, Deleted: u.deleted})
+	}
+	return updates
 }
 
 func applyReportStatus(store *refs.Store, rem Remote, pending []pendingUpdate, resp *transport.PushResult) ([]Change, []transport.RefStatus, []error, error) {
