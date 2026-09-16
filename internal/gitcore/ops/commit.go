@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
+	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/repo"
@@ -47,42 +49,19 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 		author = picked.Author
 	}
 
+	runner := openHooks(r, opts.Hooks)
+	if message, err = prepareCommitMessage(ctx, runner, rc, opts, state, message); err != nil {
+		return hash.Zero, err
+	}
+
 	lock, err := lockIndex(r)
 	if err != nil {
 		return hash.Zero, err
 	}
-	if lock.idx.HasConflicts() {
-		lock.abort()
-		return hash.Zero, ErrUnmergedPaths
-	}
-
-	treeID, err := lock.idx.WriteTree(rc.db)
+	plan, err := planCommit(rc, lock.idx, opts, state)
 	if err != nil {
 		lock.abort()
 		return hash.Zero, err
-	}
-
-	target, err := resolveHeadTarget(rc.refs)
-	if err != nil {
-		lock.abort()
-		return hash.Zero, err
-	}
-
-	parents, amended, err := commitParents(rc.db, target.old, opts.Amend)
-	if err != nil {
-		lock.abort()
-		return hash.Zero, err
-	}
-	parents = append(parents, state.Heads...)
-
-	empty, err := isEmptyCommit(rc.db, treeID, parents)
-	if err != nil {
-		lock.abort()
-		return hash.Zero, err
-	}
-	if empty && !opts.AllowEmpty && state.Operation() != OperationMerge {
-		lock.abort()
-		return hash.Zero, ErrNothingToCommit
 	}
 
 	when := opts.When
@@ -91,15 +70,15 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	}
 	switch {
 	case opts.Author != nil, !state.Picked.IsZero():
-	case amended != nil:
-		author = amended.Author
+	case plan.amended != nil:
+		author = plan.amended.Author
 	default:
 		author.When = when
 	}
 	committer := rc.sig
 	committer.When = when
 
-	commit := &object.Commit{Tree: treeID, Parents: parents, Author: author, Committer: committer, Message: message}
+	commit := &object.Commit{Tree: plan.tree, Parents: plan.parents, Author: author, Committer: committer, Message: message}
 	id, err := dbPutObject(rc.db, commit)
 	if err != nil {
 		lock.abort()
@@ -107,8 +86,8 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	}
 
 	tx := rc.refs.Begin()
-	tx.SetMessage(commitReflogMessage(opts.Amend, parents, message, state.Operation() == OperationCherryPick))
-	if err := txUpdate(tx, target.ref, id, target.old); err != nil {
+	tx.SetMessage(commitReflogMessage(opts.Amend, plan.parents, message, state.Operation() == OperationCherryPick))
+	if err := txUpdate(tx, plan.target.ref, id, plan.target.old); err != nil {
 		tx.Rollback()
 		lock.abort()
 		return hash.Zero, err
@@ -121,7 +100,72 @@ func Commit(ctx context.Context, r *repo.Repository, opts CommitOptions) (hash.O
 	if err := lock.commit(); err != nil {
 		return hash.Zero, err
 	}
-	return id, errors.Join(recordRerereResolutions(ctx, r, rc.db), clearMergeState(r))
+	settled := errors.Join(recordRerereResolutions(ctx, r, rc.db), clearMergeState(r))
+	runner.notify(ctx, hooks.Invocation{Name: hookPostCommit, Env: runner.commitEnv()})
+	if opts.Amend {
+		runner.notify(ctx, hooks.Invocation{Name: hookPostRewrite, Args: []string{rewriteAmend}, Stdin: []byte(plan.target.old.String() + " " + id.String() + "\n")})
+	}
+	return id, settled
+}
+
+func prepareCommitMessage(ctx context.Context, runner hookRunner, rc *repoContext, opts CommitOptions, state MergeState, message string) (string, error) {
+	if !opts.Hooks.NoVerify {
+		if err := runner.verifyCommit(ctx, hookPreCommit); err != nil {
+			return "", err
+		}
+	}
+	if !runner.editsMessage() {
+		return message, nil
+	}
+	idx, err := readIndex(rc.repo)
+	if err != nil {
+		return "", err
+	}
+	if _, err := planCommit(rc, idx, opts, state); err != nil {
+		return "", err
+	}
+	edited, err := runner.editMessage(ctx, commitEditMsgFile, message, messageSourceMessage)
+	if err != nil {
+		return "", err
+	}
+	if edited == "" {
+		return "", ErrEmptyMessage
+	}
+	return edited, nil
+}
+
+type commitPlan struct {
+	tree    hash.ObjectID
+	target  headTarget
+	parents []hash.ObjectID
+	amended *object.Commit
+}
+
+func planCommit(rc *repoContext, idx *index.Index, opts CommitOptions, state MergeState) (commitPlan, error) {
+	if idx.HasConflicts() {
+		return commitPlan{}, ErrUnmergedPaths
+	}
+	tree, err := idx.WriteTree(rc.db)
+	if err != nil {
+		return commitPlan{}, err
+	}
+	target, err := resolveHeadTarget(rc.refs)
+	if err != nil {
+		return commitPlan{}, err
+	}
+	parents, amended, err := commitParents(rc.db, target.old, opts.Amend)
+	if err != nil {
+		return commitPlan{}, err
+	}
+	parents = append(parents, state.Heads...)
+	empty, err := isEmptyCommit(rc.db, tree, parents)
+	if err != nil {
+		return commitPlan{}, err
+	}
+	if empty && !opts.AllowEmpty && state.Operation() != OperationMerge {
+		return commitPlan{}, ErrNothingToCommit
+	}
+	return commitPlan{tree: tree, target: target, parents: parents, amended: amended}, nil
 }
 
 func commitParents(db *odb.DB, headCommit hash.ObjectID, amend bool) ([]hash.ObjectID, *object.Commit, error) {

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -32,6 +34,7 @@ type MergeOptions struct {
 	Message  string
 	When     time.Time
 	Progress progress.Func
+	Hooks    HookOptions
 }
 
 type MergeResult struct {
@@ -65,6 +68,7 @@ type merger struct {
 	rc     *repoContext
 	opts   MergeOptions
 	action string
+	hooks  hookRunner
 }
 
 func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*merger, error) {
@@ -83,7 +87,7 @@ func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*me
 	if opts.When.IsZero() {
 		opts.When = time.Now()
 	}
-	return &merger{ctx: ctx, r: r, wt: wt, rc: rc, opts: opts}, nil
+	return &merger{ctx: ctx, r: r, wt: wt, rc: rc, opts: opts, hooks: openHooks(r, opts.Hooks)}, nil
 }
 
 func (m *merger) close() {
@@ -150,6 +154,26 @@ func (m *merger) refuseWhileMerging() error {
 }
 
 func (m *merger) integrate(in incoming) (MergeResult, error) {
+	result, err := m.combine(in)
+	if flag, ok := m.postMergeFlag(result); ok && err == nil {
+		m.hooks.notify(m.ctx, hooks.Invocation{Name: hookPostMerge, Args: []string{flag}})
+	}
+	return result, err
+}
+
+func (m *merger) postMergeFlag(result MergeResult) (string, bool) {
+	switch {
+	case result.UpToDate || result.Old.IsZero():
+		return "", false
+	case m.opts.Mode == MergeSquash:
+		return squashMergeFlag, true
+	case result.Committed || result.FastForward:
+		return plainMergeFlag, true
+	}
+	return "", false
+}
+
+func (m *merger) combine(in incoming) (MergeResult, error) {
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return MergeResult{}, err
@@ -281,6 +305,10 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 	case !result.Clean() || m.opts.NoCommit:
 		return result, errors.Join(m.stopBeforeCommit(theirs, tree, message, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	}
+	message, edited, err := m.mergeCommitMessage(theirs, tree, message)
+	if err != nil {
+		return result, err
+	}
 	commit, err := m.writeMergeCommit(tree, head.old, theirs, message)
 	if err != nil {
 		return result, err
@@ -289,7 +317,29 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 		return result, err
 	}
 	result.New, result.Committed = commit, true
+	if edited {
+		return result, clearMergeState(m.r)
+	}
 	return result, nil
+}
+
+func (m *merger) mergeCommitMessage(theirs, tree hash.ObjectID, message string) (string, bool, error) {
+	if !m.opts.Hooks.NoVerify {
+		if err := m.hooks.verifyCommit(m.ctx, hookPreMergeCommit); err != nil {
+			return "", false, errors.Join(err, m.stopBeforeCommit(theirs, tree, message, nil))
+		}
+	}
+	if !m.hooks.editsMessage() {
+		return message, false, nil
+	}
+	if err := m.stopBeforeCommit(theirs, tree, message, nil); err != nil {
+		return "", false, err
+	}
+	edited, err := m.hooks.editMessage(m.ctx, mergeMsgFile, strings.TrimSuffix(message, "\n"), messageSourceMerge)
+	if err == nil && edited == "" {
+		err = ErrEmptyMessage
+	}
+	return edited, true, err
 }
 
 type stateFile struct{ name, content string }

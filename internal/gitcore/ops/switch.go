@@ -13,6 +13,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/hooks"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -91,7 +92,11 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		return err
 	}
 
-	return updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID)
+	if err := updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID); err != nil {
+		return err
+	}
+	runner := openHooks(r, opts.Hooks)
+	return runner.verify(ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{runner.hex(fromCommit), runner.hex(commitID), branchCheckoutFlag}})
 }
 
 func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, headTree, targetTree map[string]treeEntry, force bool, report *CheckoutReport) error {
