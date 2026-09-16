@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	gitmerge "github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -195,6 +196,16 @@ func reportMerge(reporter OperationReporter, req merge.Request, result ops.Merge
 	default:
 		reporter.Log(i18n.T("Operation.Log.MergeStopped"))
 	}
+	for _, warning := range result.Warnings {
+		reporter.Log(mergeWarningText(warning))
+	}
+}
+
+func mergeWarningText(warning gitmerge.Warning) string {
+	if warning.Kind == gitmerge.WarningRenameLimit {
+		return i18n.Tf("Operation.Log.MergeRenameLimit", warning.Needed)
+	}
+	return i18n.Tf("Operation.Log.MergeDriverUnsupported", warning.Driver, warning.Path)
 }
 
 func overwriteList(overwrite *ops.OverwriteError) string {

@@ -942,6 +942,8 @@
   "Operation.Log.MergeCommitted": "Создан коммит слияния %s",
   "Operation.Log.MergeConflictPath": "Конфликт: %s",
   "Operation.Log.MergeConflicts": "Неразрешённых конфликтов: %d. Разрешите их и сделайте коммит",
+  "Operation.Log.MergeDriverUnsupported": "Драйвер слияния %s для %s не может работать в Go.Git; файл оставлен как конфликт двоичного файла",
+  "Operation.Log.MergeRenameLimit": "Поиск неточных переименований пропущен: слишком много файлов; задайте merge.renameLimit не меньше %d и повторите слияние",
   "Operation.Log.MergeFastForward": "Перемотано до %s",
   "Operation.Log.MergeNotFastForward": "Ветки разошлись, перемотка вперёд невозможна",
   "Operation.Log.MergeSquashed": "Изменения подготовлены — сделайте коммит",

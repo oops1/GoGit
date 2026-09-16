@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
+	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -71,6 +72,7 @@ func ReadConflict(ctx context.Context, r *repo.Repository, path string) (Conflic
 		file.Blocks = merge.Chunks(file.Base, file.Ours, file.Theirs, merge.Options{
 			Style:      file.Style,
 			MarkerSize: file.MarkerSize,
+			Diff:       diff.Options{Algorithm: diff.AlgorithmHistogram},
 		})
 	}
 	return file, nil

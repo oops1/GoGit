@@ -199,6 +199,15 @@ func mergeScenarios() []mergeScenario {
 		{name: "criss-cross over a symlink conflict", target: "feature", setup: crissCrossHistory(func(b *mergeBuilder, step int) {
 			b.link("link", "target"+strconv.Itoa(step))
 		})},
+		{name: "content conflict in diff3 style", target: "feature", setup: styledHistory("diff3", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
+		{name: "content conflict in zdiff3 style", target: "feature", setup: styledHistory("zdiff3", forkedHistory(map[string]string{"f": editLine(editLine(f, 4, "OURS"), 5, "SHARED")}, map[string]string{"f": editLine(editLine(f, 4, "THEIRS"), 5, "SHARED")}))},
+		{name: "criss-cross text conflict in diff3 style", target: "feature", setup: styledHistory("diff3", crissCrossHistory(func(b *mergeBuilder, step int) {
+			b.write(map[string]string{"f": editLine(f, 4, "V"+strconv.Itoa(step))})
+		}))},
+		{name: "cherry-pick conflict in diff3 style", pick: pickCherry, target: "feature", setup: styledHistory("diff3", pickHistory(true))},
+		{name: "a wider conflict marker set by attributes", target: "feature", setup: attributedHistory("f conflict-marker-size=12\n", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
+		{name: "a union merge set by attributes", target: "feature", setup: attributedHistory("f merge=union\n", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
+		{name: "a text file merged as binary by attributes", target: "feature", setup: attributedHistory("f -merge\n", forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"f": editLine(f, 9, "THEIRS")}))},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "local change in the way", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
@@ -382,6 +391,20 @@ func (b *mergeBuilder) link(rel, target string) {
 	b.o.remove(b.dir, ".link-target")
 	b.git("update-index", "--add", "--cacheinfo", "120000,"+id+","+rel)
 	b.git("checkout", "-q", "--", rel)
+}
+
+func styledHistory(style string, setup func(b *mergeBuilder)) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		b.git("config", "merge.conflictStyle", style)
+		setup(b)
+	}
+}
+
+func attributedHistory(attributes string, setup func(b *mergeBuilder)) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		b.write(map[string]string{".gitattributes": attributes})
+		setup(b)
+	}
 }
 
 func crissCrossHistory(set func(b *mergeBuilder, step int)) func(b *mergeBuilder) {

@@ -45,6 +45,7 @@ type MergeResult struct {
 	FastForward bool
 	Committed   bool
 	Conflicts   []string
+	Warnings    []merge.Warning
 }
 
 func (r MergeResult) Clean() bool { return len(r.Conflicts) == 0 }
@@ -65,9 +66,10 @@ type merger struct {
 	r      *repo.Repository
 	wt     *workingTree
 	rc     *repoContext
-	opts   MergeOptions
-	action string
-	hooks  hookRunner
+	opts     MergeOptions
+	action   string
+	hooks    hookRunner
+	warnings []merge.Warning
 }
 
 func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*merger, error) {
@@ -281,10 +283,11 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 	if err != nil {
 		return result, err
 	}
-	merged, err := m.mergeTrees(base, oursTree, theirsTree, merge.Labels{Ours: oursLabel, Theirs: in.label}, 0)
+	merged, err := m.mergeTrees(base, oursTree, theirsTree, merge.Labels{Ours: oursLabel, Theirs: in.label, Base: baseLabel(bases)}, 0)
 	if err != nil {
 		return result, err
 	}
+	result.Warnings = m.warnings
 	to := outcomeOf(merged)
 	if err := m.moveTo(ours, to, true); err != nil {
 		return result, err
@@ -406,18 +409,26 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 		}
 		snapshots[i] = s
 	}
-	opts := merge.TreeOptions{File: merge.Options{Labels: labels}, Depth: depth}
+	opts := merge.TreeOptions{
+		File:       merge.Options{Labels: labels, Style: conflictStyle(m.r)},
+		Depth:      depth,
+		Attributes: m.mergeAttributes,
+	}
 	var err error
 	if opts.OurRenames, opts.TheirRenames, err = merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs); err != nil {
 		return merge.TreeResult{}, err
 	}
-	return merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
+	result, err := merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
+	m.warnings = append(m.warnings, result.Warnings...)
+	return result, err
 }
 
 func (m *merger) baseTree(bases []hash.ObjectID, depth int) (hash.ObjectID, error) {
 	if len(bases) == 0 {
 		return hash.Zero, nil
 	}
+	bases = slices.Clone(bases)
+	slices.Reverse(bases)
 	tree, err := m.treeOf(bases[0])
 	if err != nil {
 		return hash.Zero, err
@@ -435,7 +446,7 @@ func (m *merger) baseTree(bases []hash.ObjectID, depth int) (hash.ObjectID, erro
 		if err != nil {
 			return hash.Zero, err
 		}
-		result, err := m.mergeTrees(innerTree, tree, nextTree, merge.Labels{Ours: virtualLabelOurs, Theirs: virtualLabelTheir}, depth+1)
+		result, err := m.mergeTrees(innerTree, tree, nextTree, merge.Labels{Ours: virtualLabelOurs, Theirs: virtualLabelTheir, Base: baseLabel(inner)}, depth+1)
 		if err != nil {
 			return hash.Zero, err
 		}

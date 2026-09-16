@@ -942,6 +942,8 @@
   "Operation.Log.MergeCommitted": "Merge commit %s created",
   "Operation.Log.MergeConflictPath": "Conflict: %s",
   "Operation.Log.MergeConflicts": "Unresolved conflicts: %d. Resolve them and commit",
+  "Operation.Log.MergeDriverUnsupported": "The merge driver %s set for %s cannot run in Go.Git; the file was left as a binary conflict",
+  "Operation.Log.MergeRenameLimit": "Inexact rename detection was skipped because there were too many files; set merge.renameLimit to at least %d and merge again",
   "Operation.Log.MergeFastForward": "Fast-forwarded to %s",
   "Operation.Log.MergeNotFastForward": "The branches diverged; a fast-forward is not possible",
   "Operation.Log.MergeSquashed": "The changes are staged; commit them to finish",
