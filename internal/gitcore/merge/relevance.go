@@ -18,17 +18,15 @@ func relevantSources(base, side, other Snapshot, directories bool) func(path str
 	}
 }
 
-func relocatableDirectories(base, side, other Snapshot) map[string]bool {
-	baseDirs, sideDirs := directoriesOf(base), directoriesOf(side)
+func relocatableDirectories(base, renamer, adder Snapshot) map[string]bool {
+	baseDirs, renamerDirs := directoriesOf(base), directoriesOf(renamer)
 	located := map[string]bool{}
-	for path := range other {
+	for path := range adder {
 		if _, existed := base[path]; existed {
 			continue
 		}
-		for dir, _ := splitPath(path); dir != ""; dir, _ = splitPath(dir) {
-			if baseDirs[dir] && !sideDirs[dir] {
-				located[dir] = true
-			}
+		if dir, _ := splitPath(path); baseDirs[dir] && !renamerDirs[dir] {
+			located[dir] = true
 		}
 	}
 	return located

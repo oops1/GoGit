@@ -43,6 +43,7 @@ const (
 	ConflictRenameDelete
 	ConflictRenameRename
 	ConflictDistinctTypes
+	ConflictFileLocation
 )
 
 type Conflict struct {
@@ -54,13 +55,14 @@ type Conflict struct {
 }
 
 type TreeOptions struct {
-	File         Options
-	OurRenames   Renames
-	TheirRenames Renames
-	Depth        int
-	Attributes   func(path string, virtual bool) PathAttributes
-	extraMarkers int
-	warnings     *[]Warning
+	File             Options
+	OurRenames       Renames
+	TheirRenames     Renames
+	Depth            int
+	Attributes       func(path string, virtual bool) PathAttributes
+	DirectoryRenames DirectoryRenames
+	extraMarkers     int
+	warnings         *[]Warning
 }
 
 type TreeResult struct {
@@ -97,6 +99,9 @@ func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (Tree
 		}
 		if merged != nil {
 			result.Tree[path] = *merged
+		}
+		if conflict == nil && a.located[path] {
+			conflict = &Conflict{Path: path, Kind: ConflictFileLocation, Base: baseEntry, Ours: ourEntry, Theirs: theirEntry}
 		}
 		if conflict != nil {
 			result.Conflicts = append(result.Conflicts, *conflict)

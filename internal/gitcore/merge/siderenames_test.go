@@ -113,7 +113,7 @@ func TestSideRenamesLookForMovedDirectoriesOnlyWhenAsked(t *testing.T) {
 	a, b := tenLines("a"), tenLines("b")
 	base := writeSnapshot(t, s, Snapshot{"lib/a": s.blob(t, a), "lib/b": s.blob(t, b), "top": s.blob(t, "top\n")})
 	ours := writeSnapshot(t, s, Snapshot{"src/a": s.blob(t, a+"ours\n"), "src/b": s.blob(t, b+"ours\n"), "top": s.blob(t, "top\n")})
-	theirs := writeSnapshot(t, s, Snapshot{"lib/a": s.blob(t, a), "lib/b": s.blob(t, b), "lib/deep/new": s.blob(t, "new\n"), "top": s.blob(t, "top\n")})
+	theirs := writeSnapshot(t, s, Snapshot{"lib/a": s.blob(t, a), "lib/b": s.blob(t, b), "lib/new": s.blob(t, "new\n"), "top": s.blob(t, "top\n")})
 
 	off := sideRenames(t, s, base, ours, theirs, RenameOptions{})
 	on := sideRenames(t, s, base, ours, theirs, RenameOptions{DirectoryRenames: true})

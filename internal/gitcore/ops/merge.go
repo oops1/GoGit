@@ -62,10 +62,10 @@ const (
 )
 
 type merger struct {
-	ctx    context.Context
-	r      *repo.Repository
-	wt     *workingTree
-	rc     *repoContext
+	ctx      context.Context
+	r        *repo.Repository
+	wt       *workingTree
+	rc       *repoContext
 	opts     MergeOptions
 	action   string
 	hooks    hookRunner
@@ -410,11 +410,15 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 		snapshots[i] = s
 	}
 	opts := merge.TreeOptions{
-		File:       merge.Options{Labels: labels, Style: conflictStyle(m.r)},
-		Depth:      depth,
-		Attributes: m.mergeAttributes,
+		File:             merge.Options{Labels: labels, Style: conflictStyle(m.r)},
+		Depth:            depth,
+		Attributes:       m.mergeAttributes,
+		DirectoryRenames: directoryRenamesMode(m.r),
 	}
-	detected, err := merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs, merge.RenameOptions{Limit: mergeRenameLimit(m.r), DirectoryRenames: true})
+	detected, err := merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs, merge.RenameOptions{
+		Limit:            mergeRenameLimit(m.r),
+		DirectoryRenames: opts.DirectoryRenames != merge.DirectoryRenamesOff,
+	})
 	if err != nil {
 		return merge.TreeResult{}, err
 	}

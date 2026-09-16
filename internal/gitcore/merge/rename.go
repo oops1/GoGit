@@ -118,6 +118,7 @@ type aligned struct {
 	conflicts []Conflict
 	depth     int
 	handled   map[string]bool
+	located   map[string]bool
 }
 
 func (r Renames) check(base, side Snapshot) error {
@@ -143,7 +144,9 @@ func align(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (*ali
 		decided: Snapshot{},
 		depth:   opts.Depth,
 		handled: map[string]bool{},
+		located: map[string]bool{},
 	}
+	opts.OurRenames, opts.TheirRenames = a.applyDirectoryRenames(opts)
 	if err := a.renamedIntoOnePath(objects, opts); err != nil {
 		return nil, err
 	}

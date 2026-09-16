@@ -219,6 +219,8 @@ func mergeScenarios() []mergeScenario {
 		{name: "renames within the default merge rename limit", target: "feature", setup: forkedHistory(
 			map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
 			map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})},
+		{name: "a file added in a directory we renamed", target: "feature", setup: movedDirectoryHistory("")},
+		{name: "a file added in a directory we renamed, moved without asking", target: "feature", setup: movedDirectoryHistory("true")},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "local change in the way", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
@@ -421,6 +423,21 @@ func fileAgainstDirectoryHistory(directoryOnOurSide bool) func(b *mergeBuilder) 
 		first()
 		b.git("checkout", "-q", "feature")
 		second()
+		b.git("checkout", "-q", "main")
+	}
+}
+
+func movedDirectoryHistory(setting string) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		if setting != "" {
+			b.git("config", "merge.directoryRenames", setting)
+		}
+		b.commit("base", map[string]string{"keep": "keep\n", "lib/a.go": lines("a", 10), "lib/b.go": lines("b", 10)})
+		b.git("branch", "feature")
+		b.git("mv", "lib", "src")
+		b.commit("move", nil)
+		b.git("checkout", "-q", "feature")
+		b.commit("add", map[string]string{"lib/new.go": "new\n"})
 		b.git("checkout", "-q", "main")
 	}
 }

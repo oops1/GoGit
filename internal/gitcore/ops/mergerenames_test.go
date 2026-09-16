@@ -22,6 +22,22 @@ func TestTheMergeRenameLimitFallsBackToTheDiffLimitAndThenToGits(t *testing.T) {
 	}
 }
 
+func TestDirectoryRenamesFollowTheMergeConfig(t *testing.T) {
+	for text, want := range map[string]merge.DirectoryRenames{
+		"": merge.DirectoryRenamesConflict,
+		"[merge]\n\tdirectoryRenames = conflict\n": merge.DirectoryRenamesConflict,
+		"[merge]\n\tdirectoryRenames = true\n":     merge.DirectoryRenamesApply,
+		"[merge]\n\tdirectoryRenames = false\n":    merge.DirectoryRenamesOff,
+		"[merge]\n\tdirectoryRenames = maybe\n":    merge.DirectoryRenamesConflict,
+	} {
+		r := newTestRepo(t)
+		r.appendConfig(text)
+		if got := directoryRenamesMode(r.reopen()); got != want {
+			t.Errorf("config %q: mode %d, want %d", text, got, want)
+		}
+	}
+}
+
 func TestAMergePastTheRenameLimitWarnsInsteadOfPairingFiles(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.appendConfig("[merge]\n\trenameLimit = 1\n")
