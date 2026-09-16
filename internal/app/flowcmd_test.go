@@ -12,6 +12,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	gitmerge "github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -402,19 +403,28 @@ func TestIntegrateDevelopLogsConflictsAndFailures(t *testing.T) {
 	prev := runIntegrateDevelop
 	t.Cleanup(func() { runIntegrateDevelop = prev })
 
-	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) ([]string, error) {
-		return []string{"a.txt"}, nil
+	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) (ops.FlowMergeResult, error) {
+		return ops.FlowMergeResult{Conflicts: []string{"a.txt"}}, nil
 	}
 	runOnDispatcher(t, a, func() { a.integrateDevelop("login", "topic/login", "develop", true) })
 	lines := operationLines(t, a, operations)
-	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) ([]string, error) {
-		return nil, errors.New("boom")
+	split := gitmerge.Warning{Kind: gitmerge.WarningDirectoryRenameSplit, Path: "lib"}
+	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) (ops.FlowMergeResult, error) {
+		return ops.FlowMergeResult{Warnings: []gitmerge.Warning{split}}, nil
+	}
+	runOnDispatcher(t, a, func() { a.integrateDevelop("login", "topic/login", "develop", false) })
+	unclean := operationLines(t, a, operations)
+	runIntegrateDevelop = func(context.Context, *gitrepo.Repository, string, ops.IntegrateDevelopOptions) (ops.FlowMergeResult, error) {
+		return ops.FlowMergeResult{}, errors.New("boom")
 	}
 	runOnDispatcher(t, a, func() { a.integrateDevelop("login", "topic/login", "develop", false) })
 	failed := operationLines(t, a, operations)
 
 	if !slices.Contains(lines, i18n.Tf("Operation.Log.MergeConflictPath", "a.txt")) || !slices.Contains(lines, i18n.Tf("Operation.Log.IntegrateStopped", 1)) {
 		t.Fatalf("conflict log = %v", lines)
+	}
+	if !slices.Contains(unclean, i18n.Tf("Operation.Log.MergeDirectoryRenameSplit", "lib")) || !slices.Contains(unclean, i18n.Tf("Operation.Log.IntegrateStopped", 0)) {
+		t.Fatalf("unclean log = %v", unclean)
 	}
 	if slices.Contains(failed, i18n.Tf("Operation.Log.DevelopIntegrated", "develop", "topic/login")) {
 		t.Fatalf("failure log = %v", failed)
@@ -432,6 +442,7 @@ func TestFinishFlowLogsEveryOutcome(t *testing.T) {
 	}{
 		{ops.FlowKindRelease, ops.FinishFlowResult{}, nil, []string{i18n.Tf("Operation.Log.ReleaseFinished", "1.0")}},
 		{ops.FlowKindFeature, ops.FinishFlowResult{Stopped: ops.FlowStepMergeDevelop, Conflicts: []string{"a.txt"}}, nil, []string{i18n.Tf("Operation.Log.MergeConflictPath", "a.txt"), i18n.Tf("Operation.Log.FeatureStopped", 1)}},
+		{ops.FlowKindFeature, ops.FinishFlowResult{Stopped: ops.FlowStepMergeDevelop, Warnings: []gitmerge.Warning{{Kind: gitmerge.WarningDirectoryRenameSplit, Path: "lib"}}}, nil, []string{i18n.Tf("Operation.Log.MergeDirectoryRenameSplit", "lib"), i18n.Tf("Operation.Log.FeatureStopped", 0)}},
 		{ops.FlowKindHotfix, ops.FinishFlowResult{}, ops.ErrFlowBehind, []string{i18n.T("Operation.Log.FlowBehind")}},
 		{ops.FlowKindRelease, ops.FinishFlowResult{}, errors.New("boom"), nil},
 		{ops.FlowKindRelease, ops.FinishFlowResult{KeptTag: "1.0"}, nil, []string{i18n.Tf("Operation.Log.FlowTagKept", "1.0"), i18n.Tf("Operation.Log.ReleaseFinished", "1.0")}},

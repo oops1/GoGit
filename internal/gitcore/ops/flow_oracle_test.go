@@ -331,6 +331,43 @@ func TestOracleConfigureFlowCreatesTheBranchesLikeSmartGit(t *testing.T) {
 	}
 }
 
+func TestOracleFinishFlowStopsOnAnUncleanDirectoryRenameLikeGit(t *testing.T) {
+	o := newOracle(t)
+	prepare := func(b *mergeBuilder) {
+		b.commit("library", map[string]string{"lib/a.go": lines("a", 10), "lib/b.go": lines("b", 10)})
+		b.git("branch", "--no-track", "feature/Feature-1", "refs/heads/develop")
+		b.git("checkout", "-q", "feature/Feature-1")
+		b.commit("feature work", map[string]string{"lib/new.go": "new\n"})
+		b.git("checkout", "-q", "develop")
+		b.commit("split the library", map[string]string{"lib/a.go": "", "lib/b.go": "", "x/a.go": lines("a", 10), "y/b.go": lines("b", 10)})
+		b.git("checkout", "-q", "feature/Feature-1")
+	}
+	gitSide := flowOracleSide(t, o, false)
+	prepare(gitSide)
+	ourSide := flowOracleSide(t, o, false)
+	prepare(ourSide)
+
+	fixed := fixedDateOracle(o)
+	fixed.run(gitSide.dir, "checkout", "-q", "--ignore-other-worktrees", "develop")
+	if _, err := fixed.attempt(gitSide.dir, "merge", "-q", "--no-ff", "-m", "Finish Feature-1", "feature/Feature-1"); err == nil {
+		t.Fatal("git merged the feature cleanly")
+	}
+	result, err := FinishFlow(t.Context(), o.openRepo(ourSide.dir), FlowKindFeature, "Feature-1", FinishFlowOptions{DeleteBranch: true, When: time.Unix(flowOracleStamp, 0).UTC()})
+	if err != nil || result.Finished() || result.Stopped != FlowStepMergeDevelop {
+		t.Fatalf("FinishFlow = %+v, %v", result, err)
+	}
+
+	sameAsGit(t, ourSide, gitSide)
+	if got, want := o.read(ourSide.dir, ".git/MERGE_MSG"), o.read(gitSide.dir, ".git/MERGE_MSG"); got != want {
+		t.Fatalf("MERGE_MSG = %q, git wrote %q", got, want)
+	}
+	ourHead, _ := o.attempt(ourSide.dir, "rev-parse", "MERGE_HEAD")
+	gitHead, _ := o.attempt(gitSide.dir, "rev-parse", "MERGE_HEAD")
+	if ourHead != gitHead || gitHead == "" {
+		t.Fatalf("MERGE_HEAD = %q, git %q", ourHead, gitHead)
+	}
+}
+
 func TestOracleIntegrateDevelopMergesOrRebasesLikeGit(t *testing.T) {
 	for _, c := range []struct {
 		label  string
@@ -357,9 +394,9 @@ func TestOracleIntegrateDevelopMergesOrRebasesLikeGit(t *testing.T) {
 			fixed := fixedDateOracle(o)
 			fixed.run(gitSide.dir, "checkout", "-q", "feature/Feature-1")
 			fixed.run(gitSide.dir, c.git...)
-			conflicts, err := IntegrateDevelop(t.Context(), o.openRepo(ourSide.dir), "Feature-1", IntegrateDevelopOptions{Rebase: c.rebase, When: time.Unix(flowOracleStamp, 0).UTC()})
-			if err != nil || len(conflicts) != 0 {
-				t.Fatalf("IntegrateDevelop = %v, %v", conflicts, err)
+			integrated, err := IntegrateDevelop(t.Context(), o.openRepo(ourSide.dir), "Feature-1", IntegrateDevelopOptions{Rebase: c.rebase, When: time.Unix(flowOracleStamp, 0).UTC()})
+			if err != nil || !integrated.Clean() {
+				t.Fatalf("IntegrateDevelop = %+v, %v", integrated, err)
 			}
 
 			sameAsGit(t, ourSide, gitSide)

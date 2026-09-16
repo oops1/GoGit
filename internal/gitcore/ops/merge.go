@@ -308,7 +308,7 @@ func (m *merger) threeWay(head headTarget, bases []hash.ObjectID, in incoming, r
 		return result, errors.Join(m.stopAfterSquash(head.old, theirs, tree, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	case !result.Clean() || m.opts.NoCommit:
 		if len(result.Conflicts) == 0 && !result.Clean() {
-			message += emptyConflictList
+			message = withConflictHint(message, nil)
 		}
 		return result, errors.Join(m.stopBeforeCommit(theirs, tree, message, result.Conflicts), m.rerere().conflicts(result.Conflicts))
 	}

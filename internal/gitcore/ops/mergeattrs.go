@@ -11,7 +11,6 @@ const (
 	mergeDefaultKey      = "merge.default"
 	mergedAncestorsLabel = "merged common ancestors"
 	emptyTreeLabel       = "empty tree"
-	emptyConflictList    = "\n# Conflicts:\n"
 )
 
 func (m *merger) mergeAttributes(path string, virtual bool) merge.PathAttributes {

@@ -1038,9 +1038,9 @@ func TestIntegrateDevelopMergesOrRebasesTheFeature(t *testing.T) {
 		switchFlowBranch(t, r, "develop")
 		developTip := commitFlowFile(t, r, "g.txt", "develop\n", "develop work")
 
-		conflicts, err := IntegrateDevelop(t.Context(), r.repo, "login", IntegrateDevelopOptions{Rebase: rebase})
-		if err != nil || len(conflicts) != 0 {
-			t.Fatalf("IntegrateDevelop(rebase=%v) = %v, %v", rebase, conflicts, err)
+		integrated, err := IntegrateDevelop(t.Context(), r.repo, "login", IntegrateDevelopOptions{Rebase: rebase})
+		if err != nil || !integrated.Clean() {
+			t.Fatalf("IntegrateDevelop(rebase=%v) = %+v, %v", rebase, integrated, err)
 		}
 
 		feature := r.branchTarget("feature/login")
