@@ -18,7 +18,7 @@ const (
 	msysSystem       = "MINGW64"
 )
 
-var directExtensions = []string{".exe", ".com", ".bat", ".cmd"}
+var directExtensions = []string{".exe"}
 
 var (
 	createJob     = func() (windows.Handle, error) { return windows.CreateJobObject(nil, nil) }

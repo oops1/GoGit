@@ -1,5 +1,3 @@
-//go:build linux || oracle
-
 package ops
 
 import (
@@ -35,4 +33,9 @@ func shellHookScript(name string, h testHook) string {
 func installShellHook(t testing.TB, dir, name string, h testHook) {
 	t.Helper()
 	writeHookFile(t, filepath.Join(dir, name), shellHookScript(name, h))
+}
+
+func installTestHook(t testing.TB, dir, name string, h testHook) {
+	t.Helper()
+	installShellHook(t, dir, name, h)
 }

@@ -49,17 +49,28 @@ func TestScriptsRunOnlyWithGitForWindows(t *testing.T) {
 	}
 }
 
-func TestCandidateNamesFollowGitForWindowsAndTheExecutableExtensions(t *testing.T) {
-	want := []string{"pre-commit", "pre-commit.exe", "pre-commit.com", "pre-commit.bat", "pre-commit.cmd"}
+func TestCandidateNamesAreTheHookNameAndItsExeLikeGitForWindows(t *testing.T) {
+	want := []string{"pre-commit", "pre-commit.exe"}
 	if got := candidateNames("pre-commit"); !slices.Equal(got, want) {
 		t.Fatalf("candidates = %q", got)
+	}
+}
+
+func TestBatchFilesAreNotHooksLikeGitForWindows(t *testing.T) {
+	r := newRepository(t, false, "")
+	for _, name := range []string{"pre-commit.cmd", "pre-commit.bat", "pre-commit.com"} {
+		writeFile(t, filepath.Join(r.HooksDir(), name), "@exit /b 1\r\n")
+	}
+
+	if New(r, nil).Present("pre-commit") {
+		t.Fatal("a .cmd, .bat or .com file must not be taken for a hook")
 	}
 }
 
 func TestTheExactHookNameWinsOverAnExtension(t *testing.T) {
 	r := newRepository(t, false, "")
 	exact := writeFile(t, filepath.Join(r.HooksDir(), "pre-commit"), "#!/bin/sh\n")
-	writeFile(t, filepath.Join(r.HooksDir(), "pre-commit.cmd"), "@exit /b 0\r\n")
+	writeFile(t, filepath.Join(r.HooksDir(), "pre-commit.exe"), "MZ")
 
 	if path, runnable := New(r, nil).locate("pre-commit"); path != exact || !runnable {
 		t.Fatalf("locate = %q, %v", path, runnable)
@@ -137,13 +148,13 @@ func TestPlanLaunchRunsExecutablesDirectlyAndScriptsThroughTheirInterpreter(t *t
 	root := fakeGitRoot(t, `usr\bin\sh.exe`)
 	swap(t, &gitForWindows, func() string { return root })
 	dir := t.TempDir()
-	batch := writeFile(t, filepath.Join(dir, "pre-commit.cmd"), "#!/bin/sh\n")
+	exe := writeFile(t, filepath.Join(dir, "pre-commit.exe"), "#!/bin/sh\n")
 	binary := writeFile(t, filepath.Join(dir, "post-commit"), "MZ")
 	shell := writeFile(t, filepath.Join(dir, "commit-msg"), "#!/bin/sh\n")
 	python := writeFile(t, filepath.Join(dir, "pre-push"), "#!/usr/bin/python\n")
 
-	if plan, ok := planLaunch(batch, []string{"a"}); !ok || plan.program != batch || !slices.Equal(plan.args, []string{"a"}) {
-		t.Fatalf("batch plan = %+v, %v", plan, ok)
+	if plan, ok := planLaunch(exe, []string{"a"}); !ok || plan.program != exe || !slices.Equal(plan.args, []string{"a"}) {
+		t.Fatalf("exe plan = %+v, %v", plan, ok)
 	}
 	if plan, ok := planLaunch(binary, nil); !ok || plan.program != binary || len(plan.env) == 0 {
 		t.Fatalf("binary plan = %+v, %v", plan, ok)

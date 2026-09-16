@@ -3,12 +3,20 @@ package hooks
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 func hookFileName(name string) string { return name }
+
+func workingDirectoryCommand() string {
+	if runtime.GOOS == "windows" {
+		return "pwd -W"
+	}
+	return "pwd"
+}
 
 func renderScript(s script) string {
 	var b strings.Builder
@@ -20,9 +28,9 @@ func renderScript(s script) string {
 		b.WriteString("echo '" + s.stderr + "' >&2\n")
 	}
 	if s.record != "" {
-		log := "'" + s.record + "'"
+		log := "'" + filepath.ToSlash(s.record) + "'"
 		b.WriteString("echo \"args:$*\" >> " + log + "\n")
-		b.WriteString("echo \"dir:$(pwd)\" >> " + log + "\n")
+		b.WriteString("echo \"dir:$(" + workingDirectoryCommand() + ")\" >> " + log + "\n")
 		b.WriteString("echo \"gitdir:$GIT_DIR\" >> " + log + "\n")
 		b.WriteString("echo \"extra:$HOOK_EXTRA\" >> " + log + "\n")
 		b.WriteString("echo \"stdin:\" >> " + log + "\n")
