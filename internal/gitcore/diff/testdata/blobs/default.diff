@@ -1149,3 +1149,44 @@ index 54e964f..bbccaff 100644
  unique 0
  unique 9
  unique 18
+=== cr-at-eol-mixed
+diff --git a/old/cr-at-eol-mixed.txt b/new/cr-at-eol-mixed.txt
+index b5d04b7..bca2c24 100644
+--- a/old/cr-at-eol-mixed.txt
++++ b/new/cr-at-eol-mixed.txt
+@@ -1,5 +1,5 @@
+-a
+-b
+-cd
+-same
+-last
+\ No newline at end of file
++a
++b
++cd
++same
++last
+=== cr-at-eol-incomplete
+diff --git a/old/cr-at-eol-incomplete.txt b/new/cr-at-eol-incomplete.txt
+index 0a207c0..26826e8 100644
+--- a/old/cr-at-eol-incomplete.txt
++++ b/new/cr-at-eol-incomplete.txt
+@@ -1,2 +1,2 @@
+-a
+-b
+\ No newline at end of file
++a
++b
+\ No newline at end of file
+=== cr-at-eol-with-space
+diff --git a/old/cr-at-eol-with-space.txt b/new/cr-at-eol-with-space.txt
+index 701e53d..4221ea6 100644
+--- a/old/cr-at-eol-with-space.txt
++++ b/new/cr-at-eol-with-space.txt
+@@ -1,3 +1,3 @@
+-a 
+-b	
+-c
++a
++b	
++c 

@@ -145,3 +145,12 @@
 === common-tail-without-context
  {old => new}/common-tail-without-context.txt | 5 +++--
  1 file changed, 3 insertions(+), 2 deletions(-)
+=== cr-at-eol-mixed
+ {old => new}/cr-at-eol-mixed.txt | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+=== cr-at-eol-incomplete
+ {old => new}/cr-at-eol-incomplete.txt | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+=== cr-at-eol-with-space
+ {old => new}/cr-at-eol-with-space.txt | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)

@@ -85,28 +85,19 @@ index 4cb29ea..0a9caa1 100644
 +five
 +six
 === no-newline-old
-diff --git a/old/no-newline-old.txt b/new/no-newline-old.txt
-index 1c943a9..de98044 100644
---- a/old/no-newline-old.txt
-+++ b/new/no-newline-old.txt
-@@ -1,3 +1,3 @@
- a
- b
--c
-\ No newline at end of file
-+c
 === no-newline-new
-diff --git a/old/no-newline-new.txt b/new/no-newline-new.txt
-index de98044..1c943a9 100644
---- a/old/no-newline-new.txt
-+++ b/new/no-newline-new.txt
+=== no-newline-both
+diff --git a/old/no-newline-both.txt b/new/no-newline-both.txt
+index 1c943a9..2704ba9 100644
+--- a/old/no-newline-both.txt
++++ b/new/no-newline-both.txt
 @@ -1,3 +1,3 @@
  a
  b
 -c
-+c
 \ No newline at end of file
-=== no-newline-both
++d
+\ No newline at end of file
 === no-newline-single
 diff --git a/old/no-newline-single.txt b/new/no-newline-single.txt
 index d5ffd5c..c3077f6 100644
@@ -118,29 +109,7 @@ index d5ffd5c..c3077f6 100644
 +solo two
 \ No newline at end of file
 === crlf-to-lf
-diff --git a/old/crlf-to-lf.txt b/new/crlf-to-lf.txt
-index b5eff57..de98044 100644
---- a/old/crlf-to-lf.txt
-+++ b/new/crlf-to-lf.txt
-@@ -1,3 +1,3 @@
--a
--b
--c
-+a
-+b
-+c
 === lf-to-crlf
-diff --git a/old/lf-to-crlf.txt b/new/lf-to-crlf.txt
-index de98044..b5eff57 100644
---- a/old/lf-to-crlf.txt
-+++ b/new/lf-to-crlf.txt
-@@ -1,3 +1,3 @@
--a
--b
--c
-+a
-+b
-+c
 === crlf-changed
 diff --git a/old/crlf-changed.txt b/new/crlf-changed.txt
 index b5eff57..d5a6cc6 100644
@@ -185,13 +154,39 @@ index 64a9fa2..555744d 100644
 +b
 +	c
 === blank-lines-added
+diff --git a/old/blank-lines-added.txt b/new/blank-lines-added.txt
+index de98044..9d17e0d 100644
+--- a/old/blank-lines-added.txt
++++ b/new/blank-lines-added.txt
+@@ -1,3 +1,6 @@
+ a
++
++
+ b
++
+ c
 === blank-lines-removed
+diff --git a/old/blank-lines-removed.txt b/new/blank-lines-removed.txt
+index 9d17e0d..de98044 100644
+--- a/old/blank-lines-removed.txt
++++ b/new/blank-lines-removed.txt
+@@ -1,6 +1,3 @@
+ a
+-
+-
+ b
+-
+ c
 === blank-and-real
 diff --git a/old/blank-and-real.txt b/new/blank-and-real.txt
 index 71ac1b5..437d40c 100644
 --- a/old/blank-and-real.txt
 +++ b/new/blank-and-real.txt
-@@ -4,5 +5,5 @@ c
+@@ -1,8 +1,9 @@
+ a
++
+ b
+ c
  d
  e
  f
@@ -373,7 +368,31 @@ index b1362b4..5e6c0f5 100644
  x
 +x
 === blank-run-grows
+diff --git a/old/blank-run-grows.txt b/new/blank-run-grows.txt
+index ef22e11..a168841 100644
+--- a/old/blank-run-grows.txt
++++ b/new/blank-run-grows.txt
+@@ -22,6 +22,7 @@ a
+ 
+ 
+ 
++
+ 
+ 
+ b
 === blank-run-shrinks
+diff --git a/old/blank-run-shrinks.txt b/new/blank-run-shrinks.txt
+index a168841..ef22e11 100644
+--- a/old/blank-run-shrinks.txt
++++ b/new/blank-run-shrinks.txt
+@@ -22,7 +22,6 @@ a
+ 
+ 
+ 
+-
+ 
+ 
+ b
 === blank-run-around-a-change
 diff --git a/old/blank-run-around-a-change.txt b/new/blank-run-around-a-change.txt
 index cdee6e6..7dbae02 100644
@@ -448,6 +467,15 @@ diff --git a/old/blank-inserts-and-a-change.txt b/new/blank-inserts-and-a-change
 index b03757e..aab5b86 100644
 --- a/old/blank-inserts-and-a-change.txt
 +++ b/new/blank-inserts-and-a-change.txt
+@@ -1,6 +1,8 @@
+ a
++
+ b
+ c
++
+ d
+ e
+ f
 @@ -10,7 +12,7 @@ i
  j
  k
@@ -458,19 +486,63 @@ index b03757e..aab5b86 100644
  o
  p
 === only-blank-inserts
+diff --git a/old/only-blank-inserts.txt b/new/only-blank-inserts.txt
+index 71ac1b5..826d9a9 100644
+--- a/old/only-blank-inserts.txt
++++ b/new/only-blank-inserts.txt
+@@ -1,8 +1,14 @@
++
+ a
++
+ b
++
+ c
+ d
++
++
+ e
+ f
+ g
+ h
++
 === blank-runs-far-apart
+diff --git a/old/blank-runs-far-apart.txt b/new/blank-runs-far-apart.txt
+index 7fc45da..4ad1d93 100644
+--- a/old/blank-runs-far-apart.txt
++++ b/new/blank-runs-far-apart.txt
+@@ -4,6 +4,8 @@ line 2
+ line 3
+ line 4
+ line 5
++
++
+ line 6
+ line 7
+ line 8
+@@ -29,6 +31,8 @@ line 27
+ line 28
+ line 29
+ line 30
++
++
+ line 31
+ line 32
+ line 33
 === ignorable-blanks-between-changes
 diff --git a/old/ignorable-blanks-between-changes.txt b/new/ignorable-blanks-between-changes.txt
 index 44e1767..02327db 100644
 --- a/old/ignorable-blanks-between-changes.txt
 +++ b/new/ignorable-blanks-between-changes.txt
-@@ -1,4 +1,4 @@
+@@ -1,23 +1,28 @@
 -line 0
 +CHANGED 0
  line 1
  line 2
  line 3
-@@ -7,7 +9,7 @@ line 5
++
+ line 4
++
+ line 5
  line 6
  line 7
  line 8
@@ -479,7 +551,12 @@ index 44e1767..02327db 100644
  line 10
  line 11
  line 12
-@@ -17,7 +22,7 @@ line 15
++
+ line 13
++
+ line 14
++
+ line 15
  line 16
  line 17
  line 18
@@ -1036,16 +1113,13 @@ index b5d04b7..bca2c24 100644
 --- a/old/cr-at-eol-mixed.txt
 +++ b/new/cr-at-eol-mixed.txt
 @@ -1,5 +1,5 @@
--a
+ a
 -b
--cd
--same
++b
+ cd
+ same
 -last
 \ No newline at end of file
-+a
-+b
-+cd
-+same
 +last
 === cr-at-eol-incomplete
 diff --git a/old/cr-at-eol-incomplete.txt b/new/cr-at-eol-incomplete.txt
@@ -1053,10 +1127,9 @@ index 0a207c0..26826e8 100644
 --- a/old/cr-at-eol-incomplete.txt
 +++ b/new/cr-at-eol-incomplete.txt
 @@ -1,2 +1,2 @@
--a
+ a
 -b
 \ No newline at end of file
-+a
 +b
 \ No newline at end of file
 === cr-at-eol-with-space
@@ -1066,8 +1139,7 @@ index 701e53d..4221ea6 100644
 +++ b/new/cr-at-eol-with-space.txt
 @@ -1,3 +1,3 @@
 -a 
--b	
--c
 +a
-+b	
+ b	
+-c
 +c 

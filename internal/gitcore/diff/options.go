@@ -16,6 +16,7 @@ const (
 	IgnoreSpaceChange
 	IgnoreSpaceAtEOL
 	IgnoreBlankLines
+	IgnoreCRAtEOL
 )
 
 const (
@@ -92,7 +93,7 @@ func (o Options) normalized() Options {
 }
 
 func (w Whitespace) ignoresSpace() bool {
-	return w&(IgnoreAllSpace|IgnoreSpaceChange|IgnoreSpaceAtEOL) != 0
+	return w&(IgnoreAllSpace|IgnoreSpaceChange|IgnoreSpaceAtEOL|IgnoreCRAtEOL) != 0
 }
 
 func (o Options) minimumScore() int {

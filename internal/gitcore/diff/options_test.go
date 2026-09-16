@@ -108,6 +108,7 @@ func TestIgnoresSpaceCoversOnlyTheSpaceFlags(t *testing.T) {
 		{IgnoreSpaceChange, true},
 		{IgnoreSpaceAtEOL, true},
 		{IgnoreBlankLines, false},
+		{IgnoreCRAtEOL, true},
 		{IgnoreBlankLines | IgnoreAllSpace, true},
 	}
 	for _, c := range cases {

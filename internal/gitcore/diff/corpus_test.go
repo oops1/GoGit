@@ -158,6 +158,9 @@ func corpus() []corpusPair {
 		{"large-one-change", big, bigChanged},
 		{"large-truncated", big, repeatLines("line ", 500)},
 		commonTailPair(),
+		{"cr-at-eol-mixed", "a\r\nb\r\nc\rd\nsame\nlast\r", "a\nb\r\r\nc\rd\r\nsame\r\nlast\r\n"},
+		{"cr-at-eol-incomplete", "a\nb", "a\r\nb\r"},
+		{"cr-at-eol-with-space", "a \r\nb\t\r\nc\n", "a\nb\t\nc \r\n"},
 	}
 }
 
@@ -192,6 +195,16 @@ func variants() []variant {
 			name: "ignore-space-at-eol",
 			args: []string{"--ignore-space-at-eol"},
 			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreSpaceAtEOL }),
+		},
+		{
+			name: "ignore-cr-at-eol",
+			args: []string{"--ignore-cr-at-eol"},
+			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreCRAtEOL }),
+		},
+		{
+			name: "ignore-cr-at-eol-blank-lines",
+			args: []string{"--ignore-cr-at-eol", "--ignore-blank-lines"},
+			opts: withOptions(func(o *Options) { o.IgnoreWhitespace = IgnoreCRAtEOL | IgnoreBlankLines }),
 		},
 		{
 			name: "ignore-blank-lines",
