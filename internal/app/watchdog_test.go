@@ -125,12 +125,27 @@ func TestAHungCommandLeavesItsStacksInTheLog(t *testing.T) {
 	a.watchdogStall = 10 * time.Millisecond
 	restoreStacks(t, func() string { return "the stacks of every goroutine" })
 	release := make(chan struct{})
-	a.handlers[CmdSearch] = func() { <-release }
+	started := make(chan struct{})
+	a.handlers[CmdSearch] = func() {
+		close(started)
+		<-release
+	}
 	go a.Dispatch(CmdSearch)
+	<-started
 
-	ctx, cancel := contextWithTimeout(t, 200*time.Millisecond)
+	ctx, cancel := contextWithTimeout(t, time.Minute)
 	defer cancel()
-	a.runWatchdog(ctx, nil)
+	stopped := make(chan struct{})
+	go func() {
+		a.runWatchdog(ctx, nil)
+		close(stopped)
+	}()
+	for !strings.Contains(buf.String(), "command stalled") && ctx.Err() == nil {
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(20 * a.watchdogStall)
+	cancel()
+	<-stopped
 	close(release)
 
 	log := buf.String()
