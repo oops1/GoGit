@@ -110,9 +110,9 @@ func (h *historian) renamedIn(commit *revision.Commit, path string) (string, boo
 	if err != nil {
 		return "", false, err
 	}
-	opts := h.opts.Diff
-	if opts.RenameThreshold == 0 {
-		opts = diff.Defaults()
+	opts, err := repoDiffOptions(h.rc.repo, h.opts.Diff)
+	if err != nil {
+		return "", false, err
 	}
 	opts.DetectRenames, opts.Paths = true, nil
 	files, err := diff.Trees(h.ctx, mergeStore{db: h.rc.db}, parent.Tree, commit.Tree, opts)
