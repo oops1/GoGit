@@ -55,9 +55,13 @@ func runGit(t *testing.T, dir string, args ...string) string {
 func apply(t *testing.T, dir string, files side) {
 	t.Helper()
 	for name, content := range files {
-		full := filepath.Join(dir, filepath.FromSlash(name))
 		if content == deleted {
 			runGit(t, dir, "rm", "-q", "-r", "--", name)
+		}
+	}
+	for name, content := range files {
+		full := filepath.Join(dir, filepath.FromSlash(name))
+		if content == deleted {
 			continue
 		}
 		if info, err := os.Lstat(full); err == nil && info.IsDir() {
@@ -258,6 +262,10 @@ func treeCases() []treeCase {
 		{name: "rename onto a path they added", renames: true, base: side{"a": long("a")}, moves: map[string][2]string{"a": {"b", ""}}, theirs: side{"b": long("b")}},
 		{name: "renamed apart with edits", renames: true, base: side{"a": long("a")}, moves: map[string][2]string{"a": {"b", "c"}}, ours: side{"b": edited(long("a"), 0, "OURS")}, theirs: side{"c": edited(long("a"), 0, "THEIRS")}},
 		{name: "two renames at once", renames: true, base: side{"a": long("a"), "x": long("x")}, moves: map[string][2]string{"a": {"b", ""}, "x": {"", "y"}}, ours: side{"x": edited(long("x"), 5, "OURS")}, theirs: side{"a": edited(long("a"), 5, "THEIRS")}},
+		{name: "renamed into one path", renames: true, base: side{"a": long("a"), "b": long("b")}, moves: map[string][2]string{"a": {"c", ""}, "b": {"", "c"}}, ours: side{"b": edited(long("b"), 1, "OURS B")}, theirs: side{"a": edited(long("a"), 8, "THEIRS A")}},
+		{name: "renamed into one path with clashing edits", renames: true, base: side{"a": long("a"), "b": long("b")}, moves: map[string][2]string{"a": {"c", ""}, "b": {"", "c"}}, ours: side{"c": edited(long("a"), 0, "OURS")}, theirs: side{"a": edited(long("a"), 0, "THEIRS")}},
+		{name: "a modified file against a directory in its place", base: side{"d": text("d"), "k": text("k")}, ours: side{"d": text("changed")}, theirs: side{"d": deleted, "d/x": text("x")}},
+		{name: "a directory in place of a file they modified", base: side{"d": text("d"), "k": text("k")}, ours: side{"d": deleted, "d/x": text("x")}, theirs: side{"d": text("changed")}},
 		{name: "delete against a rename", renames: true, base: side{"a": long("a"), "k": text("k")}, moves: map[string][2]string{"a": {"", "b"}}, ours: side{"a": deleted}},
 	}
 }

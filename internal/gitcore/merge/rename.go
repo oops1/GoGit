@@ -84,6 +84,7 @@ type aligned struct {
 	decided   Snapshot
 	conflicts []Conflict
 	depth     int
+	handled   map[string]bool
 }
 
 func (r Renames) check(base, side Snapshot) error {
@@ -108,11 +109,16 @@ func align(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (*ali
 		origins: map[string]origin{},
 		decided: Snapshot{},
 		depth:   opts.Depth,
+		handled: map[string]bool{},
+	}
+	if err := a.renamedIntoOnePath(objects, opts); err != nil {
+		return nil, err
 	}
 	for _, from := range slices.Sorted(maps.Keys(opts.OurRenames)) {
 		ourPath := opts.OurRenames[from]
 		theirPath, both := opts.TheirRenames[from]
 		switch {
+		case a.handled[from]:
 		case !both:
 			a.follow(from, ourPath, a.theirs, a.ours, false)
 		case theirPath == ourPath:
@@ -125,11 +131,62 @@ func align(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (*ali
 		}
 	}
 	for _, from := range slices.Sorted(maps.Keys(opts.TheirRenames)) {
-		if _, both := opts.OurRenames[from]; !both {
+		if _, both := opts.OurRenames[from]; !both && !a.handled[from] {
 			a.follow(from, opts.TheirRenames[from], a.ours, a.theirs, true)
 		}
 	}
 	return a, nil
+}
+
+func (a *aligned) renamedIntoOnePath(objects Objects, opts TreeOptions) error {
+	ourSources := map[string]string{}
+	for from, to := range opts.OurRenames {
+		ourSources[to] = from
+	}
+	for _, theirFrom := range slices.Sorted(maps.Keys(opts.TheirRenames)) {
+		to := opts.TheirRenames[theirFrom]
+		ourFrom, clash := ourSources[to]
+		_, theirsMovedOurSource := opts.TheirRenames[ourFrom]
+		_, oursMovedTheirSource := opts.OurRenames[theirFrom]
+		if !clash || theirsMovedOurSource || oursMovedTheirSource {
+			continue
+		}
+		if err := a.mergeIntoOnePath(to, ourFrom, theirFrom, objects, opts); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *aligned) mergeIntoOnePath(to, ourFrom, theirFrom string, objects Objects, opts TreeOptions) error {
+	ourMerged, err := mergeRenamedSource(to, lookup(a.base, ourFrom), lookup(a.ours, to), lookup(a.theirs, ourFrom), origin{base: ourFrom, ours: to, theirs: ourFrom}, objects, opts)
+	if err != nil {
+		return err
+	}
+	theirMerged, err := mergeRenamedSource(to, lookup(a.base, theirFrom), lookup(a.ours, theirFrom), lookup(a.theirs, to), origin{base: theirFrom, ours: theirFrom, theirs: to}, objects, opts)
+	if err != nil {
+		return err
+	}
+	delete(a.base, ourFrom)
+	delete(a.theirs, ourFrom)
+	delete(a.base, theirFrom)
+	delete(a.ours, theirFrom)
+	a.ours[to], a.theirs[to] = *ourMerged, *theirMerged
+	a.handled[ourFrom], a.handled[theirFrom] = true, true
+	return nil
+}
+
+func mergeRenamedSource(path string, base, ours, theirs *Entry, o origin, objects Objects, opts TreeOptions) (*Entry, error) {
+	switch {
+	case ours == nil:
+		return theirs, nil
+	case theirs == nil:
+		return ours, nil
+	}
+	nested := withOrigin(opts, o)
+	nested.extraMarkers = 1
+	merged, _, err := mergePath(path, base, ours, theirs, objects, nested)
+	return merged, err
 }
 
 func (a *aligned) follow(from, to string, stayed, renamer Snapshot, theirsRenamed bool) {
