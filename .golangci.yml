@@ -75,6 +75,13 @@ linters:
       - path: internal/gitcore/credential/.*_test\.go
         linters:
           - gosec
+      - path: internal/gitcore/hooks/.*\.go
+        linters:
+          - gosec
+        text: "G204"
+      - path: internal/gitcore/hooks/.*_test\.go
+        linters:
+          - gosec
       - path: internal/app/openurl_(windows|linux)\.go
         linters:
           - gosec
