@@ -208,6 +208,8 @@ func mergeScenarios() []mergeScenario {
 		{name: "a wider conflict marker set by attributes", target: "feature", setup: attributedHistory("f conflict-marker-size=12\n", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
 		{name: "a union merge set by attributes", target: "feature", setup: attributedHistory("f merge=union\n", forkedHistory(map[string]string{"f": editLine(f, 4, "OURS")}, map[string]string{"f": editLine(f, 4, "THEIRS")}))},
 		{name: "a text file merged as binary by attributes", target: "feature", setup: attributedHistory("f -merge\n", forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"f": editLine(f, 9, "THEIRS")}))},
+		{name: "a modified file against a directory in its place", target: "feature", setup: fileAgainstDirectoryHistory(false)},
+		{name: "a directory in place of a file they modified", target: "feature", setup: fileAgainstDirectoryHistory(true)},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "local change in the way", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)
@@ -391,6 +393,27 @@ func (b *mergeBuilder) link(rel, target string) {
 	b.o.remove(b.dir, ".link-target")
 	b.git("update-index", "--add", "--cacheinfo", "120000,"+id+","+rel)
 	b.git("checkout", "-q", "--", rel)
+}
+
+func fileAgainstDirectoryHistory(directoryOnOurSide bool) func(b *mergeBuilder) {
+	return func(b *mergeBuilder) {
+		b.commit("base", map[string]string{"keep": "keep\n", "d": "d\n"})
+		b.git("branch", "feature")
+		replace := func() {
+			b.write(map[string]string{"d": ""})
+			b.write(map[string]string{"d/x": "x\n"})
+			b.commit("directory", nil)
+		}
+		modify := func() { b.commit("modify", map[string]string{"d": "changed\n"}) }
+		first, second := modify, replace
+		if directoryOnOurSide {
+			first, second = replace, modify
+		}
+		first()
+		b.git("checkout", "-q", "feature")
+		second()
+		b.git("checkout", "-q", "main")
+	}
 }
 
 func styledHistory(style string, setup func(b *mergeBuilder)) func(b *mergeBuilder) {

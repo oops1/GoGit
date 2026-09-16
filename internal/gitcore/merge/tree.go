@@ -125,8 +125,21 @@ func moveFilesOutOfTheWay(result *TreeResult, ours Snapshot, labels Labels) {
 		conflict.Path = asidePath(func(candidate string) bool { _, taken := result.Tree[candidate]; return taken }, path, label)
 		delete(result.Tree, path)
 		result.Tree[conflict.Path] = entry
-		result.Conflicts = append(result.Conflicts, conflict)
+		if !result.moveConflicts(path, conflict.Path) {
+			result.Conflicts = append(result.Conflicts, conflict)
+		}
 	}
+}
+
+func (r *TreeResult) moveConflicts(from, to string) bool {
+	moved := false
+	for at := range r.Conflicts {
+		if r.Conflicts[at].Path == from {
+			r.Conflicts[at].Path = to
+			moved = true
+		}
+	}
+	return moved
 }
 
 func asidePath(taken func(string) bool, path, label string) string {
