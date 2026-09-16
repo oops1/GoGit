@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
+	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
@@ -57,16 +58,23 @@ type TreeOptions struct {
 	OurRenames   Renames
 	TheirRenames Renames
 	Depth        int
+	Attributes   func(path string, virtual bool) PathAttributes
+	extraMarkers int
+	warnings     *[]Warning
 }
 
 type TreeResult struct {
 	Tree      Snapshot
 	Conflicts []Conflict
+	Warnings  []Warning
 }
 
 func (r TreeResult) Clean() bool { return len(r.Conflicts) == 0 }
 
 func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (TreeResult, error) {
+	var warnings []Warning
+	opts.warnings = &warnings
+	opts.File.Diff.Algorithm = diff.AlgorithmHistogram
 	a, err := align(base, ours, theirs, objects, opts)
 	if err != nil {
 		return TreeResult{}, err
@@ -95,6 +103,7 @@ func Trees(base, ours, theirs Snapshot, objects Objects, opts TreeOptions) (Tree
 		}
 	}
 	moveFilesOutOfTheWay(&result, ours, opts.File.Labels)
+	result.Warnings = warnings
 	return result, nil
 }
 
@@ -299,17 +308,20 @@ func mergeContent(path string, base, ours, theirs *Entry, mode object.Mode, mode
 	if err != nil {
 		return nil, nil, err
 	}
+	attrs := opts.attributesFor(path)
+	if attrs.Driver == DriverExternal {
+		opts.warn(Warning{Kind: WarningExternalDriver, Path: path, Driver: attrs.Name})
+	}
 	content, conflicted := baseData, true
-	if attributes.IsBinaryContent(baseData) || attributes.IsBinaryContent(ourData) || attributes.IsBinaryContent(theirData) {
+	if attrs.Driver == DriverBinary || attrs.Driver == DriverExternal ||
+		attributes.IsBinaryContent(baseData) || attributes.IsBinaryContent(ourData) || attributes.IsBinaryContent(theirData) {
 		conflict.Kind = ConflictBinary
 		if opts.Depth == 0 {
 			return ours, conflict, nil
 		}
 		conflicted = false
 	} else {
-		fileOpts := opts.File
-		fileOpts.MarkerSize = fileOpts.markerSize() + 2*opts.Depth
-		merged := File(baseData, ourData, theirData, fileOpts)
+		merged := File(baseData, ourData, theirData, opts.fileOptionsFor(attrs))
 		content, conflicted = merged.Content, merged.Conflicts > 0
 	}
 	id, err := objects.Put(object.TypeBlob, content)

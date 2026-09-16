@@ -175,7 +175,7 @@ func (a *aligned) renamedApart(from, ourPath, theirPath string, objects Objects,
 	delete(a.ours, ourPath)
 	delete(a.theirs, theirPath)
 	nested := withOrigin(opts, origin{base: from, ours: ourPath, theirs: theirPath})
-	nested.File.MarkerSize = nested.File.markerSize() + 1
+	nested.extraMarkers = 1
 	merged, _, err := mergePath(ourPath, base, ours, theirs, objects, nested)
 	if err != nil {
 		return err
