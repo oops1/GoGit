@@ -376,6 +376,46 @@ func TestAMergeStopsOnceTheFirstParentExplainsEveryLine(t *testing.T) {
 	}
 }
 
+func TestABlameFindsAFileInsideADirectory(t *testing.T) {
+	s := newStore()
+	inner := s.tree(map[string]hash.ObjectID{"f": s.blob("one\n")})
+	outer := s.put(&object.Tree{Entries: []object.TreeEntry{{Mode: object.ModeTree, Name: "dir", ID: inner}}})
+	head := s.commit("base", outer, 1000)
+
+	result, err := File(t.Context(), s, head, "dir/f", Options{})
+
+	if err != nil || strings.Join(blamedOn(t, result), " ") != "base:1" {
+		t.Fatalf("result = %+v, %v", result, err)
+	}
+}
+
+func TestAFileNextToAnUnrelatedDeletionIsNotARename(t *testing.T) {
+	s := newStore()
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"old": s.blob("alpha\nbeta\ngamma\n")}), 1000)
+	head := s.commit("swap", s.tree(map[string]hash.ObjectID{"new": s.blob("one\ntwo\nthree\n")}), 2000, base)
+
+	result, err := File(t.Context(), s, head, "new", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "swap:1 swap:2 swap:3" {
+		t.Fatalf("blame = %v", got)
+	}
+}
+
+func TestFollowingRenamesReportsADeletedBlobItCannotRead(t *testing.T) {
+	s := newStore()
+	gone := s.blob("alpha\nbeta\ngamma\n")
+	base := s.commit("base", s.tree(map[string]hash.ObjectID{"old": gone}), 1000)
+	head := s.commit("swap", s.tree(map[string]hash.ObjectID{"new": s.blob("alpha\nbeta\nGAMMA\n")}), 2000, base)
+	s.fail[gone] = errInjected
+
+	if _, err := File(t.Context(), s, head, "new", Options{}); !errors.Is(err, errInjected) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestAMergeThatAddedTheFileOnOneSideOnly(t *testing.T) {
 	s := newStore()
 	base := s.commit("base", s.tree(map[string]hash.ObjectID{"keep": s.blob("keep\n")}), 1000)

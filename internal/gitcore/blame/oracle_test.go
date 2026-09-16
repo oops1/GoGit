@@ -201,6 +201,39 @@ func blameCases() []blameCase {
 			r.git("commit", "-q", "-m", "move")
 			r.commit("edit", map[string]string{"moved": editLine(f, 6, "EDITED")})
 		}},
+		{name: "a rename next to an identical copy", path: "moved", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f})
+			r.git("mv", "f", "moved")
+			r.write("copy", f)
+			r.clock += 60
+			r.git("add", "-A")
+			r.git("commit", "-q", "-m", "move and copy")
+		}},
+		{name: "the copy next to a rename", path: "copy", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f})
+			r.git("mv", "f", "moved")
+			r.write("copy", f)
+			r.clock += 60
+			r.git("add", "-A")
+			r.git("commit", "-q", "-m", "move and copy")
+		}},
+		{name: "a rename into a directory named like the old file", path: "g", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f, "keep": "keep\n"})
+			r.git("rm", "-q", "f")
+			r.write("f/inner", editLine(f, 3, "INNER"))
+			r.write("g", editLine(f, 8, "G"))
+			r.clock += 60
+			r.git("add", "-A")
+			r.git("commit", "-q", "-m", "reshape")
+		}},
+		{name: "a rename into the directory that replaced the old file", path: "f/inner", follow: true, build: func(r *repo) {
+			r.commit("base", map[string]string{"f": f, "keep": "keep\n"})
+			r.git("rm", "-q", "f")
+			r.write("f/inner", editLine(f, 3, "INNER"))
+			r.clock += 60
+			r.git("add", "-A")
+			r.git("commit", "-q", "-m", "reshape")
+		}},
 		{name: "a merge whose result is one side", path: "f", follow: true, build: func(r *repo) {
 			r.commit("base", map[string]string{"f": "a\n"})
 			r.git("branch", "feature")

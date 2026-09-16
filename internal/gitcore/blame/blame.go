@@ -250,9 +250,28 @@ func (b *blamer) find(parent *node, o *origin, renamed bool) (*origin, error) {
 
 func (b *blamer) findRename(parent *node, o *origin) (*origin, error) {
 	opts := b.opts.Diff
-	opts.DetectRenames, opts.DetectCopies, opts.Paths = true, false, nil
+	opts.DetectRenames, opts.DetectCopies, opts.Paths = false, false, nil
 	files, err := diff.TreeChanges(b.ctx, b.src, parent.commit.Tree, o.node.commit.Tree, opts)
 	if err != nil {
+		return nil, err
+	}
+	added := false
+	for _, file := range files {
+		switch {
+		case file.Status == diff.StatusDeleted:
+			opts.Paths = append(opts.Paths, ":(literal)"+file.OldPath)
+			if !strings.HasPrefix(o.path, file.OldPath+"/") {
+				opts.Paths = append(opts.Paths, ":(exclude,literal)"+file.OldPath+"/")
+			}
+		case file.Status == diff.StatusAdded && file.NewPath == o.path:
+			added = true
+		}
+	}
+	if !added || len(opts.Paths) == 0 {
+		return nil, nil
+	}
+	opts.DetectRenames, opts.Paths = true, append(opts.Paths, ":(literal)"+o.path)
+	if files, err = diff.TreeChanges(b.ctx, b.src, parent.commit.Tree, o.node.commit.Tree, opts); err != nil {
 		return nil, err
 	}
 	for _, file := range files {
