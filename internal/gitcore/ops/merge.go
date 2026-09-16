@@ -414,10 +414,14 @@ func (m *merger) mergeTrees(base, ours, theirs hash.ObjectID, labels merge.Label
 		Depth:      depth,
 		Attributes: m.mergeAttributes,
 	}
-	var err error
-	if opts.OurRenames, opts.TheirRenames, err = merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs); err != nil {
+	detected, err := merge.DetectSideRenames(m.ctx, m.store(), base, ours, theirs, merge.RenameOptions{Limit: mergeRenameLimit(m.r), DirectoryRenames: true})
+	if err != nil {
 		return merge.TreeResult{}, err
 	}
+	if detected.NeededLimit > 0 {
+		m.warnings = append(m.warnings, merge.Warning{Kind: merge.WarningRenameLimit, Needed: detected.NeededLimit})
+	}
+	opts.OurRenames, opts.TheirRenames = detected.Ours, detected.Theirs
 	result, err := merge.Trees(snapshots[0], snapshots[1], snapshots[2], m.store(), opts)
 	m.warnings = append(m.warnings, result.Warnings...)
 	return result, err

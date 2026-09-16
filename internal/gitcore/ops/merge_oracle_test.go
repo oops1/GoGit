@@ -210,6 +210,15 @@ func mergeScenarios() []mergeScenario {
 		{name: "a text file merged as binary by attributes", target: "feature", setup: attributedHistory("f -merge\n", forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"f": editLine(f, 9, "THEIRS")}))},
 		{name: "a modified file against a directory in its place", target: "feature", setup: fileAgainstDirectoryHistory(false)},
 		{name: "a directory in place of a file they modified", target: "feature", setup: fileAgainstDirectoryHistory(true)},
+		{name: "renames past merge.renameLimit", target: "feature", setup: func(b *mergeBuilder) {
+			b.git("config", "merge.renameLimit", "1")
+			forkedHistory(
+				map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
+				map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})(b)
+		}},
+		{name: "renames within the default merge rename limit", target: "feature", setup: forkedHistory(
+			map[string]string{"f": "", "g": "", "f2": f + "ours\n", "g2": g + "ours\n"},
+			map[string]string{"f": editLine(f, 0, "THEIRS"), "g": editLine(g, 0, "THEIRS")})},
 		{name: "fast-forward only refused", target: "feature", args: []string{"--ff-only"}, opts: MergeOptions{Mode: MergeFastForwardOnly}, setup: forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})},
 		{name: "local change in the way", target: "feature", setup: func(b *mergeBuilder) {
 			forkedHistory(map[string]string{"f": editLine(f, 0, "OURS")}, map[string]string{"g": editLine(g, 0, "THEIRS")})(b)

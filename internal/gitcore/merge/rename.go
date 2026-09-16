@@ -38,36 +38,69 @@ func (c *cachedObjects) Get(id hash.ObjectID) (object.Type, []byte, error) {
 	return kind, data, nil
 }
 
-func DetectSideRenames(ctx context.Context, objects diff.Objects, base, ours, theirs hash.ObjectID) (Renames, Renames, error) {
-	cached := &cachedObjects{objects: objects, loaded: map[hash.ObjectID]cachedObject{}}
-	ourRenames, err := DetectRenames(ctx, cached, base, ours)
-	if err != nil {
-		return nil, nil, err
-	}
-	theirRenames, err := DetectRenames(ctx, cached, base, theirs)
-	if err != nil {
-		return nil, nil, err
-	}
-	return ourRenames, theirRenames, nil
-}
-
-func DetectRenames(ctx context.Context, objects diff.Objects, base, side hash.ObjectID) (Renames, error) {
-	files, err := diff.TreeChanges(ctx, objects, base, side, diff.Options{
-		DetectRenames:   true,
-		NoRenameEmpty:   true,
-		RenameThreshold: diff.DefaultRenameThreshold,
-		RenameLimit:     diff.DefaultRenameLimit,
-	})
+func (c *cachedObjects) Tree(id hash.ObjectID) (*object.Tree, error) {
+	_, data, err := c.Get(id)
 	if err != nil {
 		return nil, err
 	}
+	return object.ParseTree(data)
+}
+
+const DefaultRenameLimit = 7000
+
+type RenameOptions struct {
+	Limit            int
+	DirectoryRenames bool
+}
+
+type SideRenames struct {
+	Ours        Renames
+	Theirs      Renames
+	NeededLimit int
+}
+
+func DetectSideRenames(ctx context.Context, objects diff.Objects, base, ours, theirs hash.ObjectID, opts RenameOptions) (SideRenames, error) {
+	cached := &cachedObjects{objects: objects, loaded: map[hash.ObjectID]cachedObject{}}
+	snapshots := make([]Snapshot, 3)
+	for at, tree := range []hash.ObjectID{base, ours, theirs} {
+		s, err := Read(cached, tree)
+		if err != nil {
+			return SideRenames{}, err
+		}
+		snapshots[at] = s
+	}
+	var result SideRenames
+	targets := []*Renames{&result.Ours, &result.Theirs}
+	for at, side := range []hash.ObjectID{ours, theirs} {
+		report, err := diff.TreeRenames(ctx, cached, base, side, diff.RenameSearch{
+			Limit:    opts.Limit,
+			Relevant: relevantSources(snapshots[0], snapshots[1+at], snapshots[2-at], opts.DirectoryRenames),
+		})
+		if err != nil {
+			return SideRenames{}, err
+		}
+		result.NeededLimit = max(result.NeededLimit, report.NeededLimit)
+		*targets[at] = renamesOf(report.Files)
+	}
+	return result, nil
+}
+
+func DetectRenames(ctx context.Context, objects diff.Objects, base, side hash.ObjectID) (Renames, error) {
+	report, err := diff.TreeRenames(ctx, objects, base, side, diff.RenameSearch{Limit: DefaultRenameLimit})
+	if err != nil {
+		return nil, err
+	}
+	return renamesOf(report.Files), nil
+}
+
+func renamesOf(files []diff.File) Renames {
 	renames := Renames{}
 	for _, file := range files {
 		if file.Status == diff.StatusRenamed {
 			renames[file.OldPath] = file.NewPath
 		}
 	}
-	return renames, nil
+	return renames
 }
 
 type origin struct {
