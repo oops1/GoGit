@@ -106,6 +106,6 @@
 === patience-functions
 10	11	{old => new}/patience-functions.txt
 === tangled-few-tokens
-395	400	{old => new}/tangled-few-tokens.txt
+388	390	{old => new}/tangled-few-tokens.txt
 === tangled-many-tokens
-112	112	{old => new}/tangled-many-tokens.txt
+110	98	{old => new}/tangled-many-tokens.txt

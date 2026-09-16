@@ -2,7 +2,6 @@ package diff
 
 import (
 	"fmt"
-	"math/rand/v2"
 	"strings"
 )
 
@@ -51,18 +50,22 @@ func commonTailPair() corpusPair {
 }
 
 func tangledPair(name string, lines, alphabet int) corpusPair {
-	rng := rand.New(rand.NewPCG(1, 7))
+	state := uint64(17)
+	next := func(n int) int {
+		state = state*6364136223846793005 + 1442695040888963407
+		return int((state >> 33) % uint64(n))
+	}
 	var old, updated strings.Builder
 	for range lines {
-		line := fmt.Sprintf("t%d\n", rng.IntN(alphabet))
+		line := fmt.Sprintf("t%d\n", next(alphabet))
 		old.WriteString(line)
-		switch roll := rng.IntN(10); {
+		switch roll := next(10); {
 		case roll < 3:
-			fmt.Fprintf(&updated, "t%d\n", rng.IntN(alphabet))
+			fmt.Fprintf(&updated, "t%d\n", next(alphabet))
 		case roll < 4:
 		case roll < 5:
 			updated.WriteString(line)
-			fmt.Fprintf(&updated, "t%d\n", rng.IntN(alphabet))
+			fmt.Fprintf(&updated, "t%d\n", next(alphabet))
 		default:
 			updated.WriteString(line)
 		}
