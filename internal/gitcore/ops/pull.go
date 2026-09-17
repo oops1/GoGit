@@ -18,11 +18,13 @@ import (
 )
 
 type PullOptions struct {
-	Remote   string
-	Fetch    remote.FetchOptions
-	Progress progress.Func
-	When     time.Time
-	Hooks    HookOptions
+	Remote            string
+	Fetch             remote.FetchOptions
+	Progress          progress.Func
+	When              time.Time
+	Hooks             HookOptions
+	RecurseSubmodules bool
+	SubmoduleEvents   SubmoduleEvents
 }
 
 type PullResult struct {
@@ -78,6 +80,15 @@ func commitPulledBranch(r *repo.Repository, branch refs.Name, oldCommit, newComm
 }
 
 func Pull(ctx context.Context, r *repo.Repository, opts PullOptions) (PullResult, error) {
+	var branch string
+	result, err := pullBranch(ctx, r, opts, &branch)
+	if err != nil || r.IsBare() || !result.Merge.Clean() || result.Rebase.Conflicted() || !result.Rebase.Finished() {
+		return result, err
+	}
+	return result, updatePulledSubmodules(ctx, r, branch, opts)
+}
+
+func pullBranch(ctx context.Context, r *repo.Repository, opts PullOptions, branch *string) (PullResult, error) {
 	if err := ctx.Err(); err != nil {
 		return PullResult{}, err
 	}
@@ -89,6 +100,7 @@ func Pull(ctx context.Context, r *repo.Repository, opts PullOptions) (PullResult
 	if !onBranch {
 		return PullResult{}, ErrDetachedHead
 	}
+	*branch = branchShort
 
 	cfg := r.Config()
 	branchCfg, _ := cfg.Branch(branchShort)
@@ -216,6 +228,12 @@ func pullModeOf(cfg *config.Config, branch string) (MergeMode, bool) {
 		return MergeNoFastForward, false
 	}
 	return MergeFastForward, false
+}
+
+func pullRebasesSubmodules(cfg *config.Config, branch string) bool {
+	_, rebase := pullModeOf(cfg, branch)
+	ff, _ := cfg.Get("pull.ff")
+	return rebase && strings.ToLower(ff) != "only"
 }
 
 func rebaseValue(value string) bool {

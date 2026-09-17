@@ -44,16 +44,21 @@ var (
 )
 
 type CloneOptions struct {
-	Bare         bool
-	Branch       string
-	SingleBranch bool
-	Depth        int
-	RemoteName   string
-	NoCheckout   bool
-	Progress     progress.Func
-	Transport    transport.Options
-	Report       *CheckoutReport
-	Hooks        HookOptions
+	Bare              bool
+	Branch            string
+	SingleBranch      bool
+	Depth             int
+	RemoteName        string
+	NoCheckout        bool
+	Progress          progress.Func
+	Transport         transport.Options
+	Report            *CheckoutReport
+	Hooks             HookOptions
+	SeparateGitDir    string
+	Open              repo.OpenOptions
+	RecurseSubmodules bool
+	ShallowSubmodules bool
+	SubmoduleEvents   SubmoduleEvents
 }
 
 type cloneTarget struct {
@@ -70,9 +75,13 @@ func Clone(ctx context.Context, url, dir string, opts CloneOptions) (*repo.Repos
 	if err != nil {
 		return nil, err
 	}
+	_, gitDirErr := os.Stat(opts.SeparateGitDir)
 	r, err := cloneInto(ctx, url, dir, opts)
 	if err != nil && r == nil {
 		cleanupCloneDirectory(dir, created)
+		if opts.SeparateGitDir != "" && errors.Is(gitDirErr, fs.ErrNotExist) {
+			_ = os.RemoveAll(opts.SeparateGitDir)
+		}
 		return nil, err
 	}
 	return r, err
@@ -126,7 +135,14 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 	prog := opts.Progress
 	prog.Phase("init")
 
-	r, err := cloneRepoInit(dir, repo.InitOptions{Bare: opts.Bare})
+	r, err := cloneRepoInit(dir, repo.InitOptions{
+		Bare:           opts.Bare,
+		SeparateGitDir: opts.SeparateGitDir,
+		Env:            opts.Open.Env,
+		NoSystem:       opts.Open.NoSystem,
+		SystemFile:     opts.Open.SystemFile,
+		GlobalFile:     opts.Open.GlobalFile,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +157,7 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 	if err != nil {
 		return failClone(r, err)
 	}
-	if err := writeCloneRemoteConfig(file, remoteName, url, spec); err != nil {
+	if err := writeCloneRemoteConfig(file, remoteName, url, spec, cloneSubmoduleValues(r, opts)...); err != nil {
 		return failClone(r, err)
 	}
 
@@ -170,7 +186,7 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 		}
 	}
 
-	reopened, err := cloneRepoOpen(dir, repo.OpenOptions{})
+	reopened, err := cloneRepoOpen(dir, opts.Open)
 	if err != nil {
 		return failClone(r, err)
 	}
@@ -182,13 +198,46 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 			return failClone(r, err)
 		}
 		runner := openHooks(r, opts.Hooks)
-		return r, runner.verify(ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{runner.zero(), target.commit.String(), branchCheckoutFlag}})
+		if err := runner.verify(ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{runner.zero(), target.commit.String(), branchCheckoutFlag}}); err != nil {
+			return r, err
+		}
+		return r, cloneSubmodules(ctx, r, opts)
 	}
 	return r, nil
 }
 
+func cloneSubmoduleValues(r *repo.Repository, opts CloneOptions) [][2]string {
+	if !opts.RecurseSubmodules {
+		return nil
+	}
+	values := [][2]string{{submoduleActiveKey, "."}}
+	if sticky, err := r.Config().GetBool(submoduleStickyKey); err == nil && sticky {
+		values = append(values, [2]string{submoduleRecurseKey, "true"})
+	}
+	return values
+}
+
+func cloneSubmodules(ctx context.Context, r *repo.Repository, opts CloneOptions) error {
+	if !opts.RecurseSubmodules {
+		return nil
+	}
+	depth := 0
+	if opts.ShallowSubmodules {
+		depth = 1
+	}
+	return SubmoduleUpdate(ctx, r, nil, SubmoduleUpdateOptions{
+		Init:        true,
+		RequireInit: true,
+		Recursive:   true,
+		Depth:       depth,
+		Progress:    opts.Progress,
+		Transport:   opts.Transport,
+		Events:      opts.SubmoduleEvents,
+	})
+}
+
 func fetchCloneObjects(ctx context.Context, r *repo.Repository, rem remote.Remote, opts remote.FetchOptions) (remote.FetchResult, error) {
-	fetchRepo, err := cloneRepoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, repo.OpenOptions{})
+	fetchRepo, err := cloneRepoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, r.Options())
 	if err != nil {
 		return remote.FetchResult{}, err
 	}
@@ -311,11 +360,15 @@ func resolveCloneTarget(opts CloneOptions, remoteName, explicitBranch, defaultBr
 	return cloneTarget{}, nil
 }
 
-func writeCloneRemoteConfig(file *config.File, remoteName, url string, spec refspec.RefSpec) error {
-	err := errors.Join(
+func writeCloneRemoteConfig(file *config.File, remoteName, url string, spec refspec.RefSpec, first ...[2]string) error {
+	var errs []error
+	for _, value := range first {
+		errs = append(errs, file.Set(value[0], value[1]))
+	}
+	err := errors.Join(append(errs,
 		file.Set("remote."+remoteName+".url", url),
 		file.Set("remote."+remoteName+".fetch", spec.String()),
-	)
+	)...)
 	if err != nil {
 		return err
 	}

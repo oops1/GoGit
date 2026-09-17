@@ -95,6 +95,9 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 	if err := updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID); err != nil {
 		return err
 	}
+	if err := updateSwitchedSubmodules(ctx, r, headTree, targetTree, opts); err != nil {
+		return err
+	}
 	runner := openHooks(r, opts.Hooks)
 	return runner.verify(ctx, hooks.Invocation{Name: hookPostCheckout, Args: []string{runner.hex(fromCommit), runner.hex(commitID), branchCheckoutFlag}})
 }

@@ -72,6 +72,7 @@ type merger struct {
 	action   string
 	hooks    hookRunner
 	warnings []merge.Warning
+	detached bool
 }
 
 func openMerger(ctx context.Context, r *repo.Repository, opts MergeOptions) (*merger, error) {

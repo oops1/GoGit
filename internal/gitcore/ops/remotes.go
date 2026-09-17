@@ -15,7 +15,7 @@ import (
 )
 
 func networkView(r *repo.Repository) (*repo.Repository, error) {
-	return cloneRepoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, repo.OpenOptions{})
+	return cloneRepoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, r.Options())
 }
 
 func fetchRemote(ctx context.Context, r *repo.Repository, rem remote.Remote, opts remote.FetchOptions) (remote.FetchResult, error) {
