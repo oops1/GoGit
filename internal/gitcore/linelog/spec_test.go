@@ -165,7 +165,7 @@ func TestResolveRangeReportsErrors(t *testing.T) {
 }
 
 func TestFindFuncnameWalksMatchesLineByLine(t *testing.T) {
-	re, err := compileBRE(`a`)
+	re, err := compilePattern(`a`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,14 +173,14 @@ func TestFindFuncnameWalksMatchesLineByLine(t *testing.T) {
 	if got := findFuncname(data, 0, re); got != 21 {
 		t.Fatalf("findFuncname = %d", got)
 	}
-	empty, err := compileBRE(`^`)
+	empty, err := compilePattern(`^`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := findFuncname([]byte("\n\nname"), 0, empty); got != 2 {
 		t.Fatalf("an empty match found %d", got)
 	}
-	indented, err := compileBRE(`x`)
+	indented, err := compilePattern(`x`)
 	if err != nil {
 		t.Fatal(err)
 	}

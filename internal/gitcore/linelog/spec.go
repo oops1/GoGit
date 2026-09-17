@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"regexp"
 	"strings"
+
+	"github.com/oops1/gogit/internal/gitcore/posixre"
 )
 
 type Spec struct {
@@ -176,7 +177,7 @@ func parseOffset(spec string, t *text, begin int) (string, int, error) {
 }
 
 func matchLine(pattern string, t *text, from int) (int, error) {
-	re, err := compileBRE(pattern)
+	re, err := compilePattern(pattern)
 	if err != nil {
 		return 0, err
 	}
@@ -199,7 +200,7 @@ func matchLine(pattern string, t *text, from int) (int, error) {
 	return at + 1, nil
 }
 
-func searchable(data []byte, re *regexp.Regexp) int {
+func searchable(data []byte, re *posixre.Regexp) int {
 	if cut := bytes.IndexByte(data, 0); cut >= 0 {
 		data = data[:cut]
 	}
@@ -228,7 +229,7 @@ func parseFuncname(arg string, t *text, anchor int) (string, int, int, error) {
 		return arg[term:], 0, 0, nil
 	}
 	pattern := arg[1:term]
-	re, err := compileBRE(pattern)
+	re, err := compilePattern(pattern)
 	if err != nil {
 		return "", 0, 0, err
 	}
@@ -252,13 +253,14 @@ func parseFuncname(arg string, t *text, anchor int) (string, int, int, error) {
 	return arg[term:], begin + 1, end, nil
 }
 
-func findFuncname(data []byte, start int, re *regexp.Regexp) int {
+func findFuncname(data []byte, start int, re *posixre.Regexp) int {
+	subject := posixre.NewSubject(data)
 	for start < len(data) {
-		loc := re.FindIndex(data[start:])
+		loc := subject.FindIndex(re, start)
 		if loc == nil {
 			return -1
 		}
-		bol, eol := start+loc[0], start+loc[1]
+		bol, eol := loc[0], loc[1]
 		for bol > start {
 			bol--
 			if data[bol] == '\n' {
