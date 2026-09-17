@@ -1,0 +1,38 @@
+using System;
+namespace Sample.App
+{
+    public class Service<T> : IService where T : new()
+    {
+        private readonly int count = 0;
+        public int Count { get; set; }
+        public Service(int count)
+        {
+            this.count = count;
+        }
+        public async Task<List<int>> LoadAsync(string path, CancellationToken token)
+        {
+            if (path == null)
+            {
+                throw new ArgumentNullException(nameof(path));
+            }
+            foreach (var item in items)
+            {
+                return new List<int>();
+            }
+            return await Task.FromResult(new List<int>());
+        }
+        internal static partial record Entry(string Name);
+        public string this[int index] => items[index];
+        protected override void Dispose(bool disposing) { }
+        [Obsolete] public int Old;
+        public Dictionary<string, List<int>> Map
+        {
+            get { return map; }
+        }
+        else if (x) Call(y);
+        lock (sync)
+    }
+    struct Pair { }
+    public sealed abstract class Weird
+    enum Color { Red }
+}

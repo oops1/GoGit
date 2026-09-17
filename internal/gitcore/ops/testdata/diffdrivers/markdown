@@ -1,0 +1,16 @@
+# Title
+Intro text.
+## Section
+Body.
+   ### Indented three
+Text.
+    #### Four spaces is code
+####### Seven
+#NoSpace
+###### Six
+End.
+#	Tabbed
+More.
+Setext heading
+==============
+Closing.

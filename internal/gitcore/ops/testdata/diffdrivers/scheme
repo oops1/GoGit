@@ -1,0 +1,21 @@
+(define (square x)
+  (* x x))
+(define-syntax swap!
+  (syntax-rules ()
+    ((_ a b) (let ((tmp a)) (set! a b) (set! b tmp)))))
+(defstruct point x y)
+  (define-record-type point
+    (make-point x y)
+    point?)
+(library (sample)
+  (export square))
+(module+ test
+  (check-equal? (square 2) 4))
+(let ((x 1))
+  x)
+(struct* thing (a b))
+(class object% (super-new))
+(defmethod area ((s shape)) 0)
+(define*/public (value) 1)
+(defalias old new)
+(definitely-not)

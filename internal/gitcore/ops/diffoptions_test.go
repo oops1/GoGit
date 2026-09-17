@@ -2,6 +2,7 @@ package ops
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
@@ -19,6 +20,41 @@ func TestDetailsTreatAFileMarkedMinusDiffAsBinary(t *testing.T) {
 	}
 	if len(result.Changes) != 2 || !result.Changes[0].Binary || result.Changes[1].Binary {
 		t.Fatalf("changes = %+v", result.Changes)
+	}
+}
+
+func TestDetailsTakeHunkHeadersFromTheDiffDriverOfEachPath(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.appendConfig("[diff \"default\"]\n\txfuncname = ^(section .*)$\n[diff \"broken\"]\n\txfuncname = (\n")
+	tr.repo = tr.reopen()
+	body := "section one\nfunc helper() {\ndef method(self):\n\tone\n\ttwo\n\tthree\n\tfour\n\tfive\n"
+	edited := strings.Replace(body, "five", "FIVE", 1)
+	rules := "*.py diff=python\n*.set diff\n*.named diff=nosuch\n*.bad diff=broken\n*.go diff=golang\n"
+	names := []string{"a.py", "b.set", "c.named", "d.bad", "e.go", "f.txt"}
+	base, edit := map[string]string{".gitattributes": rules}, map[string]string{}
+	for _, name := range names {
+		base[name], edit[name] = body, edited
+	}
+	tr.commitFiles("base", base)
+	tr.commitFiles("edit", edit)
+
+	result, err := Details(t.Context(), tr.repo, "HEAD", DetailsOptions{})
+
+	if err != nil {
+		t.Fatalf("Details returned error %v", err)
+	}
+	want := map[string]string{
+		"a.py":    "def method(self):",
+		"b.set":   "def method(self):",
+		"c.named": "section one",
+		"d.bad":   "def method(self):",
+		"e.go":    "func helper() {",
+		"f.txt":   "section one",
+	}
+	for _, file := range result.Changes {
+		if len(file.Hunks) != 1 || file.Hunks[0].Header != want[file.NewPath] {
+			t.Errorf("%s hunks = %+v", file.NewPath, file.Hunks)
+		}
 	}
 }
 

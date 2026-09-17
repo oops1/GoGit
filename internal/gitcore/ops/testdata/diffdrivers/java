@@ -1,0 +1,25 @@
+package sample;
+import java.util.List;
+public class Service extends Base implements Runnable {
+    private int count;
+    public Service(int count) {
+        this.count = count;
+    }
+    @Override
+    public void run() {
+        for (int i = 0; i < count; i++) {
+            System.out.println(i);
+        }
+    }
+    public static <T> List<T> copy(List<? extends T> source) {
+        return new ArrayList<>(source);
+    }
+    private sealed interface Shape permits Circle {}
+    record Point(int x, int y) {}
+    enum Color { RED, GREEN }
+    int[] values() { return new int[0]; }
+    return value;
+    new Thread(runnable).start();
+    Map<String, List<Integer>> build(final int size) {
+    non-sealed class Open {}
+}

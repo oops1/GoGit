@@ -1,0 +1,28 @@
+package main
+
+import "fmt"
+
+type Shape interface {
+	Area() float64
+}
+
+type Rect struct {
+	W, H float64
+}
+
+func (r Rect) Area() float64 {
+	return r.W * r.H
+}
+
+func main() {
+	fmt.Println(Rect{1, 2}.Area())
+	go func() {
+		fmt.Println("x")
+	}()
+}
+	type inner struct{}
+var funcs = map[string]func(){}
+type Alias = int
+func	tabbed()	{
+type Generic[T any] interface{ ~int }
+funcName := 1

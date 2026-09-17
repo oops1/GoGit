@@ -1,0 +1,32 @@
+package Sample::Module;
+use strict;
+sub new {
+    my ($class) = @_;
+    return bless {}, $class;
+}
+sub with_proto($$) {
+    return 1;
+}
+sub attributed :lvalue {
+    my $x;
+}
+sub declared;
+sub commented { # comment
+    1;
+}
+BEGIN {
+    print "start\n";
+}
+END
+{
+}
+=head1 NAME
+Sample
+=cut
+sub Other::qualified'name ($) : method # note
+{
+}
+sub spaced  ( $ )  {
+}
+=head2 Methods
+text

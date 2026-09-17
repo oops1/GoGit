@@ -1,0 +1,23 @@
+import os
+
+class Shape(object):
+    """Doc."""
+
+    def area(self):
+        return 0
+
+    async def load(self, path):
+        with open(path) as f:
+            return f.read()
+
+def main():
+    shape = Shape()
+    print(shape.area())
+
+async	def tabbed():
+    pass
+class_name = "not a class"
+if __name__ == "__main__":
+    main()
+	def	indented_with_tab():
+		pass

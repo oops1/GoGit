@@ -1,0 +1,27 @@
+@media screen and (max-width: 600px) {
+  body {
+    color: red;
+    margin: 0;
+  }
+}
+.container,
+#main > p:first-child {
+  padding: 1em;
+}
+A:HOVER {
+  text-decoration: none;
+}
+:root {
+  --size: 10px;
+}
+[data-x] {
+  display: block;
+}
+h1 { font-size: 2em; }
+DIV.Box:
+Section;
+_private {
+  z-index: 1;
+}
+9lives {
+}

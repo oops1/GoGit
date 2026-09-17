@@ -1,0 +1,32 @@
+<?php
+namespace App;
+final class Controller extends Base
+{
+    public function index($request)
+    {
+        return view('index');
+    }
+    private static function helper(): int
+    {
+        return 1;
+    }
+    abstract protected function run();
+}
+interface Runner
+{
+    function go();
+}
+trait Loggable
+{
+    public function log($msg) { }
+}
+enum Suit: string
+{
+    case Hearts = 'H';
+}
+function standalone() {
+    return 0;
+}
+$callback = function ($x) {
+    return $x;
+};

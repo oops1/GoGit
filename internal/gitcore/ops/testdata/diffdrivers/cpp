@@ -1,0 +1,28 @@
+#include <stdio.h>
+namespace ns {
+class Widget : public Base {
+public:
+    Widget();
+private:
+    int value;
+};
+int Widget::compute(int a, int b)
+{
+label:
+    if (a) goto label;
+    return a + b;
+}
+::global_function(void)
+static const char *name = "x";
+template <typename T>
+T maximum(T a, T b)
+{
+    return a > b ? a : b;
+}
+struct Point { int x; int y; };
+default: /* comment */
+done:  // trailing
+protected:
+public: int field;
+:: spaced_scope()
+}
