@@ -66,7 +66,11 @@ func lineHistory(ctx context.Context, r *repo.Repository, rev string, specs []li
 	if err != nil {
 		return err
 	}
-	logOpts := linelog.Options{NoRenames: opts.NoRenames || renamesOff(r), Shallow: shallow}
+	funcNames, err := lineRangeFuncNames(r)
+	if err != nil {
+		return err
+	}
+	logOpts := linelog.Options{NoRenames: opts.NoRenames || renamesOff(r), Shallow: shallow, FuncNames: funcNames}
 	if opts.Progress != nil {
 		logOpts.Progress = func(p linelog.Progress) { opts.Progress(p.Done, p.Total) }
 	}

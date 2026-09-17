@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -134,6 +135,29 @@ func TestLineHistoryReportsFailures(t *testing.T) {
 	tr.writeFile(".git/shallow", "not a hash\n")
 	if _, err := lineHistoryOf(t, tr.repo, "HEAD", spec, LineHistoryOptions{}); !errors.Is(err, repo.ErrInvalidShallowFile) {
 		t.Errorf("a broken shallow file returned %v", err)
+	}
+	tr.remove(".git/shallow")
+	tr.appendConfig("[core]\n\tattributesfile = ~otheruser/attrs\n")
+	if _, err := lineHistoryOf(t, tr.reopen(), "HEAD", spec, LineHistoryOptions{}); err == nil {
+		t.Error("an unusable core.attributesfile was accepted")
+	}
+}
+
+func TestLineHistoryFindsFunctionRangesWithTheDiffDriver(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.appendConfig("[diff \"broken\"]\n\txfuncname = (\n")
+	tr.repo = tr.reopen()
+	code := "area = 1\n  def area(self):\n    return 1\n  value = 2\n"
+	rules := "*.py diff=python\n*.bad diff=broken\n*.set diff\n"
+	tr.commitFiles("base", map[string]string{".gitattributes": rules, "a.py": code, "b.bad": code, "c.set": code, "d.txt": code})
+	edited := strings.Replace(code, "area = 1", "area = 5", 1)
+	tr.commitFiles("edit", map[string]string{"a.py": edited, "b.bad": edited, "c.set": edited, "d.txt": edited})
+	cases := map[string]int{"a.py": 1, "b.bad": 2, "c.set": 2, "d.txt": 2}
+	for path, count := range cases {
+		entries, err := lineHistoryOf(t, tr.repo, "HEAD", []linelog.Spec{{Range: ":area", Path: path}}, LineHistoryOptions{})
+		if err != nil || len(entries) != count {
+			t.Errorf("%s: entries = %v, %v", path, entries, err)
+		}
 	}
 }
 

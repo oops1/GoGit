@@ -73,3 +73,22 @@ func diffDriverMatcher(drivers *userdiff.Drivers, value attributes.Value) *userd
 	}
 	return matcher
 }
+
+func lineRangeFuncNames(r *repo.Repository) (func(path string) *userdiff.Matcher, error) {
+	attrs, err := repoAttributes(r)
+	if err != nil {
+		return nil, err
+	}
+	drivers := userdiff.Load(r.Config())
+	return func(path string) *userdiff.Matcher {
+		value := attrs.Get(path, diffAttribute)[diffAttribute]
+		if value.Kind() != attributes.Valued {
+			return nil
+		}
+		matcher, err := drivers.Matcher(value.Text())
+		if err != nil {
+			return nil
+		}
+		return matcher
+	}, nil
+}
