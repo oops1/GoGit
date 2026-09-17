@@ -8,6 +8,8 @@ func (a *Attributes) DiffBinary(path string) (binary bool, known bool) {
 	switch {
 	case value.IsUnset():
 		return true, true
+	case value.IsSet():
+		return false, true
 	case value.Kind() != Valued || cfg == nil:
 		return false, false
 	}

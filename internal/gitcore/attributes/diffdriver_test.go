@@ -34,7 +34,7 @@ func TestDiffBinaryFollowsTheDiffAttributeAndDriver(t *testing.T) {
 	}{
 		{withConfig, "x.nodiff", true, true},
 		{withConfig, "x.bin", true, true},
-		{withConfig, "x.set", false, false},
+		{withConfig, "x.set", false, true},
 		{withConfig, "x.none", false, false},
 		{withConfig, "x.conv", true, true},
 		{withConfig, "x.on", true, true},
