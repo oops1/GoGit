@@ -7,7 +7,7 @@ func (w *walker) simplify(n *node) error {
 		return nil
 	}
 	if len(n.parents) == 0 {
-		empty, err := w.sameAsEmpty(n.commit.Tree)
+		empty, err := w.sameAsEmpty(n.tree)
 		if err != nil {
 			return err
 		}
@@ -26,9 +26,11 @@ func (w *walker) simplify(n *node) error {
 		if err != nil {
 			return err
 		}
-		same, err := w.sameTree(parent.commit.Tree, n.commit.Tree)
-		if err != nil {
-			return err
+		same := index == 0 && w.unchangedByFilter(n)
+		if !same {
+			if same, err = w.sameTree(parent.tree, n.tree); err != nil {
+				return err
+			}
 		}
 		switch {
 		case !same:
@@ -45,6 +47,18 @@ func (w *walker) simplify(n *node) error {
 		n.flags |= flagTreeSame
 	}
 	return nil
+}
+
+func (w *walker) unchangedByFilter(n *node) bool {
+	if !n.inGraph || len(w.keys) != len(w.paths) {
+		return false
+	}
+	for _, keys := range w.keys {
+		if keys == nil || w.store.graph.MaybeChanged(n.position, keys) {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *walker) sameTree(before, after hash.ObjectID) (bool, error) {

@@ -3,6 +3,7 @@
 package revision
 
 import (
+	"iter"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -381,28 +383,48 @@ func TestOracleWalkMatchesRevList(t *testing.T) {
 			func(o *Options) { o.Author = regexpMustCompile("oracle") },
 		},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			want := o.lines(append([]string{"rev-list"}, test.args...)...)
-			opts, err := Ranges(test.specs, ctx)
-			if err != nil {
-				t.Fatalf("Ranges(%v) returned error %v", test.specs, err)
-			}
-			if test.setup != nil {
-				test.setup(&opts)
-			}
-			var got []string
-			for commit, err := range Walk(t.Context(), opts) {
+	for mode, ctx := range o.graphModes(ctx) {
+		for _, test := range tests {
+			t.Run(mode+"/"+test.name, func(t *testing.T) {
+				want := o.lines(append([]string{"rev-list"}, test.args...)...)
+				opts, err := Ranges(test.specs, ctx)
 				if err != nil {
-					t.Fatalf("Walk returned error %v", err)
+					t.Fatalf("Ranges(%v) returned error %v", test.specs, err)
 				}
-				got = append(got, commit.ID.String())
-			}
-			if !slices.Equal(got, want) {
-				t.Errorf("Walk visited\n%s\ngit rev-list visited\n%s",
-					strings.Join(got, "\n"), strings.Join(want, "\n"))
-			}
-		})
+				if test.setup != nil {
+					test.setup(&opts)
+				}
+				var got []string
+				for commit, err := range Walk(t.Context(), opts) {
+					if err != nil {
+						t.Fatalf("Walk returned error %v", err)
+					}
+					got = append(got, commit.ID.String())
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("Walk visited\n%s\ngit rev-list visited\n%s",
+						strings.Join(got, "\n"), strings.Join(want, "\n"))
+				}
+			})
+		}
+	}
+}
+
+func (o *oracle) graphModes(ctx Context) iter.Seq2[string, Context] {
+	return func(yield func(string, Context) bool) {
+		if !yield("objects", ctx) {
+			return
+		}
+		o.git("commit-graph", "write", "--reachable", "--changed-paths")
+		graph, err := commitgraph.Open([]string{filepath.Join(o.repo, ".git", "objects")}, commitgraph.OpenOptions{})
+		if err != nil || graph == nil {
+			o.t.Fatalf("commitgraph.Open returned %v, %v", graph, err)
+		}
+		ctx.Graph = graph
+		yield("commit-graph", ctx)
+		if err := os.Remove(filepath.Join(o.repo, ".git", "objects", "info", commitgraph.FileName)); err != nil {
+			o.t.Fatal(err)
+		}
 	}
 }
 
@@ -415,7 +437,6 @@ func TestOracleMergeBaseMatchesGit(t *testing.T) {
 	o.merge("left", "merge left into right")
 	o.checkout("left")
 	o.merge("right", "merge right into left")
-	ctx := o.open()
 	pairs := [][]string{
 		{"main", "topic"},
 		{"main", "side"},
@@ -424,33 +445,28 @@ func TestOracleMergeBaseMatchesGit(t *testing.T) {
 		{"main", "v1"},
 		{"v1", "main"},
 	}
-	for _, pair := range pairs {
-		t.Run(strings.Join(pair, " "), func(t *testing.T) {
-			want := o.lines(append([]string{"merge-base", "--all"}, pair...)...)
-			slices.Sort(want)
-			ids := make([]hash.ObjectID, 0, len(pair))
-			for _, spec := range pair {
-				ids = append(ids, o.parse(spec+"^{commit}"))
-			}
-			bases, err := MergeBase(ctx, ids...)
-			if err != nil {
-				t.Fatalf("MergeBase returned error %v", err)
-			}
-			got := make([]string, 0, len(bases))
-			for _, base := range bases {
-				got = append(got, base.String())
-			}
-			slices.Sort(got)
-			if !slices.Equal(got, want) {
-				t.Errorf("MergeBase returned %v, git returned %v", got, want)
-			}
+	for mode, ctx := range o.graphModes(o.open()) {
+		for _, pair := range pairs {
+			t.Run(mode+"/"+strings.Join(pair, " "), func(t *testing.T) {
+				checkMergeBase(t, o, ctx, pair...)
+			})
+		}
+		t.Run(mode+"/octopus", func(t *testing.T) {
+			checkMergeBase(t, o, ctx, "main", "topic", "side")
 		})
 	}
-	octopus := []string{"main", "topic", "side"}
-	want := o.lines(append([]string{"merge-base", "--octopus", "--all"}, octopus...)...)
+}
+
+func checkMergeBase(t *testing.T, o *oracle, ctx Context, specs ...string) {
+	t.Helper()
+	args := []string{"merge-base", "--all"}
+	if len(specs) > 2 {
+		args = append(args, "--octopus")
+	}
+	want := o.lines(append(args, specs...)...)
 	slices.Sort(want)
-	ids := make([]hash.ObjectID, 0, len(octopus))
-	for _, spec := range octopus {
+	ids := make([]hash.ObjectID, 0, len(specs))
+	for _, spec := range specs {
 		ids = append(ids, o.parse(spec+"^{commit}"))
 	}
 	bases, err := MergeBase(ctx, ids...)
@@ -463,13 +479,12 @@ func TestOracleMergeBaseMatchesGit(t *testing.T) {
 	}
 	slices.Sort(got)
 	if !slices.Equal(got, want) {
-		t.Errorf("MergeBase of three tips returned %v, git returned %v", got, want)
+		t.Errorf("MergeBase(%v) returned %v, git returned %v", specs, got, want)
 	}
 }
 
 func TestOracleIsAncestorMatchesGit(t *testing.T) {
 	o := buildOracleRepository(t)
-	ctx := o.open()
 	pairs := [][2]string{
 		{"v1", "main"},
 		{"main", "v1"},
@@ -479,17 +494,19 @@ func TestOracleIsAncestorMatchesGit(t *testing.T) {
 		{"topic", "side"},
 		{"main", "main"},
 	}
-	for _, pair := range pairs {
-		t.Run(pair[0]+" "+pair[1], func(t *testing.T) {
-			want := o.succeeds("merge-base", "--is-ancestor", pair[0], pair[1])
-			got, err := IsAncestor(ctx, o.parse(pair[0]+"^{commit}"), o.parse(pair[1]+"^{commit}"))
-			if err != nil {
-				t.Fatalf("IsAncestor returned error %v", err)
-			}
-			if got != want {
-				t.Errorf("IsAncestor(%s, %s) = %v, git reports %v", pair[0], pair[1], got, want)
-			}
-		})
+	for mode, ctx := range o.graphModes(o.open()) {
+		for _, pair := range pairs {
+			t.Run(mode+"/"+pair[0]+" "+pair[1], func(t *testing.T) {
+				want := o.succeeds("merge-base", "--is-ancestor", pair[0], pair[1])
+				got, err := IsAncestor(ctx, o.parse(pair[0]+"^{commit}"), o.parse(pair[1]+"^{commit}"))
+				if err != nil {
+					t.Fatalf("IsAncestor returned error %v", err)
+				}
+				if got != want {
+					t.Errorf("IsAncestor(%s, %s) = %v, git reports %v", pair[0], pair[1], got, want)
+				}
+			})
+		}
 	}
 }
 

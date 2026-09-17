@@ -6,7 +6,7 @@ func MergeBase(ctx Context, ids ...hash.ObjectID) ([]hash.ObjectID, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	objects := newStore(ctx.Objects, ctx.Shallow)
+	objects := newStore(ctx)
 	result := []hash.ObjectID{ids[0]}
 	for _, id := range ids[1:] {
 		var merged []hash.ObjectID
@@ -26,14 +26,23 @@ func MergeBase(ctx Context, ids ...hash.ObjectID) ([]hash.ObjectID, error) {
 }
 
 func IsAncestor(ctx Context, a, b hash.ObjectID) (bool, error) {
-	return isAncestor(newStore(ctx.Objects, ctx.Shallow), a, b)
+	return isAncestor(newStore(ctx), a, b)
 }
 
 func mergeBasesPair(objects *store, a, b hash.ObjectID) ([]hash.ObjectID, error) {
 	if a == b {
 		return []hash.ObjectID{a}, nil
 	}
-	common, err := paintDownToCommon(newGraph(objects), a, []hash.ObjectID{b})
+	painted := newGraph(objects)
+	one, err := painted.commit(a)
+	if err != nil {
+		return nil, err
+	}
+	two, err := painted.commit(b)
+	if err != nil {
+		return nil, err
+	}
+	common, err := paintDownToCommon(painted, one, two, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -49,10 +58,25 @@ func isAncestor(objects *store, a, b hash.ObjectID) (bool, error) {
 		return true, nil
 	}
 	painted := newGraph(objects)
-	if _, err := paintDownToCommon(painted, a, []hash.ObjectID{b}); err != nil {
+	one, err := painted.commit(a)
+	if err != nil {
 		return false, err
 	}
-	return painted.node(a).flags&flagParent2 != 0, nil
+	two, err := painted.commit(b)
+	if err != nil {
+		return false, err
+	}
+	cutoff := uint64(0)
+	if objects.graph != nil {
+		if one.generation > two.generation {
+			return false, nil
+		}
+		cutoff = one.generation
+	}
+	if _, err := paintDownToCommon(painted, one, two, cutoff); err != nil {
+		return false, err
+	}
+	return one.flags&flagParent2 != 0, nil
 }
 
 func removeRedundant(objects *store, ids []hash.ObjectID) ([]hash.ObjectID, error) {
@@ -88,25 +112,22 @@ func removeRedundant(objects *store, ids []hash.ObjectID) ([]hash.ObjectID, erro
 	return kept, nil
 }
 
-func paintDownToCommon(painted *graph, one hash.ObjectID, twos []hash.ObjectID) ([]*node, error) {
-	pending := newQueue(byCommitDate)
-	first, err := painted.commit(one)
-	if err != nil {
-		return nil, err
+func paintDownToCommon(painted *graph, one, two *node, cutoff uint64) ([]*node, error) {
+	order := byCommitDate
+	if cutoff > 0 {
+		order = byGenerationThenDate
 	}
-	first.flags |= flagParent1
-	pending.push(first)
-	for _, id := range twos {
-		other, err := painted.commit(id)
-		if err != nil {
-			return nil, err
-		}
-		other.flags |= flagParent2
-		pending.push(other)
-	}
+	pending := newQueue(order)
+	one.flags |= flagParent1
+	pending.push(one)
+	two.flags |= flagParent2
+	pending.push(two)
 	var common []*node
 	for hasNonStale(pending) {
 		current := pending.pop()
+		if current.generation < cutoff {
+			break
+		}
 		flags := current.flags & (flagParent1 | flagParent2 | flagStale)
 		if flags == flagParent1|flagParent2 {
 			if current.flags&flagResult == 0 {

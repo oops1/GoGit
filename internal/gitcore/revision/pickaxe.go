@@ -14,16 +14,16 @@ func (w *walker) pickaxe(ctx context.Context, n *node) (bool, error) {
 	if w.opts.Pickaxe == "" && w.opts.PickaxeRegexp == nil {
 		return true, nil
 	}
-	if len(n.commit.Parents) > 1 {
+	if len(n.original) > 1 {
 		return false, nil
 	}
 	base := hash.Zero
-	if len(n.commit.Parents) == 1 && n.flags&flagShallow == 0 {
-		base = w.node(n.commit.Parents[0]).commit.Tree
+	if len(n.original) == 1 && n.flags&flagShallow == 0 {
+		base = w.node(n.original[0]).tree
 	}
 	opts := diff.Defaults()
 	opts.Paths = w.paths
-	files, err := diff.Trees(ctx, w.store.objects, base, n.commit.Tree, opts)
+	files, err := diff.Trees(ctx, w.store.objects, base, n.tree, opts)
 	if err != nil {
 		return false, err
 	}

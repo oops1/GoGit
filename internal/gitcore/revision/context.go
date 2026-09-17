@@ -5,6 +5,7 @@ import (
 	"iter"
 	"strings"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -39,6 +40,7 @@ type Context struct {
 	Config  Config
 	Head    refs.Name
 	Shallow map[hash.ObjectID]struct{}
+	Graph   *commitgraph.Graph
 }
 
 type Rev struct {
@@ -64,16 +66,25 @@ type store struct {
 	trees   map[hash.ObjectID]*object.Tree
 	paths   map[pathKey]pathValue
 	shallow map[hash.ObjectID]struct{}
+	graph   *commitgraph.Graph
 }
 
-func newStore(objects Objects, shallow map[hash.ObjectID]struct{}) *store {
+func newStore(ctx Context) *store {
 	return &store{
-		objects: objects,
+		objects: ctx.Objects,
 		commits: make(map[hash.ObjectID]*object.Commit),
 		trees:   make(map[hash.ObjectID]*object.Tree),
 		paths:   make(map[pathKey]pathValue),
-		shallow: shallow,
+		shallow: ctx.Shallow,
+		graph:   ctx.Graph,
 	}
+}
+
+func (s *store) inGraph(id hash.ObjectID) (commitgraph.Position, bool) {
+	if s.graph == nil {
+		return 0, false
+	}
+	return s.graph.Lookup(id)
 }
 
 func (s *store) object(id hash.ObjectID) (object.Type, object.Object, error) {
