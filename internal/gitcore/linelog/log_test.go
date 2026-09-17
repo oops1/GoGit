@@ -13,6 +13,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 var errMissing = errors.New("object is missing")
@@ -118,6 +119,32 @@ func collect(t *testing.T, m *memory, start hash.ObjectID, specs []Spec, opts Op
 	}
 	out.patch = patch.String()
 	return out, nil
+}
+
+func TestLogFindsFunctionRangesWithTheDriverOfThePath(t *testing.T) {
+	m := newMemory()
+	code := lined("class Shape:", "    def area(self):", "        return 1", "    def name(self):", "        return 'x'")
+	base := m.commit("base", map[string]any{"shape.py": code})
+	head := m.commit("edit", map[string]any{"shape.py": strings.Replace(code, "return 1", "return 2", 1)}, base)
+	python, _ := userdiff.Builtin("python")
+	matcher, err := userdiff.Compile(python.FuncName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var asked []string
+	opts := Options{FuncNames: func(path string) *userdiff.Matcher {
+		asked = append(asked, path)
+		return matcher
+	}}
+
+	got, err := collect(t, m, head, []Spec{{Range: ":area", Path: "shape.py"}}, opts)
+
+	if err != nil || !slices.Equal(got.subjects, []string{"edit", "base"}) || !slices.Equal(asked, []string{"shape.py"}) {
+		t.Fatalf("subjects = %v, asked %v, %v", got.subjects, asked, err)
+	}
+	if !strings.Contains(got.patch, "@@ -2,2 +2,2 @@\n     def area(self):\n-        return 1\n+        return 2\n") {
+		t.Fatalf("patch = %q", got.patch)
+	}
 }
 
 func TestLogFollowsTheRangeUntilItsLinesAppear(t *testing.T) {

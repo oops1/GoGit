@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/posixre"
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 type Spec struct {
@@ -47,6 +48,7 @@ func isFuncnameRange(arg string) bool {
 type text struct {
 	data   []byte
 	starts []int
+	funcs  *userdiff.Matcher
 }
 
 func newText(data []byte) *text {
@@ -237,7 +239,7 @@ func parseFuncname(arg string, t *text, anchor int) (string, int, int, error) {
 	if cut := bytes.IndexByte(data, 0); cut >= 0 {
 		data = data[:cut]
 	}
-	found := findFuncname(data, t.start(anchor-1), re)
+	found := findFuncname(data, t.start(anchor-1), re, t.funcs)
 	if found < 0 {
 		return "", 0, 0, fmt.Errorf("%w: %s starting at line %d", ErrNoMatch, pattern, anchor)
 	}
@@ -247,13 +249,13 @@ func parseFuncname(arg string, t *text, anchor int) (string, int, int, error) {
 	}
 	lines := t.lines()
 	end := begin + 1
-	for end < lines && !isFuncLine(t.line(end)) {
+	for end < lines && !isFuncLine(t.funcs, t.line(end)) {
 		end++
 	}
 	return arg[term:], begin + 1, end, nil
 }
 
-func findFuncname(data []byte, start int, re *posixre.Regexp) int {
+func findFuncname(data []byte, start int, re *posixre.Regexp, funcs *userdiff.Matcher) int {
 	subject := posixre.NewSubject(data)
 	for start < len(data) {
 		loc := subject.FindIndex(re, start)
@@ -276,7 +278,7 @@ func findFuncname(data []byte, start int, re *posixre.Regexp) int {
 		if eol < len(data) {
 			eol++
 		}
-		if isFuncLine(data[bol:eol]) {
+		if isFuncLine(funcs, data[bol:eol]) {
 			return bol
 		}
 		start = eol
@@ -284,10 +286,7 @@ func findFuncname(data []byte, start int, re *posixre.Regexp) int {
 	return -1
 }
 
-func isFuncLine(line []byte) bool {
-	if len(line) == 0 {
-		return false
-	}
-	c := line[0]
-	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '_' || c == '$'
+func isFuncLine(funcs *userdiff.Matcher, line []byte) bool {
+	_, ok := funcs.Match(line)
+	return ok
 }

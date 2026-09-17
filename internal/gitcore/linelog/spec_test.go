@@ -3,6 +3,9 @@ package linelog
 import (
 	"errors"
 	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/posixre"
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 func TestParseArgSplitsTheRangeFromThePath(t *testing.T) {
@@ -170,24 +173,31 @@ func TestFindFuncnameWalksMatchesLineByLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	data := []byte("\ta first\n\n  a second\nalpha\n")
-	if got := findFuncname(data, 0, re); got != 21 {
+	if got := findFuncname(data, 0, re, nil); got != 21 {
 		t.Fatalf("findFuncname = %d", got)
 	}
 	empty, err := compilePattern(`^`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := findFuncname([]byte("\n\nname"), 0, empty); got != 2 {
+	if got := findFuncname([]byte("\n\nname"), 0, empty, nil); got != 2 {
 		t.Fatalf("an empty match found %d", got)
+	}
+	python, err := userdiff.Compile(userdiff.Pattern{Source: "^[ \t]*def ", Flags: posixre.Extended})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := findFuncname([]byte("a = 1\n    def alpha():\n"), 0, re, python); got != 6 {
+		t.Fatalf("a driver match found %d", got)
 	}
 	indented, err := compilePattern(`x`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := findFuncname([]byte(" x"), 0, indented); got != -1 {
+	if got := findFuncname([]byte(" x"), 0, indented, nil); got != -1 {
 		t.Fatalf("an indented match found %d", got)
 	}
-	if got := findFuncname([]byte(" x"), 0, re); got != -1 {
+	if got := findFuncname([]byte(" x"), 0, re, nil); got != -1 {
 		t.Fatalf("a missing match found %d", got)
 	}
 }

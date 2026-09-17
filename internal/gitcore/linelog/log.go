@@ -10,6 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/revision"
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 type Objects interface {
@@ -21,6 +22,7 @@ type Options struct {
 	NoRenames bool
 	Shallow   map[hash.ObjectID]struct{}
 	Progress  func(Progress)
+	FuncNames func(path string) *userdiff.Matcher
 }
 
 type Progress struct {
@@ -174,6 +176,9 @@ func (l *logger) parseLines(tree hash.ObjectID, specs []Spec) (rangeList, error)
 			return nil, err
 		}
 		t := newText(data)
+		if l.opts.FuncNames != nil {
+			t.funcs = l.opts.FuncNames(spec.Path)
+		}
 		lines := t.lines()
 		anchor := 1
 		if existing := list.find(spec.Path); existing != nil {
