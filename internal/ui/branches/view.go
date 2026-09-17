@@ -2,6 +2,7 @@ package branches
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/treeview"
@@ -42,6 +43,7 @@ type View struct {
 	OnActivate func(ref refs.Name)
 	OnMenu     func(ref refs.Name) []widget.MenuItem
 
+	mu              sync.Mutex
 	last            Snapshot
 	submodules      []ops.Submodule
 	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
@@ -63,10 +65,11 @@ func NewView() *View {
 func (v *View) Bind(tree *widget.TreeViewWidget) {
 	v.tree = tree
 	tree.Tree.OnItemInvoked = func(e treeview.ItemInvokedEvent) {
-		if ref, ok := v.idByItem[e.Item]; ok && v.OnActivate != nil {
+		ref, isRef, sub, isSub := v.lookup(e.Item)
+		if isRef && v.OnActivate != nil {
 			v.OnActivate(ref)
 		}
-		if sub, ok := v.submoduleByItem[e.Item]; ok && v.OnSubmoduleActivate != nil {
+		if isSub && v.OnSubmoduleActivate != nil {
 			v.OnSubmoduleActivate(sub)
 		}
 	}
@@ -75,29 +78,45 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 		if e.NewItem == nil {
 			return
 		}
-		if ref, ok := v.idByItem[e.NewItem]; ok && v.OnSelect != nil {
+		if ref, ok, _, _ := v.lookup(e.NewItem); ok && v.OnSelect != nil {
 			v.OnSelect(ref)
 		}
 	}
 }
 
+func (v *View) lookup(item *treeview.TreeViewItem) (refs.Name, bool, ops.Submodule, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	ref, isRef := v.idByItem[item]
+	sub, isSub := v.submoduleByItem[item]
+	return ref, isRef, sub, isSub
+}
+
 func (v *View) nodeMenu(item *treeview.TreeViewItem) []widget.MenuItem {
-	if sub, ok := v.submoduleByItem[item]; ok && v.OnSubmoduleMenu != nil {
+	ref, isRef, sub, isSub := v.lookup(item)
+	if isSub && v.OnSubmoduleMenu != nil {
 		return v.OnSubmoduleMenu(sub)
 	}
-	ref, ok := v.idByItem[item]
-	if !ok || v.OnMenu == nil {
+	if !isRef || v.OnMenu == nil {
 		return nil
 	}
 	return v.OnMenu(ref)
 }
 
 func (v *View) Item(ref refs.Name) (*treeview.TreeViewItem, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	item, ok := v.itemByRef[ref]
 	return item, ok
 }
 
 func (v *View) Render(s Snapshot) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.render(s)
+}
+
+func (v *View) render(s Snapshot) {
 	v.last = s
 	v.captureExpanded()
 	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
@@ -128,6 +147,8 @@ func (v *View) Render(s Snapshot) {
 }
 
 func (v *View) ClearStashSelection() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if v.tree == nil {
 		return
 	}

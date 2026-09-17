@@ -31,17 +31,23 @@ func SubmoduleStateText(state ops.SubmoduleState) string {
 }
 
 func (v *View) SetSubmodules(list []ops.Submodule) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.submodules = list
 	if v.tree != nil {
-		v.Render(v.last)
+		v.render(v.last)
 	}
 }
 
 func (v *View) Submodules() []ops.Submodule {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	return v.submodules
 }
 
 func (v *View) SubmoduleItem(path string) (*treeview.TreeViewItem, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	for item, sub := range v.submoduleByItem {
 		if sub.Path == path {
 			return item, true
