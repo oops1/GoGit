@@ -192,7 +192,7 @@ func TestUnstagedStatusesStopsWhenContextIsCanceled(t *testing.T) {
 	for entry := range w.index.Entries() {
 		entries = append(entries, entry)
 	}
-	if _, err := w.unstagedStatuses(newStepContext(0), entries); err == nil {
+	if _, err := w.unstagedStatuses(newStepContext(0), entries, gitlinkRules{}); err == nil {
 		t.Fatalf("unstagedStatuses returned no error for a canceled context")
 	}
 }

@@ -104,13 +104,20 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 		}
 	}
 
-	unstaged, err := w.unstagedStatuses(ctx, mergedEntries)
+	rules, err := w.gitlinkRulesFor(mergedEntries, headTree)
 	if err != nil {
 		return Status{}, err
 	}
-	untracked, err := w.untrackedEntries(ctx, trackedDirs, trackedFiles)
+	unstaged, err := w.unstagedStatuses(ctx, mergedEntries, rules)
 	if err != nil {
 		return Status{}, err
+	}
+	var untracked []Entry
+	if !w.hideUntracked {
+		untracked, err = w.untrackedEntries(ctx, trackedDirs, trackedFiles)
+		if err != nil {
+			return Status{}, err
+		}
 	}
 
 	combined := map[string]*Entry{}

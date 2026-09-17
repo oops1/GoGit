@@ -47,6 +47,7 @@ type Worktree struct {
 	workers           int
 	maxFiles          int
 	includeUnmodified bool
+	hideUntracked     bool
 }
 
 func Open(r *repo.Repository, opts Options) (*Worktree, error) {
