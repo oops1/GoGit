@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
@@ -177,6 +178,28 @@ func TestStashFailuresSurfaceTheCauseAtEveryStep(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestStashApplySurfacesStatFailuresWhileRestoringUntrackedFiles(t *testing.T) {
+	for _, target := range []string{"fresh", "fresh/deep", "fresh/deep/u.txt"} {
+		t.Run(target, func(t *testing.T) {
+			tr := newTestRepo(t)
+			tr.commitFiles("base", map[string]string{"a": "a\n"})
+			tr.writeFile("fresh/deep/u.txt", "u\n")
+			tr.stash(StashOptions{IncludeUntracked: true})
+			swapSeam(t, &fsRootLstat, func(original func(*os.Root, string) (fs.FileInfo, error)) func(*os.Root, string) (fs.FileInfo, error) {
+				return func(root *os.Root, name string) (fs.FileInfo, error) {
+					if name == filepath.FromSlash(target) {
+						return nil, errInjected
+					}
+					return original(root, name)
+				}
+			})
+			if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.Is(err, errInjected) {
+				t.Fatalf("StashApply returned %v", err)
+			}
+		})
 	}
 }
 
