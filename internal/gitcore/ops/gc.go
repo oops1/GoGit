@@ -65,7 +65,7 @@ func GC(ctx context.Context, r *repo.Repository) (GCResult, error) {
 		result.Pruned = true
 	}
 	if writeGraph && len(walk.shallow) == 0 {
-		result.CommitGraph, err = writeCommitGraph(r, commits)
+		result.CommitGraph, err = writeCommitGraph(ctx, r, db, commits)
 	}
 	return result, err
 }
