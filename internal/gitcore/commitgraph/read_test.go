@@ -76,6 +76,9 @@ func TestOpenFindsNothingWithoutAGraph(t *testing.T) {
 	if g != nil || err != nil {
 		t.Fatalf("Open returned %v, %v", g, err)
 	}
+	if _, found := g.Lookup(id(1, 1)); found {
+		t.Fatal("a missing graph found a commit")
+	}
 }
 
 func TestOpenReadsEntriesWithCorrectedDates(t *testing.T) {

@@ -51,6 +51,9 @@ func (g *Graph) CorrectedDates() bool { return g.corrected }
 func (g *Graph) ChangedPaths() bool { return g.bloom != nil }
 
 func (g *Graph) Lookup(id hash.ObjectID) (Position, bool) {
+	if g == nil {
+		return 0, false
+	}
 	for at := len(g.layers) - 1; at >= 0; at-- {
 		l := g.layers[at]
 		if lex, ok := l.search(id); ok {
