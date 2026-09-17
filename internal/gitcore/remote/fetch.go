@@ -358,6 +358,7 @@ func applyShallowResponse(r *repo.Repository, shallow map[hash.ObjectID]struct{}
 	for id := range merged {
 		ids = append(ids, id)
 	}
+	slices.SortFunc(ids, hash.ObjectID.Compare)
 	return r.WriteShallow(ids)
 }
 
