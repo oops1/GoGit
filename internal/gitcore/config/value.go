@@ -22,6 +22,15 @@ func getString(src lookuper, key string) (string, bool) {
 	return v, ok
 }
 
+func getValue(src lookuper, key string) (string, bool) {
+	n, err := parseName(key)
+	if err != nil {
+		return "", false
+	}
+	v, set, ok := src.value(n)
+	return v, ok && set
+}
+
 func getAll(src lookuper, key string) []string {
 	n, err := parseName(key)
 	if err != nil {

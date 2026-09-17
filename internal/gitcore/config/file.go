@@ -187,6 +187,7 @@ func (f *File) allValues(n name) []string {
 }
 
 func (f *File) Get(key string) (string, bool)      { return getString(f, key) }
+func (f *File) GetValue(key string) (string, bool) { return getValue(f, key) }
 func (f *File) GetAll(key string) []string         { return getAll(f, key) }
 func (f *File) Has(key string) bool                { return has(f, key) }
 func (f *File) GetBool(key string) (bool, error)   { return getBool(f, key) }

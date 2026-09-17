@@ -49,7 +49,7 @@ func (r PathRules) separator(c byte) bool {
 }
 
 func (r PathRules) accepts(path string, mode object.Mode) bool {
-	if r.Windows && (hasDOSDrivePrefix(path) || r.ProtectNTFS && !validWin32Path(path)) {
+	if r.Windows && (hasDOSDrivePrefix(path) || r.ProtectNTFS && !ValidWin32Path(path)) {
 		return false
 	}
 	at := 0
@@ -250,7 +250,7 @@ func (r PathRules) isHFSDotGeneric(path, needle string) bool {
 	return c == 0 || c < utf8.RuneSelf && r.separator(byte(c))
 }
 
-func validWin32Path(path string) bool {
+func ValidWin32Path(path string) bool {
 	start := 0
 	for at := 0; at <= len(path); at++ {
 		if at < len(path) && path[at] != '/' && path[at] != '\\' {

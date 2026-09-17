@@ -474,6 +474,7 @@ func (e *Entry) matches(n name) bool {
 }
 
 func (c *Config) Get(key string) (string, bool)      { return getString(c, key) }
+func (c *Config) GetValue(key string) (string, bool) { return getValue(c, key) }
 func (c *Config) GetAll(key string) []string         { return getAll(c, key) }
 func (c *Config) Has(key string) bool                { return has(c, key) }
 func (c *Config) GetBool(key string) (bool, error)   { return getBool(c, key) }

@@ -135,8 +135,8 @@ func TestVerifyPathFollowsGitRules(t *testing.T) {
 
 func TestValidWin32PathKeepsDotAndDotDotSegments(t *testing.T) {
 	for path, want := range map[string]bool{".": true, "..": true, "a/./..": true, "...": false, "a//b": true} {
-		if got := validWin32Path(path); got != want {
-			t.Fatalf("validWin32Path(%q) = %v, want %v", path, got, want)
+		if got := ValidWin32Path(path); got != want {
+			t.Fatalf("ValidWin32Path(%q) = %v, want %v", path, got, want)
 		}
 	}
 }
