@@ -216,6 +216,26 @@ func TestSubmoduleUpdateReportsConflictingMergesAndRebases(t *testing.T) {
 	}
 }
 
+func TestSubmoduleUpdateReportsARefusedCommandByItsFirstWordAndGoesOn(t *testing.T) {
+	p := newLibProject(t, libGitmodules+"[submodule \"steady\"]\n\tpath = steady\n\turl = ../lib\n")
+	p.super.setGitlink("steady", p.one)
+	p.super.commitAll("steady")
+	p.mustUpdate(t, SubmoduleUpdateOptions{Init: true})
+	p.super.appendConfig("[submodule \"lib\"]\n\tupdate = !\tmake  all -j4\n")
+	p.super.setGitlink("steady", p.two)
+	p.record(p.two)
+
+	events, err := p.update(t, nil, SubmoduleUpdateOptions{})
+
+	refused := slices.IndexFunc(events, func(e SubmoduleEvent) bool { return e.Kind == SubmoduleCommandRefused })
+	if !errors.Is(err, ErrSubmoduleCommand) || refused < 0 || events[refused].Command != "make" || events[refused].Path != "libs/lib" {
+		t.Fatalf("SubmoduleUpdate = %+v, %v", events, err)
+	}
+	if submoduleHead(t, p.super.path("steady")) != p.two {
+		t.Fatal("the other submodule was not updated after the refusal")
+	}
+}
+
 func TestSubmoduleUpdateRefusesBrokenUpdateModes(t *testing.T) {
 	tests := map[string]error{
 		"!make":    ErrSubmoduleCommand,
