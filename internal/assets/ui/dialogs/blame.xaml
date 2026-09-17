@@ -12,20 +12,23 @@
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="120"/>
         <ColumnDefinition Width="110"/>
     </Grid.ColumnDefinitions>
 
-    <TextBlock x:Name="pathLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+    <TextBlock x:Name="pathLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
                Text="{Loc Dialog.Blame.PathLabel}"/>
 
-    <DataGrid x:Name="lines" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+    <DataGrid x:Name="lines" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
               Width="860" Height="380"
               IsReadOnly="True" AutoGenerateColumns="False"
               CanUserSortColumns="False" SelectionMode="Single"/>
 
-    <TextBlock x:Name="hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+    <TextBlock x:Name="hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                Text="" FontSize="11" TextWrapping="Wrap"/>
 
-    <Button x:Name="close" Grid.Row="4" Grid.Column="1"
+    <Button x:Name="investigate" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Blame.Investigate}"/>
+    <Button x:Name="close" Grid.Row="4" Grid.Column="2"
             Content="{Loc Dialog.Blame.Close}"/>
 </Grid>
