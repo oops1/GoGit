@@ -159,6 +159,13 @@ func TestStashApplyIndexRefusesAnIndexThatDoesNotFit(t *testing.T) {
 			tr.commitFiles("change", map[string]string{"x": changeLine(tenLines("x"), 0, "HEAD")})
 			tr.setIndexMode("x", object.ModeSymlink, "")
 		}},
+		{"a staged link that replaced a file changed since", func(tr *testRepo) {
+			tr.commitFiles("base", map[string]string{"a": "a\n", "x": tenLines("x")})
+			tr.setIndexMode("x", object.ModeSymlink, "target")
+			tr.writeFile("a", "a2\n")
+			tr.stash(StashOptions{})
+			tr.commitFiles("change", map[string]string{"x": changeLine(tenLines("x"), 0, "HEAD")})
+		}},
 		{"a staged edit of binary content", func(tr *testRepo) {
 			tr.commitFiles("base", map[string]string{"bin": binary("base")})
 			tr.writeFile("bin", binary("staged"))
@@ -228,6 +235,8 @@ func TestStashPushStagedRefusesWorkTreesItCannotReverse(t *testing.T) {
 			tr.commitFiles("base", map[string]string{"x": tenLines("x")})
 			tr.setIndexMode("x", object.ModeSymlink, "target\n")
 			tr.writeFile("x", "elsewhere\n")
+			tr.appendConfig("[core]\n\tsymlinks = false\n")
+			tr.repo = tr.reopen()
 		}},
 		{"a staged binary edit changed on disk", func(tr *testRepo) {
 			tr.commitFiles("base", map[string]string{"bin": binary("base")})
