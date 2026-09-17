@@ -35,14 +35,15 @@ const (
 )
 
 type Module struct {
-	Name       string
-	Path       string
-	URL        string
-	Branch     string
-	Update     UpdateStrategy
-	Ignore     Ignore
-	Shallow    bool
-	ShallowSet bool
+	Name         string
+	Path         string
+	URL          string
+	Branch       string
+	Update       UpdateStrategy
+	Ignore       Ignore
+	Shallow      bool
+	ShallowSet   bool
+	FetchRecurse FetchRecurse
 }
 
 type Modules struct {
@@ -200,6 +201,8 @@ func (m *Modules) apply(v config.Variable) error {
 			shallow = parsed
 		}
 		module.Shallow, module.ShallowSet = shallow, true
+	case "fetchrecursesubmodules":
+		module.FetchRecurse = ParseFetchRecurse(v.Value, v.HasValue)
 	case "branch":
 		module.Branch = v.Value
 	}

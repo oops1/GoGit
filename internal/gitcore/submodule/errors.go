@@ -12,4 +12,5 @@ var (
 	ErrReadGitmodules     = errors.New("submodule: read .gitmodules")
 	ErrSymlinkInPath      = errors.New("submodule: the submodule path goes through a symbolic link")
 	ErrGitDirInsideGitDir = errors.New("submodule: the submodule git directory is inside another submodule git directory")
+	ErrNoDirectoryName    = errors.New("submodule: no directory name could be guessed from the url")
 )

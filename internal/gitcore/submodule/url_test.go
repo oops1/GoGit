@@ -140,6 +140,35 @@ func TestIsRelativeURLAcceptsBothSeparators(t *testing.T) {
 	}
 }
 
+func TestURLBasenameGuessesTheDirectoryLikeGit(t *testing.T) {
+	tests := map[string]string{
+		"https://host/group/lib.git":   "lib",
+		"git@host:group/lib.git/":      "lib",
+		"../lib":                       "lib",
+		"file:///srv/repo/.git":        "repo",
+		"file:///srv/deep//.git":       "deep",
+		"host:2222":                    "host",
+		"/foo/bar:2222.git":            "2222",
+		"user@host:repo.git":           "repo",
+		"https://user:pw@host":         "host",
+		"https://host/a b\t\tc.git  ":  "a b c",
+		"https://host/ lead\x01trail ": "lead trail",
+	}
+	for url, want := range tests {
+		if got, err := URLBasename(url); err != nil || got != want {
+			t.Fatalf("URLBasename(%q) = %q, %v; want %q", url, got, err, want)
+		}
+	}
+	if got, err := (pathStyle{windows: true}).urlBasename(`C:\repos\lib\.git`); err != nil || got != "lib" {
+		t.Fatalf("windows basename = %q, %v", got, err)
+	}
+	for _, url := range []string{".git", "x://", "/"} {
+		if _, err := URLBasename(url); !errors.Is(err, ErrNoDirectoryName) {
+			t.Fatalf("URLBasename(%q) returned %v", url, err)
+		}
+	}
+}
+
 func TestUpPathClimbsOutOfTheSubmodulePath(t *testing.T) {
 	tests := map[string]string{
 		"sub":      "../",

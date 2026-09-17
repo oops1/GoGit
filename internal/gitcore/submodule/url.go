@@ -126,6 +126,76 @@ func IsRelativeURL(url string) bool {
 	return crossPlatform.dotSlash(url) || crossPlatform.dotDotSlash(url)
 }
 
+func (s pathStyle) urlBasename(url string) (string, error) {
+	start := 0
+	if at := strings.Index(url, "://"); at >= 0 {
+		start = at + 3
+	}
+	end := len(url)
+	for at := start; at < end && url[at] != '/'; at++ {
+		if url[at] == '@' {
+			start = at + 1
+		}
+	}
+	for start < end && (s.dirSep(url[end-1]) || isSpace(url[end-1])) {
+		end--
+	}
+	if end-start > 5 && s.dirSep(url[end-5]) && url[end-4:end] == ".git" {
+		end -= 5
+		for start < end && s.dirSep(url[end-1]) {
+			end--
+		}
+	}
+	part := url[start:end]
+	if !strings.Contains(part, "/") && strings.Contains(part, ":") {
+		cut := end
+		for start < cut && url[cut-1] >= '0' && url[cut-1] <= '9' {
+			cut--
+		}
+		if start < cut && url[cut-1] == ':' {
+			end = cut - 1
+		}
+	}
+	last := end
+	for start < last && !s.dirSep(url[last-1]) && url[last-1] != ':' {
+		last--
+	}
+	name := strings.TrimSuffix(url[last:end], ".git")
+	if name == "" || name == "/" {
+		return "", fmt.Errorf("%w: %q", ErrNoDirectoryName, url)
+	}
+	return collapseSpaces(name), nil
+}
+
+func isSpace(c byte) bool {
+	return c == ' ' || c >= '\t' && c <= '\r'
+}
+
+func collapseSpaces(name string) string {
+	var out strings.Builder
+	space := true
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c < 0x20 {
+			c = ' '
+		}
+		if isSpace(c) {
+			if space {
+				continue
+			}
+			space = true
+		} else {
+			space = false
+		}
+		out.WriteByte(c)
+	}
+	return strings.TrimSuffix(out.String(), " ")
+}
+
+func URLBasename(url string) (string, error) {
+	return nativeStyle.urlBasename(url)
+}
+
 func UpPath(path string) string {
 	up := strings.Repeat("../", strings.Count(path, "/"))
 	if path == "" || !nativeStyle.dirSep(path[len(path)-1]) {

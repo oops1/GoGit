@@ -27,14 +27,15 @@ func TestParseReadsEverySettingOfAModule(t *testing.T) {
 
 	got, ok := modules.ByPath("libs/lib")
 	want := Module{
-		Name:       "lib",
-		Path:       "libs/lib",
-		URL:        "../lib.git",
-		Branch:     "stable",
-		Update:     UpdateStrategy{Type: UpdateRebase},
-		Ignore:     IgnoreDirty,
-		Shallow:    true,
-		ShallowSet: true,
+		Name:         "lib",
+		Path:         "libs/lib",
+		URL:          "../lib.git",
+		Branch:       "stable",
+		Update:       UpdateStrategy{Type: UpdateRebase},
+		Ignore:       IgnoreDirty,
+		Shallow:      true,
+		ShallowSet:   true,
+		FetchRecurse: FetchRecurseOff,
 	}
 	if !ok || got != want {
 		t.Fatalf("ByPath = %+v, %v; want %+v", got, ok, want)
