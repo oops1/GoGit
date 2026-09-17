@@ -49,6 +49,14 @@ func (d *DB) Format() hash.Format { return d.opts.Format }
 
 func (d *DB) Alternates() []*DB { return d.alternates }
 
+func (d *DB) Dirs() []string {
+	dirs := []string{d.dir}
+	for _, alternate := range d.alternates {
+		dirs = append(dirs, alternate.Dirs()...)
+	}
+	return dirs
+}
+
 func (d *DB) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()

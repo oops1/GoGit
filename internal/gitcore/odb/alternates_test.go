@@ -64,6 +64,20 @@ func TestOpenFollowsTheAlternatesFile(t *testing.T) {
 	}
 }
 
+func TestDirsListsTheAlternatesDepthFirst(t *testing.T) {
+	root := t.TempDir()
+	main := makeObjectsDir(t, root, "main")
+	first := makeObjectsDir(t, root, "first")
+	nested := makeObjectsDir(t, root, "nested")
+	second := makeObjectsDir(t, root, "second")
+	writeAlternates(t, main, first, second)
+	writeAlternates(t, first, nested)
+	db := openDB(t, main, Options{})
+	if got := db.Dirs(); !slices.Equal(got, []string{main, first, nested, second}) {
+		t.Fatalf("Dirs() = %v", got)
+	}
+}
+
 func TestOpenResolvesRelativeAlternates(t *testing.T) {
 	root := t.TempDir()
 	main := makeObjectsDir(t, root, "main")
