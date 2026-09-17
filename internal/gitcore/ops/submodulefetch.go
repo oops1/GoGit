@@ -426,14 +426,8 @@ func (f *submoduleFetcher) fromIndex(link gitlinkEntry) {
 }
 
 func (f *submoduleFetcher) fromChanged(change *changedSubmodule) {
-	if !change.known {
-		return
-	}
 	active, err := submodule.Active(f.super.cfg, change.module)
-	if err != nil || !active {
-		return
-	}
-	if _, ok := f.taskMode(change.module); !ok {
+	if _, wanted := f.taskMode(change.module); !change.known || err != nil || !active || !wanted {
 		return
 	}
 	sub, ok := f.super.submoduleRepoFor(change.path, change.module)
