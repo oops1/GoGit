@@ -25,6 +25,7 @@ type Options struct {
 	Workers           int
 	MaxFiles          int
 	IncludeUnmodified bool
+	IgnoreNoSubmodule bool
 }
 
 type Worktree struct {
@@ -48,6 +49,7 @@ type Worktree struct {
 	maxFiles          int
 	includeUnmodified bool
 	hideUntracked     bool
+	ignoreNoSubmodule bool
 }
 
 func Open(r *repo.Repository, opts Options) (*Worktree, error) {
@@ -116,6 +118,7 @@ func Open(r *repo.Repository, opts Options) (*Worktree, error) {
 		workers:           workerCount(opts.Workers),
 		maxFiles:          opts.MaxFiles,
 		includeUnmodified: opts.IncludeUnmodified,
+		ignoreNoSubmodule: opts.IgnoreNoSubmodule,
 	}, nil
 }
 

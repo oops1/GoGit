@@ -49,7 +49,7 @@ func hasGitlink(entries []*index.Entry) bool {
 
 func (w *Worktree) gitlinkRulesFor(entries []*index.Entry, headTree map[string]headEntry) (gitlinkRules, error) {
 	rules := gitlinkRules{cfg: w.repo.Config(), modules: &submodule.Modules{}, base: ignoreFlags{untracked: w.hideUntracked}}
-	if !hasGitlink(entries) {
+	if !hasGitlink(entries) || w.ignoreNoSubmodule {
 		return rules, nil
 	}
 	if value, ok := rules.cfg.GetValue("diff.ignoresubmodules"); ok {
