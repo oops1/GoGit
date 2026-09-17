@@ -126,6 +126,22 @@ func stashFaultScenarios() []faultScenario {
 			_, err := StashApply(ctx, tr.repo, 0, StashApplyOptions{Index: true})
 			return err
 		}},
+		{"apply index over staged changes", func(tr *testRepo) {
+			stashed(tr)
+			tr.writeFile("z", "z\n")
+			tr.stageAll("z")
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := StashApply(ctx, tr.repo, 0, StashApplyOptions{Index: true})
+			var overwrite *OverwriteError
+			if errors.As(err, &overwrite) && !errors.Is(err, errInjected) {
+				return nil
+			}
+			return err
+		}},
+		{"push untracked beside a nested repository", func(tr *testRepo) {
+			untrackedChanges(tr)
+			tr.writeFile("vendor/lib/.git/HEAD", "ref: refs/heads/main\n")
+		}, pushWith(StashOptions{IncludeUntracked: true})},
 		{"apply index on shifted lines", func(tr *testRepo) {
 			tr.commitFiles("lines", map[string]string{"m": tenLines("m")})
 			tr.writeFile("m", changeLine(tenLines("m"), 5, "STAGED"))

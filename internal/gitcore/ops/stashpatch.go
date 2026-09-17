@@ -15,6 +15,17 @@ func looksBinary(data []byte) bool {
 	return bytes.IndexByte(data[:min(len(data), binarySniffLength)], 0) >= 0
 }
 
+func (m *merger) binaryContent(path string, blobs ...[]byte) (bool, error) {
+	opts, err := repoDiffOptions(m.r, diff.Options{})
+	if err != nil {
+		return false, err
+	}
+	if binary, known := opts.BinaryHint(path); known {
+		return binary, nil
+	}
+	return slices.ContainsFunc(blobs, looksBinary), nil
+}
+
 func splitRecords(data []byte) []string {
 	records := strings.SplitAfter(string(data), "\n")
 	return slices.DeleteFunc(records, func(record string) bool { return record == "" })

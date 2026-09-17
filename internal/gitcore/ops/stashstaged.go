@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -26,7 +27,7 @@ type worktreeEdit struct {
 func (m *merger) removeStagedChanges(p *stashPush) error {
 	edits, err := m.stagedReversal(p.headState, p.indexed)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrStashWorktreeKept, err)
+		return err
 	}
 	if err := m.applyWorktreeEdits(edits); err != nil {
 		return err
@@ -74,14 +75,21 @@ func (m *merger) reverseStaged(sw *switcher, path string, before merge.Entry, ha
 		return worktreeEdit{}, err
 	}
 	edit := worktreeEdit{path: path, mode: before.Mode}
+	if before.ID != after.ID {
+		if err := m.refuseBinaryStaged(path, before, had, after, has); err != nil {
+			return edit, err
+		}
+	}
 	switch {
 	case !has && exists:
-		return edit, fmt.Errorf("%s: already exists in working directory", path)
+		return edit, fmt.Errorf("%w: %s already exists in the working tree", ErrStashWorktreeKept, path)
 	case !has:
 		_, edit.data, err = dbGet(m.rc.db, before.ID)
 		return edit, err
 	case !exists:
-		return edit, fmt.Errorf("%s: does not exist in working directory", path)
+		return edit, fmt.Errorf("%w: %s does not exist in the working tree", ErrStashWorktreeKept, path)
+	case m.wt.symlinks && info.Mode()&os.ModeSymlink != 0 != after.Mode.IsSymlink():
+		return edit, fmt.Errorf("%w: %s on disk does not have the type of the index entry", ErrStashWorktreeKept, path)
 	}
 	current, err := sw.readWorktreeBytes(path, info)
 	if err != nil {
@@ -96,7 +104,7 @@ func (m *merger) reverseStaged(sw *switcher, path string, before merge.Entry, ha
 		edit.remove = true
 		return edit, nil
 	case !had:
-		return edit, fmt.Errorf("%s: %w", path, diff.ErrApply)
+		return edit, fmt.Errorf("%w: %s: %w", ErrStashWorktreeKept, path, diff.ErrApply)
 	case before.ID == after.ID:
 		edit.keep = true
 		return edit, nil
@@ -108,9 +116,34 @@ func (m *merger) reverseStaged(sw *switcher, path string, before merge.Entry, ha
 	return edit, err
 }
 
+func (m *merger) refuseBinaryStaged(path string, before merge.Entry, had bool, after merge.Entry, has bool) error {
+	var blobs [][]byte
+	for _, side := range []struct {
+		entry   merge.Entry
+		present bool
+	}{{before, had}, {after, has}} {
+		if !side.present {
+			continue
+		}
+		_, data, err := dbGet(m.rc.db, side.entry.ID)
+		if err != nil {
+			return err
+		}
+		blobs = append(blobs, data)
+	}
+	binary, err := m.binaryContent(path, blobs...)
+	if err != nil {
+		return err
+	}
+	if binary {
+		return fmt.Errorf("%w: %s: cannot apply a binary patch without the full index line", ErrStashWorktreeKept, path)
+	}
+	return nil
+}
+
 func (m *merger) reverseHunks(path string, before, after merge.Entry, current []byte) ([]byte, error) {
-	if !before.Mode.IsRegular() || !after.Mode.IsRegular() {
-		return nil, fmt.Errorf("%s: %w", path, diff.ErrApply)
+	if !sameEntryType(before.Mode, after.Mode) {
+		return nil, fmt.Errorf("%w: %s: %w", ErrStashWorktreeKept, path, diff.ErrApply)
 	}
 	_, oldData, err := dbGet(m.rc.db, before.ID)
 	if err != nil {
@@ -120,13 +153,10 @@ func (m *merger) reverseHunks(path string, before, after merge.Entry, current []
 	if err != nil {
 		return nil, err
 	}
-	if looksBinary(oldData) || looksBinary(newData) {
-		return nil, fmt.Errorf("%s: %w", path, diff.ErrApply)
-	}
 	hunks := diff.Blobs(oldData, newData, diff.Options{Context: stagedPatchContext, IndentHeuristic: true})
 	data, err := applyHunks(current, patch.Reverse(hunks))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrStashWorktreeKept, path, err)
 	}
 	return data, nil
 }

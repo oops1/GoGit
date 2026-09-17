@@ -251,6 +251,45 @@ func TestStashPushStagedRefusesWorkTreesItCannotReverse(t *testing.T) {
 	}
 }
 
+func TestStashPushStagedRefusesALinkThatIsAFileOnDisk(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.commitFiles("base", map[string]string{"a": "a\n", "link": "a"})
+	tr.setIndexMode("link", object.ModeSymlink, "b")
+	tr.writeFile("link", "b")
+	tr.appendConfig("[core]\n\tsymlinks = true\n")
+	tr.repo = tr.reopen()
+
+	_, err := StashPush(t.Context(), tr.repo, StashOptions{Staged: true, When: mergeTime})
+
+	if !errors.Is(err, ErrStashWorktreeKept) || tr.readFile("link") != "b" {
+		t.Fatalf("StashPush returned %v", err)
+	}
+}
+
+func TestStashBinaryChecksReportAnUnknownDiffAlgorithm(t *testing.T) {
+	staged := newTestRepo(t)
+	staged.commitFiles("base", map[string]string{"a": "a\n"})
+	staged.writeFile("a", "a2\n")
+	staged.stageAll("a")
+	staged.appendConfig("[diff]\n\talgorithm = sideways\n")
+	staged.repo = staged.reopen()
+	if _, err := StashPush(t.Context(), staged.repo, StashOptions{Staged: true, When: mergeTime}); err == nil {
+		t.Fatal("a staged push accepted an unknown diff algorithm")
+	}
+
+	index := newTestRepo(t)
+	index.commitFiles("base", map[string]string{"m": tenLines("m")})
+	index.writeFile("m", changeLine(tenLines("m"), 5, "STAGED"))
+	index.stageAll("m")
+	index.stash(StashOptions{})
+	index.commitFiles("shift", map[string]string{"m": "top\n" + tenLines("m")})
+	index.appendConfig("[diff]\n\talgorithm = sideways\n")
+	index.repo = index.reopen()
+	if _, err := StashApply(t.Context(), index.repo, 0, StashApplyOptions{Index: true}); err == nil || errors.Is(err, ErrStashIndexConflicts) {
+		t.Fatalf("applying the index with an unknown diff algorithm returned %v", err)
+	}
+}
+
 func TestStashPushStagedKeepsTheContentOfAModeOnlyChange(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.commitFiles("base", map[string]string{"x": "x\n", "a": "a\n"})
