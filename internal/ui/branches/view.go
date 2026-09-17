@@ -7,6 +7,7 @@ import (
 	"github.com/oops1/headless-gui/v3/widget/treeview"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/icons"
@@ -40,14 +41,22 @@ type View struct {
 	OnSelect   func(ref refs.Name)
 	OnActivate func(ref refs.Name)
 	OnMenu     func(ref refs.Name) []widget.MenuItem
+
+	last            Snapshot
+	submodules      []ops.Submodule
+	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
+
+	OnSubmoduleActivate func(ops.Submodule)
+	OnSubmoduleMenu     func(ops.Submodule) []widget.MenuItem
 }
 
 func NewView() *View {
 	return &View{
-		idByItem:  map[*treeview.TreeViewItem]refs.Name{},
-		itemByRef: map[refs.Name]*treeview.TreeViewItem{},
-		keyByItem: map[*treeview.TreeViewItem]string{},
-		expanded:  map[string]bool{},
+		idByItem:        map[*treeview.TreeViewItem]refs.Name{},
+		itemByRef:       map[refs.Name]*treeview.TreeViewItem{},
+		keyByItem:       map[*treeview.TreeViewItem]string{},
+		expanded:        map[string]bool{},
+		submoduleByItem: map[*treeview.TreeViewItem]ops.Submodule{},
 	}
 }
 
@@ -56,6 +65,9 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 	tree.Tree.OnItemInvoked = func(e treeview.ItemInvokedEvent) {
 		if ref, ok := v.idByItem[e.Item]; ok && v.OnActivate != nil {
 			v.OnActivate(ref)
+		}
+		if sub, ok := v.submoduleByItem[e.Item]; ok && v.OnSubmoduleActivate != nil {
+			v.OnSubmoduleActivate(sub)
 		}
 	}
 	tree.NodeContextMenu = v.nodeMenu
@@ -70,6 +82,9 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 }
 
 func (v *View) nodeMenu(item *treeview.TreeViewItem) []widget.MenuItem {
+	if sub, ok := v.submoduleByItem[item]; ok && v.OnSubmoduleMenu != nil {
+		return v.OnSubmoduleMenu(sub)
+	}
 	ref, ok := v.idByItem[item]
 	if !ok || v.OnMenu == nil {
 		return nil
@@ -83,6 +98,7 @@ func (v *View) Item(ref refs.Name) (*treeview.TreeViewItem, bool) {
 }
 
 func (v *View) Render(s Snapshot) {
+	v.last = s
 	v.captureExpanded()
 	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
 
@@ -92,12 +108,16 @@ func (v *View) Render(s Snapshot) {
 	v.idByItem = map[*treeview.TreeViewItem]refs.Name{}
 	v.itemByRef = map[refs.Name]*treeview.TreeViewItem{}
 	v.keyByItem = map[*treeview.TreeViewItem]string{}
+	v.submoduleByItem = map[*treeview.TreeViewItem]ops.Submodule{}
 
 	v.tree.AddRoot(v.buildLocal(s))
 	v.tree.AddRoot(v.buildRemotes(s))
 	v.tree.AddRoot(v.buildTags(s))
 	if len(s.Stashes) > 0 {
 		v.tree.AddRoot(v.buildStash(s))
+	}
+	if len(v.submodules) > 0 {
+		v.tree.AddRoot(v.buildSubmodules())
 	}
 
 	v.tree.EndUpdate()

@@ -72,7 +72,7 @@ func TestEachSectionShowsItsOwnContent(t *testing.T) {
 		{SectionTags, parts.Branches},
 		{SectionRemotes, parts.Branches},
 		{SectionStash, v.notYet},
-		{SectionSubmodules, v.notYet},
+		{SectionSubmodules, parts.Branches},
 		{SectionWorkingCopy, v.work},
 	} {
 		v.Select(tt.section)
