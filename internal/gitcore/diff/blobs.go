@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 func Blobs(oldData, newData []byte, opts Options) []Hunk {
@@ -93,6 +95,16 @@ func binaryFor(path string, data []byte, opts Options) bool {
 		}
 	}
 	return isBinary(data)
+}
+
+func (o Options) funcMatcherFor(oldPath, newPath string) *userdiff.Matcher {
+	if o.FuncNames == nil {
+		return o.FuncMatcher
+	}
+	if matcher := o.FuncNames(oldPath); matcher != nil {
+		return matcher
+	}
+	return o.FuncNames(newPath)
 }
 
 func lineRecord(line Line) string {

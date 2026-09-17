@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 type Algorithm uint8
@@ -61,6 +62,8 @@ const (
 
 type BinaryHint func(path string) (binary bool, known bool)
 
+type FuncNames func(path string) *userdiff.Matcher
+
 type Options struct {
 	Algorithm        Algorithm
 	IgnoreWhitespace Whitespace
@@ -76,6 +79,8 @@ type Options struct {
 	Abbrev           int
 	StatWidth        int
 	BinaryHint       BinaryHint
+	FuncNames        FuncNames
+	FuncMatcher      *userdiff.Matcher
 }
 
 func Defaults() Options {

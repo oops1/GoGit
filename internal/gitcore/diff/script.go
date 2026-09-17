@@ -2,7 +2,8 @@ package diff
 
 import (
 	"slices"
-	"strings"
+
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
 
 type change struct {
@@ -113,34 +114,17 @@ func (e *env) emit(changes []change) []Hunk {
 	return hunks
 }
 
-const funcNameLimit = 80
-
 func (e *env) functionName(start, limit int, previous string) string {
 	step := 1
 	if start > limit {
 		step = -1
 	}
 	for at := start; at != limit && 0 <= at && at < e.a.count(); at += step {
-		if name, ok := functionRecord(e.a.recs[at]); ok {
+		if name, ok := e.opts.FuncMatcher.Header([]byte(e.a.recs[at]), userdiff.HeaderLimit); ok {
 			return name
 		}
 	}
 	return previous
-}
-
-func startsName(head byte) bool {
-	return head == '_' || head == '$' || ('a' <= head && head <= 'z') || ('A' <= head && head <= 'Z')
-}
-
-func functionRecord(record string) (string, bool) {
-	if record == "" || !startsName(record[0]) {
-		return "", false
-	}
-	name := record
-	if len(name) > funcNameLimit {
-		name = name[:funcNameLimit]
-	}
-	return strings.TrimRight(name, spaceChars), true
 }
 
 func (e *env) emitHunk(changes []change, first, last int) Hunk {
