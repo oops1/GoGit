@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -32,7 +33,8 @@ func (a *App) startJournal() {
 	if o == nil {
 		return
 	}
-	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow}
+	graph, _ := ops.OpenCommitGraph(o.repo, o.db)
+	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow, Graph: graph}
 	filter := a.journalFilter()
 	opts, err := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.State().HasRemotes))
 	if err != nil {
