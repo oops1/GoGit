@@ -46,16 +46,17 @@ func changeText(in *widget.TextInput, text string) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"url":       widget.NewTextInput(""),
-		"directory": widget.NewTextInput(""),
-		"browse":    widget.NewButton(""),
-		"check":     widget.NewButton(""),
-		"status":    widget.NewWin10Label(""),
-		"branch":    widget.NewDropdown(),
-		"shallow":   widget.NewCheckBox(""),
-		"depth":     widget.NewNumericUpDown(),
-		"ok":        widget.NewButton(""),
-		"cancel":    widget.NewButton(""),
+		"url":        widget.NewTextInput(""),
+		"directory":  widget.NewTextInput(""),
+		"browse":     widget.NewButton(""),
+		"check":      widget.NewButton(""),
+		"status":     widget.NewWin10Label(""),
+		"branch":     widget.NewDropdown(),
+		"shallow":    widget.NewCheckBox(""),
+		"depth":      widget.NewNumericUpDown(),
+		"submodules": widget.NewCheckBox(""),
+		"ok":         widget.NewButton(""),
+		"cancel":     widget.NewButton(""),
 	}
 }
 
@@ -91,7 +92,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"url", "directory", "browse", "check", "status", "branch", "shallow", "depth", "ok", "cancel"}
+	keys := []string{"url", "directory", "browse", "check", "status", "branch", "shallow", "depth", "submodules", "ok", "cancel"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -377,6 +378,22 @@ func TestConfirmCallsOnOKWithDepthWhenShallow(t *testing.T) {
 
 	if got.Depth != 5 {
 		t.Fatalf("depth = %d, want 5", got.Depth)
+	}
+}
+
+func TestTheDialogIncludesSubmodulesUnlessUnchecked(t *testing.T) {
+	v := newTestView(t, Request{URL: "https://example.com/repo.git", Directory: "dir"})
+	var got Result
+	v.OnOK = func(r Result) { got = r }
+
+	v.confirm()
+	if !got.Submodules {
+		t.Fatal("submodules must be included by default")
+	}
+	clickCheckBox(v.submodules)
+	v.confirm()
+	if got.Submodules {
+		t.Fatal("an unchecked box must leave the submodules out")
 	}
 }
 

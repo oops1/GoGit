@@ -24,10 +24,11 @@ type Request struct {
 }
 
 type Result struct {
-	URL       string
-	Directory string
-	Branch    string
-	Depth     int
+	URL        string
+	Directory  string
+	Branch     string
+	Depth      int
+	Submodules bool
 }
 
 type View struct {
@@ -40,6 +41,7 @@ type View struct {
 	branchDrop   *widget.Dropdown
 	shallowCheck *widget.CheckBox
 	depthInput   *widget.NumericUpDown
+	submodules   *widget.CheckBox
 	okBtn        *widget.Button
 	cancelBtn    *widget.Button
 
@@ -102,6 +104,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.depthInput, ok = named["depth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: depth", ErrWidgetMissing)
+	}
+	if v.submodules, ok = named["submodules"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: submodules", ErrWidgetMissing)
 	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
@@ -203,10 +208,11 @@ func (v *View) depth() int {
 
 func (v *View) result() Result {
 	return Result{
-		URL:       strings.TrimSpace(v.urlInput.GetText()),
-		Directory: strings.TrimSpace(v.dirInput.GetText()),
-		Branch:    v.branchDrop.SelectedText(),
-		Depth:     v.depth(),
+		URL:        strings.TrimSpace(v.urlInput.GetText()),
+		Directory:  strings.TrimSpace(v.dirInput.GetText()),
+		Branch:     v.branchDrop.SelectedText(),
+		Depth:      v.depth(),
+		Submodules: v.submodules.IsChecked(),
 	}
 }
 
