@@ -107,7 +107,7 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 		laterItem("Menu.Files.Investigate"),
 		menuSeparator(),
 		enabledItem("Menu.Edit.Commit", a.openCommit, state.Enabled(CmdCommit)),
-		laterItem("Menu.Files.StashSelection"),
+		enabledItem("Menu.Files.StashSelection", a.openStashSelection, state.Enabled(CmdStashSelection)),
 		menuSeparator(),
 	)
 	edit := a.editItems()

@@ -122,6 +122,7 @@ func (a *App) onJournalRowSelected(row journal.Row) {
 	if shown, ok := a.shownCommit(); ok && shown == row.ID {
 		return
 	}
+	a.branchesView.ClearStashSelection()
 	a.setSelectedCommit(row.ID)
 	a.setCommitSelected(true)
 	a.setFilesSelected(false)

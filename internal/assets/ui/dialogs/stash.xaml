@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Width="520" Height="170">
+      Width="520" Height="196">
 
     <Grid.RowDefinitions>
         <RowDefinition Height="22"/>
         <RowDefinition Height="30"/>
         <RowDefinition Height="12"/>
+        <RowDefinition Height="26"/>
         <RowDefinition Height="26"/>
         <RowDefinition Height="*"/>
         <RowDefinition Height="30"/>
@@ -21,10 +22,12 @@
                Text="{Loc Dialog.Stash.Entry}"/>
     <ComboBox x:Name="entries" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"/>
 
-    <CheckBox x:Name="dropAfterApply" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+    <CheckBox x:Name="restoreIndex" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
+              Content="{Loc Dialog.Stash.RestoreIndex}"/>
+    <CheckBox x:Name="dropAfterApply" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3"
               Content="{Loc Dialog.Stash.DropAfterApply}"/>
 
-    <Button x:Name="ok" Grid.Row="5" Grid.Column="1" Margin="0,0,6,0" Content=""/>
-    <Button x:Name="cancel" Grid.Row="5" Grid.Column="2"
+    <Button x:Name="ok" Grid.Row="6" Grid.Column="1" Margin="0,0,6,0" Content=""/>
+    <Button x:Name="cancel" Grid.Row="6" Grid.Column="2"
             Content="{Loc Dialog.Stash.Cancel}"/>
 </Grid>

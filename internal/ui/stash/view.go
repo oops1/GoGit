@@ -30,8 +30,9 @@ var modeKeys = map[Mode][2]string{
 }
 
 type Request struct {
-	Index int
-	Drop  bool
+	Index        int
+	Drop         bool
+	RestoreIndex bool
 }
 
 type View struct {
@@ -41,6 +42,7 @@ type View struct {
 	entryLabel *widget.Label
 	entries    *widget.Dropdown
 	dropBox    *widget.CheckBox
+	indexBox   *widget.CheckBox
 	okBtn      *widget.Button
 	cancelBtn  *widget.Button
 
@@ -60,6 +62,7 @@ func NewView(mode Mode) (*View, error) {
 	}
 	v.okBtn.SetText(i18n.T(keys[1]))
 	v.dropBox.SetVisible(mode == ModeApply)
+	v.indexBox.SetVisible(mode == ModeApply)
 	v.okBtn.OnClick = v.confirm
 	v.cancelBtn.OnClick = v.cancel
 	v.dlg.DefaultAction = v.confirm
@@ -89,6 +92,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.dropBox, ok = named["dropAfterApply"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: dropAfterApply", ErrWidgetMissing)
 	}
+	if v.indexBox, ok = named["restoreIndex"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: restoreIndex", ErrWidgetMissing)
+	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
 	}
@@ -106,7 +112,11 @@ func (v *View) SetEntries(labels []string, selected int) {
 }
 
 func (v *View) Request() Request {
-	return Request{Index: v.entries.Selected(), Drop: v.mode == ModeDrop || v.dropBox.IsChecked()}
+	return Request{
+		Index:        v.entries.Selected(),
+		Drop:         v.mode == ModeDrop || v.dropBox.IsChecked(),
+		RestoreIndex: v.mode == ModeApply && v.indexBox.IsChecked(),
+	}
 }
 
 func (v *View) refresh() {

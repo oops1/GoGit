@@ -120,6 +120,9 @@
                 <Separator x:Name="toolbarSep1" Width="8" Height="24" Margin="4,0"/>
                 <Button x:Name="btnCommit" Content="{Loc Toolbar.Commit}" ToolTip="{Loc Toolbar.Commit.Tip}" Margin="2" IsEnabled="False"/>
                 <Separator x:Name="toolbarSep2" Width="8" Height="24" Margin="4,0"/>
+                <SplitButton x:Name="btnSaveStash" Content="{Loc Toolbar.SaveStash}" ToolTip="{Loc Toolbar.SaveStash.Tip}" Margin="2" IsEnabled="False"/>
+                <SplitButton x:Name="btnApplyStash" Content="{Loc Toolbar.ApplyStash}" ToolTip="{Loc Toolbar.ApplyStash.Tip}" Margin="2" IsEnabled="False"/>
+                <Separator x:Name="toolbarSep3" Width="8" Height="24" Margin="4,0"/>
                 <MenuButton x:Name="btnGitFlow" Content="{Loc Toolbar.GitFlow}" ToolTip="{Loc Toolbar.GitFlow.Tip}" Margin="2" IsEnabled="False"/>
             </StackPanel>
 

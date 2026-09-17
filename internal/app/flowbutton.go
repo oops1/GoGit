@@ -35,22 +35,6 @@ func flowMenuEntries(light bool) []menuLeafEntry {
 	return flowMenuLeaves
 }
 
-func (a *App) flowButton() (*widget.MenuButton, bool) {
-	btn, ok := a.named["btnGitFlow"].(*widget.MenuButton)
-	return btn, ok
-}
-
-func (a *App) toolbarCaptionButtons() []*widget.Button {
-	buttons := make([]*widget.Button, 0, len(toolbarButtons)+1)
-	for _, name := range toolbarButtons {
-		buttons = append(buttons, a.named[name].(*widget.Button))
-	}
-	if flow, ok := a.flowButton(); ok {
-		buttons = append(buttons, flow.Button)
-	}
-	return buttons
-}
-
 func (a *App) flowMenuItems() []widget.MenuItem {
 	state := a.State()
 	entries := flowMenuEntries(state.FlowLight)
@@ -68,16 +52,4 @@ func (a *App) flowMenuItems() []widget.MenuItem {
 		})
 	}
 	return items
-}
-
-func (a *App) wireFlowButton() {
-	if flow, ok := a.flowButton(); ok {
-		flow.OnOpening = func() { flow.Items = a.flowMenuItems() }
-	}
-}
-
-func (a *App) refreshFlowButton(state State) {
-	if flow, ok := a.flowButton(); ok {
-		flow.SetEnabled(state.ActiveRepository != "")
-	}
 }

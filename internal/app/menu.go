@@ -238,7 +238,7 @@ func (a *App) wireToolbar() {
 		cmd := id
 		btn.OnClick = func() { a.Dispatch(cmd) }
 	}
-	a.wireFlowButton()
+	a.wireToolbarMenus()
 }
 
 func (a *App) refreshCommands() {
@@ -253,7 +253,7 @@ func (a *App) refreshCommands() {
 	for id, name := range toolbarButtons {
 		a.named[name].(*widget.Button).SetEnabled(state.Enabled(id))
 	}
-	a.refreshFlowButton(state)
+	a.refreshToolbarMenus(state)
 	a.applyMenuIcons()
 }
 

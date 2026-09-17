@@ -36,6 +36,7 @@ const (
 	CmdStashSave            CommandID = "local.stash-save"
 	CmdStashApply           CommandID = "local.stash-apply"
 	CmdStashDrop            CommandID = "local.stash-drop"
+	CmdStashSelection       CommandID = "local.stash-selection"
 	CmdCompareFiles         CommandID = "edit.compare-files"
 	CmdMerge                CommandID = "branch.merge"
 	CmdRebase               CommandID = "branch.rebase"
@@ -186,6 +187,8 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)
 	case CmdStashSave:
 		return s.ActiveRepository != "" && s.HasChanges && !s.Merging
+	case CmdStashSelection:
+		return s.ActiveRepository != "" && s.FilesSelected && !s.Merging
 	case CmdStashApply, CmdStashDrop:
 		return s.ActiveRepository != "" && s.HasStashes
 	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:

@@ -28,7 +28,7 @@ func TestACommitDiffCancelledBeforeItIsShownStaysHidden(t *testing.T) {
 	a, row := appWithHeldQueue(t)
 	ctx, cancel := context.WithCancel(t.Context())
 
-	a.runDiff(ctx, a.opened().db, row.ID)
+	a.runFilesDiff(ctx, a.opened().db, a.commitFilesLoader(row.ID))
 	cancel()
 	a.Engine().Flush()
 

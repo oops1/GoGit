@@ -146,6 +146,7 @@ func (a *App) leaveCommitView() {
 	a.setSelectedCommit(hash.ObjectID{})
 	a.setCommitSelected(false)
 	a.journalView.ClearSelection()
+	a.branchesView.ClearStashSelection()
 	a.clearDiff()
 	a.requestWorking()
 }

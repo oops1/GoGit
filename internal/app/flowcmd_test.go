@@ -219,7 +219,7 @@ func TestOpeningAConfiguredRepositoryEnablesGitFlow(t *testing.T) {
 func TestTheToolbarGitFlowMenuFollowsTheMode(t *testing.T) {
 	bare := newTestApp(t)
 	buttonOf := func(app *App) *widget.MenuButton {
-		return readOnDispatcher(t, app, func() *widget.MenuButton { btn, _ := app.flowButton(); return btn })
+		return readOnDispatcher(t, app, func() *widget.MenuButton { btn, _ := app.toolbarMenuButton("btnGitFlow"); return btn })
 	}
 	if btn := buttonOf(bare); btn == nil || readOnDispatcher(t, bare, btn.IsEnabled) {
 		t.Fatal("the git-flow button is missing or enabled without a repository")

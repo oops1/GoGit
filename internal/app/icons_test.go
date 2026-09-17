@@ -12,8 +12,8 @@ import (
 
 func TestToolbarButtonsHaveIconsAfterConstruction(t *testing.T) {
 	a := newTestApp(t)
-	for _, name := range toolbarButtons {
-		btn := a.Widget(name).(*widget.Button)
+	for name, button := range allToolbarButtons(t, a) {
+		btn := button.btn
 		if btn.Icon == nil {
 			t.Fatalf("button %q has no icon", name)
 		}

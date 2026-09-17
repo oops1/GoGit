@@ -145,7 +145,7 @@ func TestACommitWithoutChangesClearsTheDiff(t *testing.T) {
 		return true
 	})
 
-	a.runDiff(t.Context(), db, empty)
+	a.runFilesDiff(t.Context(), db, a.commitFilesLoader(empty))
 	waitForPostQueueDrain(t, a)
 
 	if doc := diffDocumentOnDispatcher(t, a); !doc.IsEmpty() || doc.OldName != "" || doc.Left != "" {
