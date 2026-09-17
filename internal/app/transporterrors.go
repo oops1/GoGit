@@ -16,6 +16,8 @@ var transportErrorKeys = []struct {
 	key string
 }{
 	{transport.ErrAuthSchemeUnsupported, "Operation.Error.AuthSchemeUnsupported"},
+	{transport.ErrNTLMAuthFailed, "Operation.Error.NTLMAuthFailed"},
+	{transport.ErrNegotiateAuthFailed, "Operation.Error.NegotiateAuthFailed"},
 	{transport.ErrClientKeyEncrypted, "Operation.Error.ClientKeyEncrypted"},
 	{transport.ErrHeaderTimeout, "Operation.Error.HeaderTimeout"},
 	{transport.ErrInvalidProxy, "Operation.Error.InvalidProxy"},
