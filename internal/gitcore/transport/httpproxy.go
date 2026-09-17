@@ -21,7 +21,6 @@ type proxySelector struct {
 
 	mu   sync.Mutex
 	user *url.Userinfo
-	last *url.URL
 }
 
 func newProxySelector(s httpSettings) *proxySelector {
@@ -72,18 +71,56 @@ func (p *proxySelector) proxy(req *http.Request) (*url.URL, error) {
 	if p.user != nil {
 		u.User = p.user
 	}
-	p.last = u
 	return u, nil
 }
 
-func (p *proxySelector) resource() string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.last == nil {
-		return ""
+func isSocksProxy(u *url.URL) bool {
+	return strings.HasPrefix(u.Scheme, "socks5")
+}
+
+func (p *proxySelector) transportProxy(req *http.Request) (*url.URL, error) {
+	u, err := p.proxy(req)
+	if err != nil || u == nil || isSocksProxy(u) {
+		return u, err
 	}
-	u := url.URL{Scheme: p.last.Scheme, Host: p.last.Host}
-	return u.String()
+	if req.URL.Scheme == string(SchemeHTTPS) {
+		return nil, nil
+	}
+	stripped := *u
+	stripped.User = nil
+	return &stripped, nil
+}
+
+func (p *proxySelector) forURL(rawURL string) (*url.URL, error) {
+	target, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	u, err := p.proxy(&http.Request{URL: target})
+	if err != nil || u == nil || isSocksProxy(u) {
+		return nil, err
+	}
+	return u, nil
+}
+
+func (p *proxySelector) tunnelFor(addr string) (*url.URL, error) {
+	if p.isTLSProxyAddress(addr) {
+		return nil, nil
+	}
+	return p.forURL("https://" + addr)
+}
+
+func (p *proxySelector) isTLSProxyAddress(addr string) bool {
+	raw := p.rawFor(string(SchemeHTTP))
+	if raw == "" {
+		return false
+	}
+	u, err := parseProxyURL(raw)
+	return err == nil && u.Scheme == string(SchemeHTTPS) && u.Host == addr
+}
+
+func proxyResource(u *url.URL) string {
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 func (p *proxySelector) authenticate(user *url.Userinfo) {

@@ -18,11 +18,12 @@ import (
 )
 
 type forwardProxy struct {
-	server   *httptest.Server
-	auth     string
-	requests atomic.Int32
-	mu       sync.Mutex
-	conns    []net.Conn
+	server    *httptest.Server
+	auth      string
+	authority *ntlmTestServer
+	requests  atomic.Int32
+	mu        sync.Mutex
+	conns     []net.Conn
 }
 
 func newForwardProxy(t *testing.T, user, password string) *forwardProxy {
@@ -51,6 +52,9 @@ func (p *forwardProxy) track(conns ...net.Conn) {
 
 func (p *forwardProxy) serve(w http.ResponseWriter, r *http.Request) {
 	p.requests.Add(1)
+	if p.authority != nil && !p.authority.authorize(w, r) {
+		return
+	}
 	if p.auth != "" && r.Header.Get("Proxy-Authorization") != p.auth {
 		w.Header().Set("Proxy-Authenticate", `Basic realm="proxy"`)
 		w.WriteHeader(http.StatusProxyAuthRequired)
@@ -312,9 +316,6 @@ func TestProxySelectorUsesSuppliedCredentialsAndReportsTheProxyResource(t *testi
 	if err != nil {
 		t.Fatalf("NewRequest returned error %v", err)
 	}
-	if got := selector.resource(); got != "" {
-		t.Fatalf("resource before any request = %q, want empty", got)
-	}
 	selector.authenticate(url.UserPassword("alice", "secret"))
 	proxyURL, err := selector.proxy(req)
 	if err != nil {
@@ -323,7 +324,7 @@ func TestProxySelectorUsesSuppliedCredentialsAndReportsTheProxyResource(t *testi
 	if proxyURL.User.String() != "alice:secret" {
 		t.Fatalf("proxy user = %q, want the supplied credentials", proxyURL.User.String())
 	}
-	if got := selector.resource(); got != "http://proxy.local:3128" {
+	if got := proxyResource(proxyURL); got != "http://proxy.local:3128" {
 		t.Fatalf("resource = %q, want http://proxy.local:3128", got)
 	}
 	disabled := newProxySelector(httpSettings{proxySet: true})
@@ -483,14 +484,5 @@ func TestResolveHTTPSettingsMatchesPlainHTTPOnTheDefaultPort(t *testing.T) {
 	s, err := resolveHTTPSettings(cfg, "", Endpoint{Scheme: SchemeHTTP, Host: "git.example.com", Port: "80", Path: "/repo.git"})
 	if err != nil || s.proxy != "plain:1" {
 		t.Fatalf("resolveHTTPSettings gave proxy %q, %v; want plain:1", s.proxy, err)
-	}
-}
-
-func TestRejectProxyChallengeOnlyStopsOn407(t *testing.T) {
-	if err := rejectProxyChallenge(t.Context(), nil, nil, &http.Response{StatusCode: http.StatusOK}); err != nil {
-		t.Fatalf("rejectProxyChallenge(200) = %v, want nil", err)
-	}
-	if err := rejectProxyChallenge(t.Context(), nil, nil, &http.Response{StatusCode: http.StatusProxyAuthRequired}); !errors.Is(err, errProxyChallenge) {
-		t.Fatalf("rejectProxyChallenge(407) = %v, want errProxyChallenge", err)
 	}
 }

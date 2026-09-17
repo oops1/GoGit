@@ -17,19 +17,28 @@ const (
 )
 
 type httpSettings struct {
-	proxy         string
-	proxySet      bool
-	sslVerify     bool
-	caInfo        string
-	caPath        string
-	sslCert       string
-	sslKey        string
-	lowSpeedLimit int64
-	lowSpeedTime  int64
-	postBuffer    int64
-	extraHeaders  []string
-	emptyAuth     bool
+	proxy           string
+	proxySet        bool
+	sslVerify       bool
+	caInfo          string
+	caPath          string
+	sslCert         string
+	sslKey          string
+	lowSpeedLimit   int64
+	lowSpeedTime    int64
+	postBuffer      int64
+	extraHeaders    []string
+	emptyAuth       emptyAuthMode
+	proxyAuthMethod string
 }
+
+type emptyAuthMode int
+
+const (
+	emptyAuthAuto emptyAuthMode = iota
+	emptyAuthOn
+	emptyAuthOff
+)
 
 type urlMatch struct {
 	hostLen int
@@ -55,6 +64,9 @@ func resolveHTTPSettings(cfg *config.Config, remoteName string, target Endpoint)
 		}
 		if entry, ok := cfg.Lookup("remote." + remoteName + ".proxy"); ok && remoteName != "" {
 			s.proxy, s.proxySet = entry.Value, true
+		}
+		if entry, ok := cfg.Lookup("remote." + remoteName + ".proxyauthmethod"); ok && remoteName != "" {
+			s.proxyAuthMethod = strings.ToLower(strings.TrimSpace(entry.Value))
 		}
 	}
 	s.applyEnvironment()
@@ -95,9 +107,11 @@ func (s *httpSettings) apply(key string, entry config.Entry) error {
 		s.sslVerify = verify || !entry.HasValue
 		return entryError(entry, err, entry.HasValue)
 	case "emptyauth":
-		empty, err := config.ParseBool(entry.Value)
-		s.emptyAuth = empty || !entry.HasValue
-		return entryError(entry, err, entry.HasValue)
+		mode, err := parseEmptyAuth(entry)
+		s.emptyAuth = mode
+		return entryError(entry, err, true)
+	case "proxyauthmethod":
+		s.proxyAuthMethod = strings.ToLower(strings.TrimSpace(entry.Value))
 	case "sslcainfo", "sslcapath", "sslcert", "sslkey":
 		expanded, err := config.ExpandPath(entry.Value)
 		*s.pathField(key) = expanded
@@ -108,6 +122,24 @@ func (s *httpSettings) apply(key string, entry config.Entry) error {
 		return entryError(entry, err, true)
 	}
 	return nil
+}
+
+func parseEmptyAuth(entry config.Entry) (emptyAuthMode, error) {
+	if !entry.HasValue {
+		return emptyAuthOn, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(entry.Value), "auto") {
+		return emptyAuthAuto, nil
+	}
+	on, err := config.ParseBool(entry.Value)
+	switch {
+	case err != nil:
+		return emptyAuthAuto, err
+	case on:
+		return emptyAuthOn, nil
+	default:
+		return emptyAuthOff, nil
+	}
 }
 
 func appendExtraHeader(headers []string, value string) []string {
@@ -142,6 +174,9 @@ func (s *httpSettings) intField(key string) *int64 {
 }
 
 func (s *httpSettings) applyEnvironment() {
+	if value, ok := os.LookupEnv("GIT_HTTP_PROXY_AUTHMETHOD"); ok {
+		s.proxyAuthMethod = strings.ToLower(strings.TrimSpace(value))
+	}
 	if _, ok := os.LookupEnv("GIT_SSL_NO_VERIFY"); ok {
 		s.sslVerify = false
 	}
