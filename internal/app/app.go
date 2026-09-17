@@ -584,6 +584,16 @@ func (a *App) setHasChanges(v bool) {
 	}
 }
 
+func (a *App) setHasStashable(v bool) {
+	a.mu.Lock()
+	changed := a.state.HasStashable != v
+	a.state.HasStashable = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
 func (a *App) setHasRemotes(v bool) {
 	a.mu.Lock()
 	changed := a.state.HasRemotes != v

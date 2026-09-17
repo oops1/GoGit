@@ -146,6 +146,7 @@ type State struct {
 	FilesSelected    bool
 	HasStagedChanges bool
 	HasChanges       bool
+	HasStashable     bool
 	HasRemotes       bool
 	HasStashes       bool
 	Merging          bool
@@ -186,7 +187,7 @@ func (s State) Enabled(id CommandID) bool {
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)
 	case CmdStashSave:
-		return s.ActiveRepository != "" && s.HasChanges && !s.Merging
+		return s.ActiveRepository != "" && s.HasStashable && !s.Merging
 	case CmdStashSelection:
 		return s.ActiveRepository != "" && s.FilesSelected && !s.Merging
 	case CmdStashApply, CmdStashDrop:

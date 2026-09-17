@@ -88,7 +88,7 @@ func dirtyAppWithUntrackedFile(t *testing.T) (*App, string) {
 	runOnDispatcher(t, a, a.RefreshRepository)
 	waitForFileRowStatus(t, a, "new.txt", changes.RowUntracked)
 	waitForFileRowStatus(t, a, "f.txt", changes.RowModified)
-	waitForAppState(t, a, "local changes", func(s State) bool { return s.HasChanges })
+	waitForAppState(t, a, "local changes", func(s State) bool { return s.HasStashable })
 	return a, target
 }
 
@@ -152,7 +152,7 @@ func TestTheApplyStashMenuIsEmptyWhenTheStashesCannotBeRead(t *testing.T) {
 func TestTheSaveStashButtonFollowsTheChangesAndTheFileSelection(t *testing.T) {
 	a, _ := stashedApp(t)
 	btn := toolbarMenuOnDispatcher(t, a, "btnSaveStash")
-	waitForAppState(t, a, "a clean working tree", func(s State) bool { return !s.HasChanges })
+	waitForAppState(t, a, "a clean working tree", func(s State) bool { return !s.HasStashable })
 	if got := menuButtonStateOf(t, a, btn); got != (menuButtonState{Enabled: true, Menu: true}) {
 		t.Fatalf("save button without changes = %+v", got)
 	}
