@@ -397,6 +397,21 @@ func TestLogStopsOnCancellation(t *testing.T) {
 	}
 }
 
+func TestFileAtReadsAFileOfACommit(t *testing.T) {
+	m := newMemory()
+	head := m.commit("head", map[string]any{"dir/f": lined("a", "b")})
+
+	if data, err := FileAt(m, head, "dir/f"); err != nil || string(data) != lined("a", "b") {
+		t.Fatalf("FileAt = %q, %v", data, err)
+	}
+	if _, err := FileAt(m, head, "dir/g"); !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("a missing file returned %v", err)
+	}
+	if _, err := FileAt(m, hash.ObjectID{1}, "dir/f"); !errors.Is(err, errMissing) {
+		t.Fatalf("a missing commit returned %v", err)
+	}
+}
+
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errMissing }

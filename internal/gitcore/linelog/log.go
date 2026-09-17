@@ -169,14 +169,7 @@ func (l *logger) live() bool {
 func (l *logger) parseLines(tree hash.ObjectID, specs []Spec) (rangeList, error) {
 	var list rangeList
 	for _, spec := range specs {
-		entry, found, err := l.entryAt(tree, spec.Path)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			return nil, fmt.Errorf("%w: %s", ErrPathNotFound, spec.Path)
-		}
-		data, err := l.content(entry)
+		data, err := l.file(tree, spec.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -351,6 +344,26 @@ func (l *logger) findRenames(created []*filePair, tree, parentTree hash.ObjectID
 		pair.oldPath, pair.oldValid, pair.oldData = file.OldPath, true, data
 	}
 	return nil
+}
+
+func FileAt(src Objects, commit hash.ObjectID, path string) ([]byte, error) {
+	l := &logger{src: src, entries: map[entryKey]entryResult{}}
+	c, err := l.commit(commit)
+	if err != nil {
+		return nil, err
+	}
+	return l.file(c.Tree, path)
+}
+
+func (l *logger) file(tree hash.ObjectID, path string) ([]byte, error) {
+	entry, found, err := l.entryAt(tree, path)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: %s", ErrPathNotFound, path)
+	}
+	return l.content(entry)
 }
 
 func (l *logger) content(entry object.TreeEntry) ([]byte, error) {
