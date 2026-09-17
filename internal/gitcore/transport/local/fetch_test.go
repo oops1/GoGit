@@ -505,6 +505,25 @@ func TestFetchShallowMarksEveryCommitAtTheDepthLimitLikeUploadPack(t *testing.T)
 	}
 }
 
+func TestFetchSendsHistoryBehindTheClientShallowBoundary(t *testing.T) {
+	src := newTestRepo(t, true)
+	root := src.commit("main", map[string]string{"a.txt": "root"})
+	child := src.commit("main", map[string]string{"a.txt": "child"}, root)
+
+	sess := dialSession(t, src.dir)
+	neg := &staticNegotiator{haves: []hash.ObjectID{child}}
+	resp, err := sess.Fetch(t.Context(), transport.FetchRequest{Wants: []hash.ObjectID{root}, Shallow: []hash.ObjectID{child}}, neg)
+	if err != nil {
+		t.Fatalf("Fetch returned error %v", err)
+	}
+	dst := newTestRepo(t, true)
+	indexPackInto(t, dst, resp.Pack)
+	_ = resp.Pack.Close()
+	if !dst.hasObject(root) {
+		t.Fatal("the commit behind the client shallow boundary was not sent")
+	}
+}
+
 func TestFetchShallowDeduplicatesADiamondAncestor(t *testing.T) {
 	src := newTestRepo(t, true)
 	base := src.commitWithTree(src.tree(map[string]string{"a.txt": "base"}))
