@@ -66,14 +66,8 @@ func (p *libProject) submoduleRepo(t *testing.T) *testRepo {
 
 func (p *libProject) appendSubmoduleConfig(t *testing.T, text string) {
 	t.Helper()
-	path := p.super.path(".git/modules/lib/config")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, append(data, text...), 0o666); err != nil {
-		t.Fatal(err)
-	}
+	const rel = ".git/modules/lib/config"
+	p.super.writeFile(rel, p.super.readFile(rel)+text)
 }
 
 func (p *libProject) setSubmoduleOrigin(t *testing.T, url string) {
