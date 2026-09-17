@@ -6,6 +6,7 @@ import (
 	"iter"
 	"strings"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -23,6 +24,7 @@ type Options struct {
 	Shallow   map[hash.ObjectID]struct{}
 	Progress  func(Progress)
 	FuncNames func(path string) *userdiff.Matcher
+	Graph     *commitgraph.Graph
 }
 
 type Progress struct {
@@ -64,7 +66,7 @@ type logger struct {
 	ctx     context.Context
 	src     Objects
 	opts    Options
-	commits map[hash.ObjectID]*revision.Commit
+	trees   map[hash.ObjectID]hash.ObjectID
 	decor   map[hash.ObjectID]rangeList
 	entries map[entryKey]entryResult
 }
@@ -78,7 +80,7 @@ func Log(ctx context.Context, src Objects, start hash.ObjectID, specs []Spec, op
 			ctx:     ctx,
 			src:     src,
 			opts:    opts,
-			commits: map[hash.ObjectID]*revision.Commit{},
+			trees:   map[hash.ObjectID]hash.ObjectID{},
 			decor:   map[hash.ObjectID]rangeList{},
 			entries: map[entryKey]entryResult{},
 		}
@@ -100,12 +102,16 @@ func (l *logger) run(start hash.ObjectID, specs []Spec, yield func(*Entry, error
 	if err != nil {
 		return err
 	}
-	order, err := l.topoOrder(start)
+	commits, total, err := l.history(start)
 	if err != nil {
 		return err
 	}
 	l.decor[start] = list
-	for done, c := range order {
+	done := 0
+	for c, err := range commits {
+		if err != nil {
+			return err
+		}
 		if !l.live() {
 			return nil
 		}
@@ -113,8 +119,9 @@ func (l *logger) run(start hash.ObjectID, specs []Spec, yield func(*Entry, error
 			return err
 		}
 		if l.opts.Progress != nil {
-			l.opts.Progress(Progress{Done: done, Total: len(order)})
+			l.opts.Progress(Progress{Done: done, Total: total})
 		}
+		done++
 		ranges, found := l.decor[c.ID]
 		if !found {
 			continue
@@ -142,23 +149,45 @@ func (l *logger) commit(id hash.ObjectID) (*object.Commit, error) {
 	return object.ParseCommit(data)
 }
 
-func (l *logger) topoOrder(start hash.ObjectID) ([]*revision.Commit, error) {
+func (l *logger) history(start hash.ObjectID) (iter.Seq2[*revision.Commit, error], int, error) {
+	source := revision.Context{Objects: l.src, Shallow: l.opts.Shallow, Graph: l.opts.Graph}
+	walk := revision.Walk(l.ctx, revision.Options{Context: source, Include: []hash.ObjectID{start}, Order: revision.Topo})
+	if l.opts.Graph != nil {
+		total, err := revision.Count(l.ctx, source, []hash.ObjectID{start})
+		return walk, total, err
+	}
 	var order []*revision.Commit
-	walk := revision.Walk(l.ctx, revision.Options{
-		Context: revision.Context{Objects: l.src, Shallow: l.opts.Shallow},
-		Include: []hash.ObjectID{start},
-		Order:   revision.Topo,
-	})
 	for c, err := range walk {
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		l.commits[c.ID] = c
+		l.trees[c.ID] = c.Tree
 		order = append(order, c)
 	}
-	return order, nil
+	return func(yield func(*revision.Commit, error) bool) {
+		for _, c := range order {
+			if !yield(c, nil) {
+				return
+			}
+		}
+	}, len(order), nil
 }
 
+func (l *logger) treeOf(id hash.ObjectID) (hash.ObjectID, error) {
+	if tree, known := l.trees[id]; known {
+		return tree, nil
+	}
+	if position, inGraph := l.opts.Graph.Lookup(id); inGraph {
+		l.trees[id] = l.opts.Graph.Entry(position).Tree
+		return l.trees[id], nil
+	}
+	c, err := l.commit(id)
+	if err != nil {
+		return hash.Zero, err
+	}
+	l.trees[id] = c.Tree
+	return c.Tree, nil
+}
 func (l *logger) live() bool {
 	for _, list := range l.decor {
 		if list.live() {
@@ -204,12 +233,20 @@ func (l *logger) parseLines(tree hash.ObjectID, specs []Spec) (rangeList, error)
 }
 
 func (l *logger) process(c *revision.Commit, ranges rangeList) (*Entry, error) {
+	if l.unchangedByFilter(c, ranges) {
+		l.add(c.Parents[0], ranges.copy())
+		return nil, nil
+	}
 	if len(c.Parents) > 1 {
 		return l.processMerge(c, ranges)
 	}
 	parentTree := hash.Zero
 	if len(c.Parents) == 1 {
-		parentTree = l.commits[c.Parents[0]].Tree
+		tree, err := l.treeOf(c.Parents[0])
+		if err != nil {
+			return nil, err
+		}
+		parentTree = tree
 	}
 	pairs, err := l.queueDiffs(ranges, c.Tree, parentTree)
 	if err != nil {
@@ -228,7 +265,11 @@ func (l *logger) process(c *revision.Commit, ranges rangeList) (*Entry, error) {
 func (l *logger) processMerge(c *revision.Commit, ranges rangeList) (*Entry, error) {
 	candidates := make([]rangeList, 0, len(c.Parents))
 	for _, parent := range c.Parents {
-		pairs, err := l.queueDiffs(ranges, c.Tree, l.commits[parent].Tree)
+		parentTree, err := l.treeOf(parent)
+		if err != nil {
+			return nil, err
+		}
+		pairs, err := l.queueDiffs(ranges, c.Tree, parentTree)
 		if err != nil {
 			return nil, err
 		}
@@ -243,6 +284,20 @@ func (l *logger) processMerge(c *revision.Commit, ranges rangeList) (*Entry, err
 		l.add(parent, candidates[at])
 	}
 	return &Entry{Commit: c}, nil
+}
+
+func (l *logger) unchangedByFilter(c *revision.Commit, ranges rangeList) bool {
+	position, inGraph := l.opts.Graph.Lookup(c.ID)
+	if !inGraph || len(c.Parents) == 0 {
+		return false
+	}
+	for _, entry := range ranges {
+		keys := l.opts.Graph.BloomKeys(entry.path)
+		if keys == nil || l.opts.Graph.MaybeChanged(position, keys) {
+			return false
+		}
+	}
+	return true
 }
 
 func (l *logger) add(id hash.ObjectID, ranges rangeList) {

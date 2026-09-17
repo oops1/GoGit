@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 )
@@ -321,6 +322,27 @@ func TestOracleLineLogMatchesGit(t *testing.T) {
 			c.build(r)
 			for _, args := range c.args {
 				compareWithGit(t, r, args...)
+			}
+		})
+	}
+}
+
+func TestOracleLineLogThroughAGitCommitGraphMatchesGit(t *testing.T) {
+	for _, c := range oracleCases() {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRepo(t)
+			c.build(r)
+			r.git("commit-graph", "write", "--reachable", "--changed-paths")
+			graph, err := commitgraph.Open([]string{filepath.Join(r.dir, ".git", "objects")}, commitgraph.OpenOptions{})
+			if err != nil || graph == nil {
+				t.Fatalf("commitgraph.Open returned %v, %v", graph, err)
+			}
+			for _, args := range c.args {
+				want := gitLineLog(r, args)
+				got, err := ourLineLog(r, args, Options{Graph: graph})
+				if err != nil || got != want {
+					t.Fatalf("line log for %q differs (%v)\n--- ours\n%s\n--- git\n%s", args, err, got, want)
+				}
 			}
 		})
 	}
