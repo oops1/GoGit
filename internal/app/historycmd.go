@@ -99,11 +99,11 @@ func (a *App) openBlame(rev, path string) {
 			a.statusLabel.SetText(i18n.Tf("Status.BlameFailed", err))
 			return
 		}
-		a.showBlame(path, result)
+		a.showBlame(rev, path, result)
 	})
 }
 
-func (a *App) showBlame(path string, result blame.Result) {
+func (a *App) showBlame(rev, path string, result blame.Result) {
 	view, err := newBlameView()
 	if err != nil {
 		a.log.Warn("open blame dialog failed", "error", err)
@@ -111,6 +111,10 @@ func (a *App) showBlame(path string, result blame.Result) {
 		return
 	}
 	view.SetLines(path, blameRows(result))
+	view.OnInvestigate = func(line blameview.Line) {
+		a.eng.CloseModal(view.Dialog())
+		a.investigateBlamedLine(rev, path, line.Number)
+	}
 	view.OnClose = func() { a.eng.CloseModal(view.Dialog()) }
 	a.showModal(view.Dialog(), view)
 }
