@@ -37,3 +37,29 @@ func TestRenderKeepsTheSelectedBranchWithoutReportingANewSelection(t *testing.T)
 		t.Fatal("a branch that disappeared stayed selected")
 	}
 }
+
+func TestClearingTheStashSelectionLeavesOtherNodesSelected(t *testing.T) {
+	NewView().ClearStashSelection()
+	v, tw := bound(t)
+	v.Render(fullSnapshot(t))
+	selections := 0
+	v.OnSelect = func(refs.Name) { selections++ }
+	main, _ := v.Item(refs.BranchName("main"))
+	stash, _ := v.Item(StashRef(1))
+
+	v.ClearStashSelection()
+	tw.Tree.SetSelectedItem(main)
+	v.ClearStashSelection()
+	if tw.Tree.SelectedItem() != main {
+		t.Fatal("clearing the stash selection dropped a selected branch")
+	}
+
+	tw.Tree.SetSelectedItem(stash)
+	v.ClearStashSelection()
+	if tw.Tree.SelectedItem() != nil {
+		t.Fatal("the stash stayed selected")
+	}
+	if selections != 2 || tw.Tree.OnSelectedItemChanged == nil {
+		t.Fatalf("OnSelect ran %d times, want only the user's two selections", selections)
+	}
+}
