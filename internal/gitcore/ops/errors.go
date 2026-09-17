@@ -43,7 +43,42 @@ var (
 	ErrNoCommitCheckedOut = errors.New("ops: the nested repository has no commit checked out")
 	ErrNotBisecting       = errors.New("ops: no bisect is in progress")
 	ErrBranchBisected     = errors.New("ops: branch is being bisected")
+
+	ErrStashStagedUntracked = errors.New("ops: a stash of staged changes cannot include untracked files")
+	ErrNoStagedChanges      = errors.New("ops: there are no staged changes to stash")
+	ErrStashWorktreeKept    = errors.New("ops: the stash was saved but its changes could not be removed from the working tree")
+	ErrStashIndexConflicts  = errors.New("ops: the stashed index does not apply to the current index")
+	ErrUntrackedNotRestored = errors.New("ops: untracked files could not be restored from the stash")
+	ErrPathspecNoMatch      = errors.New("ops: pathspec did not match any file known to git")
 )
+
+type PathspecError struct {
+	Specs []string
+}
+
+func (e *PathspecError) Error() string {
+	return fmt.Sprintf("%s: %s", ErrPathspecNoMatch, strings.Join(e.Specs, ", "))
+}
+
+func (e *PathspecError) Unwrap() error {
+	return ErrPathspecNoMatch
+}
+
+type UntrackedRestoreError struct {
+	Existing []string
+	Blocked  string
+}
+
+func (e *UntrackedRestoreError) Error() string {
+	if e.Blocked != "" {
+		return fmt.Sprintf("%s: cannot create directory at %s", ErrUntrackedNotRestored, e.Blocked)
+	}
+	return fmt.Sprintf("%s: already exist: %s", ErrUntrackedNotRestored, strings.Join(e.Existing, ", "))
+}
+
+func (e *UntrackedRestoreError) Unwrap() error {
+	return ErrUntrackedNotRestored
+}
 
 type OverwriteError struct {
 	Paths []string

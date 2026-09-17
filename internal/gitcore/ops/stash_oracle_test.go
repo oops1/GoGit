@@ -127,7 +127,7 @@ func TestOracleStashApplyMatchesGit(t *testing.T) {
 	}
 
 	o.run(gitSide, "stash", "apply", "-q")
-	result, err := StashApply(t.Context(), o.openRepo(ourSide), 0)
+	result, err := StashApply(t.Context(), o.openRepo(ourSide), 0, StashApplyOptions{})
 	if err != nil || !result.Clean() || result.Dropped {
 		t.Fatalf("StashApply = %+v, %v", result, err)
 	}
@@ -153,7 +153,7 @@ func TestOracleStashPopWithConflictKeepsTheEntryLikeGit(t *testing.T) {
 	if _, err := o.attempt(gitSide, "stash", "pop"); err == nil {
 		t.Fatal("git stash pop succeeded despite the conflict")
 	}
-	result, err := StashPop(t.Context(), o.openRepo(ourSide), 0)
+	result, err := StashPop(t.Context(), o.openRepo(ourSide), 0, StashApplyOptions{})
 	if err != nil || result.Dropped || len(result.Conflicts) != 1 || result.Conflicts[0] != "a.txt" {
 		t.Fatalf("StashPop = %+v, %v", result, err)
 	}
@@ -177,7 +177,7 @@ func TestOracleStashPopDropsTheEntryLikeGit(t *testing.T) {
 	}
 
 	o.run(gitSide, "stash", "pop", "-q")
-	result, err := StashPop(t.Context(), o.openRepo(ourSide), 0)
+	result, err := StashPop(t.Context(), o.openRepo(ourSide), 0, StashApplyOptions{})
 	if err != nil || !result.Dropped {
 		t.Fatalf("StashPop = %+v, %v", result, err)
 	}

@@ -58,7 +58,7 @@ func TestAStashAppliedOverADirectoryRenameSplitKeepsTheIndexAndTheStash(t *testi
 	}
 	tr.commitFiles("ours", map[string]string{"lib/a": "", "lib/b": "", "x/a": tenLines("a"), "y/b": tenLines("b")})
 
-	result, err := StashPop(t.Context(), tr.repo, 0)
+	result, err := StashPop(t.Context(), tr.repo, 0, StashApplyOptions{})
 
 	if err != nil || result.Clean() || result.Dropped {
 		t.Fatalf("result = %+v, %v; want the stash kept after an unclean apply", result, err)

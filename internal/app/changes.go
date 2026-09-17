@@ -76,7 +76,19 @@ func entryOf(entries []worktree.Entry, row changes.Row) (worktree.Entry, bool) {
 	return worktree.Entry{}, false
 }
 
+type diffFilesLoader func(ctx context.Context, db *odb.DB) ([]diff.File, error)
+
+func (a *App) commitFilesLoader(id hash.ObjectID) diffFilesLoader {
+	return func(ctx context.Context, db *odb.DB) ([]diff.File, error) {
+		return a.loadDiffFiles(ctx, db, id)
+	}
+}
+
 func (a *App) startDiff(id hash.ObjectID) {
+	a.startFilesDiff(a.commitFilesLoader(id))
+}
+
+func (a *App) startFilesDiff(load diffFilesLoader) {
 	a.stopWorking()
 	a.diffRunMu.Lock()
 	defer a.diffRunMu.Unlock()
@@ -90,7 +102,7 @@ func (a *App) startDiff(id hash.ObjectID) {
 	a.diffCancel = cancel
 	a.diffMu.Unlock()
 	db := o.db
-	a.diffWG.Go(func() { a.runDiff(ctx, db, id) })
+	a.diffWG.Go(func() { a.runFilesDiff(ctx, db, load) })
 }
 
 func (a *App) stopDiff() {
@@ -110,8 +122,8 @@ func (a *App) stopDiffLocked() {
 	a.diffWG.Wait()
 }
 
-func (a *App) runDiff(ctx context.Context, db *odb.DB, id hash.ObjectID) {
-	files, err := a.loadDiffFiles(ctx, db, id)
+func (a *App) runFilesDiff(ctx context.Context, db *odb.DB, load diffFilesLoader) {
+	files, err := load(ctx, db)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			a.log.Warn("load diff failed", "error", err)

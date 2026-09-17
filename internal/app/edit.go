@@ -22,6 +22,15 @@ var newCommitView = commit.NewView
 var stageForCommit = ops.Stage
 
 func (a *App) selectedWorkingPaths() []string {
+	rows := a.selectedWorkingRows()
+	paths := make([]string, 0, len(rows))
+	for _, row := range rows {
+		paths = append(paths, row.RelPath)
+	}
+	return paths
+}
+
+func (a *App) selectedWorkingRows() []changes.Row {
 	a.filesMu.Lock()
 	mode := a.filesMode
 	a.filesMu.Unlock()
@@ -29,15 +38,15 @@ func (a *App) selectedWorkingPaths() []string {
 		return nil
 	}
 	items := a.filesGrid.Data().Grid.SelectedItems()
-	paths := make([]string, 0, len(items))
+	rows := make([]changes.Row, 0, len(items))
 	for _, it := range items {
 		row, ok := it.(changes.Row)
 		if !ok || row.RelPath == "" {
 			continue
 		}
-		paths = append(paths, row.RelPath)
+		rows = append(rows, row)
 	}
-	return paths
+	return rows
 }
 
 func (a *App) clearFilesSelection() {

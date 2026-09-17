@@ -54,6 +54,7 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 			"entryLabel":     widget.NewLabel("", widget.CurrentTheme().LabelText),
 			"entries":        widget.NewDropdown(),
 			"dropAfterApply": widget.NewCheckBox(""),
+			"restoreIndex":   widget.NewCheckBox(""),
 			"ok":             widget.NewButton(""),
 			"cancel":         widget.NewButton(""),
 		}
@@ -70,14 +71,29 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 	}
 }
 
-func TestTheModeNamesTheActionAndShowsTheDropOption(t *testing.T) {
+func TestTheModeNamesTheActionAndShowsTheApplyOptions(t *testing.T) {
 	apply := newTestView(t, ModeApply)
-	if apply.okBtn.Text != i18n.T("Dialog.ApplyStash.OK") || !apply.dropBox.IsVisible() {
-		t.Fatalf("apply mode: ok = %q, drop visible = %v", apply.okBtn.Text, apply.dropBox.IsVisible())
+	if apply.okBtn.Text != i18n.T("Dialog.ApplyStash.OK") || !apply.dropBox.IsVisible() || !apply.indexBox.IsVisible() {
+		t.Fatalf("apply mode: ok = %q, drop visible = %v, index visible = %v", apply.okBtn.Text, apply.dropBox.IsVisible(), apply.indexBox.IsVisible())
 	}
 	drop := newTestView(t, ModeDrop)
-	if drop.okBtn.Text != i18n.T("Dialog.DropStash.OK") || drop.dropBox.IsVisible() {
-		t.Fatalf("drop mode: ok = %q, drop visible = %v", drop.okBtn.Text, drop.dropBox.IsVisible())
+	if drop.okBtn.Text != i18n.T("Dialog.DropStash.OK") || drop.dropBox.IsVisible() || drop.indexBox.IsVisible() {
+		t.Fatalf("drop mode: ok = %q, drop visible = %v, index visible = %v", drop.okBtn.Text, drop.dropBox.IsVisible(), drop.indexBox.IsVisible())
+	}
+}
+
+func TestTheApplyRequestCarriesTheRestoreIndexChoice(t *testing.T) {
+	v := newTestView(t, ModeApply)
+	v.SetEntries([]string{"stash@{0}: a"}, 0)
+	toggle(v.indexBox)
+	if got := v.Request(); got != (Request{Index: 0, RestoreIndex: true}) {
+		t.Fatalf("request = %+v", got)
+	}
+	drop := newTestView(t, ModeDrop)
+	drop.SetEntries([]string{"stash@{0}: a"}, 0)
+	drop.indexBox.SetChecked(true)
+	if got := drop.Request(); got != (Request{Index: 0, Drop: true}) {
+		t.Fatalf("drop request = %+v", got)
 	}
 }
 

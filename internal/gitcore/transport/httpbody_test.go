@@ -188,7 +188,7 @@ func TestHTTPAttemptFailsWhenTheBodyCannotBeReopened(t *testing.T) {
 	}
 	body := streamBody(strings.NewReader("data"))
 	_, _ = body.open()
-	if _, err := s.attempt(t.Context(), http.MethodPost, "http://127.0.0.1:1/git-receive-pack", "", body, nil); !errors.Is(err, errBodyNotReplayable) {
+	if _, err := s.attempt(t.Context(), http.MethodPost, "http://127.0.0.1:1/git-receive-pack", "", "", body, nil); !errors.Is(err, errBodyNotReplayable) {
 		t.Fatalf("attempt returned %v, want errBodyNotReplayable", err)
 	}
 }
@@ -500,14 +500,15 @@ func TestHTTPAdvertiseAcceptsAContentTypeWithParameters(t *testing.T) {
 	}
 }
 
-func TestOnlyUnsupportedChallengesSpotsNegotiateOnlyServers(t *testing.T) {
+func TestOnlyUnsupportedChallengesSpotsDigestOnlyServers(t *testing.T) {
 	tests := []struct {
 		values []string
 		want   bool
 	}{
 		{nil, false},
-		{[]string{"Negotiate"}, true},
-		{[]string{"Negotiate", "NTLM"}, true},
+		{[]string{"Negotiate"}, false},
+		{[]string{"Negotiate", "NTLM"}, false},
+		{[]string{`Digest realm="git", nonce="abc"`}, true},
 		{[]string{`Negotiate, Basic realm="git"`}, false},
 		{[]string{`Bearer realm="git"`}, false},
 		{[]string{`basic realm="a, b"`}, false},
@@ -523,10 +524,9 @@ func TestOnlyUnsupportedChallengesSpotsNegotiateOnlyServers(t *testing.T) {
 	}
 }
 
-func TestHTTPRefusesNegotiateOnlyServersWithoutAskingForCredentials(t *testing.T) {
+func TestHTTPRefusesDigestOnlyServersWithoutAskingForCredentials(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Add("WWW-Authenticate", "Negotiate")
-		w.Header().Add("WWW-Authenticate", "NTLM")
+		w.Header().Add("WWW-Authenticate", `Digest realm="git", nonce="abc"`)
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(server.Close)
@@ -536,6 +536,29 @@ func TestHTTPRefusesNegotiateOnlyServersWithoutAskingForCredentials(t *testing.T
 	}
 	if len(source.retries) != 0 {
 		t.Fatalf("the credential source was asked %d times, want never", len(source.retries))
+	}
+}
+
+func TestHTTPReportsNegotiateAndNTLMOnlyServersWithoutCredentials(t *testing.T) {
+	cases := map[string]struct {
+		scheme string
+		want   error
+	}{
+		"negotiate": {"Negotiate", ErrNoCredentials},
+		"ntlm":      {"NTLM", ErrNoCredentials},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Add("WWW-Authenticate", tc.scheme)
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			t.Cleanup(server.Close)
+			cfg := testGitConfig(t, "[http]\n\temptyAuth = false\n")
+			if err := advertiseThrough(t, server.URL+"/repo.git", Options{Config: cfg}); !errors.Is(err, tc.want) {
+				t.Fatalf("advertise returned %v, want %v", err, tc.want)
+			}
+		})
 	}
 }
 

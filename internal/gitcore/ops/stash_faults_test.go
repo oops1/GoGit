@@ -7,7 +7,11 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/diff"
+	"github.com/oops1/gogit/internal/gitcore/hash"
 )
 
 func stashSeams() []faultSeam {
@@ -20,7 +24,52 @@ func stashSeams() []faultSeam {
 				return original(root, name)
 			}
 		})
+	}}, faultSeam{"open directory", func(t *testing.T, failAt int, calls *int) {
+		swapSeam(t, &fsRootOpen, func(original func(*os.Root, string) (*os.File, error)) func(*os.Root, string) (*os.File, error) {
+			return func(root *os.Root, name string) (*os.File, error) {
+				if hit(calls, failAt) {
+					return nil, errInjected
+				}
+				return original(root, name)
+			}
+		})
+	}}, faultSeam{"hash content", func(t *testing.T, failAt int, calls *int) {
+		swapSeam(t, &hashSum, func(original func(hash.Format, string, []byte) (hash.ObjectID, error)) func(hash.Format, string, []byte) (hash.ObjectID, error) {
+			return func(format hash.Format, kind string, data []byte) (hash.ObjectID, error) {
+				if hit(calls, failAt) {
+					return hash.Zero, errInjected
+				}
+				return original(format, kind, data)
+			}
+		})
 	}})
+}
+
+func untrackedChanges(tr *testRepo) {
+	tr.t.Helper()
+	stashChanges(tr)
+	tr.writeFile(".git/info/exclude", "*.log\n")
+	tr.writeFile("loose/u.txt", "u\n")
+	tr.writeFile("loose/skip.log", "log\n")
+	tr.writeFile("top.log", "log\n")
+}
+
+func stagedLineChanges(tr *testRepo) {
+	tr.t.Helper()
+	tr.commitFiles("lines", map[string]string{"m": tenLines("m")})
+	stashChanges(tr)
+	staged := changeLine(tenLines("m"), 5, "STAGED")
+	tr.writeFile("m", staged)
+	tr.stageAll("m")
+	tr.writeFile("m", changeLine(staged, 9, "LATER"))
+}
+
+func pushWith(opts StashOptions) func(ctx context.Context, tr *testRepo) error {
+	return func(ctx context.Context, tr *testRepo) error {
+		opts.When = mergeTime
+		_, err := StashPush(ctx, tr.repo, opts)
+		return err
+	}
 }
 
 func stashFaultScenarios() []faultScenario {
@@ -29,11 +78,11 @@ func stashFaultScenarios() []faultScenario {
 		tr.stash(StashOptions{})
 	}
 	apply := func(ctx context.Context, tr *testRepo) error {
-		_, err := StashApply(ctx, tr.repo, 0)
+		_, err := StashApply(ctx, tr.repo, 0, StashApplyOptions{})
 		return err
 	}
 	pop := func(ctx context.Context, tr *testRepo) error {
-		_, err := StashPop(ctx, tr.repo, 0)
+		_, err := StashPop(ctx, tr.repo, 0, StashApplyOptions{})
 		return err
 	}
 	return []faultScenario{
@@ -64,6 +113,39 @@ func stashFaultScenarios() []faultScenario {
 		}, apply},
 		{"drop", stashed, func(ctx context.Context, tr *testRepo) error {
 			return StashDrop(ctx, tr.repo, 0)
+		}},
+		{"push untracked", untrackedChanges, pushWith(StashOptions{IncludeUntracked: true})},
+		{"push ignored keeping the index", untrackedChanges, pushWith(StashOptions{IncludeIgnored: true, KeepIndex: true})},
+		{"push paths", untrackedChanges, pushWith(StashOptions{IncludeUntracked: true, KeepIndex: true, Paths: []string{"b", "new", "loose"}})},
+		{"push staged", stagedLineChanges, pushWith(StashOptions{Staged: true})},
+		{"push staged paths", stagedLineChanges, pushWith(StashOptions{Staged: true, Paths: []string{"m", "b"}})},
+		{"apply index", func(tr *testRepo) {
+			stashed(tr)
+			tr.commitFiles("other", map[string]string{"z": "z\n"})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := StashApply(ctx, tr.repo, 0, StashApplyOptions{Index: true})
+			return err
+		}},
+		{"apply index on shifted lines", func(tr *testRepo) {
+			tr.commitFiles("lines", map[string]string{"m": tenLines("m")})
+			tr.writeFile("m", changeLine(tenLines("m"), 5, "STAGED"))
+			tr.stageAll("m")
+			tr.stash(StashOptions{})
+			tr.commitFiles("shift", map[string]string{"m": "top\n" + tenLines("m")})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := StashApply(ctx, tr.repo, 0, StashApplyOptions{Index: true})
+			return err
+		}},
+		{"pop untracked", func(tr *testRepo) {
+			untrackedChanges(tr)
+			tr.stash(StashOptions{IncludeUntracked: true})
+		}, pop},
+		{"show", func(tr *testRepo) {
+			untrackedChanges(tr)
+			tr.stash(StashOptions{IncludeUntracked: true})
+		}, func(ctx context.Context, tr *testRepo) error {
+			_, err := StashShow(ctx, tr.repo, 0, diff.Options{})
+			return err
 		}},
 		{"switch merging", func(tr *testRepo) {
 			switchMergingRepo(tr)
@@ -96,6 +178,28 @@ func TestStashFailuresSurfaceTheCauseAtEveryStep(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestStashApplySurfacesStatFailuresWhileRestoringUntrackedFiles(t *testing.T) {
+	for _, target := range []string{"fresh", "fresh/deep", "fresh/deep/u.txt"} {
+		t.Run(target, func(t *testing.T) {
+			tr := newTestRepo(t)
+			tr.commitFiles("base", map[string]string{"a": "a\n"})
+			tr.writeFile("fresh/deep/u.txt", "u\n")
+			tr.stash(StashOptions{IncludeUntracked: true})
+			swapSeam(t, &fsRootLstat, func(original func(*os.Root, string) (fs.FileInfo, error)) func(*os.Root, string) (fs.FileInfo, error) {
+				return func(root *os.Root, name string) (fs.FileInfo, error) {
+					if name == filepath.FromSlash(target) {
+						return nil, errInjected
+					}
+					return original(root, name)
+				}
+			})
+			if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.Is(err, errInjected) {
+				t.Fatalf("StashApply returned %v", err)
+			}
+		})
 	}
 }
 

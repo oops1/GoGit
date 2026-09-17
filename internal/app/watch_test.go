@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"iter"
+	"os"
 	"path/filepath"
 	"slices"
 	"sync/atomic"
@@ -12,10 +13,12 @@ import (
 	"github.com/oops1/headless-gui/v3/widget"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/repo/watch"
 	"github.com/oops1/gogit/internal/ui/branches"
+	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
 
@@ -422,6 +425,38 @@ func TestHandleChangeSetPostsAWorkingStatusReloadForIndexOrWorkTreeChanges(t *te
 	if row.RelPath != "new.txt" {
 		t.Fatalf("row = %+v, want the untracked new.txt", row)
 	}
+}
+
+func TestAnIndexWrittenByAnotherGitClientIsReadOnTheNextChange(t *testing.T) {
+	a, target := appWithCommittedFile(t, "base\n")
+	a.ActivateRepository("r1")
+	if err := os.WriteFile(filepath.Join(target, "new.txt"), []byte("hello\n"), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	a.handleChangeSet(watch.ChangeSet{watch.Change{Kind: watch.WorkTree}: struct{}{}})
+	waitForWorkingRowStatus(t, a, "new.txt", changes.RowUntracked)
+
+	if err := ops.Stage(t.Context(), openTestRepository(t, target).repo, []string{"new.txt"}, ops.StageOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	a.handleChangeSet(watch.ChangeSet{watch.Change{Kind: watch.Index}: struct{}{}})
+
+	waitForWorkingRowStatus(t, a, "new.txt", changes.RowAdded)
+}
+
+func waitForWorkingRowStatus(t *testing.T, a *App, path string, want changes.RowStatus) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		waitForPostQueueDrain(t, a)
+		for i := range filesRowCountOnDispatcher(t, a) {
+			if row := filesRowOnDispatcher(t, a, i); row.RelPath == path && row.Status == want {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("%s never showed as %s", path, want)
 }
 
 func TestHandleChangeSetSkipsTheWorkingStatusReloadWhileACommitIsSelected(t *testing.T) {

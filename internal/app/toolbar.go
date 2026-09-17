@@ -29,9 +29,7 @@ func (a *App) applyToolbarIcons(*widget.Theme) {
 	for id, name := range toolbarIcons {
 		styleToolbarButton(a.named[toolbarButtons[id]].(*widget.Button), name, captions, width, height)
 	}
-	if flow, ok := a.flowButton(); ok {
-		styleToolbarButton(flow.Button, flowToolbarIcon, captions, width, height)
-	}
+	a.styleToolbarMenus(captions, width, height)
 	a.relayoutToolbar()
 }
 
@@ -48,15 +46,10 @@ func styleToolbarButton(btn *widget.Button, icon string, captions bool, width, h
 
 func (a *App) toolbarCaptionsWidth() int {
 	width := toolbarButtonMinWidth
-	for _, btn := range a.toolbarCaptionButtons() {
-		if w := toolbarCaptionButtonWidth(btn.Text); w > width {
-			width = w
-		}
+	for _, w := range a.toolbarCaptionWidths() {
+		width = max(width, w)
 	}
-	if width > toolbarButtonMaxWidth {
-		width = toolbarButtonMaxWidth
-	}
-	return width
+	return min(width, toolbarButtonMaxWidth)
 }
 
 func toolbarCaptionButtonWidth(text string) int {

@@ -107,6 +107,15 @@ func (v *View) Render(s Snapshot) {
 	v.tree.ScrollBy(scroll)
 }
 
+func (v *View) ClearStashSelection() {
+	if v.tree == nil {
+		return
+	}
+	if _, ok := StashIndex(v.idByItem[v.tree.Tree.SelectedItem()]); ok {
+		selectQuietly(v.tree.Tree, nil)
+	}
+}
+
 func selectQuietly(tree *treeview.TreeView, item *treeview.TreeViewItem) {
 	handler := tree.OnSelectedItemChanged
 	tree.OnSelectedItemChanged = nil

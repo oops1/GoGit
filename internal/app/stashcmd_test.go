@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
@@ -29,6 +31,33 @@ func captureStashViews(t *testing.T) *[]*stash.View {
 	}
 	t.Cleanup(func() { newStashView = prev })
 	return views
+}
+
+func captureSaveStashViews(t *testing.T) *[]*stash.SaveView {
+	t.Helper()
+	views := &[]*stash.SaveView{}
+	prev := newSaveStashView
+	newSaveStashView = func(selectedFiles int) (*stash.SaveView, error) {
+		view, err := prev(selectedFiles)
+		if err == nil {
+			*views = append(*views, view)
+		}
+		return view, err
+	}
+	t.Cleanup(func() { newSaveStashView = prev })
+	return views
+}
+
+func capturePushedStashOptions(t *testing.T, err error) *[]ops.StashOptions {
+	t.Helper()
+	pushed := &[]ops.StashOptions{}
+	prev := runStashPush
+	runStashPush = func(_ context.Context, _ *gitrepo.Repository, opts ops.StashOptions) (hash.ObjectID, error) {
+		*pushed = append(*pushed, opts)
+		return hash.Zero, err
+	}
+	t.Cleanup(func() { runStashPush = prev })
+	return pushed
 }
 
 func stashMessages(t *testing.T, target string) []string {
@@ -71,11 +100,14 @@ func hasStashes(t *testing.T, a *App) bool {
 
 func TestSavingAStashPutsTheChangesAside(t *testing.T) {
 	a, target := blockedSwitchApp(t, "dirty\n")
-	runOnDispatcher(t, a, func() {
-		a.askInput = func(_, _ string, cb func(string, bool)) { cb("  keep  ", true) }
-	})
+	views := captureSaveStashViews(t)
+	runOnDispatcher(t, a, a.openSaveStash)
+	if len(*views) != 1 {
+		t.Fatalf("save dialogs = %d", len(*views))
+	}
+	view := (*views)[0]
 
-	lines := rebaseThrough(t, a, a.openSaveStash)
+	lines := rebaseThrough(t, a, func() { view.OnOK(stash.SaveRequest{Message: "keep"}) })
 
 	if !logHasPrefix(t, lines, "Operation.Log.StashSaved") {
 		t.Fatalf("log = %v", lines)
@@ -95,24 +127,76 @@ func TestSavingAStashPutsTheChangesAside(t *testing.T) {
 func TestSavingWithoutChangesSaysThereIsNothingToStash(t *testing.T) {
 	a, _ := forkedApp(t, false)
 
-	lines := rebaseThrough(t, a, func() { a.saveStash("") })
+	lines := rebaseThrough(t, a, func() { a.saveStash(ops.StashOptions{}) })
 
 	if !logHasPrefix(t, lines, "Operation.Log.NothingToStash") {
 		t.Fatalf("log = %v", lines)
 	}
 }
 
-func TestCancellingTheStashMessageSavesNothing(t *testing.T) {
+func TestCancellingTheSaveStashDialogSavesNothing(t *testing.T) {
 	a, target := blockedSwitchApp(t, "dirty\n")
-	views := captureOperationViews(t)
+	operations := captureOperationViews(t)
+	views := captureSaveStashViews(t)
 
-	runOnDispatcher(t, a, func() {
-		a.askInput = func(_, _ string, cb func(string, bool)) { cb("x", false) }
-		a.openSaveStash()
+	runOnDispatcher(t, a, a.openSaveStash)
+	runOnDispatcher(t, a, func() { (*views)[0].Dialog().CancelAction() })
+
+	if len(*operations) != 0 || stashCount(t, target) != 0 {
+		t.Fatal("a cancelled dialog still saved a stash")
+	}
+}
+
+func TestTheSaveStashDialogOptionsReachTheStash(t *testing.T) {
+	a, _ := blockedSwitchApp(t, "dirty\n")
+	views := captureSaveStashViews(t)
+	pushed := capturePushedStashOptions(t, nil)
+
+	runOnDispatcher(t, a, a.openSaveStash)
+	view := (*views)[0]
+	rebaseThrough(t, a, func() {
+		view.OnOK(stash.SaveRequest{Message: "keep", IncludeUntracked: true, KeepIndex: true})
 	})
 
-	if len(*views) != 0 || stashCount(t, target) != 0 {
-		t.Fatal("a cancelled message still saved a stash")
+	want := ops.StashOptions{Message: "keep", IncludeUntracked: true, KeepIndex: true}
+	if len(*pushed) != 1 || !reflect.DeepEqual((*pushed)[0], want) {
+		t.Fatalf("pushed = %+v, want %+v", *pushed, want)
+	}
+}
+
+func TestSavingAStashExplainsEveryOutcome(t *testing.T) {
+	a, _ := blockedSwitchApp(t, "dirty\n")
+	cases := []struct {
+		name string
+		err  error
+		key  string
+	}{
+		{"saved", nil, "Operation.Log.StashSaved"},
+		{"nothing", ops.ErrNothingToStash, "Operation.Log.NothingToStash"},
+		{"pathspec", &ops.PathspecError{Specs: []string{"gone.txt"}}, "Operation.Log.StashPathspec"},
+		{"worktree kept", fmt.Errorf("%w: locked", ops.ErrStashWorktreeKept), "Operation.Log.StashWorktreeKept"},
+		{"unmerged", ops.ErrUnmergedPaths, "Operation.Log.StashUnmerged"},
+	}
+	for _, c := range cases {
+		capturePushedStashOptions(t, c.err)
+		lines := rebaseThrough(t, a, func() { a.saveStash(ops.StashOptions{}) })
+		if !logHasPrefix(t, lines, c.key) {
+			t.Fatalf("%s: %s missing from %v", c.name, c.key, lines)
+		}
+	}
+}
+
+func TestAFailingSaveStashDialogSavesNothing(t *testing.T) {
+	a, target := blockedSwitchApp(t, "dirty\n")
+	operations := captureOperationViews(t)
+	prev := newSaveStashView
+	newSaveStashView = func(int) (*stash.SaveView, error) { return nil, errors.New("no dialog") }
+	t.Cleanup(func() { newSaveStashView = prev })
+
+	runOnDispatcher(t, a, a.openSaveStash)
+
+	if len(*operations) != 0 || stashCount(t, target) != 0 {
+		t.Fatal("a missing dialog still saved a stash")
 	}
 }
 
@@ -120,13 +204,17 @@ func TestStashCommandsNeedARepository(t *testing.T) {
 	a := newTestApp(t)
 	operations := captureOperationViews(t)
 	views := captureStashViews(t)
+	saves := captureSaveStashViews(t)
 
 	a.openSaveStash()
-	a.saveStash("")
+	a.openStashSelection()
+	a.showSaveStash([]string{"f.txt"}, true)
+	a.saveStash(ops.StashOptions{})
 	a.openStashDialog(stash.ModeApply, 0)
-	a.applyStash(0, false)
+	a.applyStash(0, false, ops.StashApplyOptions{})
+	a.showStashChanges(0)
 
-	if len(*operations) != 0 || len(*views) != 0 {
+	if len(*operations) != 0 || len(*views) != 0 || len(*saves) != 0 || a.applyStashMenuItems() != nil || a.commitIsSelected() {
 		t.Fatal("a stash command ran without a repository")
 	}
 }
@@ -139,7 +227,7 @@ func TestSaveStashFailuresAreReported(t *testing.T) {
 	}
 	t.Cleanup(func() { runStashPush = prev })
 
-	lines := rebaseThrough(t, a, func() { a.saveStash("") })
+	lines := rebaseThrough(t, a, func() { a.saveStash(ops.StashOptions{}) })
 	if logHasPrefix(t, lines, "Operation.Log.StashSaved") {
 		t.Fatalf("log = %v", lines)
 	}
@@ -147,7 +235,7 @@ func TestSaveStashFailuresAreReported(t *testing.T) {
 	prevOpen := openGitRepository
 	openGitRepository = func(string, gitrepo.OpenOptions) (*gitrepo.Repository, error) { return nil, errors.New("gone") }
 	t.Cleanup(func() { openGitRepository = prevOpen })
-	rebaseThrough(t, a, func() { a.saveStash("") })
+	rebaseThrough(t, a, func() { a.saveStash(ops.StashOptions{}) })
 }
 
 func TestApplyingAStashFromTheDialogCanDropIt(t *testing.T) {
@@ -242,12 +330,16 @@ func TestApplyingAStashExplainsBlockedAndConflictingChanges(t *testing.T) {
 	}{
 		{"Operation.Log.StashBlocked", ops.StashApplyResult{}, &ops.OverwriteError{Paths: []string{"f.txt"}}},
 		{"Operation.Log.StashConflicts", ops.StashApplyResult{Conflicts: []string{"f.txt"}}, nil},
+		{"Operation.Log.StashIndexConflicts", ops.StashApplyResult{}, fmt.Errorf("%w: f.txt", ops.ErrStashIndexConflicts)},
+		{"Operation.Log.StashUnmerged", ops.StashApplyResult{}, ops.ErrUnmergedPaths},
+		{"Operation.Log.StashUntrackedExists", ops.StashApplyResult{}, &ops.UntrackedRestoreError{Existing: []string{"new.txt"}}},
+		{"Operation.Log.StashUntrackedBlocked", ops.StashApplyResult{}, &ops.UntrackedRestoreError{Blocked: "dir"}},
 	}
 	for _, c := range cases {
-		runStashApply = func(context.Context, *gitrepo.Repository, int) (ops.StashApplyResult, error) {
+		runStashApply = func(context.Context, *gitrepo.Repository, int, ops.StashApplyOptions) (ops.StashApplyResult, error) {
 			return c.result, c.err
 		}
-		lines := rebaseThrough(t, a, func() { a.applyStash(0, false) })
+		lines := rebaseThrough(t, a, func() { a.applyStash(0, false, ops.StashApplyOptions{}) })
 		if !logHasPrefix(t, lines, c.key) {
 			t.Fatalf("%s missing from %v", c.key, lines)
 		}
@@ -256,7 +348,7 @@ func TestApplyingAStashExplainsBlockedAndConflictingChanges(t *testing.T) {
 	prevOpen := openGitRepository
 	openGitRepository = func(string, gitrepo.OpenOptions) (*gitrepo.Repository, error) { return nil, errors.New("gone") }
 	t.Cleanup(func() { openGitRepository = prevOpen })
-	rebaseThrough(t, a, func() { a.applyStash(0, false) })
+	rebaseThrough(t, a, func() { a.applyStash(0, false, ops.StashApplyOptions{}) })
 }
 
 func TestStashDialogFailuresAreLogged(t *testing.T) {

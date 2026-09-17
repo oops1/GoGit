@@ -80,6 +80,7 @@ var contextIcons = map[string]string{
 	"Menu.Context.Reflog":             "history",
 	"Menu.Context.SwitchHere":         "switch",
 	"Menu.Context.CompareWithCurrent": "compare_refs",
+	"Menu.Files.StashSelection":       "stash_save",
 	"Menu.Stash.Apply":                "stash_apply",
 	"Menu.Stash.ApplyDrop":            "stash_apply",
 	"Menu.Stash.Drop":                 "stash_drop",

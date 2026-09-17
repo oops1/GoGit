@@ -58,7 +58,7 @@ func TestI18NFS(t *testing.T) {
 
 func TestIcons(t *testing.T) {
 	names := IconNames()
-	for _, want := range []string{"pull", "sync", "push", "commit", "app"} {
+	for _, want := range []string{"pull", "sync", "push", "commit", "stash_save", "stash_apply", "gitflow", "app"} {
 		if !slices.Contains(names, want) {
 			t.Fatalf("icon %q missing in %v", want, names)
 		}

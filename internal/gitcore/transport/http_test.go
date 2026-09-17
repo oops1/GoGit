@@ -764,7 +764,7 @@ func newTestResponse(status int, contentType string, body []byte) *http.Response
 
 func TestHTTPAttemptFailsOnInvalidRequestURL(t *testing.T) {
 	s, _ := newHTTPSession(Endpoint{Scheme: SchemeHTTP, Host: "example.com"}, nil, UploadPack, Options{})
-	if _, err := s.attempt(t.Context(), http.MethodGet, "http://\x00", "", nil, nil); err == nil {
+	if _, err := s.attempt(t.Context(), http.MethodGet, "http://\x00", "", "", nil, nil); err == nil {
 		t.Fatalf("attempt succeeded with an invalid request url")
 	}
 }
