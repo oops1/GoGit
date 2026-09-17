@@ -108,11 +108,12 @@ func (a *App) runFetchBody(ctx context.Context, o *openedRepository, prog progre
 		return err
 	}
 	defer func() { _ = r.Close() }()
-	result, err := ops.Fetch(ctx, r, a.effectiveDefaultRemote(r), remote.FetchOptions{
+	result, err := ops.FetchRecursive(ctx, r, a.effectiveDefaultRemote(r), remote.FetchOptions{
 		Prune:     prune,
 		Progress:  prog,
 		Transport: a.transportOptions(prog),
-	})
+	}, ops.SubmoduleFetchOptions{Events: submoduleEventLog(reporter, new(int))})
+	reportSubmoduleError(reporter, err)
 	if err != nil {
 		return err
 	}

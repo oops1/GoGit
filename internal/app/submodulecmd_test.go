@@ -127,7 +127,7 @@ func TestTheBranchesTreeShowsSubmodulesAndTheMenuFollowsThem(t *testing.T) {
 	}
 	for id, want := range map[CommandID]bool{
 		CmdSubmoduleUpdate: true, CmdSubmoduleInitialize: true, CmdSubmoduleSync: true,
-		CmdSubmoduleAdd: false, CmdSubmoduleRemove: false, CmdSubmoduleUnregister: false, CmdSubmoduleReset: false,
+		CmdSubmoduleAdd: true, CmdSubmoduleRemove: true, CmdSubmoduleUnregister: true, CmdSubmoduleReset: true,
 	} {
 		if _, enabled, ok := readOnDispatcher(t, a, func() menuState { return menuStateOf(a, id) }).split(); !ok || enabled != want {
 			t.Fatalf("%s enabled = %v, want %v", id, enabled, want)

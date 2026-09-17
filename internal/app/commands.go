@@ -200,10 +200,10 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.FilesSelected && !s.Merging
 	case CmdStashApply, CmdStashDrop:
 		return s.ActiveRepository != "" && s.HasStashes
-	case CmdSubmoduleUpdate, CmdSubmoduleInitialize, CmdSubmoduleSync:
+	case CmdSubmoduleUpdate, CmdSubmoduleInitialize, CmdSubmoduleSync, CmdSubmoduleRemove, CmdSubmoduleUnregister, CmdSubmoduleReset:
 		return s.ActiveRepository != "" && s.HasSubmodules
-	case CmdSubmoduleAdd, CmdSubmoduleRemove, CmdSubmoduleUnregister, CmdSubmoduleReset:
-		return false
+	case CmdSubmoduleAdd:
+		return s.ActiveRepository != ""
 	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdFlowStartFeature:
