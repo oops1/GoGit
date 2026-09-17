@@ -170,6 +170,7 @@ func (s *session) commitClosure(ctx context.Context, wants, haves []hash.ObjectI
 
 func (s *session) shallowClosure(ctx context.Context, wants []hash.ObjectID, depth int) (map[hash.ObjectID]*object.Commit, []hash.ObjectID, error) {
 	included := make(map[hash.ObjectID]*object.Commit)
+	var shallow []hash.ObjectID
 	frontier := slices.Clone(wants)
 	for level := 1; len(frontier) > 0; level++ {
 		next := make([]hash.ObjectID, 0, len(frontier))
@@ -187,18 +188,11 @@ func (s *session) shallowClosure(ctx context.Context, wants []hash.ObjectID, dep
 			included[id] = commit
 			if level < depth {
 				next = append(next, commit.Parents...)
+				continue
 			}
+			shallow = append(shallow, id)
 		}
 		frontier = next
-	}
-	var shallow []hash.ObjectID
-	for id, commit := range included {
-		for _, parent := range commit.Parents {
-			if _, ok := included[parent]; !ok {
-				shallow = append(shallow, id)
-				break
-			}
-		}
 	}
 	slices.SortFunc(shallow, func(a, b hash.ObjectID) int { return a.Compare(b) })
 	return included, shallow, nil

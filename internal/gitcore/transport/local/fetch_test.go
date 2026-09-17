@@ -480,6 +480,31 @@ func TestFetchExcludeTreeSkipsSubmodulesAndDescendsSubtrees(t *testing.T) {
 	}
 }
 
+func TestFetchShallowMarksEveryCommitAtTheDepthLimitLikeUploadPack(t *testing.T) {
+	src := newTestRepo(t, true)
+	root := src.commit("main", map[string]string{"a.txt": "root"})
+	child := src.commit("main", map[string]string{"a.txt": "child"}, root)
+
+	sess := dialSession(t, src.dir)
+	resp, err := sess.Fetch(t.Context(), transport.FetchRequest{Wants: []hash.ObjectID{root}, Depth: 1}, nil)
+	if err != nil {
+		t.Fatalf("Fetch returned error %v", err)
+	}
+	_ = resp.Pack.Close()
+	if len(resp.Shallow) != 1 || resp.Shallow[0] != root {
+		t.Fatalf("resp.Shallow = %v, want the root commit at the limit", resp.Shallow)
+	}
+
+	resp, err = sess.Fetch(t.Context(), transport.FetchRequest{Wants: []hash.ObjectID{child}, Depth: 3}, nil)
+	if err != nil {
+		t.Fatalf("Fetch returned error %v", err)
+	}
+	_ = resp.Pack.Close()
+	if len(resp.Shallow) != 0 {
+		t.Fatalf("resp.Shallow = %v, want nothing above the limit", resp.Shallow)
+	}
+}
+
 func TestFetchShallowDeduplicatesADiamondAncestor(t *testing.T) {
 	src := newTestRepo(t, true)
 	base := src.commitWithTree(src.tree(map[string]string{"a.txt": "base"}))
