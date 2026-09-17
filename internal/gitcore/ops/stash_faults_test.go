@@ -63,13 +63,6 @@ func stagedLineChanges(tr *testRepo) {
 	tr.writeFile("m", changeLine(staged, 9, "LATER"))
 }
 
-func (r *testRepo) stageAll(paths ...string) {
-	r.t.Helper()
-	if err := Stage(r.t.Context(), r.repo, paths, StageOptions{}); err != nil {
-		r.t.Fatalf("Stage returned error %v", err)
-	}
-}
-
 func pushWith(opts StashOptions) func(ctx context.Context, tr *testRepo) error {
 	return func(ctx context.Context, tr *testRepo) error {
 		opts.When = mergeTime

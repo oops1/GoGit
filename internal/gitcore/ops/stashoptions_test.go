@@ -27,6 +27,13 @@ func (r *testRepo) setIndexMode(rel string, mode object.Mode, content string) {
 	r.saveIndex(idx)
 }
 
+func (r *testRepo) stageAll(paths ...string) {
+	r.t.Helper()
+	if err := Stage(r.t.Context(), r.repo, paths, StageOptions{}); err != nil {
+		r.t.Fatalf("Stage returned error %v", err)
+	}
+}
+
 func (r *testRepo) dropFromIndex(rel string) {
 	r.t.Helper()
 	idx := r.index()
