@@ -2,6 +2,7 @@ package transport
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net/http"
@@ -16,29 +17,59 @@ import (
 type ntlmTestServer struct {
 	t               *testing.T
 	password        string
-	scheme          string
 	offer           []string
 	serverChallenge []byte
 	targetInfo      []byte
 	wrapSPNEGO      bool
+	requestHeader   string
+	challengeHeader string
+	status          int
+	expectBinding   []byte
 
-	mu        sync.Mutex
-	type1Addr string
-	type3Addr string
-	type3Seen bool
-	postBody  []byte
+	mu            sync.Mutex
+	type1Addr     string
+	type3Addr     string
+	type3Seen     bool
+	authenticated int
+	sawBinding    []byte
+	postBody      []byte
+	trace         []string
+}
+
+func (s *ntlmTestServer) record(step string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.trace = append(s.trace, step)
+}
+
+func (s *ntlmTestServer) takeTrace() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	trace := s.trace
+	s.trace = nil
+	return trace
 }
 
 func newNTLMTestServer(t *testing.T, scheme, password string) *ntlmTestServer {
 	return &ntlmTestServer{
 		t:               t,
 		password:        password,
-		scheme:          scheme,
 		offer:           []string{scheme},
 		serverChallenge: []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef},
 		targetInfo:      ntlmTargetInfoWithTimestamp(),
 		wrapSPNEGO:      strings.EqualFold(scheme, "Negotiate"),
+		requestHeader:   "Authorization",
+		challengeHeader: "WWW-Authenticate",
+		status:          http.StatusUnauthorized,
 	}
+}
+
+func newNTLMProxyAuthority(t *testing.T, scheme, password string) *ntlmTestServer {
+	s := newNTLMTestServer(t, scheme, password)
+	s.requestHeader = "Proxy-Authorization"
+	s.challengeHeader = "Proxy-Authenticate"
+	s.status = http.StatusProxyAuthRequired
+	return s
 }
 
 func ntlmTargetInfoWithTimestamp() []byte {
@@ -55,42 +86,12 @@ func (s *ntlmTestServer) challengeToken() []byte {
 	return msg
 }
 
-func (s *ntlmTestServer) handle(w http.ResponseWriter, r *http.Request) {
-	auth := r.Header.Get("Authorization")
-	if auth == "" {
-		for _, scheme := range s.offer {
-			w.Header().Add("WWW-Authenticate", scheme)
-		}
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+func (s *ntlmTestServer) reject(w http.ResponseWriter) {
+	for _, scheme := range s.offer {
+		w.Header().Add(s.challengeHeader, scheme)
 	}
-	_, rawToken, _ := strings.Cut(auth, " ")
-	token, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rawToken))
-	if err != nil {
-		s.t.Errorf("authorization token is not base64: %v", err)
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	ntlm := token
-	if s.wrapSPNEGO {
-		if ntlm, err = spnegoExtractNTLM(token); err != nil {
-			s.t.Errorf("server could not extract NTLM from SPNEGO: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-	}
-	switch messageType(ntlm) {
-	case ntlmNegotiate:
-		s.mu.Lock()
-		s.type1Addr = r.RemoteAddr
-		s.mu.Unlock()
-		w.Header().Set("WWW-Authenticate", s.headerScheme()+" "+base64.StdEncoding.EncodeToString(s.challengeToken()))
-		w.WriteHeader(http.StatusUnauthorized)
-	case ntlmAuthenticate:
-		s.completeAuthenticate(w, r, ntlm)
-	default:
-		w.WriteHeader(http.StatusBadRequest)
-	}
+	w.Header().Set("Content-Length", "0")
+	w.WriteHeader(s.status)
 }
 
 func (s *ntlmTestServer) headerScheme() string {
@@ -100,16 +101,57 @@ func (s *ntlmTestServer) headerScheme() string {
 	return "NTLM"
 }
 
-func (s *ntlmTestServer) completeAuthenticate(w http.ResponseWriter, r *http.Request, ntlm []byte) {
-	s.mu.Lock()
-	s.type3Addr = r.RemoteAddr
-	s.type3Seen = true
-	s.mu.Unlock()
-	if !s.verifyProof(ntlm) {
-		for _, scheme := range s.offer {
-			w.Header().Add("WWW-Authenticate", scheme)
+func (s *ntlmTestServer) authorize(w http.ResponseWriter, r *http.Request) bool {
+	auth := r.Header.Get(s.requestHeader)
+	if auth == "" {
+		s.record(r.Method + " none")
+		s.reject(w)
+		return false
+	}
+	name, rawToken, _ := strings.Cut(auth, " ")
+	token, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rawToken))
+	s.record(r.Method + " " + strings.ToLower(name) + " " + ntlmStepName(token))
+	if err != nil {
+		s.reject(w)
+		return false
+	}
+	ntlm := token
+	if s.wrapSPNEGO {
+		if ntlm, err = spnegoExtractNTLM(token); err != nil {
+			s.reject(w)
+			return false
 		}
-		w.WriteHeader(http.StatusUnauthorized)
+	}
+	switch messageType(ntlm) {
+	case ntlmNegotiate:
+		s.mu.Lock()
+		s.type1Addr = r.RemoteAddr
+		s.mu.Unlock()
+		w.Header().Set(s.challengeHeader, s.headerScheme()+" "+base64.StdEncoding.EncodeToString(s.challengeToken()))
+		w.Header().Set("Content-Length", "0")
+		w.WriteHeader(s.status)
+		return false
+	case ntlmAuthenticate:
+		s.mu.Lock()
+		s.type3Addr = r.RemoteAddr
+		s.type3Seen = true
+		s.mu.Unlock()
+		if !s.verifyProof(ntlm) {
+			s.reject(w)
+			return false
+		}
+		s.mu.Lock()
+		s.authenticated++
+		s.mu.Unlock()
+		return true
+	default:
+		s.reject(w)
+		return false
+	}
+}
+
+func (s *ntlmTestServer) handle(w http.ResponseWriter, r *http.Request) {
+	if !s.authorize(w, r) {
 		return
 	}
 	switch r.Method {
@@ -126,52 +168,81 @@ func (s *ntlmTestServer) completeAuthenticate(w http.ResponseWriter, r *http.Req
 	}
 }
 
+func ntlmMessageField(msg []byte, off int) []byte {
+	length := int(binary.LittleEndian.Uint16(msg[off:]))
+	start := int(binary.LittleEndian.Uint32(msg[off+4:]))
+	if start+length > len(msg) {
+		return nil
+	}
+	return msg[start : start+length]
+}
+
+func avPairValue(info []byte, want uint16) []byte {
+	for len(info) >= 4 {
+		id := binary.LittleEndian.Uint16(info)
+		length := int(binary.LittleEndian.Uint16(info[2:]))
+		if id == avEOL || 4+length > len(info) {
+			return nil
+		}
+		if id == want {
+			return info[4 : 4+length]
+		}
+		info = info[4+length:]
+	}
+	return nil
+}
+
 func (s *ntlmTestServer) verifyProof(msg []byte) bool {
 	if len(msg) < 64 {
 		return false
 	}
-	field := func(off int) []byte {
-		length := int(uint16(msg[off]) | uint16(msg[off+1])<<8)
-		start := int(uint32(msg[off+4]) | uint32(msg[off+5])<<8 | uint32(msg[off+6])<<16 | uint32(msg[off+7])<<24)
-		if start+length > len(msg) {
-			return nil
-		}
-		return msg[start : start+length]
-	}
-	ntResponse := field(20)
-	domain := utf16Decode(field(28))
-	user := utf16Decode(field(36))
-	if len(ntResponse) < 16 {
+	ntResponse := ntlmMessageField(msg, 20)
+	domain := utf16Decode(ntlmMessageField(msg, 28))
+	user := utf16Decode(ntlmMessageField(msg, 36))
+	if len(ntResponse) < 16+28 {
 		return false
 	}
 	proof := ntResponse[:16]
 	temp := ntResponse[16:]
+	binding := avPairValue(temp[28:], avChannelBind)
+	s.mu.Lock()
+	s.sawBinding = append([]byte(nil), binding...)
+	s.mu.Unlock()
+	if s.expectBinding != nil && string(binding) != string(s.expectBinding) {
+		return false
+	}
 	ntowf := ntowfV2(user, domain, []byte(s.password))
 	want := hmacMD5(ntowf, append(append([]byte(nil), s.serverChallenge...), temp...))
 	return string(proof) == string(want)
+}
+
+func ntlmStepName(token []byte) string {
+	if inner, err := spnegoExtractNTLM(token); err == nil {
+		token = inner
+	}
+	switch messageType(token) {
+	case ntlmNegotiate:
+		return "type1"
+	case ntlmAuthenticate:
+		return "type3"
+	default:
+		return "other"
+	}
 }
 
 func messageType(msg []byte) uint32 {
 	if len(msg) < 12 || string(msg[:8]) != string(ntlmSignature) {
 		return 0
 	}
-	return uint32(msg[8]) | uint32(msg[9])<<8 | uint32(msg[10])<<16 | uint32(msg[11])<<24
+	return binary.LittleEndian.Uint32(msg[8:])
 }
 
 func utf16Decode(b []byte) string {
-	units := make([]uint16, len(b)/2)
-	for i := range units {
-		units[i] = uint16(b[i*2]) | uint16(b[i*2+1])<<8
+	runes := make([]rune, 0, len(b)/2)
+	for i := 0; i+1 < len(b); i += 2 {
+		runes = append(runes, rune(binary.LittleEndian.Uint16(b[i:])))
 	}
-	return string(decodeUTF16(units))
-}
-
-func decodeUTF16(units []uint16) []rune {
-	out := make([]rune, 0, len(units))
-	for _, u := range units {
-		out = append(out, rune(u))
-	}
-	return out
+	return string(runes)
 }
 
 func (s *ntlmTestServer) sameConnection() bool {

@@ -188,7 +188,7 @@ func TestHTTPAttemptFailsWhenTheBodyCannotBeReopened(t *testing.T) {
 	}
 	body := streamBody(strings.NewReader("data"))
 	_, _ = body.open()
-	if _, err := s.attempt(t.Context(), http.MethodPost, "http://127.0.0.1:1/git-receive-pack", "", body, nil); !errors.Is(err, errBodyNotReplayable) {
+	if _, err := s.attempt(t.Context(), http.MethodPost, "http://127.0.0.1:1/git-receive-pack", "", "", body, nil); !errors.Is(err, errBodyNotReplayable) {
 		t.Fatalf("attempt returned %v, want errBodyNotReplayable", err)
 	}
 }
@@ -554,7 +554,8 @@ func TestHTTPReportsNegotiateAndNTLMOnlyServersWithoutCredentials(t *testing.T) 
 				w.WriteHeader(http.StatusUnauthorized)
 			}))
 			t.Cleanup(server.Close)
-			if err := advertiseThrough(t, server.URL+"/repo.git", Options{}); !errors.Is(err, tc.want) {
+			cfg := testGitConfig(t, "[http]\n\temptyAuth = false\n")
+			if err := advertiseThrough(t, server.URL+"/repo.git", Options{Config: cfg}); !errors.Is(err, tc.want) {
 				t.Fatalf("advertise returned %v, want %v", err, tc.want)
 			}
 		})

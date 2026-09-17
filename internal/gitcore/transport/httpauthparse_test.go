@@ -70,7 +70,7 @@ func TestChallengeTokenDecodesBase64AndIgnoresGarbage(t *testing.T) {
 }
 
 func TestNTLMGeneratorRejectsAMalformedChallenge(t *testing.T) {
-	gen := newNTLMGenerator(newNTLMCredentials("alice", []byte("pw")))
+	gen := newCredentialGenerator(schemeNTLM, newNTLMCredentials("alice", []byte("pw")), nil)
 	if _, _, err := gen.next(nil); err != nil {
 		t.Fatalf("first next returned %v", err)
 	}
@@ -81,7 +81,7 @@ func TestNTLMGeneratorRejectsAMalformedChallenge(t *testing.T) {
 }
 
 func TestSPNEGOGeneratorRejectsATokenWithoutNTLM(t *testing.T) {
-	gen := newSPNEGOGenerator(newNTLMCredentials("alice", []byte("pw")))
+	gen := newCredentialGenerator(schemeNegotiate, newNTLMCredentials("alice", []byte("pw")), nil)
 	if _, _, err := gen.next(nil); err != nil {
 		t.Fatalf("first next returned %v", err)
 	}
@@ -91,7 +91,7 @@ func TestSPNEGOGeneratorRejectsATokenWithoutNTLM(t *testing.T) {
 	gen.close()
 }
 
-func TestConnectionAuthAbortsWhenTheServerDropsTheChallenge(t *testing.T) {
+func TestConnectionAuthTreatsADroppedChallengeAsARejection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
 			w.Header().Set("WWW-Authenticate", "NTLM")
@@ -102,13 +102,17 @@ func TestConnectionAuthAbortsWhenTheServerDropsTheChallenge(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	creds := &fakeCredentialSource{creds: []Credentials{{Username: "alice", Password: []byte("pw")}}}
-	session, err := Dial(t.Context(), server.URL+"/repo.git", UploadPack, Options{Credentials: creds, Version: 1})
+	cfg := testGitConfig(t, "[http]\n\temptyAuth = false\n")
+	session, err := Dial(t.Context(), server.URL+"/repo.git", UploadPack, Options{Credentials: creds, Config: cfg, Version: 1})
 	if err != nil {
 		t.Fatalf("Dial returned error %v", err)
 	}
 	t.Cleanup(func() { _ = session.Close() })
-	if _, err := session.Advertise(t.Context()); !errors.Is(err, errAuthHandshakeAborted) {
-		t.Fatalf("Advertise returned %v, want errAuthHandshakeAborted", err)
+	if _, err := session.Advertise(t.Context()); !errors.Is(err, ErrNTLMAuthFailed) {
+		t.Fatalf("Advertise returned %v, want ErrNTLMAuthFailed", err)
+	}
+	if len(creds.retries) != 2 {
+		t.Fatalf("credential source asked %d times, want 2", len(creds.retries))
 	}
 }
 

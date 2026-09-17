@@ -15,32 +15,27 @@ func testAuthSession(t *testing.T, opts Options) *httpSession {
 	return s
 }
 
-func TestIntegratedTargetIsEmptyWithoutAHost(t *testing.T) {
-	if got := (&httpSession{}).integratedTarget(); got != "" {
-		t.Fatalf("integratedTarget = %q, want empty", got)
+func TestRequestHostIsEmptyForAnUnparsableURL(t *testing.T) {
+	if got := requestHost("http://\x00"); got != "" {
+		t.Fatalf("requestHost = %q, want empty", got)
 	}
-	if got := testAuthSession(t, Options{}).integratedTarget(); got != "HTTP/example.com" {
-		t.Fatalf("integratedTarget = %q, want HTTP/example.com", got)
+	if got := requestHost("https://git.example.com:8443/repo.git"); got != "git.example.com" {
+		t.Fatalf("requestHost = %q, want git.example.com", got)
 	}
 }
 
-func TestNewAuthGeneratorWithoutCredentialsFailsOrUsesIntegrated(t *testing.T) {
+func TestServerGeneratorWithoutCredentialsOrIntegratedFails(t *testing.T) {
 	s := testAuthSession(t, Options{})
-	gen, err := s.newAuthGenerator(t.Context(), schemeNTLM)
-	if err == nil {
-		gen.close()
-		return
-	}
-	if !errors.Is(err, ErrNoCredentials) {
-		t.Fatalf("newAuthGenerator without a source = %v, want ErrNoCredentials or an integrated generator", err)
+	if _, _, err := s.serverGenerator(t.Context(), schemeNTLM, nil, false); !errors.Is(err, ErrNoCredentials) {
+		t.Fatalf("serverGenerator without a source = %v, want ErrNoCredentials", err)
 	}
 }
 
-func TestNewAuthGeneratorPropagatesCredentialErrors(t *testing.T) {
+func TestServerGeneratorPropagatesCredentialErrors(t *testing.T) {
 	boom := errors.New("boom")
 	s := testAuthSession(t, Options{Credentials: &fakeCredentialSource{err: boom}})
-	if _, err := s.newAuthGenerator(t.Context(), schemeNegotiate); !errors.Is(err, boom) {
-		t.Fatalf("newAuthGenerator = %v, want boom", err)
+	if _, _, err := s.serverGenerator(t.Context(), schemeNegotiate, nil, false); !errors.Is(err, boom) {
+		t.Fatalf("serverGenerator = %v, want boom", err)
 	}
 }
 
