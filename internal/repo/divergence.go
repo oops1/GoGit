@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -65,7 +66,14 @@ func AheadBehind(r *gitrepo.Repository) (Divergence, bool, error) {
 	}
 	defer func() { _ = db.Close() }()
 
+	settings, err := r.CommitGraphSettings()
+	if err != nil {
+		return Divergence{}, false, err
+	}
 	revCtx := revision.Context{Objects: db, Shallow: shallow}
+	if settings.Enabled {
+		revCtx.Graph, _ = commitgraph.Open(db.Dirs(), settings.Open)
+	}
 	ahead, err := countDivergenceCommits(revCtx, localCommit, remoteCommit)
 	if err != nil {
 		return Divergence{}, false, err

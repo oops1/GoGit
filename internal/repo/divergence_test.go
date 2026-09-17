@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -274,6 +275,39 @@ func TestAheadBehindReportsBothWhenHistoriesDiverge(t *testing.T) {
 	}
 	if div != (Divergence{Ahead: 1, Behind: 1}) {
 		t.Fatalf("divergence = %+v, want {1 1}", div)
+	}
+}
+
+func TestAheadBehindCountsThroughTheCommitGraph(t *testing.T) {
+	dir := newDivergenceRepoDir(t, "main")
+	db, store := openDivergenceWriters(t, dir)
+	base := putDivergenceCommit(t, db, "base")
+	local := putDivergenceCommit(t, db, "local", base)
+	remote := putDivergenceCommit(t, db, "remote", base)
+	newer := putDivergenceCommit(t, db, "newer", local)
+	setDivergenceRef(t, store, refs.BranchName("main"), newer)
+	setDivergenceRef(t, store, refs.RemoteBranchName("origin", "main"), remote)
+	setDivergenceUpstream(t, dir, "main", "origin", "refs/heads/main")
+	var commits []commitgraph.Commit
+	for _, id := range []hash.ObjectID{base, local, remote} {
+		parsed, err := db.Commit(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		commits = append(commits, commitgraph.Commit{ID: id, Tree: parsed.Tree, Parents: parsed.Parents, Time: parsed.Committer.When.Unix()})
+	}
+	if err := commitgraph.WriteFile(filepath.Join(dir, ".git", "objects", "info"), hash.SHA1, commits, commitgraph.EncodeOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	div, hasUpstream, err := AheadBehind(openForDivergence(t, dir))
+
+	if err != nil || !hasUpstream || div != (Divergence{Ahead: 2, Behind: 1}) {
+		t.Fatalf("AheadBehind = %+v, %v, %v", div, hasUpstream, err)
+	}
+	setDivergenceUpstream(t, dir, "main", "origin", "refs/heads/main\n[core]\n\tcommitGraph = maybe")
+	if _, _, err := AheadBehind(openForDivergence(t, dir)); err == nil {
+		t.Fatal("a broken core.commitGraph was accepted")
 	}
 }
 
