@@ -70,7 +70,11 @@ func lineHistory(ctx context.Context, r *repo.Repository, rev string, specs []li
 	if err != nil {
 		return err
 	}
-	logOpts := linelog.Options{NoRenames: opts.NoRenames || renamesOff(r), Shallow: shallow, FuncNames: funcNames}
+	graph, err := OpenCommitGraph(r, rc.db)
+	if err != nil {
+		return err
+	}
+	logOpts := linelog.Options{NoRenames: opts.NoRenames || renamesOff(r), Shallow: shallow, FuncNames: funcNames, Graph: graph}
 	if opts.Progress != nil {
 		logOpts.Progress = func(p linelog.Progress) { opts.Progress(p.Done, p.Total) }
 	}

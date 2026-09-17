@@ -41,18 +41,22 @@ func Compare(ctx context.Context, r *repo.Repository, left, right string, opts C
 	if result.Right, err = resolveCommittish(rc, right); err != nil {
 		return CompareResult{}, err
 	}
-	store := mergeStore{db: rc.db}
-	bases, err := revision.MergeBase(revision.Context{Objects: store}, result.Left, result.Right)
+	graph, err := OpenCommitGraph(r, rc.db)
+	if err != nil {
+		return CompareResult{}, err
+	}
+	source := revision.Context{Objects: mergeStore{db: rc.db}, Graph: graph}
+	bases, err := revision.MergeBase(source, result.Left, result.Right)
 	if err != nil {
 		return CompareResult{}, err
 	}
 	if len(bases) > 0 {
 		result.Base = bases[0]
 	}
-	if result.Behind, err = countCommits(ctx, store, result.Left, result.Right); err != nil {
+	if result.Behind, err = countCommits(ctx, source, result.Left, result.Right); err != nil {
 		return CompareResult{}, err
 	}
-	if result.Ahead, err = countCommits(ctx, store, result.Right, result.Left); err != nil {
+	if result.Ahead, err = countCommits(ctx, source, result.Right, result.Left); err != nil {
 		return CompareResult{}, err
 	}
 	leftTree, err := treeOfCommit(rc, result.Left)
@@ -67,16 +71,16 @@ func Compare(ctx context.Context, r *repo.Repository, left, right string, opts C
 	if err != nil {
 		return CompareResult{}, err
 	}
-	if result.Changes, err = diff.Trees(ctx, store, leftTree, rightTree, options); err != nil {
+	if result.Changes, err = diff.Trees(ctx, source.Objects, leftTree, rightTree, options); err != nil {
 		return CompareResult{}, err
 	}
 	return result, nil
 }
 
-func countCommits(ctx context.Context, store mergeStore, exclude, include hash.ObjectID) (int, error) {
+func countCommits(ctx context.Context, source revision.Context, exclude, include hash.ObjectID) (int, error) {
 	count := 0
 	walk := revision.Walk(ctx, revision.Options{
-		Context: revision.Context{Objects: store},
+		Context: source,
 		Include: []hash.ObjectID{include},
 		Exclude: []hash.ObjectID{exclude},
 	})

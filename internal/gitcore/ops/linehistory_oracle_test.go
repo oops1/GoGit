@@ -107,14 +107,23 @@ func TestOracleFunctionLineHistoryFollowsDiffDrivers(t *testing.T) {
 	edit("custom.txt", "body a", "body A")
 	b.commit("edit more", map[string]string{"prog.c": files["prog.c"], "shapes.go": files["shapes.go"], "shape.py": files["shape.py"], "plain.txt": files["plain.txt"], "custom.txt": files["custom.txt"]})
 
-	for _, arg := range []string{
+	args := []string{
 		":main:prog.c", ":helper:prog.c", ":Area:shapes.go", ":Scale:shapes.go", ":Rect:shapes.go",
 		":area:shape.py", ":__init__:shape.py", ":helper:shape.py", "^:Circle:shape.py", ":import:plain.txt", ":class:plain.txt",
 		":a:custom.txt", ":beta:custom.txt", ":gamma:custom.txt", ":helper:basic.txt", ":Circle:basic.txt",
-	} {
-		want := b.git("log", "--format=%H", "--no-color", "-L", arg)
-		if got := funcLogOf(t, o, dir, arg); got != want {
-			t.Errorf("line history for %q differs\n--- ours\n%s\n--- git\n%s", arg, got, want)
+	}
+	wants := make([]string, len(args))
+	for at, arg := range args {
+		wants[at] = b.git("log", "--format=%H", "--no-color", "-L", arg)
+	}
+	for _, mode := range []string{"objects", "commit-graph"} {
+		if mode == "commit-graph" {
+			b.git("commit-graph", "write", "--reachable", "--changed-paths")
+		}
+		for at, arg := range args {
+			if got := funcLogOf(t, o, dir, arg); got != wants[at] {
+				t.Errorf("%s: line history for %q differs\n--- ours\n%s\n--- git\n%s", mode, arg, got, wants[at])
+			}
 		}
 	}
 }
