@@ -108,6 +108,42 @@ func newWalker(opts Options) (*walker, error) {
 	return w, nil
 }
 
+func Count(ctx context.Context, source Context, include []hash.ObjectID) (int, error) {
+	g := newGraph(newStore(source))
+	var pending []*node
+	for _, id := range include {
+		n, err := g.commit(id)
+		if err != nil {
+			return 0, err
+		}
+		if n.flags&flagSeen == 0 {
+			n.flags |= flagSeen
+			pending = append(pending, n)
+		}
+	}
+	count := 0
+	for len(pending) > 0 {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		n := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		count++
+		for _, id := range n.parents {
+			parent := g.node(id)
+			if parent.flags&flagSeen != 0 {
+				continue
+			}
+			parent.flags |= flagSeen
+			if err := g.load(parent); err != nil {
+				return 0, err
+			}
+			pending = append(pending, parent)
+		}
+	}
+	return count, nil
+}
+
 func normalizePaths(paths []string) []string {
 	cleaned := make([]string, 0, len(paths))
 	for _, path := range paths {

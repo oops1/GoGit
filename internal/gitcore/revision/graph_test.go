@@ -246,6 +246,32 @@ func TestGraphWalksReportObjectsTheGraphDoesNotHold(t *testing.T) {
 	}
 }
 
+func TestCountVisitsEveryReachableCommitOnce(t *testing.T) {
+	b, all := randomFixture(t, 7, 30)
+	want := len(collect(t, b, Walk(t.Context(), b.options(all[29], all[10]))))
+	for _, graph := range []*commitgraph.Graph{nil, b.graphOf(t, all[:15]...)} {
+		ctx := b.context()
+		ctx.Graph = graph
+		got, err := Count(t.Context(), ctx, []hash.ObjectID{b.id(all[29]), b.id(all[10]), b.id(all[29])})
+		if err != nil || got != want {
+			t.Fatalf("Count = %d, %v; want %d", got, err, want)
+		}
+	}
+	broken := errors.New("broken")
+	b.objects.fail[b.id(all[0])] = broken
+	if _, err := Count(t.Context(), b.context(), []hash.ObjectID{b.id(all[29])}); !errors.Is(err, broken) {
+		t.Errorf("a missing ancestor returned %v", err)
+	}
+	if _, err := Count(t.Context(), b.context(), []hash.ObjectID{b.id(all[0])}); !errors.Is(err, broken) {
+		t.Errorf("a missing tip returned %v", err)
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := Count(cancelled, b.context(), []hash.ObjectID{b.id(all[29])}); !errors.Is(err, context.Canceled) {
+		t.Errorf("a cancelled count returned %v", err)
+	}
+}
+
 func TestGraphWalksStopOnCancellation(t *testing.T) {
 	b, all := randomFixture(t, 9, 20)
 	ctx := b.context()
