@@ -794,7 +794,7 @@ func runOurSide(t *testing.T, r *repo.Repository, s mergeScenario, opts MergeOpt
 		picked, err := run(t.Context(), r, s.target, PickOptions{When: opts.When})
 		return MergeResult{Conflicts: picked.Conflicts, Warnings: picked.Warnings}, err
 	case pickStashApply:
-		applied, err := StashApply(t.Context(), r, 0)
+		applied, err := StashApply(t.Context(), r, 0, StashApplyOptions{})
 		return MergeResult{Conflicts: applied.Conflicts, Warnings: applied.Warnings}, err
 	}
 	return Merge(t.Context(), r, s.target, opts)

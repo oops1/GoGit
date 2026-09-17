@@ -244,7 +244,7 @@ func TestApplyingAStashExplainsBlockedAndConflictingChanges(t *testing.T) {
 		{"Operation.Log.StashConflicts", ops.StashApplyResult{Conflicts: []string{"f.txt"}}, nil},
 	}
 	for _, c := range cases {
-		runStashApply = func(context.Context, *gitrepo.Repository, int) (ops.StashApplyResult, error) {
+		runStashApply = func(context.Context, *gitrepo.Repository, int, ops.StashApplyOptions) (ops.StashApplyResult, error) {
 			return c.result, c.err
 		}
 		lines := rebaseThrough(t, a, func() { a.applyStash(0, false) })

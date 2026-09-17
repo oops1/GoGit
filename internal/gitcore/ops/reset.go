@@ -10,6 +10,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/merge"
+	"github.com/oops1/gogit/internal/gitcore/pathspec"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
@@ -143,6 +144,10 @@ func (m *merger) stageOnly(to merge.Snapshot) error {
 }
 
 func (m *merger) restore(to merge.Snapshot) error {
+	return m.restoreMatching(to, pathspec.Set{})
+}
+
+func (m *merger) restoreMatching(to merge.Snapshot, spec pathspec.Set) error {
 	if err := m.verifySnapshot(to); err != nil {
 		return err
 	}
@@ -151,7 +156,7 @@ func (m *merger) restore(to merge.Snapshot) error {
 		return err
 	}
 	sw := &switcher{ctx: m.ctx, wt: m.wt, db: m.rc.db, format: m.rc.db.Format()}
-	changed, err := staleOrDirtyPaths(sw, lock.idx, to)
+	changed, err := staleOrDirtyPaths(sw, lock.idx, to, spec)
 	if err != nil {
 		lock.abort()
 		return err
@@ -164,11 +169,14 @@ func (m *merger) restore(to merge.Snapshot) error {
 	return lock.commit()
 }
 
-func staleOrDirtyPaths(sw *switcher, idx *index.Index, to merge.Snapshot) ([]string, error) {
+func staleOrDirtyPaths(sw *switcher, idx *index.Index, to merge.Snapshot, spec pathspec.Set) ([]string, error) {
 	var changed []string
 	for path := range unionKeys(to, indexPaths(idx), map[string]bool{}) {
 		if err := sw.ctx.Err(); err != nil {
 			return nil, err
+		}
+		if !spec.Match(path) {
+			continue
 		}
 		want, has := to[path]
 		if !indexHolds(idx, path, want, has) {

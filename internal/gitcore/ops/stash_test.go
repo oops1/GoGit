@@ -75,7 +75,7 @@ func TestStashPushSavesTheChangesAndApplyBringsThemBack(t *testing.T) {
 		t.Fatalf("stash message = %q, want %q", entries[0].Message, want)
 	}
 
-	result, err := StashApply(t.Context(), tr.repo, 0)
+	result, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{})
 	if err != nil || !result.Clean() || result.Dropped {
 		t.Fatalf("StashApply = %+v, %v", result, err)
 	}
@@ -172,7 +172,7 @@ func TestStashRefusesAnIndexWithConflicts(t *testing.T) {
 	if _, err := StashPush(t.Context(), tr.repo, StashOptions{}); !errors.Is(err, ErrUnmergedPaths) {
 		t.Fatalf("StashPush returned %v", err)
 	}
-	if _, err := StashApply(t.Context(), tr.repo, 0); !errors.Is(err, ErrUnmergedPaths) {
+	if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.Is(err, ErrUnmergedPaths) {
 		t.Fatalf("StashApply returned %v", err)
 	}
 }
@@ -185,7 +185,7 @@ func TestStashReportsAnUnreadableIndex(t *testing.T) {
 	if _, err := StashPush(t.Context(), tr.repo, StashOptions{}); err == nil {
 		t.Fatal("StashPush accepted a corrupt index")
 	}
-	if _, err := StashApply(t.Context(), tr.repo, 0); err == nil {
+	if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); err == nil {
 		t.Fatal("StashApply accepted a corrupt index")
 	}
 }
@@ -202,7 +202,7 @@ func TestStashReportsAnIndexThatCannotBeWrittenAsATree(t *testing.T) {
 	stashChanges(clean)
 	clean.stash(StashOptions{})
 	clean.breakCacheTree()
-	if _, err := StashApply(t.Context(), clean.repo, 0); !errors.Is(err, index.ErrMalformed) {
+	if _, err := StashApply(t.Context(), clean.repo, 0, StashApplyOptions{}); !errors.Is(err, index.ErrMalformed) {
 		t.Fatalf("StashApply returned %v", err)
 	}
 }
@@ -213,7 +213,7 @@ func TestStashApplyRefusesToOverwriteLocalChanges(t *testing.T) {
 	tr.stash(StashOptions{})
 	tr.writeFile("a", "dirty\n")
 	var overwrite *OverwriteError
-	if _, err := StashApply(t.Context(), tr.repo, 0); !errors.As(err, &overwrite) || !slices.Equal(overwrite.Paths, []string{"a"}) {
+	if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.As(err, &overwrite) || !slices.Equal(overwrite.Paths, []string{"a"}) {
 		t.Fatalf("StashApply returned %v", err)
 	}
 	if tr.readFile("a") != "dirty\n" {
@@ -225,14 +225,14 @@ func TestStashPopDropsOnlyACleanApplication(t *testing.T) {
 	tr := newTestRepo(t)
 	stashChanges(tr)
 	tr.stash(StashOptions{})
-	result, err := StashPop(t.Context(), tr.repo, 0)
+	result, err := StashPop(t.Context(), tr.repo, 0, StashApplyOptions{})
 	if err != nil || !result.Dropped || len(tr.stashes()) != 0 {
 		t.Fatalf("StashPop = %+v, %v", result, err)
 	}
 
 	tr.stash(StashOptions{})
 	tr.commitFiles("upstream", map[string]string{"a": "upstream\n"})
-	result, err = StashPop(t.Context(), tr.repo, 0)
+	result, err = StashPop(t.Context(), tr.repo, 0, StashApplyOptions{})
 	if err != nil || result.Dropped || !slices.Equal(result.Conflicts, []string{"a"}) || len(tr.stashes()) != 1 {
 		t.Fatalf("conflicting StashPop = %+v, %v", result, err)
 	}
@@ -245,7 +245,7 @@ func TestStashPopReportsADropThatFailsAfterApplying(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tr.repo.GitDir(), "refs", "stash.lock"), nil, 0o666); err != nil {
 		t.Fatalf("WriteFile returned error %v", err)
 	}
-	result, err := StashPop(t.Context(), tr.repo, 0)
+	result, err := StashPop(t.Context(), tr.repo, 0, StashApplyOptions{})
 	if !errors.Is(err, refs.ErrLocked) || result.Dropped || tr.readFile("a") != "a2\n" {
 		t.Fatalf("StashPop = %+v, %v", result, err)
 	}
@@ -270,11 +270,11 @@ func TestStashDropRemovesTheChosenEntry(t *testing.T) {
 func TestStashOperationsRejectMissingEntries(t *testing.T) {
 	tr := newTestRepo(t)
 	stashChanges(tr)
-	if _, err := StashApply(t.Context(), tr.repo, 0); !errors.Is(err, ErrStashNotFound) {
+	if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.Is(err, ErrStashNotFound) {
 		t.Fatalf("StashApply returned %v", err)
 	}
 	tr.stash(StashOptions{})
-	if _, err := StashPop(t.Context(), tr.repo, -1); !errors.Is(err, ErrStashNotFound) {
+	if _, err := StashPop(t.Context(), tr.repo, -1, StashApplyOptions{}); !errors.Is(err, ErrStashNotFound) {
 		t.Fatalf("StashPop returned %v", err)
 	}
 	if err := StashDrop(t.Context(), tr.repo, 3); !errors.Is(err, ErrStashNotFound) {
@@ -294,7 +294,7 @@ func TestStashApplyRejectsACommitThatIsNotAStash(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("Commit returned error %v", err)
 	}
-	if _, err := StashApply(t.Context(), tr.repo, 0); !errors.Is(err, ErrNotAStash) {
+	if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.Is(err, ErrNotAStash) {
 		t.Fatalf("StashApply returned %v", err)
 	}
 }
@@ -309,7 +309,7 @@ func TestStashReportsAMalformedReflog(t *testing.T) {
 	if _, err := StashList(t.Context(), tr.repo); !errors.Is(err, refs.ErrMalformedReflog) {
 		t.Fatalf("StashList returned %v", err)
 	}
-	if _, err := StashApply(t.Context(), tr.repo, 0); !errors.Is(err, refs.ErrMalformedReflog) {
+	if _, err := StashApply(t.Context(), tr.repo, 0, StashApplyOptions{}); !errors.Is(err, refs.ErrMalformedReflog) {
 		t.Fatalf("StashApply returned %v", err)
 	}
 	if err := StashDrop(t.Context(), tr.repo, 0); !errors.Is(err, refs.ErrMalformedReflog) {
@@ -322,10 +322,10 @@ func TestStashOperationsNeedAWorkingTreeAndALiveContext(t *testing.T) {
 	if _, err := StashPush(t.Context(), bare.repo, StashOptions{}); !errors.Is(err, ErrBareRepository) {
 		t.Fatalf("StashPush returned %v", err)
 	}
-	if _, err := StashApply(t.Context(), bare.repo, 0); !errors.Is(err, ErrBareRepository) {
+	if _, err := StashApply(t.Context(), bare.repo, 0, StashApplyOptions{}); !errors.Is(err, ErrBareRepository) {
 		t.Fatalf("StashApply returned %v", err)
 	}
-	if _, err := StashPop(t.Context(), bare.repo, 0); !errors.Is(err, ErrBareRepository) {
+	if _, err := StashPop(t.Context(), bare.repo, 0, StashApplyOptions{}); !errors.Is(err, ErrBareRepository) {
 		t.Fatalf("StashPop returned %v", err)
 	}
 

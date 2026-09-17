@@ -15,13 +15,25 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/pathspec"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
 type StashOptions struct {
-	Message string
-	When    time.Time
+	Message          string
+	When             time.Time
+	IncludeUntracked bool
+	IncludeIgnored   bool
+	KeepIndex        bool
+	Staged           bool
+	Paths            []string
+}
+
+func (o StashOptions) untracked() bool { return o.IncludeUntracked || o.IncludeIgnored }
+
+type StashApplyOptions struct {
+	Index bool
 }
 
 type StashEntry struct {
@@ -36,9 +48,10 @@ func (e StashEntry) Selector() string {
 }
 
 type StashApplyResult struct {
-	Conflicts []string
-	Warnings  []merge.Warning
-	Dropped   bool
+	Conflicts     []string
+	Warnings      []merge.Warning
+	IndexRestored bool
+	Dropped       bool
 }
 
 func (r StashApplyResult) Clean() bool {
@@ -53,13 +66,15 @@ type SwitchMergeResult struct {
 func (r SwitchMergeResult) Clean() bool { return len(r.Conflicts) == 0 }
 
 const (
-	stashIndexPrefix = "index on "
-	stashWorkPrefix  = "WIP on "
-	stashNamedPrefix = "On "
-	stashNoBranch    = "(no branch)"
-	stashBaseLabel   = "Stash base"
-	stashOursLabel   = "Updated upstream"
-	stashTheirsLabel = "Stashed changes"
+	stashIndexPrefix     = "index on "
+	stashUntrackedPrefix = "untracked files on "
+	stashWorkPrefix      = "WIP on "
+	stashNamedPrefix     = "On "
+	stashNoBranch        = "(no branch)"
+	stashBaseLabel       = "Stash base"
+	stashOursLabel       = "Updated upstream"
+	stashTheirsLabel     = "Stashed changes"
+	stashUntrackedParent = 2
 )
 
 func StashPush(ctx context.Context, r *repo.Repository, opts StashOptions) (hash.ObjectID, error) {
@@ -68,7 +83,7 @@ func StashPush(ctx context.Context, r *repo.Repository, opts StashOptions) (hash
 		return hash.Zero, err
 	}
 	defer m.close()
-	return m.stashPush(opts.Message)
+	return m.stashPush(opts)
 }
 
 func StashList(ctx context.Context, r *repo.Repository) ([]StashEntry, error) {
@@ -83,22 +98,22 @@ func StashList(ctx context.Context, r *repo.Repository) ([]StashEntry, error) {
 	return stashEntries(rc.refs)
 }
 
-func StashApply(ctx context.Context, r *repo.Repository, position int) (StashApplyResult, error) {
+func StashApply(ctx context.Context, r *repo.Repository, position int, opts StashApplyOptions) (StashApplyResult, error) {
 	m, err := openMerger(ctx, r, MergeOptions{})
 	if err != nil {
 		return StashApplyResult{}, err
 	}
 	defer m.close()
-	return m.stashApply(position)
+	return m.stashApply(position, opts)
 }
 
-func StashPop(ctx context.Context, r *repo.Repository, position int) (StashApplyResult, error) {
+func StashPop(ctx context.Context, r *repo.Repository, position int, opts StashApplyOptions) (StashApplyResult, error) {
 	m, err := openMerger(ctx, r, MergeOptions{})
 	if err != nil {
 		return StashApplyResult{}, err
 	}
 	defer m.close()
-	result, err := m.stashApply(position)
+	result, err := m.stashApply(position, opts)
 	if err != nil || !result.Clean() {
 		return result, err
 	}
@@ -131,10 +146,10 @@ func SwitchMerging(ctx context.Context, r *repo.Repository, target string) (Swit
 	}
 	result := SwitchMergeResult{Stashed: true}
 	if err := Switch(ctx, r, target, SwitchOptions{}); err != nil {
-		_, restoreErr := StashPop(context.WithoutCancel(ctx), r, 0)
+		_, restoreErr := StashPop(context.WithoutCancel(ctx), r, 0, StashApplyOptions{})
 		return result, errors.Join(err, restoreErr)
 	}
-	applied, err := StashPop(context.WithoutCancel(ctx), r, 0)
+	applied, err := StashPop(context.WithoutCancel(ctx), r, 0, StashApplyOptions{})
 	result.Conflicts = applied.Conflicts
 	return result, err
 }
@@ -162,68 +177,43 @@ func dropStash(store *refs.Store, position int) error {
 	return err
 }
 
-func (m *merger) stashPush(message string) (hash.ObjectID, error) {
+type stashPush struct {
+	opts      StashOptions
+	spec      pathspec.Set
+	head      headTarget
+	base      *object.Commit
+	headState merge.Snapshot
+	indexTree hash.ObjectID
+	indexed   merge.Snapshot
+	workTree  hash.ObjectID
+	untracked []string
+	walk      *untrackedWalk
+}
+
+func (m *merger) stashPush(opts StashOptions) (hash.ObjectID, error) {
+	if opts.Staged && opts.untracked() {
+		return hash.Zero, ErrStashStagedUntracked
+	}
+	spec, err := pathspec.Parse(opts.Paths)
+	if err != nil {
+		return hash.Zero, fmt.Errorf("%w: %w", ErrInvalidPath, err)
+	}
 	if err := m.rc.requireIdentity(); err != nil {
 		return hash.Zero, err
 	}
-	head, err := resolveHeadTarget(m.rc.refs)
-	if err != nil {
+	p := &stashPush{opts: opts, spec: spec}
+	if err := m.readStashSources(p); err != nil {
 		return hash.Zero, err
-	}
-	if head.old.IsZero() {
-		return hash.Zero, ErrUnbornHead
-	}
-	base, err := dbCommit(m.rc.db, head.old)
-	if err != nil {
-		return hash.Zero, err
-	}
-	idx, err := readIndex(m.r)
-	if err != nil {
-		return hash.Zero, err
-	}
-	if idx.HasConflicts() {
-		return hash.Zero, ErrUnmergedPaths
-	}
-	indexTree, err := idx.WriteTree(m.rc.db)
-	if err != nil {
-		return hash.Zero, err
-	}
-	headState, err := merge.Read(m.store(), base.Tree)
-	if err != nil {
-		return hash.Zero, err
-	}
-	workTree, err := m.stashWorkTree(idx, headState)
-	if err != nil {
-		return hash.Zero, err
-	}
-	if indexTree == base.Tree && workTree == base.Tree {
-		return hash.Zero, ErrNothingToStash
 	}
 	previous, err := stashTip(m.rc.refs)
 	if err != nil {
 		return hash.Zero, err
 	}
-	label := stashBranch(head) + ": " + abbreviate(head.old) + " " + stashSubject(base.Message)
-	sig := m.rc.sig
-	sig.When = m.opts.When
-	indexCommit, err := dbPutObject(m.rc.db, &object.Commit{
-		Tree: indexTree, Parents: []hash.ObjectID{head.old}, Author: sig, Committer: sig,
-		Message: stashIndexPrefix + label + "\n",
-	})
+	stash, err := m.writeStashCommits(p)
 	if err != nil {
 		return hash.Zero, err
 	}
-	note := stashWorkPrefix + label
-	if message != "" {
-		note = stashNamedPrefix + stashBranch(head) + ": " + message
-	}
-	stash, err := dbPutObject(m.rc.db, &object.Commit{
-		Tree: workTree, Parents: []hash.ObjectID{head.old, indexCommit}, Author: sig, Committer: sig,
-		Message: note,
-	})
-	if err != nil {
-		return hash.Zero, err
-	}
+	note := stashNote(p)
 	tx := m.rc.refs.Begin()
 	tx.SetMessage(note)
 	if err := txUpdate(tx, refs.StashName, stash, previous); err != nil {
@@ -233,13 +223,172 @@ func (m *merger) stashPush(message string) (hash.ObjectID, error) {
 	if err := txCommit(tx); err != nil {
 		return hash.Zero, err
 	}
-	if err := m.restore(headState); err != nil {
-		return stash, err
+	if opts.Staged {
+		return stash, m.removeStagedChanges(p)
+	}
+	return stash, m.removeStashedChanges(p)
+}
+
+func (m *merger) readStashSources(p *stashPush) error {
+	head, err := resolveHeadTarget(m.rc.refs)
+	if err != nil {
+		return err
+	}
+	if head.old.IsZero() {
+		return ErrUnbornHead
+	}
+	p.head = head
+	if p.base, err = dbCommit(m.rc.db, head.old); err != nil {
+		return err
+	}
+	idx, err := readIndex(m.r)
+	if err != nil {
+		return err
+	}
+	if idx.HasConflicts() {
+		return ErrUnmergedPaths
+	}
+	if !p.opts.untracked() {
+		if err := requireKnownPaths(idx, p.opts.Paths); err != nil {
+			return err
+		}
+	}
+	if p.indexTree, err = idx.WriteTree(m.rc.db); err != nil {
+		return err
+	}
+	if p.headState, err = merge.Read(m.store(), p.base.Tree); err != nil {
+		return err
+	}
+	if p.indexed, err = merge.Read(m.store(), p.indexTree); err != nil {
+		return err
+	}
+	if p.opts.untracked() {
+		p.walk = newUntrackedWalk(m, idx, p.spec, p.opts.IncludeIgnored)
+		if p.untracked, err = p.walk.list(); err != nil {
+			return err
+		}
+	}
+	if p.workTree, err = m.stashWorkTree(idx, p.headState, p.spec); err != nil {
+		return err
+	}
+	if !stagedWithin(p.headState, p.indexed, p.spec) && p.workTree == p.indexTree && len(p.untracked) == 0 {
+		return ErrNothingToStash
+	}
+	if p.opts.Staged {
+		if p.indexTree == p.base.Tree {
+			return ErrNoStagedChanges
+		}
+		p.workTree = p.indexTree
+	}
+	return nil
+}
+
+func requireKnownPaths(idx *index.Index, specs []string) error {
+	var unknown []string
+	paths := slices.Collect(idx.Paths(""))
+	for _, spec := range specs {
+		single, _ := pathspec.Parse([]string{spec})
+		if !slices.ContainsFunc(paths, single.Match) {
+			unknown = append(unknown, spec)
+		}
+	}
+	if len(unknown) > 0 {
+		return &PathspecError{Specs: unknown}
+	}
+	return nil
+}
+
+func stagedWithin(head, indexed merge.Snapshot, spec pathspec.Set) bool {
+	for path := range unionKeys(head, indexed, map[string]bool{}) {
+		before, had := head[path]
+		after, has := indexed[path]
+		if (had != has || before != after) && spec.Match(path) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *merger) writeStashCommits(p *stashPush) (hash.ObjectID, error) {
+	label := stashLabel(p)
+	sig := m.rc.sig
+	sig.When = m.opts.When
+	parents := []hash.ObjectID{p.head.old}
+	indexCommit, err := dbPutObject(m.rc.db, &object.Commit{
+		Tree: p.indexTree, Parents: parents, Author: sig, Committer: sig,
+		Message: stashIndexPrefix + label + "\n",
+	})
+	if err != nil {
+		return hash.Zero, err
+	}
+	parents = append(parents, indexCommit)
+	if len(p.untracked) > 0 {
+		tree, err := m.untrackedTree(p.untracked)
+		if err != nil {
+			return hash.Zero, err
+		}
+		untrackedCommit, err := dbPutObject(m.rc.db, &object.Commit{
+			Tree: tree, Author: sig, Committer: sig,
+			Message: stashUntrackedPrefix + label + "\n",
+		})
+		if err != nil {
+			return hash.Zero, err
+		}
+		parents = append(parents, untrackedCommit)
+	}
+	return dbPutObject(m.rc.db, &object.Commit{
+		Tree: p.workTree, Parents: parents, Author: sig, Committer: sig,
+		Message: stashNote(p),
+	})
+}
+
+func stashLabel(p *stashPush) string {
+	return stashBranch(p.head) + ": " + abbreviate(p.head.old) + " " + stashSubject(p.base.Message)
+}
+
+func stashNote(p *stashPush) string {
+	if p.opts.Message != "" {
+		return stashNamedPrefix + stashBranch(p.head) + ": " + p.opts.Message
+	}
+	return stashWorkPrefix + stashLabel(p)
+}
+
+func (m *merger) removeStashedChanges(p *stashPush) error {
+	if !p.spec.Empty() {
+		if err := m.restoreMatching(p.headState, p.spec); err != nil {
+			return err
+		}
+		if err := m.removeFiles(p.untracked); err != nil {
+			return err
+		}
+		return m.keepStashedIndex(p)
+	}
+	if p.opts.untracked() {
+		if err := p.walk.cleanAll(); err != nil {
+			return err
+		}
+	}
+	if err := m.resetHard(p.head, p.headState); err != nil {
+		return err
+	}
+	return m.keepStashedIndex(p)
+}
+
+func (m *merger) resetHard(head headTarget, to merge.Snapshot) error {
+	if err := m.restore(to); err != nil {
+		return err
 	}
 	if err := m.advance(head, head.old, resetToHeadNote); err != nil {
-		return stash, err
+		return err
 	}
-	return stash, errors.Join(writeStateFile(m.r, origHeadFile, head.old.String()+"\n"), clearMergeState(m.r), forgetMergeRR(m.r))
+	return errors.Join(writeStateFile(m.r, origHeadFile, head.old.String()+"\n"), clearMergeState(m.r), forgetMergeRR(m.r))
+}
+
+func (m *merger) keepStashedIndex(p *stashPush) error {
+	if !p.opts.KeepIndex {
+		return nil
+	}
+	return m.restoreMatching(p.indexed, p.spec)
 }
 
 func stashTip(store *refs.Store) (hash.ObjectID, error) {
@@ -274,12 +423,15 @@ func stashSubject(message string) string {
 	return strings.Join(lines, " ")
 }
 
-func (m *merger) stashWorkTree(idx *index.Index, head merge.Snapshot) (hash.ObjectID, error) {
+func (m *merger) stashWorkTree(idx *index.Index, head merge.Snapshot, spec pathspec.Set) (hash.ObjectID, error) {
 	sw := &switcher{ctx: m.ctx, wt: m.wt, db: m.rc.db, format: m.rc.db.Format()}
 	st := &stager{ctx: m.ctx, wt: m.wt, db: m.rc.db, idx: idx}
 	for _, path := range slices.Sorted(maps.Keys(unionKeys(head, indexPaths(idx), map[string]bool{}))) {
 		if err := m.ctx.Err(); err != nil {
 			return hash.Zero, err
+		}
+		if !spec.Match(path) {
+			continue
 		}
 		if entry, staged := idx.Get(path, index.StageMerged); staged {
 			dirty, err := sw.isDirty(path, entry, nil)
@@ -305,12 +457,16 @@ func (m *merger) stashWorkTree(idx *index.Index, head merge.Snapshot) (hash.Obje
 	return idx.WriteTree(m.rc.db)
 }
 
-func (m *merger) stashApply(position int) (StashApplyResult, error) {
-	stash, err := m.stashCommit(position)
-	if err != nil {
-		return StashApplyResult{}, err
-	}
-	base, err := m.treeOf(stash.Parents[0])
+type stashParts struct {
+	entry     StashEntry
+	stash     *object.Commit
+	base      hash.ObjectID
+	index     hash.ObjectID
+	untracked hash.ObjectID
+}
+
+func (m *merger) stashApply(position int, opts StashApplyOptions) (StashApplyResult, error) {
+	parts, err := readStashParts(m.rc, position)
 	if err != nil {
 		return StashApplyResult{}, err
 	}
@@ -329,14 +485,20 @@ func (m *merger) stashApply(position int) (StashApplyResult, error) {
 	if err != nil {
 		return StashApplyResult{}, err
 	}
+	var restored hash.ObjectID
+	if opts.Index && parts.index != parts.base && parts.index != oursTree {
+		if restored, err = m.reinstateIndex(ours, parts); err != nil {
+			return StashApplyResult{}, err
+		}
+	}
 	labels := merge.Labels{Base: stashBaseLabel, Ours: stashOursLabel, Theirs: stashTheirsLabel}
-	merged, err := m.mergeTrees(base, oursTree, stash.Tree, labels, 0)
+	merged, err := m.mergeTrees(parts.base, oursTree, parts.stash.Tree, labels, 0)
 	if err != nil {
 		return StashApplyResult{}, err
 	}
 	to := outcomeOf(merged)
 	if err := m.moveTo(ours, to, false); err != nil {
-		return StashApplyResult{}, err
+		return StashApplyResult{}, errors.Join(err, m.restoreUntracked(parts.untracked))
 	}
 	result := StashApplyResult{Conflicts: to.conflicted(), Warnings: m.warnings}
 	if !merged.Clean() {
@@ -344,27 +506,48 @@ func (m *merger) stashApply(position int) (StashApplyResult, error) {
 		if err != nil {
 			return result, err
 		}
-		return result, writeStateFile(m.r, autoMergeFile, tree.String()+"\n")
+		return result, errors.Join(writeStateFile(m.r, autoMergeFile, tree.String()+"\n"), m.restoreUntracked(parts.untracked))
 	}
-	return result, m.unstageApplied(ours, to)
+	if restored.IsZero() {
+		err = m.unstageApplied(ours, to)
+	} else {
+		err = m.readTreeIntoIndex(restored)
+		result.IndexRestored = err == nil
+	}
+	if err != nil {
+		return result, err
+	}
+	return result, m.restoreUntracked(parts.untracked)
 }
 
-func (m *merger) stashCommit(position int) (*object.Commit, error) {
-	entries, err := stashEntries(m.rc.refs)
+func readStashParts(rc *repoContext, position int) (stashParts, error) {
+	entries, err := stashEntries(rc.refs)
 	if err != nil {
-		return nil, err
+		return stashParts{}, err
 	}
 	if position < 0 || position >= len(entries) {
-		return nil, fmt.Errorf("%w: stash@{%d}", ErrStashNotFound, position)
+		return stashParts{}, fmt.Errorf("%w: stash@{%d}", ErrStashNotFound, position)
 	}
-	stash, err := dbCommit(m.rc.db, entries[position].Commit)
+	stash, err := dbCommit(rc.db, entries[position].Commit)
 	if err != nil {
-		return nil, err
+		return stashParts{}, err
 	}
 	if len(stash.Parents) < 2 {
-		return nil, fmt.Errorf("%w: %s", ErrNotAStash, entries[position].Selector())
+		return stashParts{}, fmt.Errorf("%w: %s", ErrNotAStash, entries[position].Selector())
 	}
-	return stash, nil
+	parts := stashParts{entry: entries[position], stash: stash}
+	if parts.base, err = treeOfCommit(rc, stash.Parents[0]); err != nil {
+		return stashParts{}, err
+	}
+	if parts.index, err = treeOfCommit(rc, stash.Parents[1]); err != nil {
+		return stashParts{}, err
+	}
+	if len(stash.Parents) > stashUntrackedParent {
+		if parts.untracked, err = treeOfCommit(rc, stash.Parents[stashUntrackedParent]); err != nil {
+			return stashParts{}, err
+		}
+	}
+	return parts, nil
 }
 
 func (m *merger) unstageApplied(ours merge.Snapshot, to outcome) error {

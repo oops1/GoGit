@@ -146,7 +146,7 @@ func (a *App) applyStash(index int, drop bool) {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		result, err := apply(ctx, r, index)
+		result, err := apply(ctx, r, index, ops.StashApplyOptions{})
 		reportStashApply(reporter, stashSelector(index), result, err)
 		return err
 	})
