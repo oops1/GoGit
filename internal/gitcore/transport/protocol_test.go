@@ -54,6 +54,19 @@ func TestProtocolAllowedFollowsGitPolicies(t *testing.T) {
 	}
 }
 
+func TestProtocolAllowedForARequestNotFromTheUserNeedsAlways(t *testing.T) {
+	unsetEnvironment(t, "GIT_ALLOW_PROTOCOL", "GIT_PROTOCOL_FROM_USER")
+	if err := ProtocolAllowedFor(nil, SchemeFile, true); !errors.Is(err, ErrProtocolNotAllowed) {
+		t.Fatalf("ProtocolAllowedFor returned %v, want file refused", err)
+	}
+	if err := ProtocolAllowedFor(nil, SchemeHTTPS, true); err != nil {
+		t.Fatalf("ProtocolAllowedFor returned %v, want https allowed", err)
+	}
+	if err := ProtocolAllowedFor(testGitConfig(t, "[protocol \"file\"]\n\tallow = always\n"), SchemeFile, true); err != nil {
+		t.Fatalf("ProtocolAllowedFor returned %v, want file allowed by config", err)
+	}
+}
+
 func TestProtocolAllowedRejectsAnUnknownPolicy(t *testing.T) {
 	unsetEnvironment(t, "GIT_ALLOW_PROTOCOL", "GIT_PROTOCOL_FROM_USER")
 	err := ProtocolAllowed(testGitConfig(t, "[protocol \"file\"]\n\tallow = sometimes\n"), SchemeFile)

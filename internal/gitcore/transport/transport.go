@@ -132,6 +132,7 @@ type Options struct {
 	SSH         SSHOptions
 	Config      *config.Config
 	RemoteName  string
+	NotFromUser bool
 }
 
 type HostKey struct {

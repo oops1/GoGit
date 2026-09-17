@@ -100,3 +100,15 @@ func TestDialAnyRefusesAProtocolForbiddenByTheConfig(t *testing.T) {
 		t.Fatalf("dialAny returned %v, want ErrProtocolNotAllowed", err)
 	}
 }
+
+func TestDialAnyRefusesALocalRepositoryTheUserDidNotAskFor(t *testing.T) {
+	t.Setenv("GIT_PROTOCOL_FROM_USER", "1")
+	swapLocalDial(t, func(context.Context, string, transport.Service, transport.Options) (transport.Session, error) {
+		t.Fatalf("localDial should not be called for a request that is not from the user")
+		return nil, nil
+	})
+	cfg := newTestRepo(t, "").Config()
+	if _, err := dialAny(t.Context(), "/srv/repos/example.git", transport.UploadPack, transport.Options{Config: cfg, NotFromUser: true}); !errors.Is(err, transport.ErrProtocolNotAllowed) {
+		t.Fatalf("dialAny returned %v, want ErrProtocolNotAllowed", err)
+	}
+}

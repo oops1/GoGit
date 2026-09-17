@@ -21,7 +21,7 @@ func dialAny(ctx context.Context, rawURL string, service transport.Service, opts
 	if err != nil {
 		return nil, err
 	}
-	if err := transport.ProtocolAllowed(opts.Config, endpoint.Scheme); err != nil {
+	if err := transport.ProtocolAllowedFor(opts.Config, endpoint.Scheme, opts.NotFromUser); err != nil {
 		return nil, err
 	}
 	if endpoint.IsLocal() {

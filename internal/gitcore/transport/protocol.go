@@ -16,6 +16,10 @@ const (
 )
 
 func ProtocolAllowed(cfg *config.Config, scheme Scheme) error {
+	return ProtocolAllowedFor(cfg, scheme, false)
+}
+
+func ProtocolAllowedFor(cfg *config.Config, scheme Scheme, notFromUser bool) error {
 	name := string(scheme)
 	if list, ok := os.LookupEnv("GIT_ALLOW_PROTOCOL"); ok {
 		if slices.Contains(strings.Split(list, ":"), name) {
@@ -27,7 +31,7 @@ func ProtocolAllowed(cfg *config.Config, scheme Scheme) error {
 	case protocolPolicyAlways:
 		return nil
 	case protocolPolicyUser:
-		if protocolFromUser() {
+		if !notFromUser && protocolFromUser() {
 			return nil
 		}
 	case protocolPolicyNever:
