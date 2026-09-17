@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/gitlink"
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -45,8 +46,7 @@ type SubmoduleUpdateOptions struct {
 	Transport        transport.Options
 	Events           SubmoduleEvents
 
-	populatedOnly bool
-	onlyPaths     map[string]bool
+	noSingleBranch bool
 }
 
 const gitFileMode = 0o666
@@ -93,9 +93,6 @@ func (s *superproject) update(ctx context.Context, explicitPaths bool, opts Subm
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if opts.onlyPaths != nil && !opts.onlyPaths[link.path] {
-			continue
-		}
 		record, ok, err := s.prepareUpdate(ctx, link, explicitPaths, opts)
 		if err != nil {
 			return err
@@ -110,7 +107,7 @@ func (s *superproject) update(ctx context.Context, explicitPaths bool, opts Subm
 			return err
 		}
 		err := s.updateOne(ctx, record, opts)
-		if errors.Is(err, ErrSubmoduleCheckout) {
+		if errors.Is(err, ErrSubmoduleCheckout) || errors.Is(err, ErrSubmoduleCommand) {
 			failures = append(failures, err)
 			continue
 		}
@@ -165,9 +162,6 @@ func (s *superproject) prepareUpdate(ctx context.Context, link gitlinkEntry, exp
 	record := updateRecord{link: link, justCloned: statErr != nil, displayPath: path}
 	if !record.justCloned {
 		return record, true, nil
-	}
-	if opts.populatedOnly {
-		return updateRecord{}, false, nil
 	}
 	return record, true, s.cloneSubmodule(ctx, record, url, opts)
 }
@@ -244,6 +238,7 @@ func (s *superproject) cloneSubmodule(ctx context.Context, record updateRecord, 
 		NoCheckout:     true,
 		Depth:          depth,
 		SeparateGitDir: gitDir,
+		SingleBranch:   depth > 0 && !opts.noSingleBranch,
 		Open:           s.repo.Options(),
 		Progress:       opts.Progress,
 		Transport:      transportOpts,
@@ -289,7 +284,7 @@ func (s *superproject) ensureCoreWorktree(sub *repo.Repository, path string) err
 }
 
 func (s *superproject) strategyFor(record updateRecord, opts SubmoduleUpdateOptions) (submodule.UpdateType, error) {
-	kind := submodule.UpdateCheckout
+	kind, command := submodule.UpdateCheckout, ""
 	switch opts.Mode {
 	case SubmoduleUpdateRebase:
 		kind = submodule.UpdateRebase
@@ -301,13 +296,15 @@ func (s *superproject) strategyFor(record updateRecord, opts SubmoduleUpdateOpti
 			return 0, fmt.Errorf("%w: %s", err, record.displayPath)
 		}
 		if strategy.Type != submodule.UpdateUnspecified {
-			kind = strategy.Type
+			kind, command = strategy.Type, strategy.Command
 		}
 	}
 	if record.justCloned && kind != submodule.UpdateCommand {
 		kind = submodule.UpdateCheckout
 	}
 	if kind == submodule.UpdateCommand {
+		word, _, _ := strings.Cut(strings.Join(strings.Fields(command), " "), " ")
+		opts.Events.emit(SubmoduleEvent{Kind: SubmoduleCommandRefused, Path: record.displayPath, Name: record.link.module.Name, Command: word})
 		return 0, fmt.Errorf("%w: %s", ErrSubmoduleCommand, record.displayPath)
 	}
 	return kind, nil
@@ -460,7 +457,7 @@ func (s *superproject) runUpdate(ctx context.Context, sub *repo.Repository, reco
 		}
 	default:
 		event.Kind = SubmoduleCheckedOut
-		if err := Switch(ctx, sub, target.String(), SwitchOptions{Force: force, RecurseSubmodules: opts.populatedOnly, SubmoduleEvents: opts.Events}); err != nil {
+		if err := Switch(ctx, sub, target.String(), SwitchOptions{Force: force, SubmoduleEvents: opts.Events}); err != nil {
 			return fmt.Errorf("%w: %s: %w", ErrSubmoduleCheckout, record.displayPath, err)
 		}
 	}

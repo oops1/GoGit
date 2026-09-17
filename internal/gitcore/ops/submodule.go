@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"slices"
 
@@ -58,14 +57,20 @@ const (
 	SubmoduleSkippedUnmerged
 	SubmoduleNotInitialized
 	SubmoduleSynchronized
+	SubmoduleCommandRefused
+	SubmoduleAbsorbed
+	SubmoduleCleared
+	SubmoduleUnregistered
+	SubmoduleRemoved
 )
 
 type SubmoduleEvent struct {
-	Kind   SubmoduleEventKind
-	Path   string
-	Name   string
-	URL    string
-	Commit hash.ObjectID
+	Kind    SubmoduleEventKind
+	Path    string
+	Name    string
+	URL     string
+	Commit  hash.ObjectID
+	Command string
 }
 
 type SubmoduleEvents func(SubmoduleEvent)
@@ -85,15 +90,19 @@ type gitlinkEntry struct {
 }
 
 type superproject struct {
-	repo    *repo.Repository
-	cfg     *config.Config
-	modules *submodule.Modules
-	links   []gitlinkEntry
-	prefix  string
+	repo     *repo.Repository
+	cfg      *config.Config
+	modules  *submodule.Modules
+	links    []gitlinkEntry
+	prefix   string
+	index    *index.Index
+	headBlob hash.ObjectID
 }
 
 var (
 	submoduleReadIndex   = index.ReadFile
+	submoduleOpen        = repo.Open
+	submoduleOpenLayout  = repo.OpenLayout
 	submoduleLoad        = submodule.Load
 	writeSubmoduleConfig = setConfigValues
 )
@@ -129,7 +138,7 @@ func loadSuperproject(r *repo.Repository, specs []string) (*superproject, error)
 	for i := range links {
 		links[i].module, links[i].known = modules.ByPath(links[i].path)
 	}
-	return &superproject{repo: r, cfg: r.Config(), modules: modules, links: links}, nil
+	return &superproject{repo: r, cfg: r.Config(), modules: modules, links: links, index: idx, headBlob: headBlob}, nil
 }
 
 func listGitlinks(idx *index.Index, specs []string) ([]gitlinkEntry, error) {
@@ -275,25 +284,19 @@ func openSubmodule(s *superproject, path string) (*repo.Repository, bool, error)
 	if !ok {
 		return nil, false, nil
 	}
-	sub, err := repo.OpenLayout(layout, s.repo.Options())
+	sub, err := submoduleOpenLayout(layout, s.repo.Options())
 	return sub, true, err
 }
 
 func setConfigValues(path string, values ...[2]string) error {
-	data, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	file, err := config.Parse(data)
-	if err != nil {
-		return err
-	}
-	for _, value := range values {
-		if err := file.Set(value[0], value[1]); err != nil {
-			return err
+	return editConfigFile(path, func(file *config.File) error {
+		for _, value := range values {
+			if err := file.Set(value[0], value[1]); err != nil {
+				return err
+			}
 		}
-	}
-	return file.Save(path)
+		return nil
+	})
 }
 
 func (s *superproject) setConfig(values ...[2]string) error {

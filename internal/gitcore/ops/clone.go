@@ -148,7 +148,11 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 	}
 
 	defaultBranch, _ := r.Config().Get(cloneDefaultBranchKey)
-	spec, explicitBranch, err := planCloneFetch(ctx, url, remoteName, defaultBranch, opts)
+	listOpts := opts
+	if listOpts.Transport.Config == nil {
+		listOpts.Transport.Config = r.Config()
+	}
+	spec, explicitBranch, err := planCloneFetch(ctx, url, remoteName, defaultBranch, listOpts)
 	if err != nil {
 		return failClone(r, err)
 	}
@@ -226,13 +230,14 @@ func cloneSubmodules(ctx context.Context, r *repo.Repository, opts CloneOptions)
 		depth = 1
 	}
 	return SubmoduleUpdate(ctx, r, nil, SubmoduleUpdateOptions{
-		Init:        true,
-		RequireInit: true,
-		Recursive:   true,
-		Depth:       depth,
-		Progress:    opts.Progress,
-		Transport:   opts.Transport,
-		Events:      opts.SubmoduleEvents,
+		Init:           true,
+		RequireInit:    true,
+		noSingleBranch: true,
+		Recursive:      true,
+		Depth:          depth,
+		Progress:       opts.Progress,
+		Transport:      opts.Transport,
+		Events:         opts.SubmoduleEvents,
 	})
 }
 

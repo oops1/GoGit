@@ -40,8 +40,10 @@ func lockIndex(r *repo.Repository) (*indexLock, error) {
 	return &indexLock{root: root, file: file, idx: idx, repo: r}, nil
 }
 
+var readIndexFile = index.ReadFile
+
 func readIndex(r *repo.Repository) (*index.Index, error) {
-	idx, err := index.ReadFile(r.IndexFile())
+	idx, err := readIndexFile(r.IndexFile())
 	if errors.Is(err, fs.ErrNotExist) {
 		return index.New(index.Version2), nil
 	}

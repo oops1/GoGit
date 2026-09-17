@@ -106,7 +106,7 @@ func describePopulated(ctx context.Context, sub *repo.Repository, item *Submodul
 	if err == nil {
 		item.Head = head
 	}
-	dirty, err := submoduleDirty(ctx, sub)
+	dirty, err := submoduleDirty(ctx, sub, false)
 	if err != nil {
 		return err
 	}
@@ -122,13 +122,13 @@ func describePopulated(ctx context.Context, sub *repo.Repository, item *Submodul
 	return nil
 }
 
-func submoduleDirty(ctx context.Context, sub *repo.Repository) (bool, error) {
+func submoduleDirty(ctx context.Context, sub *repo.Repository, ignoreNoSubmodule bool) (bool, error) {
 	db, err := odbOpen(sub.ObjectsDir(), odb.Options{Format: sub.ObjectFormat})
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = db.Close() }()
-	tree, err := worktreeOpen(sub, worktree.Options{DB: db})
+	tree, err := worktreeOpen(sub, worktree.Options{DB: db, IgnoreNoSubmodule: ignoreNoSubmodule})
 	if err != nil {
 		return false, err
 	}

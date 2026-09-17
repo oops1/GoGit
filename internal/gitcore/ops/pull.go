@@ -118,7 +118,11 @@ func pullBranch(ctx context.Context, r *repo.Repository, opts PullOptions, branc
 		return PullResult{}, err
 	}
 
-	fetchResult, err := fetchRemote(ctx, r, rem, opts.Fetch)
+	fetchMode := SubmoduleFetchConfigured
+	if opts.RecurseSubmodules {
+		fetchMode = SubmoduleFetchOn
+	}
+	fetchResult, err := fetchWithSubmodules(ctx, r, rem, opts.Fetch, SubmoduleFetchOptions{Mode: fetchMode, Events: opts.SubmoduleEvents})
 	if err != nil {
 		return PullResult{}, err
 	}
