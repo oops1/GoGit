@@ -28,6 +28,7 @@ type httpSettings struct {
 	lowSpeedTime  int64
 	postBuffer    int64
 	extraHeaders  []string
+	emptyAuth     bool
 }
 
 type urlMatch struct {
@@ -92,6 +93,10 @@ func (s *httpSettings) apply(key string, entry config.Entry) error {
 	case "sslverify":
 		verify, err := config.ParseBool(entry.Value)
 		s.sslVerify = verify || !entry.HasValue
+		return entryError(entry, err, entry.HasValue)
+	case "emptyauth":
+		empty, err := config.ParseBool(entry.Value)
+		s.emptyAuth = empty || !entry.HasValue
 		return entryError(entry, err, entry.HasValue)
 	case "sslcainfo", "sslcapath", "sslcert", "sslkey":
 		expanded, err := config.ExpandPath(entry.Value)

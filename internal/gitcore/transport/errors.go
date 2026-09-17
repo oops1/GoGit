@@ -25,6 +25,8 @@ var (
 	ErrInvalidURL = errors.New("transport: invalid url")
 
 	ErrAuthSchemeUnsupported = errors.New("transport: the server accepts only an unsupported authentication scheme")
+	ErrNTLMAuthFailed        = errors.New("transport: ntlm authentication was rejected")
+	ErrNegotiateAuthFailed   = errors.New("transport: negotiate authentication was rejected")
 	ErrProxyAuthRequired     = errors.New("transport: proxy authentication required")
 	ErrInvalidProxy          = errors.New("transport: invalid or unsupported proxy")
 	ErrTLSConfig             = errors.New("transport: invalid tls configuration")

@@ -65,6 +65,17 @@ linters:
         linters:
           - gosec
         text: "G402"
+      - path: internal/gitcore/transport/ntlm\.go
+        linters:
+          - gosec
+      - path: internal/gitcore/transport/ntlm\.go
+        linters:
+          - staticcheck
+        text: "SA1019"
+      - path: internal/gitcore/transport/sspi_windows\.go
+        linters:
+          - gosec
+        text: "G103"
       - path: internal/gitcore/transport/httpproxy_test\.go
         linters:
           - gosec

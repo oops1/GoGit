@@ -293,30 +293,29 @@ func (s *httpSession) send(ctx context.Context, method, suffix, contentType stri
 	}
 }
 
-func onlyUnsupportedChallenges(h http.Header) bool {
-	values := h.Values("WWW-Authenticate")
-	if len(values) == 0 {
-		return false
-	}
-	for _, value := range values {
-		for part := range strings.SplitSeq(value, ",") {
-			scheme, _, _ := strings.Cut(strings.TrimSpace(part), " ")
-			if strings.EqualFold(scheme, "Basic") || strings.EqualFold(scheme, "Bearer") {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 func (s *httpSession) unauthorizedError(h http.Header) error {
-	switch {
-	case onlyUnsupportedChallenges(h):
-		return ErrAuthSchemeUnsupported
-	case s.opts.Credentials == nil:
+	challenges := parseAuthChallenges(h, headerWWWAuthenticate)
+	scheme := selectAuthScheme(challenges)
+	if scheme == "" {
+		if len(challenges) > 0 {
+			return ErrAuthSchemeUnsupported
+		}
+		if s.opts.Credentials == nil {
+			return ErrNoCredentials
+		}
+		return ErrAuthRequired
+	}
+	if s.opts.Credentials == nil && !s.settings.emptyAuth {
 		return ErrNoCredentials
 	}
-	return ErrAuthRequired
+	switch scheme {
+	case schemeNTLM:
+		return ErrNTLMAuthFailed
+	case schemeNegotiate:
+		return ErrNegotiateAuthFailed
+	default:
+		return ErrAuthRequired
+	}
 }
 
 func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
@@ -324,16 +323,9 @@ func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType
 	if err != nil {
 		return nil, err
 	}
-	for resp.StatusCode == http.StatusUnauthorized && s.credAttempts < 2 && s.opts.Credentials != nil && !onlyUnsupportedChallenges(resp.Header) {
-		_ = resp.Body.Close()
-		s.rejectCredential(ctx, &s.supplied)
-		if err := s.authenticate(ctx); err != nil {
-			return nil, err
-		}
-		resp, err = s.send(ctx, method, suffix, contentType, body, headers)
-		if err != nil {
-			return nil, err
-		}
+	resp, err = s.authorize(ctx, resp, method, suffix, contentType, body, headers)
+	if err != nil {
+		return nil, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		_ = resp.Body.Close()
@@ -344,6 +336,53 @@ func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType
 		s.approveCredential(ctx, s.supplied)
 	}
 	return s.checkStatus(resp)
+}
+
+func (s *httpSession) authorize(ctx context.Context, resp *http.Response, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
+	if resp.StatusCode != http.StatusUnauthorized || (s.opts.Credentials == nil && !s.settings.emptyAuth) {
+		return resp, nil
+	}
+	challenges := parseAuthChallenges(resp.Header, headerWWWAuthenticate)
+	scheme := selectAuthScheme(challenges)
+	switch {
+	case scheme == schemeNTLM || scheme == schemeNegotiate:
+		return s.connectionAuthLoop(ctx, resp, method, suffix, contentType, body, headers, scheme)
+	case len(challenges) == 0 || scheme == schemeBasic || scheme == schemeBearer:
+		return s.basicRetry(ctx, resp, method, suffix, contentType, body, headers)
+	default:
+		return resp, nil
+	}
+}
+
+func (s *httpSession) basicRetry(ctx context.Context, resp *http.Response, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
+	for resp.StatusCode == http.StatusUnauthorized && s.credAttempts < 2 && s.opts.Credentials != nil {
+		_ = resp.Body.Close()
+		s.rejectCredential(ctx, &s.supplied)
+		if err := s.authenticate(ctx); err != nil {
+			return nil, err
+		}
+		next, err := s.send(ctx, method, suffix, contentType, body, headers)
+		if err != nil {
+			return nil, err
+		}
+		resp = next
+	}
+	return resp, nil
+}
+
+func (s *httpSession) connectionAuthLoop(ctx context.Context, resp *http.Response, method, suffix, contentType string, body *requestBody, headers map[string]string, scheme string) (*http.Response, error) {
+	integrated := s.settings.emptyAuth || s.opts.Credentials == nil
+	for attempt := 0; ; attempt++ {
+		next, err := s.connectionAuth(ctx, method, suffix, contentType, body, headers, scheme, resp)
+		if err != nil {
+			return nil, err
+		}
+		if next.StatusCode != http.StatusUnauthorized || integrated || attempt >= 1 || s.opts.Credentials == nil {
+			return next, nil
+		}
+		s.rejectCredential(ctx, &s.supplied)
+		resp = next
+	}
 }
 
 func (s *httpSession) checkStatus(resp *http.Response) (*http.Response, error) {
