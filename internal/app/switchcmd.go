@@ -73,7 +73,7 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 			return err
 		}
 		defer func() { _ = r.Close() }()
-		name, err := switchTo(ctx, r, choice, hookEvents(reporter))
+		name, err := switchTo(ctx, r, choice, hookEvents(reporter), submoduleEventLog(reporter, new(int)))
 		reportSwitch(reporter, name, err)
 		var overwrite *ops.OverwriteError
 		if !errors.As(err, &overwrite) {
@@ -87,10 +87,10 @@ func (a *App) startSwitch(choice switchbranch.Choice) {
 	})
 }
 
-func switchTo(ctx context.Context, r *gitrepo.Repository, choice switchbranch.Choice, events hooks.Sink) (string, error) {
+func switchTo(ctx context.Context, r *gitrepo.Repository, choice switchbranch.Choice, events hooks.Sink, submodules ops.SubmoduleEvents) (string, error) {
 	hookOpts := ops.HookOptions{Events: events}
 	if !choice.StartsABranch() {
-		return choice.Source, runSwitchBranch(ctx, r, choice.Source, ops.SwitchOptions{Hooks: hookOpts})
+		return choice.Source, runSwitchBranch(ctx, r, choice.Source, ops.SwitchOptions{Hooks: hookOpts, SubmoduleEvents: submodules})
 	}
 	result, err := runStartBranch(ctx, r, choice.Name, choice.Source, ops.StartBranchOptions{Track: choice.Track, Hooks: hookOpts})
 	return result.Branch.Short(), err

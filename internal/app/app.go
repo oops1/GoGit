@@ -199,6 +199,9 @@ type App struct {
 	branchGen   uint64
 	branchWG    sync.WaitGroup
 
+	submoduleGen atomic.Uint64
+	submoduleWG  sync.WaitGroup
+
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
 	commands         commandWatch
@@ -502,6 +505,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.registerRebaseHandlers()
 	a.registerReflogHandlers()
 	a.registerSwitchHandlers()
+	a.registerSubmoduleHandlers()
 	a.registerStashHandlers()
 	a.registerCompareHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
@@ -628,6 +632,7 @@ func (a *App) CloseRepository() {
 	a.setDivergence(repo.Divergence{}, false)
 	a.updateStatusText()
 	a.statusBranchLabel.SetText("")
+	a.clearSubmodules()
 	a.branchesView.Render(branches.Snapshot{})
 	a.journalView.Reset()
 	a.reposView.Render(a.registry, a.repoTreeState())
@@ -654,6 +659,7 @@ func (a *App) ActivateRepository(id string) {
 		a.setDivergence(repo.Divergence{}, false)
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		a.statusBranchLabel.SetText("")
+		a.clearSubmodules()
 		a.branchesView.Render(branches.Snapshot{})
 		a.journalView.Reset()
 		a.refreshBranchCache()
@@ -673,7 +679,9 @@ func (a *App) ActivateRepository(id string) {
 	a.SetActiveRepository(id, node.Kind == repo.KindWorktree)
 	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
+	a.clearSubmodules()
 	a.branchesView.Render(snap)
+	a.refreshSubmodules(opened)
 	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(opened)
@@ -772,6 +780,7 @@ func (a *App) RefreshRepository() {
 		return
 	}
 	a.branchesView.Render(snap)
+	a.refreshSubmodules(o)
 	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
@@ -1110,6 +1119,7 @@ func (a *App) Close() {
 		a.stopNetOperations()
 		a.closePostQueue()
 		a.branchWG.Wait()
+		a.submoduleWG.Wait()
 		a.releaseDialogs(true)
 		a.stopWatcher()
 		a.stopJournal()

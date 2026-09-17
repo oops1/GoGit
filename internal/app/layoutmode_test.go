@@ -91,7 +91,6 @@ func TestTheSideBarCountsBranchesTagsRemotesAndFiles(t *testing.T) {
 		sidebar.SectionTags:        "1",
 		sidebar.SectionRemotes:     "4",
 		sidebar.SectionStash:       "—",
-		sidebar.SectionSubmodules:  "—",
 		sidebar.SectionWorkingCopy: "7",
 		sidebar.SectionIndex:       "2",
 	} {

@@ -87,7 +87,20 @@ func buildRemoteMenuTree() []menuTreeEntry {
 		leaf("Menu.Remote.Prune", CmdPrune),
 		separator,
 		leaf("Menu.Remote.Manage", CmdManageRemotes),
+		separator,
+		{Group: &menuGroupEntry{Key: "Menu.Remote.Submodule", Items: submoduleMenuLeaves}},
 	}
+}
+
+var submoduleMenuLeaves = []menuLeafEntry{
+	{Key: "Menu.Remote.Submodule.Update", Command: CmdSubmoduleUpdate},
+	{Key: "Menu.Remote.Submodule.Initialize", Command: CmdSubmoduleInitialize},
+	{Key: "Menu.Remote.Submodule.Synchronize", Command: CmdSubmoduleSync},
+	{},
+	{Key: "Menu.Remote.Submodule.Add", Command: CmdSubmoduleAdd},
+	{Key: "Menu.Remote.Submodule.Remove", Command: CmdSubmoduleRemove},
+	{Key: "Menu.Remote.Submodule.Unregister", Command: CmdSubmoduleUnregister},
+	{Key: "Menu.Remote.Submodule.Reset", Command: CmdSubmoduleReset},
 }
 
 func buildEditMenuTree() []menuTreeEntry {

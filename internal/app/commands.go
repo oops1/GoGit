@@ -29,6 +29,13 @@ const (
 	CmdPush                 CommandID = "remote.push"
 	CmdPrune                CommandID = "remote.prune"
 	CmdManageRemotes        CommandID = "remote.manage"
+	CmdSubmoduleUpdate      CommandID = "remote.submodule.update"
+	CmdSubmoduleInitialize  CommandID = "remote.submodule.initialize"
+	CmdSubmoduleSync        CommandID = "remote.submodule.sync"
+	CmdSubmoduleAdd         CommandID = "remote.submodule.add"
+	CmdSubmoduleRemove      CommandID = "remote.submodule.remove"
+	CmdSubmoduleUnregister  CommandID = "remote.submodule.unregister"
+	CmdSubmoduleReset       CommandID = "remote.submodule.reset"
 	CmdStage                CommandID = "edit.stage"
 	CmdUnstage              CommandID = "edit.unstage"
 	CmdDiscard              CommandID = "edit.discard"
@@ -149,6 +156,7 @@ type State struct {
 	HasStashable     bool
 	HasRemotes       bool
 	HasStashes       bool
+	HasSubmodules    bool
 	Merging          bool
 	Rebasing         bool
 	Rewording        bool
@@ -192,6 +200,10 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.FilesSelected && !s.Merging
 	case CmdStashApply, CmdStashDrop:
 		return s.ActiveRepository != "" && s.HasStashes
+	case CmdSubmoduleUpdate, CmdSubmoduleInitialize, CmdSubmoduleSync:
+		return s.ActiveRepository != "" && s.HasSubmodules
+	case CmdSubmoduleAdd, CmdSubmoduleRemove, CmdSubmoduleUnregister, CmdSubmoduleReset:
+		return false
 	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdFlowStartFeature:

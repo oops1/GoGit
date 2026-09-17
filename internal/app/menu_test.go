@@ -303,6 +303,12 @@ func TestRemoteMenuTreeStructure(t *testing.T) {
 			}
 			continue
 		}
+		if entry.Group != nil {
+			if sub[i].Text != widget.Tr(entry.Group.Key) || len(sub[i].SubItems) != len(entry.Group.Items) {
+				t.Fatalf("group %d = %q with %d items, want %q with %d", i, sub[i].Text, len(sub[i].SubItems), widget.Tr(entry.Group.Key), len(entry.Group.Items))
+			}
+			continue
+		}
 		if entry.Leaf == nil {
 			t.Fatalf("item %d must be a leaf", i)
 		}
