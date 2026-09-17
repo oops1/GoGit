@@ -45,6 +45,16 @@ func (v *View) Submodules() []ops.Submodule {
 	return v.submodules
 }
 
+func (v *View) SelectedSubmodule() (ops.Submodule, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.tree == nil {
+		return ops.Submodule{}, false
+	}
+	sub, ok := v.submoduleByItem[v.tree.Tree.SelectedItem()]
+	return sub, ok
+}
+
 func (v *View) SubmoduleItem(path string) (*treeview.TreeViewItem, bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()

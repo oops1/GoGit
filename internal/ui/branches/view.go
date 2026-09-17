@@ -120,6 +120,7 @@ func (v *View) render(s Snapshot) {
 	v.last = s
 	v.captureExpanded()
 	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
+	selectedSubmodule, submoduleSelected := v.submoduleByItem[v.tree.Tree.SelectedItem()]
 
 	v.tree.BeginUpdate()
 	v.tree.ClearRoots()
@@ -142,6 +143,11 @@ func (v *View) render(s Snapshot) {
 	v.tree.EndUpdate()
 	if item, ok := v.itemByRef[selected]; ok {
 		selectQuietly(v.tree.Tree, item)
+	}
+	for item, sub := range v.submoduleByItem {
+		if submoduleSelected && sub.Path == selectedSubmodule.Path {
+			selectQuietly(v.tree.Tree, item)
+		}
 	}
 	v.tree.ScrollBy(scroll)
 }
