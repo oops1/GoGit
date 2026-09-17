@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -13,7 +14,10 @@ import (
 
 var nowFunc = time.Now
 
-const headerWWWAuthenticate = "WWW-Authenticate"
+const (
+	headerWWWAuthenticate   = "WWW-Authenticate"
+	headerProxyAuthenticate = "Proxy-Authenticate"
+)
 
 const (
 	schemeBasic     = "basic"
@@ -22,8 +26,6 @@ const (
 	schemeNegotiate = "negotiate"
 	schemeDigest    = "digest"
 )
-
-var errAuthHandshakeAborted = errors.New("transport: connection authentication did not complete")
 
 func parseAuthChallenges(h http.Header, key string) map[string]string {
 	out := map[string]string{}
@@ -91,10 +93,13 @@ func localWorkstation() string {
 	if err != nil {
 		return ""
 	}
-	if dot := strings.IndexByte(name, '.'); dot >= 0 {
-		name = name[:dot]
-	}
+	name, _, _ = strings.Cut(name, ".")
 	return strings.ToUpper(name)
+}
+
+func basicAuthorization(user *url.Userinfo) string {
+	password, _ := user.Password()
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(user.Username()+":"+password))
 }
 
 type authGenerator interface {
@@ -106,15 +111,12 @@ type ntlmGenerator struct {
 	scheme      string
 	creds       ntlmCredentials
 	workstation string
+	binding     []byte
 	negotiate   []byte
 }
 
-func newNTLMGenerator(creds ntlmCredentials) *ntlmGenerator {
-	return &ntlmGenerator{scheme: schemeNTLM, creds: creds, workstation: localWorkstation()}
-}
-
-func newSPNEGOGenerator(creds ntlmCredentials) *ntlmGenerator {
-	return &ntlmGenerator{scheme: schemeNegotiate, creds: creds, workstation: localWorkstation()}
+func newCredentialGenerator(scheme string, creds ntlmCredentials, binding []byte) *ntlmGenerator {
+	return &ntlmGenerator{scheme: scheme, creds: creds, workstation: localWorkstation(), binding: binding}
 }
 
 func (g *ntlmGenerator) headerScheme() string {
@@ -150,6 +152,7 @@ func (g *ntlmGenerator) next(serverToken []byte) (string, bool, error) {
 		challenge:       challenge,
 		clientChallenge: randomBytes(8),
 		timestamp:       windowsTimestamp(nowFunc()),
+		channelBinding:  ntlmChannelBindingHash(g.binding),
 		sessionKey:      randomBytes(16),
 		workstation:     g.workstation,
 	}
@@ -163,42 +166,60 @@ func (g *ntlmGenerator) next(serverToken []byte) (string, bool, error) {
 func (g *ntlmGenerator) close() { g.creds.wipe() }
 
 func (c *ntlmCredentials) wipe() {
-	for i := range c.password {
-		c.password[i] = 0
-	}
+	clear(c.password)
 	c.password = nil
 }
 
-func (s *httpSession) newAuthGenerator(ctx context.Context, scheme string) (authGenerator, error) {
-	useIntegrated := s.settings.emptyAuth || s.opts.Credentials == nil
-	if useIntegrated {
-		if gen, ok, err := newIntegratedGenerator(scheme, s.integratedTarget()); ok {
-			if err != nil {
-				return nil, err
-			}
-			return gen, nil
+func drainClose(resp *http.Response) {
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+}
+
+func runHandshake(gen authGenerator, challengeHeader, scheme string, challengeStatus int, leg func(string) (*http.Response, error)) (*http.Response, error) {
+	var token []byte
+	for {
+		value, last, err := gen.next(token)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := leg(value)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != challengeStatus || last {
+			return resp, nil
+		}
+		token = challengeToken(resp.Header, challengeHeader, scheme)
+		if token == nil {
+			return resp, nil
+		}
+		drainClose(resp)
+	}
+}
+
+func requestHost(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+func (s *httpSession) serverGenerator(ctx context.Context, scheme string, binding []byte, allowIntegrated bool) (authGenerator, bool, error) {
+	if allowIntegrated {
+		if gen, ok := newIntegratedGenerator(scheme, requestHost(s.baseURL), binding); ok {
+			s.integratedAttempted = true
+			return gen, true, nil
 		}
 	}
 	if s.opts.Credentials == nil {
-		return nil, ErrNoCredentials
+		return nil, false, ErrNoCredentials
 	}
 	user, password, err := s.fetchConnectionCredentials(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	creds := newNTLMCredentials(user, password)
-	if scheme == schemeNegotiate {
-		return newSPNEGOGenerator(creds), nil
-	}
-	return newNTLMGenerator(creds), nil
-}
-
-func (s *httpSession) integratedTarget() string {
-	host := s.endpoint.Host
-	if host == "" {
-		return ""
-	}
-	return "HTTP/" + host
+	return newCredentialGenerator(scheme, newNTLMCredentials(user, password), binding), false, nil
 }
 
 func (s *httpSession) fetchConnectionCredentials(ctx context.Context) (string, []byte, error) {
@@ -208,46 +229,61 @@ func (s *httpSession) fetchConnectionCredentials(ctx context.Context) (string, [
 	if err != nil {
 		return "", nil, err
 	}
-	password := creds.Password
-	if len(password) == 0 && len(creds.Token) > 0 {
-		password = creds.Token
-	}
 	s.supplied = &suppliedCredentials{resource: s.resource, creds: creds}
-	return creds.Username, append([]byte(nil), password...), nil
+	return creds.Username, secretOf(creds), nil
 }
 
-func drainClose(resp *http.Response) {
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
-}
-
-func (s *httpSession) connectionAuth(ctx context.Context, method, suffix, contentType string, body *requestBody, headers map[string]string, scheme string, first *http.Response) (*http.Response, error) {
-	drainClose(first)
-	gen, err := s.newAuthGenerator(ctx, scheme)
-	if err != nil {
-		return nil, err
+func secretOf(creds Credentials) []byte {
+	if len(creds.Password) == 0 && len(creds.Token) > 0 {
+		return append([]byte(nil), creds.Token...)
 	}
-	defer gen.close()
+	return append([]byte(nil), creds.Password...)
+}
+
+func (s *httpSession) connectionAuthLoop(ctx context.Context, first *http.Response, method, suffix, contentType string, body *requestBody, headers map[string]string, scheme string) (*http.Response, error) {
+	binding := channelBindingFromState(first.TLS)
+	drainClose(first)
+	s.attemptedScheme = scheme
 	previous := s.authHeader
 	defer func() { s.authHeader = previous }()
-	var token []byte
-	for {
-		value, last, err := gen.next(token)
-		if err != nil {
-			return nil, err
-		}
+	leg := func(value string) (*http.Response, error) {
 		s.authHeader = value
-		resp, err := s.send(ctx, method, suffix, contentType, body, headers)
+		return s.send(ctx, method, suffix, contentType, body, headers)
+	}
+	allowIntegrated := s.settings.emptyAuth != emptyAuthOff
+	var rejected *http.Response
+	for {
+		gen, integrated, err := s.serverGenerator(ctx, scheme, binding, allowIntegrated)
 		if err != nil {
+			if rejected != nil && errors.Is(err, ErrNoCredentials) {
+				return rejected, nil
+			}
+			closeResponse(rejected)
 			return nil, err
 		}
-		if resp.StatusCode != http.StatusUnauthorized || last {
+		closeResponse(rejected)
+		resp, err := runHandshake(gen, headerWWWAuthenticate, scheme, http.StatusUnauthorized, leg)
+		gen.close()
+		if err != nil && !integrated {
+			return nil, err
+		}
+		if err == nil && resp.StatusCode != http.StatusUnauthorized {
 			return resp, nil
 		}
-		token = challengeToken(resp.Header, headerWWWAuthenticate, scheme)
-		drainClose(resp)
-		if token == nil {
-			return nil, errAuthHandshakeAborted
+		rejected = resp
+		if integrated {
+			allowIntegrated = false
+			continue
 		}
+		s.rejectCredential(ctx, &s.supplied)
+		if s.credAttempts >= 2 {
+			return rejected, nil
+		}
+	}
+}
+
+func closeResponse(resp *http.Response) {
+	if resp != nil {
+		drainClose(resp)
 	}
 }

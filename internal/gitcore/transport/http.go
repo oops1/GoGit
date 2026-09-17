@@ -3,6 +3,7 @@ package transport
 import (
 	"cmp"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -21,35 +22,30 @@ import (
 
 const defaultUserAgent = "git/2.45.0 (Go.Git)"
 
+const tlsHandshakeTimeout = 15 * time.Second
+
 var (
 	discoveryHeaderTimeout  = 30 * time.Second
-	errProxyChallenge       = errors.New("transport: the proxy asked for authentication")
 	errUnsupportedMediaType = errors.New("transport: the server refused the request encoding")
 )
 
-func newHTTPClient(settings httpSettings, proxy *proxySelector) (*http.Client, error) {
-	tlsConfig, err := buildTLSConfig(settings)
+func (s *httpSession) buildClient() error {
+	tlsConfig, err := buildTLSConfig(s.settings)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &http.Client{
+	s.tlsConfig = tlsConfig
+	s.dialer = &net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}
+	s.ownsTransport = true
+	s.client = &http.Client{
 		Transport: &http.Transport{
-			Proxy:                  proxy.proxy,
-			OnProxyConnectResponse: rejectProxyChallenge,
-			DialContext: (&net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
+			Proxy:                 s.proxy.transportProxy,
+			DialContext:           s.dialer.DialContext,
+			DialTLSContext:        s.dialTLS,
 			TLSClientConfig:       tlsConfig,
-			TLSHandshakeTimeout:   15 * time.Second,
+			TLSHandshakeTimeout:   tlsHandshakeTimeout,
 			ExpectContinueTimeout: 5 * time.Second,
 		},
-	}, nil
-}
-
-func rejectProxyChallenge(_ context.Context, _ *url.URL, _ *http.Request, resp *http.Response) error {
-	if resp.StatusCode == http.StatusProxyAuthRequired {
-		return errProxyChallenge
 	}
 	return nil
 }
@@ -71,26 +67,32 @@ func hasMediaType(header, want string) bool {
 }
 
 type httpSession struct {
-	mu            sync.Mutex
-	endpoint      Endpoint
-	password      Password
-	service       Service
-	opts          Options
-	settings      httpSettings
-	proxy         *proxySelector
-	client        *http.Client
-	baseURL       string
-	resource      string
-	advertised    bool
-	version       int
-	caps          Capabilities
-	authHeader    string
-	supplied      *suppliedCredentials
-	credAttempts  int
-	proxySupplied *suppliedCredentials
-	proxyAttempts int
-	plainRequests bool
-	closed        bool
+	mu                  sync.Mutex
+	endpoint            Endpoint
+	password            Password
+	service             Service
+	opts                Options
+	settings            httpSettings
+	proxy               *proxySelector
+	client              *http.Client
+	tlsConfig           *tls.Config
+	dialer              *net.Dialer
+	ownsTransport       bool
+	baseURL             string
+	resource            string
+	advertised          bool
+	version             int
+	caps                Capabilities
+	authHeader          string
+	supplied            *suppliedCredentials
+	credAttempts        int
+	integratedAttempted bool
+	attemptedScheme     string
+	proxyMu             sync.Mutex
+	proxySupplied       *suppliedCredentials
+	proxyAttempts       int
+	plainRequests       bool
+	closed              bool
 }
 
 type suppliedCredentials struct {
@@ -105,11 +107,19 @@ func newHTTPSession(endpoint Endpoint, password Password, service Service, opts 
 		password.Wipe()
 		return nil, err
 	}
-	proxy := newProxySelector(settings)
-	client := opts.HTTPClient
-	if client == nil {
-		client, err = newHTTPClient(settings, proxy)
-		if err != nil {
+	s := &httpSession{
+		endpoint: endpoint,
+		password: password,
+		service:  service,
+		opts:     opts,
+		settings: settings,
+		proxy:    newProxySelector(settings),
+		client:   opts.HTTPClient,
+		baseURL:  httpBaseURL(endpoint),
+		resource: CredentialResource(endpoint),
+	}
+	if s.client == nil {
+		if err := s.buildClient(); err != nil {
 			password.Wipe()
 			return nil, err
 		}
@@ -117,17 +127,7 @@ func newHTTPSession(endpoint Endpoint, password Password, service Service, opts 
 			opts.Progress.Phase(progress.PhaseTLSVerifyDisabled)
 		}
 	}
-	return &httpSession{
-		endpoint: endpoint,
-		password: password,
-		service:  service,
-		opts:     opts,
-		settings: settings,
-		proxy:    proxy,
-		client:   client,
-		baseURL:  httpBaseURL(endpoint),
-		resource: CredentialResource(endpoint),
-	}, nil
+	return s, nil
 }
 
 func (s *httpSession) Close() error {
@@ -140,7 +140,9 @@ func (s *httpSession) Close() error {
 	s.password.Wipe()
 	s.authHeader = ""
 	forgetCredential(&s.supplied)
+	s.proxyMu.Lock()
 	forgetCredential(&s.proxySupplied)
+	s.proxyMu.Unlock()
 	return nil
 }
 
@@ -198,26 +200,7 @@ func (s *httpSession) authenticate(ctx context.Context) error {
 	return nil
 }
 
-func (s *httpSession) authenticateProxy(ctx context.Context) error {
-	resource := s.proxy.resource()
-	if s.opts.Credentials == nil || resource == "" || s.proxyAttempts >= 2 {
-		return ErrProxyAuthRequired
-	}
-	creds, err := s.opts.Credentials.Credentials(ctx, resource, s.proxyAttempts > 0)
-	s.proxyAttempts++
-	if err != nil {
-		return err
-	}
-	secret := creds.Password
-	if len(creds.Token) > 0 {
-		secret = creds.Token
-	}
-	s.proxy.authenticate(url.UserPassword(creds.Username, string(secret)))
-	s.proxySupplied = &suppliedCredentials{resource: resource, creds: creds}
-	return nil
-}
-
-func (s *httpSession) applyHeaders(req *http.Request, contentType string, headers map[string]string) {
+func (s *httpSession) applyHeaders(req *http.Request, contentType, proxyAuthorization string, headers map[string]string) {
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
@@ -231,9 +214,12 @@ func (s *httpSession) applyHeaders(req *http.Request, contentType string, header
 		}
 	}
 	s.applyAuthHeader(req)
+	if proxyAuthorization != "" {
+		req.Header.Set("Proxy-Authorization", proxyAuthorization)
+	}
 }
 
-func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
+func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType, proxyAuthorization string, body *requestBody, headers map[string]string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
 	if err != nil {
 		return nil, err
@@ -248,7 +234,7 @@ func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType s
 			return nil, err
 		}
 	}
-	s.applyHeaders(req, contentType, headers)
+	s.applyHeaders(req, contentType, proxyAuthorization, headers)
 	stopHeaderTimer := func() bool { return false }
 	if method == http.MethodGet {
 		stopHeaderTimer = time.AfterFunc(discoveryHeaderTimeout, func() { cancel(ErrHeaderTimeout) }).Stop
@@ -265,37 +251,32 @@ func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType s
 	return resp, nil
 }
 
-func proxyChallenged(resp *http.Response, err error) bool {
-	if err != nil {
-		return errors.Is(err, errProxyChallenge)
-	}
-	return resp.StatusCode == http.StatusProxyAuthRequired
-}
-
 func (s *httpSession) send(ctx context.Context, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
-	for {
-		resp, err := s.attempt(ctx, method, s.baseURL+suffix, contentType, body, headers)
-		if !proxyChallenged(resp, err) {
-			if err != nil {
-				return nil, err
-			}
-			s.approveCredential(ctx, s.proxySupplied)
-			s.adoptRedirect(resp.Request)
-			return resp, nil
-		}
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
-		s.rejectCredential(ctx, &s.proxySupplied)
-		if err := s.authenticateProxy(ctx); err != nil {
-			return nil, err
-		}
+	target := s.baseURL + suffix
+	leg := func(proxyAuthorization string) (*http.Response, error) {
+		return s.attempt(ctx, method, target, contentType, proxyAuthorization, body, headers)
 	}
+	var resp *http.Response
+	var err error
+	if proxyURL := s.plainProxyFor(target); proxyURL != nil {
+		resp, err = s.proxyAuthenticate(ctx, proxyURL, nil, leg)
+	} else {
+		resp, err = leg("")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusProxyAuthRequired {
+		drainClose(resp)
+		return nil, ErrProxyAuthRequired
+	}
+	s.adoptRedirect(resp.Request)
+	return resp, nil
 }
 
 func (s *httpSession) unauthorizedError(h http.Header) error {
 	challenges := parseAuthChallenges(h, headerWWWAuthenticate)
-	scheme := selectAuthScheme(challenges)
+	scheme := cmp.Or(s.attemptedScheme, selectAuthScheme(challenges))
 	if scheme == "" {
 		if len(challenges) > 0 {
 			return ErrAuthSchemeUnsupported
@@ -305,7 +286,7 @@ func (s *httpSession) unauthorizedError(h http.Header) error {
 		}
 		return ErrAuthRequired
 	}
-	if s.opts.Credentials == nil && !s.settings.emptyAuth {
+	if s.opts.Credentials == nil && !s.integratedAttempted {
 		return ErrNoCredentials
 	}
 	switch scheme {
@@ -323,6 +304,7 @@ func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType
 	if err != nil {
 		return nil, err
 	}
+	s.attemptedScheme = ""
 	resp, err = s.authorize(ctx, resp, method, suffix, contentType, body, headers)
 	if err != nil {
 		return nil, err
@@ -339,7 +321,7 @@ func (s *httpSession) doRequest(ctx context.Context, method, suffix, contentType
 }
 
 func (s *httpSession) authorize(ctx context.Context, resp *http.Response, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {
-	if resp.StatusCode != http.StatusUnauthorized || (s.opts.Credentials == nil && !s.settings.emptyAuth) {
+	if resp.StatusCode != http.StatusUnauthorized || (s.opts.Credentials == nil && s.settings.emptyAuth == emptyAuthOff) {
 		return resp, nil
 	}
 	challenges := parseAuthChallenges(resp.Header, headerWWWAuthenticate)
@@ -368,21 +350,6 @@ func (s *httpSession) basicRetry(ctx context.Context, resp *http.Response, metho
 		resp = next
 	}
 	return resp, nil
-}
-
-func (s *httpSession) connectionAuthLoop(ctx context.Context, resp *http.Response, method, suffix, contentType string, body *requestBody, headers map[string]string, scheme string) (*http.Response, error) {
-	integrated := s.settings.emptyAuth || s.opts.Credentials == nil
-	for attempt := 0; ; attempt++ {
-		next, err := s.connectionAuth(ctx, method, suffix, contentType, body, headers, scheme, resp)
-		if err != nil {
-			return nil, err
-		}
-		if next.StatusCode != http.StatusUnauthorized || integrated || attempt >= 1 || s.opts.Credentials == nil {
-			return next, nil
-		}
-		s.rejectCredential(ctx, &s.supplied)
-		resp = next
-	}
 }
 
 func (s *httpSession) checkStatus(resp *http.Response) (*http.Response, error) {

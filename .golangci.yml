@@ -68,6 +68,10 @@ linters:
       - path: internal/gitcore/transport/ntlm\.go
         linters:
           - gosec
+      - path: internal/gitcore/transport/channelbinding\.go
+        linters:
+          - gosec
+        text: "G501"
       - path: internal/gitcore/transport/ntlm\.go
         linters:
           - staticcheck

@@ -4,6 +4,7 @@ package transport
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"unsafe"
 
@@ -11,14 +12,16 @@ import (
 )
 
 const (
-	sspiCredOutbound      = 2
-	sspiNativeDREP        = 0x10
-	sspiBufferToken       = 2
-	sspiBufferVersion     = 0
-	sspiReqConnection     = 0x00000800
-	sspiReqAllocateMemory = 0x00000100
-	sspiOK                = 0
-	sspiContinueNeeded    = 0x00090312
+	sspiCredOutbound         = 2
+	sspiNativeDREP           = 0x10
+	sspiBufferToken          = 2
+	sspiBufferChannelBinding = 14
+	sspiBufferVersion        = 0
+	sspiReqConnection        = 0x00000800
+	sspiReqAllocateMemory    = 0x00000100
+	sspiOK                   = 0
+	sspiContinueNeeded       = 0x00090312
+	sspiChannelBindingsSize  = 32
 )
 
 var (
@@ -50,30 +53,43 @@ type secBufferDesc struct {
 }
 
 type sspiGenerator struct {
-	scheme  string
-	target  *uint16
-	cred    sspiHandle
-	ctx     sspiHandle
-	haveCtx bool
-	closed  bool
+	header   string
+	target   *uint16
+	bindings []byte
+	cred     sspiHandle
+	ctx      sspiHandle
+	haveCtx  bool
+	closed   bool
 }
 
-func newIntegratedGenerator(scheme, target string) (authGenerator, bool, error) {
-	pkg := "Negotiate"
-	header := "Negotiate"
+func sspiPackage(scheme string) string {
 	if scheme == schemeNTLM {
-		pkg = "NTLM"
-		header = "NTLM"
+		return "NTLM"
 	}
-	pkgPtr, err := windows.UTF16PtrFromString(pkg)
+	return "Negotiate"
+}
+
+func sspiChannelBindings(applicationData []byte) []byte {
+	if applicationData == nil {
+		return nil
+	}
+	out := make([]byte, sspiChannelBindingsSize, sspiChannelBindingsSize+len(applicationData))
+	binary.LittleEndian.PutUint32(out[24:], uint32(len(applicationData)))
+	binary.LittleEndian.PutUint32(out[28:], sspiChannelBindingsSize)
+	return append(out, applicationData...)
+}
+
+func newIntegratedGenerator(scheme, host string, binding []byte) (authGenerator, bool) {
+	if host == "" || (scheme != schemeNTLM && scheme != schemeNegotiate) {
+		return nil, false
+	}
+	pkg := sspiPackage(scheme)
+	pkgPtr, _ := windows.UTF16PtrFromString(pkg)
+	targetPtr, err := windows.UTF16PtrFromString("HTTP/" + host)
 	if err != nil {
-		return nil, false, nil
+		return nil, false
 	}
-	targetPtr, err := windows.UTF16PtrFromString(target)
-	if err != nil {
-		return nil, false, nil
-	}
-	g := &sspiGenerator{scheme: header, target: targetPtr}
+	g := &sspiGenerator{header: pkg, target: targetPtr, bindings: sspiChannelBindings(binding)}
 	var expiry int64
 	status, _, _ := procAcquireCredentialsHandleW.Call(
 		0,
@@ -84,25 +100,32 @@ func newIntegratedGenerator(scheme, target string) (authGenerator, bool, error) 
 		uintptr(unsafe.Pointer(&expiry)),
 	)
 	if status != sspiOK {
-		return nil, false, nil
+		return nil, false
 	}
-	return g, true, nil
+	return g, true
+}
+
+func (g *sspiGenerator) inputBuffers(serverToken []byte) []secBuffer {
+	var buffers []secBuffer
+	if len(serverToken) > 0 {
+		buffers = append(buffers, secBuffer{count: uint32(len(serverToken)), bufferType: sspiBufferToken, buffer: &serverToken[0]})
+	}
+	if len(g.bindings) > 0 {
+		buffers = append(buffers, secBuffer{count: uint32(len(g.bindings)), bufferType: sspiBufferChannelBinding, buffer: &g.bindings[0]})
+	}
+	return buffers
 }
 
 func (g *sspiGenerator) next(serverToken []byte) (string, bool, error) {
-	var inBuf secBuffer
+	buffers := g.inputBuffers(serverToken)
 	var inDesc secBufferDesc
 	var inputPtr uintptr
-	if len(serverToken) > 0 {
-		inBuf = secBuffer{count: uint32(len(serverToken)), bufferType: sspiBufferToken, buffer: &serverToken[0]}
-		inDesc = secBufferDesc{version: sspiBufferVersion, count: 1, buffers: &inBuf}
+	if len(buffers) > 0 {
+		inDesc = secBufferDesc{version: sspiBufferVersion, count: uint32(len(buffers)), buffers: &buffers[0]}
 		inputPtr = uintptr(unsafe.Pointer(&inDesc))
 	}
-
-	var outBuf secBuffer
-	outBuf.bufferType = sspiBufferToken
+	outBuf := secBuffer{bufferType: sspiBufferToken}
 	outDesc := secBufferDesc{version: sspiBufferVersion, count: 1, buffers: &outBuf}
-
 	var ctxPtr uintptr
 	if g.haveCtx {
 		ctxPtr = uintptr(unsafe.Pointer(&g.ctx))
@@ -124,14 +147,11 @@ func (g *sspiGenerator) next(serverToken []byte) (string, bool, error) {
 		uintptr(unsafe.Pointer(&expiry)),
 	)
 	g.haveCtx = true
-	if status != sspiOK && status != sspiContinueNeeded {
-		return "", true, errSSPIContext
-	}
 	token := copyContextBuffer(&outBuf)
-	if len(token) == 0 {
+	if (status != sspiOK && status != sspiContinueNeeded) || len(token) == 0 {
 		return "", true, errSSPIContext
 	}
-	return g.scheme + " " + base64.StdEncoding.EncodeToString(token), status == sspiOK, nil
+	return g.header + " " + base64.StdEncoding.EncodeToString(token), status == sspiOK, nil
 }
 
 func copyContextBuffer(buf *secBuffer) []byte {
