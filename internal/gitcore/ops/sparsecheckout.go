@@ -239,21 +239,13 @@ func updateSparseWorkingTree(ctx context.Context, r *repo.Repository, state spar
 }
 
 func writeSparseConfig(r *repo.Repository, values [][2]string) error {
-	on, err := configFlag(r.Config(), worktreeConfigKey, false)
+	local, err := localConfigFile(r)
 	if err != nil {
 		return err
 	}
-	if !on {
-		local, err := localConfigFile(r)
-		if err != nil {
-			return err
-		}
-		if err := local.Set(worktreeConfigKey, sparseBoolText(true)); err != nil {
-			return err
-		}
-		if err := local.Save(local.Path()); err != nil {
-			return err
-		}
+	err = errors.Join(local.Set(worktreeConfigKey, sparseBoolText(true)), local.Save(local.Path()))
+	if err != nil {
+		return err
 	}
 	return editConfigFile(r.GitPath(worktreeConfigFile), func(file *config.File) error {
 		var errs []error

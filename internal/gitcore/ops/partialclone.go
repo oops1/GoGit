@@ -21,7 +21,7 @@ const (
 )
 
 type promisor struct {
-	name   string
+	remote remote.Remote
 	filter string
 }
 
@@ -35,7 +35,7 @@ func promisorOf(cfg *config.Config) (promisor, bool, error) {
 			continue
 		}
 		filter, _ := cfg.Get("remote." + rem.Name + partialCloneKeySufix)
-		return promisor{name: rem.Name, filter: filter}, true, nil
+		return promisor{remote: rem, filter: filter}, true, nil
 	}
 	return promisor{}, false, nil
 }
@@ -56,7 +56,7 @@ func withPromisorFilter(r *repo.Repository, rem remote.Remote, opts remote.Fetch
 		return opts, nil
 	}
 	found, ok, err := promisorOf(r.Config())
-	if err != nil || !ok || found.name != rem.Name {
+	if err != nil || !ok || found.remote.Name != rem.Name {
 		return opts, err
 	}
 	opts.Filter = found.filter
@@ -70,7 +70,7 @@ func objectOptions(ctx context.Context, r *repo.Repository) odb.Options {
 		return opts
 	}
 	opts.Missing = func(id hash.ObjectID) error {
-		return fetchPromisorObjects(ctx, r, found.name, []hash.ObjectID{id})
+		return fetchPromisorObjects(ctx, r, found.remote, []hash.ObjectID{id})
 	}
 	return opts
 }
@@ -87,15 +87,11 @@ func FetchMissingObjects(ctx context.Context, r *repo.Repository, ids []hash.Obj
 	if !ok {
 		return ErrNoPromisorRemote
 	}
-	return fetchPromisorObjects(ctx, r, found.name, ids)
+	return fetchPromisorObjects(ctx, r, found.remote, ids)
 }
 
-func fetchPromisorObjects(ctx context.Context, r *repo.Repository, remoteName string, ids []hash.ObjectID) error {
-	rem, err := remote.Load(r.Config(), remoteName)
-	if err != nil {
-		return err
-	}
-	_, err = fetchRemote(ctx, r, rem, remote.FetchOptions{
+func fetchPromisorObjects(ctx context.Context, r *repo.Repository, rem remote.Remote, ids []hash.ObjectID) error {
+	_, err := fetchRemote(ctx, r, rem, remote.FetchOptions{
 		Wants:       ids,
 		Filter:      lazyFetchFilter,
 		ObjectsOnly: true,
