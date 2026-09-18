@@ -13,8 +13,8 @@ import (
 
 var gitBuiltinNames = []string{
 	"ada", "bash", "bibtex", "cpp", "csharp", "css", "dts", "elixir", "fortran", "fountain",
-	"golang", "html", "java", "kotlin", "markdown", "matlab", "objc", "pascal", "perl", "php",
-	"python", "ruby", "rust", "scheme", "tex",
+	"golang", "html", "ini", "java", "kotlin", "markdown", "matlab", "objc", "pascal", "perl",
+	"php", "python", "r", "ruby", "rust", "scheme", "tex",
 }
 
 func TestBuiltinsListEveryDriverOfGit(t *testing.T) {
