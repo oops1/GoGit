@@ -1,111 +1,65 @@
-# Go.Git 1.5.0 — Depth
+# Go.Git 1.5.1 — Reach
 
-Staging lines and hunks, stashes, repository maintenance, journal search,
-git-flow the way SmartGit does it, hooks, merges and rebases taken all the way
-to how git behaves on the awkward cases, a faster blame and a sharper diff,
-and a sturdier network and secret store.
+Submodules, corporate HTTP authentication, line history, git's own diff
+drivers, and a `commit-graph` reader that makes the journal fast on long
+histories.
 
-## Staging and stash
+## The file list sees other clients' commits
 
-- Lines and hunks can be picked right in the diff pane and applied to the
-  index or the working copy — staging, unstaging and discarding part of a
-  file, not only the whole of it. Checked against `git apply --cached` on 11
-  kinds of selection in both directions.
-- Stash: save, apply, unstage and drop from the Edit menu and from the
-  "Stash" node of the Branches panel; `refs/stash` and its reflog match git.
-  Switching branches over local changes that are in the way offers a choice —
-  carry them along in a stash, bring them over by merging, or overwrite them
-  — and remembers what you picked.
+- The index is read again when another git client rewrote it. Until now
+  `.git/index` was read once, when the repository was opened, so a commit made
+  in a console or in another program left stale changes in the file list.
 
-## Repository maintenance
+## Submodules
 
-- Our own `repack`, `gc`, `prune`, `fsck`, `count-objects` and `commit-graph`
-  writing — no system git involved. The reachable object set, the packfiles
-  and the commit-graph file are checked byte for byte against the matching
-  git commands.
+- `.gitmodules` is read with every field it can carry, and relative URLs are
+  resolved against `origin` the way git resolves them.
+- Init, update, sync, add, remove, unregister and reset — from the menu and
+  from the Branches panel, with an add dialog that asks for the URL, the path
+  and the branch.
+- Cloning offers to bring the submodules along, switching branches creates and
+  removes submodule working copies according to `submodule.recurse`, and fetch
+  and pull descend into changed submodules according to
+  `fetch.recurseSubmodules`.
+- The Branches panel shows submodules and their state, and working-copy status
+  honours `submodule.<name>.ignore` — and can report a submodule in spite of
+  it when asked to.
 
-## Journal search
+## NTLM and Kerberos authentication
 
-- The journal filter searches by changed content (`-S`, `-G`, with a
-  "regular expression" checkbox) and by path — a second row of the filter
-  bar, alongside the branch, author and message filters from 1.4.0.
+- NTLMSSP in pure Go and SPNEGO for the Negotiate scheme: through SSPI on
+  Windows, through a Kerberos ticket (gokrb5) on Linux. The password comes
+  from the secret store and reaches neither the log nor a process argument.
+- Both schemes work through proxies, including the CONNECT tunnel, and bind to
+  the server certificate (`tls-server-end-point`). The operation log names the
+  scheme it picked.
 
-## Git-flow
+## Investigate — line history
 
-- Full git-flow in SmartGit's own style: a "Git-Flow ▾" toolbar button and
-  the same menu under "Branch → Git-Flow" — Start/Finish for Feature,
-  Hotfix, Release and Support Branch, Integrate Develop, a "Configure…"
-  dialog with a Light/Full switch and a change-or-switch-off question window,
-  and a Git-Flow Light mode with no `develop` branch. The command sequence
-  for every branch kind is checked hash for hash against SmartGit's own
-  operation log.
-- A double click switches branches, and the branch and file context menus
-  match SmartGit — including committing changes without staging them first.
+- `git log -L` in full: the history of the selected lines from the file list,
+  from the diff pane and from blame, with a window listing the commits that
+  changed them and the selection carried onto the revision you pick.
 
-## Hooks
+## Diff drivers
 
-- `pre-commit`, `commit-msg`, `post-checkout`, `post-merge`, `pre-rebase` and
-  `pre-push` run as separate processes the way git runs them — on Windows
-  only extensionless scripts and `.exe`, the way Git for Windows does it.
-  The commit and push dialogs show the hook's output and offer to bypass it.
+- Git's built-in `userdiff` drivers for a couple of dozen languages: hunk
+  headers come from the driver a path is given in `.gitattributes`, together
+  with `diff.<driver>.funcname` and `xfuncname` from the configuration. POSIX
+  regular expressions are translated byte for byte, so they match git on
+  content that is not UTF-8.
+- The `-L :funcname:file` range rests on the path's driver as well.
 
-## Submodules and bisect
+## commit-graph
 
-- `.gitmodules` is checked the way `git fsck` checks it; the commit a
-  submodule is checked out at is tracked through conflicts, staging and
-  checkout, and a moved submodule shows up in working-copy status the way
-  `git status` reports it.
-- A bisect started by another git client is detected and shown in a banner
-  that can end it the way `git bisect reset` does.
+- The `commit-graph` file and split chains are read in full: corrected commit
+  dates, generation numbers and changed-path (bloom) filters.
+- The revision walk, line history, path history, merge-base and the
+  ahead/behind count go through the graph and skip commits its path filters
+  rule out. A missing or rewritten graph is detected and left unused.
 
-## Merges and history
+## Also
 
-- Merging honours `merge.conflictStyle`, a path's diff attributes and custom
-  version labels in a conflict; directory renames follow
-  `merge.directoryRenames`, and rename detection is capped the same way
-  git's is.
-- Merge, cherry-pick, revert, rebase, applying a stash and git-flow steps now
-  stop with a conflict exactly where git stops — on a split renamed
-  directory, a path that quietly changed type, and names that differ only by
-  case — instead of silently filing something in the wrong place.
-- `rerere` tells apart identical-looking conflicts from the same merge; an
-  interactive rebase keeps commits that started out empty and skips commits
-  already applied upstream, the way git does.
-
-## Blame and diff
-
-- Blame follows only genuine renames onto the blamed path and walks history
-  through a date queue — noticeably faster on long histories; the `patience`
-  and `minimal` algorithms and an `ignore-cr-at-eol` option were added.
-- A path's diff attributes decide what counts as binary and are applied to
-  commit diffs; tree comparisons understand git pathspec magic and globs.
-
-## Network
-
-- An SSH connection offers a key from the vault, from ssh-agent, or from an
-  identity file, with a dialog for the key's passphrase; `core.sshCommand` is
-  parsed, the host key algorithms `known_hosts` lists are honoured, lines it
-  cannot parse are skipped, and the OpenSSH agent pipe is used when nothing
-  else answers.
-- The HTTP transport honours git's proxy, TLS, speed and `extraHeader`
-  settings and `protocol.allow`, sends a git user agent, follows the address
-  discovery redirected to, and can fall back to protocol v0 when the server
-  lacks the v2 features we asked for.
-
-## Passwords and the secret store
-
-- Credential helpers are no longer started as external programs: the Windows
-  Credential Manager (the generic and wincred formats) and Linux's Secret
-  Service (the generic and libsecret formats) are read directly; `credential.<url>`
-  settings apply with the same URL matching git uses.
-- The master password can be changed, a backup password is offered, and
-  keyring failures are explained; a broken `config.toml` is recovered
-  instead of failing to start. Logs mask token headers, URLs of any scheme,
-  keys that look like secrets, and composite values.
-
-## CI
-
-- Oracle tests against system git are split from the unit tests, race tests
-  are split the same way with a build cached per suite; test suites run in
-  parallel and duplicate or superseded runs are stopped; a build on `main`
-  skips suites already run on the same tree on `develop`.
+- Rename detection is limited to the destination paths asked for, so path
+  history no longer looks for renames it would not show anyway.
+- A depth-limited fetch sends the history beyond the client's shallow
+  boundary, and the `shallow` file is written sorted the way git writes it.
