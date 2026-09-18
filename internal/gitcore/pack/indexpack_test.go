@@ -518,6 +518,37 @@ func TestIndexPackLeavesAKeepFileItDidNotCreate(t *testing.T) {
 	}
 }
 
+func TestIndexPackMarksAPromisorPack(t *testing.T) {
+	builder := newPackBuilder()
+	builder.addObject(t, KindBlob, []byte("fetched under a filter"))
+	raw := builder.bytes()
+
+	dir := t.TempDir()
+	result, err := IndexPack(t.Context(), bytes.NewReader(raw), dir, IndexOptions{Promisor: true})
+	if err != nil {
+		t.Fatalf("IndexPack returned error %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "pack-"+result.Checksum.String()+promisorSuffix))
+	if err != nil {
+		t.Fatalf("ReadFile returned error %v", err)
+	}
+	if len(data) != 0 {
+		t.Fatalf("the promisor file holds %q, want it empty", data)
+	}
+}
+
+func TestIndexPackReportsAPromisorWriteFailure(t *testing.T) {
+	builder := newPackBuilder()
+	builder.addObject(t, KindBlob, []byte("content for the promisor failure test"))
+	raw := builder.bytes()
+	original := openKeepFile
+	openKeepFile = func(string) (*os.File, error) { return nil, errRead }
+	t.Cleanup(func() { openKeepFile = original })
+	if _, err := IndexPack(t.Context(), bytes.NewReader(raw), t.TempDir(), IndexOptions{Promisor: true}); !errors.Is(err, errRead) {
+		t.Fatalf("IndexPack returned %v, want %v", err, errRead)
+	}
+}
+
 func TestIndexPackReportsProgress(t *testing.T) {
 	source := newFakeSource()
 	var ids []hash.ObjectID
