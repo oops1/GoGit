@@ -47,7 +47,7 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 	}
 	defer func() { _ = wt.close() }()
 
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := objectDatabase(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -111,6 +111,10 @@ func layoutWorkingTree(ctx context.Context, r *repo.Repository, wt *workingTree,
 	if err != nil {
 		return err
 	}
+	return layoutWorkingTreeWith(ctx, r, wt, db, sparse, headTree, targetTree, force, report)
+}
+
+func layoutWorkingTreeWith(ctx context.Context, r *repo.Repository, wt *workingTree, db *odb.DB, sparse sparseCheckout, headTree, targetTree map[string]treeEntry, force bool, report *CheckoutReport) error {
 	lock, err := lockIndex(r)
 	if err != nil {
 		return err
