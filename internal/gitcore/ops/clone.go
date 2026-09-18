@@ -36,11 +36,11 @@ const (
 )
 
 var (
-	cloneRepoInit       = repo.Init
-	cloneRepoOpen       = repo.Open
-	cloneRepoOpenLayout = repo.OpenLayout
-	cloneReadDir        = os.ReadDir
-	cloneMkdirAll       = os.MkdirAll
+	cloneRepoInit  = repo.Init
+	cloneRepoOpen  = repo.Open
+	repoOpenLayout = repo.OpenLayout
+	cloneReadDir   = os.ReadDir
+	cloneMkdirAll  = os.MkdirAll
 )
 
 type CloneOptions struct {
@@ -248,7 +248,7 @@ func cloneSubmodules(ctx context.Context, r *repo.Repository, opts CloneOptions)
 }
 
 func fetchCloneObjects(ctx context.Context, r *repo.Repository, rem remote.Remote, opts remote.FetchOptions) (remote.FetchResult, error) {
-	fetchRepo, err := cloneRepoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, r.Options())
+	fetchRepo, err := repoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, r.Options())
 	if err != nil {
 		return remote.FetchResult{}, err
 	}

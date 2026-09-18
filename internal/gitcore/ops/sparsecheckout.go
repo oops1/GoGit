@@ -197,7 +197,7 @@ func applySparseCheckout(ctx context.Context, r *repo.Repository, lines []string
 }
 
 func withReopenedRepository(r *repo.Repository, run func(*repo.Repository) error) error {
-	reopened, err := cloneRepoOpenLayout(r.Layout(), r.Options())
+	reopened, err := repoOpenLayout(r.Layout(), r.Options())
 	if err != nil {
 		return err
 	}

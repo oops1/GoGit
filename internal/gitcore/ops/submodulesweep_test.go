@@ -101,7 +101,7 @@ var submoduleFaultPoints = []faultPoint{
 	seamFault("validate path", &validateSubmodulePath),
 	seamFault("worktree", &worktreeOpen),
 	seamFault("clone init", &cloneRepoInit),
-	seamFault("clone layout", &cloneRepoOpenLayout),
+	seamFault("clone layout", &repoOpenLayout),
 	seamFault("read dir", &readSubmoduleDir),
 	seamFault("open submodule", &submoduleOpen),
 	seamFault("open submodule layout", &submoduleOpenLayout),
