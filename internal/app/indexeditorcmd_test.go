@@ -210,6 +210,18 @@ func TestTheFilesMenuOpensTheIndexEditor(t *testing.T) {
 	waitForDialog(t, a, func() int { return len(*views) }, "the index editor")
 }
 
+func TestAConflictedFileIsNotOfferedTheIndexEditor(t *testing.T) {
+	a, _ := conflictedApp(t)
+	row, at := selectWorkingFile(t, a, "f.txt")
+
+	items := readOnDispatcher(t, a, func() []widget.MenuItem { return a.filesMenu(row, at) })
+
+	item, ok := findMenuItem(items, i18n.T("Menu.Files.IndexEditor"))
+	if !ok || !item.Disabled {
+		t.Fatalf("item = %+v, want it off while the path is conflicted", item)
+	}
+}
+
 func TestAnUntouchedIndexEditorClosesWithoutAsking(t *testing.T) {
 	a, _ := appWithStagedAndWorkingChanges(t)
 	view := openedIndexEditor(t, a)
