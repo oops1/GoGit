@@ -210,7 +210,6 @@ func (s State) flowReady() bool {
 var commandsWaitingForTheirCore = map[CommandID]bool{
 	CmdCopy:        true,
 	CmdSelectAll:   true,
-	CmdIndexEditor: true,
 	CmdIgnore:      true,
 	CmdRemove:      true,
 	CmdLog:         true,
