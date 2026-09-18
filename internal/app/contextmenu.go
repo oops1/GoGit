@@ -117,7 +117,7 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 	return append(items,
 		edit[0],
 		edit[1],
-		laterItem("Menu.Files.IndexEditor"),
+		enabledItem("Menu.Files.IndexEditor", func() { a.openIndexEditor(rel) }, state.Enabled(CmdIndexEditor) && !conflict),
 		laterItem("Menu.Files.Rename"),
 		menuSeparator(),
 		enabledItem("Menu.Files.ConflictSolver", func() { a.openConflictEditor(rel) }, conflict),

@@ -232,7 +232,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.HasRemotes
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
-	case CmdStage, CmdUnstage, CmdDiscard:
+	case CmdStage, CmdUnstage, CmdDiscard, CmdIndexEditor:
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)

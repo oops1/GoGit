@@ -510,6 +510,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.registerSwitchHandlers()
 	a.registerSubmoduleHandlers()
 	a.registerStashHandlers()
+	a.registerIndexEditorHandlers()
 	a.registerCompareHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
