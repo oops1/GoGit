@@ -236,3 +236,12 @@ func TestSubmoduleUpdateClonesIntoTheAbsorbedLayout(t *testing.T) {
 		t.Fatalf("events = %+v", *got)
 	}
 }
+
+func TestRealPathResolvesANameItsParentDoesNotHaveYet(t *testing.T) {
+	parent := t.TempDir()
+	missing := filepath.Join(parent, "libs", "lib")
+
+	if got, want := realPath(missing), filepath.Join(realPath(parent), "libs", "lib"); got != want {
+		t.Fatalf("realPath(%q) = %q, want %q", missing, got, want)
+	}
+}

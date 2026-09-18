@@ -256,7 +256,12 @@ func realPath(path string) string {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved
 	}
-	return path
+	parent, name := filepath.Split(path)
+	parent = filepath.Clean(parent)
+	if name == "" || parent == path {
+		return path
+	}
+	return filepath.Join(realPath(parent), name)
 }
 
 func relativeSlashPath(target, base string) string {
@@ -280,7 +285,7 @@ func (s *superproject) ensureCoreWorktree(sub *repo.Repository, path string) err
 	if _, set := sub.Config().GetValue("core.worktree"); !set {
 		return nil
 	}
-	return writeSubmoduleConfig(filepath.Join(sub.GitDir(), "config"), [2]string{"core.worktree", relativeSlashPath(s.submoduleDir(path), realPath(sub.GitDir()))})
+	return writeSubmoduleConfig(filepath.Join(sub.GitDir(), "config"), [2]string{"core.worktree", relativeSlashPath(realPath(s.submoduleDir(path)), realPath(sub.GitDir()))})
 }
 
 func (s *superproject) strategyFor(record updateRecord, opts SubmoduleUpdateOptions) (submodule.UpdateType, error) {
