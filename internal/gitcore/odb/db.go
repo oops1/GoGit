@@ -152,10 +152,31 @@ func (d *DB) lookupFresh(id hash.ObjectID) (object.Type, []byte, bool, error) {
 	if ok || err != nil {
 		return kind, data, ok, err
 	}
-	if grown, err := d.Reload(); err != nil || !grown {
+	grown, err := d.Reload()
+	if err != nil {
+		return 0, nil, false, err
+	}
+	if grown {
+		kind, data, ok, err = d.lookup(id)
+		if ok || err != nil {
+			return kind, data, ok, err
+		}
+	}
+	if err := d.demand(id); err != nil {
 		return 0, nil, false, err
 	}
 	return d.lookup(id)
+}
+
+func (d *DB) demand(id hash.ObjectID) error {
+	if d.opts.Missing == nil {
+		return nil
+	}
+	if err := d.opts.Missing(id); err != nil {
+		return err
+	}
+	_, err := d.Reload()
+	return err
 }
 
 func (d *DB) lookup(id hash.ObjectID) (object.Type, []byte, bool, error) {
@@ -250,7 +271,17 @@ func (d *DB) headerFresh(id hash.ObjectID) (object.Type, int64, bool, error) {
 	if ok || err != nil {
 		return kind, size, ok, err
 	}
-	if grown, err := d.Reload(); err != nil || !grown {
+	grown, err := d.Reload()
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if grown {
+		kind, size, ok, err = d.header(id)
+		if ok || err != nil {
+			return kind, size, ok, err
+		}
+	}
+	if err := d.demand(id); err != nil {
 		return 0, 0, false, err
 	}
 	return d.header(id)
