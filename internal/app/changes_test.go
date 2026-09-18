@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +114,26 @@ func waitForFilesMode(t *testing.T, a *App, mode filesMode, want int) {
 func waitForFilesRows(t *testing.T, a *App, want int) {
 	t.Helper()
 	waitForFilesMode(t, a, filesModeCommit, want)
+}
+
+func waitForFilesPaths(t *testing.T, a *App, want ...string) {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		if filesModeOnDispatcher(a) == filesModeCommit && filesRowCountOnDispatcher(t, a) == len(want) {
+			paths := make([]string, len(want))
+			for at := range want {
+				paths[at] = filesRowOnDispatcher(t, a, at).RelPath
+			}
+			if slices.Equal(paths, want) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("files grid did not show %v in time", want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitForWorkingRows(t *testing.T, a *App, want int) {

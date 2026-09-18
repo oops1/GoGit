@@ -313,12 +313,8 @@ func TestSelectingAStashShowsItsFilesAndDiffLikeACommit(t *testing.T) {
 	a, _, id := stashedAppWithUntrackedFile(t)
 
 	selectBranchNode(t, a, branches.StashRef(0))
-	waitForFilesRows(t, a, 2)
+	waitForFilesPaths(t, a, "f.txt", "new.txt")
 
-	paths := []string{filesRowOnDispatcher(t, a, 0).RelPath, filesRowOnDispatcher(t, a, 1).RelPath}
-	if !slices.Equal(paths, []string{"f.txt", "new.txt"}) {
-		t.Fatalf("stash files = %v", paths)
-	}
 	if doc := diffDocumentOnDispatcher(t, a); doc.NewName != "f.txt" || !strings.Contains(doc.Right, "dirty") {
 		t.Fatalf("first diff = %+v", doc)
 	}
