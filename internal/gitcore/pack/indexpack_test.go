@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -541,11 +542,33 @@ func TestIndexPackReportsAPromisorWriteFailure(t *testing.T) {
 	builder := newPackBuilder()
 	builder.addObject(t, KindBlob, []byte("content for the promisor failure test"))
 	raw := builder.bytes()
-	original := openKeepFile
-	openKeepFile = func(string) (*os.File, error) { return nil, errRead }
-	t.Cleanup(func() { openKeepFile = original })
-	if _, err := IndexPack(t.Context(), bytes.NewReader(raw), t.TempDir(), IndexOptions{Promisor: true}); !errors.Is(err, errRead) {
-		t.Fatalf("IndexPack returned %v, want %v", err, errRead)
+	for _, tc := range []struct {
+		name  string
+		setup func(t *testing.T)
+	}{
+		{"open", func(t *testing.T) {
+			original := openKeepFile
+			openKeepFile = func(string) (*os.File, error) { return nil, errRead }
+			t.Cleanup(func() { openKeepFile = original })
+		}},
+		{"close", func(t *testing.T) {
+			original := fileClose
+			fileClose = func(file *os.File) error {
+				if strings.HasSuffix(file.Name(), promisorSuffix) {
+					_ = file.Close()
+					return errRead
+				}
+				return original(file)
+			}
+			t.Cleanup(func() { fileClose = original })
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup(t)
+			if _, err := IndexPack(t.Context(), bytes.NewReader(raw), t.TempDir(), IndexOptions{Promisor: true}); !errors.Is(err, errRead) {
+				t.Fatalf("IndexPack returned %v, want %v", err, errRead)
+			}
+		})
 	}
 }
 

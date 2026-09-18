@@ -67,6 +67,23 @@ func TestFetchLeavesOutTheBlobsTheFilterOmits(t *testing.T) {
 	}
 }
 
+func TestFetchWeighsABlobSharedByTwoTreesOnlyOnce(t *testing.T) {
+	src := newTestRepo(t, true)
+	shared := src.blob("small")
+	inner := src.treeWithEntries([]object.TreeEntry{{Mode: object.ModeBlob, Name: "n.txt", ID: shared}})
+	root := src.treeWithEntries([]object.TreeEntry{
+		{Mode: object.ModeBlob, Name: "a.txt", ID: shared},
+		{Mode: object.ModeTree, Name: "sub", ID: inner},
+	})
+	head := src.commitWithTree(root)
+	src.setBranch("main", head)
+
+	got := fetchedObjects(t, src, transport.FetchRequest{Wants: []hash.ObjectID{head}, Filter: "blob:limit=8"})
+	if _, ok := got[shared]; !ok {
+		t.Fatalf("the pack is missing the shared blob %s", shared)
+	}
+}
+
 func TestFetchSendsTheBlobsAskedForByNameDespiteTheFilter(t *testing.T) {
 	src := newTestRepo(t, true)
 	wanted := src.blob("fetched on demand")
