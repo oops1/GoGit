@@ -85,7 +85,7 @@ const (
 	viewPanePrefix     = "window.pane:"
 	viewThemePrefix    = "view.theme:"
 	viewLanguagePrefix = "view.language:"
-	viewLayoutPrefix   = "window.layout:"
+	layoutModePrefix   = "window.layout:"
 	checkedPrefix      = "✓ "
 )
 
@@ -108,9 +108,9 @@ var viewThemeKeys = map[string]string{
 
 var viewLanguageOrder = []string{"en", "ru"}
 
-var viewLayoutOrder = []string{config.LayoutDocks, config.LayoutSidebar}
+var layoutModeOrder = []string{config.LayoutDocks, config.LayoutSidebar}
 
-var viewLayoutKeys = map[string]string{
+var layoutModeKeys = map[string]string{
 	config.LayoutDocks:   "Layout.Docks",
 	config.LayoutSidebar: "Layout.Sidebar",
 }
@@ -118,14 +118,14 @@ var viewLayoutKeys = map[string]string{
 func cmdPane(id string) CommandID       { return CommandID(viewPanePrefix + id) }
 func cmdTheme(name string) CommandID    { return CommandID(viewThemePrefix + name) }
 func cmdLanguage(code string) CommandID { return CommandID(viewLanguagePrefix + code) }
-func cmdLayout(mode string) CommandID   { return CommandID(viewLayoutPrefix + mode) }
+func cmdLayout(mode string) CommandID   { return CommandID(layoutModePrefix + mode) }
 
 func paneIDFromCommand(id CommandID) (string, bool) {
 	return cutPrefix(id, viewPanePrefix)
 }
 
 func layoutFromCommand(id CommandID) (string, bool) {
-	return cutPrefix(id, viewLayoutPrefix)
+	return cutPrefix(id, layoutModePrefix)
 }
 
 func themeFromCommand(id CommandID) (string, bool) {

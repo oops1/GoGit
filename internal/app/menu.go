@@ -56,13 +56,13 @@ var helpMenuTree = buildHelpMenuTree()
 var menuBarDefs = []menuDef{
 	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Edit", Tree: editMenuTree, LeafText: plainLeafText},
-	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
+	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).checkableLeafText},
 	{TitleKey: "Menu.Remote", Tree: remoteMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Local", Tree: localMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Branch", Tree: branchMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Query", Tree: queryMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Tools", Tree: toolsMenuTree, LeafText: plainLeafText},
-	{TitleKey: "Menu.Window", Tree: windowMenuTree, LeafText: (*App).viewLeafText},
+	{TitleKey: "Menu.Window", Tree: windowMenuTree, LeafText: (*App).checkableLeafText},
 	{TitleKey: "Menu.Help", Tree: helpMenuTree, LeafText: plainLeafText},
 }
 
@@ -186,8 +186,8 @@ func buildToolsMenuTree() []menuTreeEntry {
 }
 
 func buildViewMenuTree() []menuTreeEntry {
-	theme := buildViewLeafGroup("Menu.View.Theme", viewThemeOrder, viewThemeKeys, cmdTheme)
-	language := buildViewLeafGroup("Menu.View.Language", viewLanguageOrder, nil, cmdLanguage)
+	theme := buildCheckableLeafGroup("Menu.View.Theme", viewThemeOrder, viewThemeKeys, cmdTheme)
+	language := buildCheckableLeafGroup("Menu.View.Language", viewLanguageOrder, nil, cmdLanguage)
 	return []menuTreeEntry{
 		{Group: &theme},
 		{Group: &language},
@@ -197,8 +197,8 @@ func buildViewMenuTree() []menuTreeEntry {
 }
 
 func buildWindowMenuTree() []menuTreeEntry {
-	panes := buildViewLeafGroup("Menu.Window.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
-	layout := buildViewLeafGroup("Menu.Window.Layout", viewLayoutOrder, viewLayoutKeys, cmdLayout)
+	panes := buildCheckableLeafGroup("Menu.Window.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
+	layout := buildCheckableLeafGroup("Menu.Window.Layout", layoutModeOrder, layoutModeKeys, cmdLayout)
 	return []menuTreeEntry{
 		{Group: &panes},
 		menuLeaf("Menu.Window.ResetLayout", CmdResetLayout),
@@ -215,7 +215,7 @@ func buildHelpMenuTree() []menuTreeEntry {
 	}
 }
 
-func buildViewLeafGroup(headerKey string, ids []string, keys map[string]string, cmd func(string) CommandID) menuGroupEntry {
+func buildCheckableLeafGroup(headerKey string, ids []string, keys map[string]string, cmd func(string) CommandID) menuGroupEntry {
 	items := make([]menuLeafEntry, 0, len(ids))
 	for _, id := range ids {
 		key := keys[id]
@@ -266,7 +266,7 @@ func wireMenuTreeEntry(item *widget.MenuItem, entry menuTreeEntry, dispatch func
 	}
 }
 
-func (a *App) wireViewHandlers() {
+func (a *App) wireCheckableHandlers() {
 	for _, id := range viewPaneIDs {
 		paneID := id
 		a.handlers[cmdPane(paneID)] = func() {
@@ -274,7 +274,7 @@ func (a *App) wireViewHandlers() {
 			a.applyMenuTexts(windowMenuIndex)
 		}
 	}
-	for _, name := range viewLayoutOrder {
+	for _, name := range layoutModeOrder {
 		mode := name
 		a.handlers[cmdLayout(mode)] = func() {
 			a.SetLayout(mode)
@@ -414,15 +414,15 @@ func applyTreeEntryText(a *App, item *widget.MenuItem, entry menuTreeEntry, leaf
 	}
 }
 
-func (a *App) viewLeafText(leaf menuLeafEntry) string {
-	label, checked := a.viewLeafLabelChecked(leaf)
+func (a *App) checkableLeafText(leaf menuLeafEntry) string {
+	label, checked := a.checkableLeafLabel(leaf)
 	if checked {
 		return checkedPrefix + label
 	}
 	return label
 }
 
-func (a *App) viewLeafLabelChecked(leaf menuLeafEntry) (string, bool) {
+func (a *App) checkableLeafLabel(leaf menuLeafEntry) (string, bool) {
 	if paneID, ok := paneIDFromCommand(leaf.Command); ok {
 		return i18n.T(leaf.Key), a.PaneVisible(paneID)
 	}

@@ -478,7 +478,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.wireMenuBar()
 	a.wireToolbar()
 	a.retranslateGrids()
-	a.wireViewHandlers()
+	a.wireCheckableHandlers()
 	a.applyMenuTexts(viewMenuIndex)
 	a.applyMenuTexts(windowMenuIndex)
 	a.logLanguageMenuLimit()

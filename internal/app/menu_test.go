@@ -109,8 +109,8 @@ func TestViewMenuTreeStructure(t *testing.T) {
 			}
 			for j, leaf := range entry.Group.Items {
 				sub := item.SubItems[j]
-				if sub.Text != a.viewLeafText(leaf) {
-					t.Fatalf("group %d item %d text = %q, want %q", i, j, sub.Text, a.viewLeafText(leaf))
+				if sub.Text != a.checkableLeafText(leaf) {
+					t.Fatalf("group %d item %d text = %q, want %q", i, j, sub.Text, a.checkableLeafText(leaf))
 				}
 			}
 		default:
@@ -162,8 +162,8 @@ func TestWindowMenuTreeShapeMatchesSpec(t *testing.T) {
 	if windowMenuTree[3].Group == nil || windowMenuTree[3].Group.Key != "Menu.Window.Layout" {
 		t.Fatal("layout group out of place")
 	}
-	if len(windowMenuTree[3].Group.Items) != len(viewLayoutOrder) {
-		t.Fatalf("layout group must have %d items", len(viewLayoutOrder))
+	if len(windowMenuTree[3].Group.Items) != len(layoutModeOrder) {
+		t.Fatalf("layout group must have %d items", len(layoutModeOrder))
 	}
 }
 
