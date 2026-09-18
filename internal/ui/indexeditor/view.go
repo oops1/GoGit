@@ -241,6 +241,8 @@ func (v *View) requestSave() {
 
 func (v *View) Saved(content string) {
 	v.saved = content
+	v.file.Index = []byte(content)
+	v.apply()
 	v.say(i18n.T("Dialog.IndexEditor.Saved"))
 }
 

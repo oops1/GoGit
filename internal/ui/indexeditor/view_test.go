@@ -244,6 +244,22 @@ func TestTheWindowReportsWhatHappenedToTheSave(t *testing.T) {
 	}
 }
 
+func TestAfterASaveTheIndexSideIsWhatWasSaved(t *testing.T) {
+	v := shown(t)
+
+	v.fromHead.OnClick()
+	v.Saved(v.Result())
+
+	if got := v.Result(); got != "one\ntwo\nthree\n" || v.Modified() {
+		t.Fatalf("result = %q, modified = %v", got, v.Modified())
+	}
+	v.fromWorking.OnClick()
+	v.reset.OnClick()
+	if got := v.Result(); got != "one\ntwo\nthree\n" {
+		t.Fatalf("result = %q, want the saved index back", got)
+	}
+}
+
 func TestClosingCallsBackAndToleratesNoListener(t *testing.T) {
 	v := shown(t)
 	v.closeBtn.OnClick()
