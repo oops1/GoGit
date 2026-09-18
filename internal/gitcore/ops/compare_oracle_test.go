@@ -22,6 +22,7 @@ func TestOracleComparingTwoBranchesMatchesGit(t *testing.T) {
 	b.git("checkout", "-q", "feature")
 	b.commit("theirs", map[string]string{"keep": "", "g": "g\n"})
 	b.git("checkout", "-q", "main")
+	b.git("commit-graph", "write", "--reachable", "--changed-paths")
 
 	result, err := Compare(t.Context(), o.openRepo(dir), "main", "feature", CompareOptions{})
 	if err != nil {

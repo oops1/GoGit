@@ -28,9 +28,10 @@ var (
 func joinErrors(errs ...error) error { return errors.Join(errs...) }
 
 const (
-	rebaseAction = "rebase"
-	returningTo  = "returning to "
-	refsPrefix   = "refs/"
+	rebaseAction     = "rebase"
+	returningTo      = "returning to "
+	detachedHeadName = refs.Name("detached HEAD")
+	refsPrefix       = "refs/"
 )
 
 func (m *merger) rebaseNote(kind string) string {
@@ -46,6 +47,8 @@ type RebaseOptions struct {
 	When     time.Time
 	Progress progress.Func
 	Hooks    HookOptions
+
+	allowDetached bool
 }
 
 type RebaseResult struct {
@@ -74,6 +77,7 @@ func Rebase(ctx context.Context, r *repo.Repository, upstream string, opts Rebas
 		return RebaseResult{}, err
 	}
 	defer m.close()
+	m.detached = opts.allowDetached
 	if err := m.refuseWhileMerging(); err != nil {
 		return RebaseResult{}, err
 	}
@@ -97,10 +101,12 @@ func (m *merger) rebaseOnto(base, onto hash.ObjectID, ontoName, upstreamArg stri
 		return RebaseResult{}, err
 	}
 	switch {
-	case head.detached:
+	case head.detached && !m.detached:
 		return RebaseResult{}, ErrDetachedHead
 	case head.old.IsZero():
 		return RebaseResult{}, ErrUnbornHead
+	case head.detached:
+		head.ref = detachedHeadName
 	}
 	return m.startRebase(head, base, onto, ontoName, upstreamArg, todo)
 }
@@ -261,6 +267,10 @@ func (m *merger) finishRebase(state RebaseState, result RebaseResult) (RebaseRes
 	head, err := resolveHeadTarget(m.rc.refs)
 	if err != nil {
 		return result, err
+	}
+	if !strings.HasPrefix(state.HeadName, refsPrefix) {
+		result.New = head.old
+		return result, errors.Join(clearRebaseState(m.r), removeStateFiles(m.r, mergeMsgFile))
 	}
 	branch := refs.Name(state.HeadName)
 	tx := m.rc.refs.Begin()

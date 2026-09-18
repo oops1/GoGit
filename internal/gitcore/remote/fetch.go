@@ -41,6 +41,7 @@ func fetchKeepMessage() string {
 
 type FetchOptions struct {
 	Refspecs    []refspec.RefSpec
+	Wants       []hash.ObjectID
 	Depth       int
 	Deepen      int
 	DeepenSince time.Time
@@ -126,7 +127,7 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 
 	result := FetchResult{Refs: adv.Refs, Head: adv.Head}
 	headWant, wantHead := advertisedHead(adv, opts.WantHead)
-	if len(matched) == 0 && !wantHead {
+	if len(matched) == 0 && !wantHead && len(opts.Wants) == 0 {
 		if !opts.Prune {
 			return result, nil
 		}
@@ -212,6 +213,12 @@ func buildFetchRequest(matched []matchedRef, opts FetchOptions, shallow map[hash
 		}
 		seen[m.ref.ID] = true
 		wants = append(wants, m.ref.ID)
+	}
+	for _, id := range opts.Wants {
+		if !seen[id] {
+			seen[id] = true
+			wants = append(wants, id)
+		}
 	}
 	req := transport.FetchRequest{
 		Wants:       wants,
@@ -351,6 +358,7 @@ func applyShallowResponse(r *repo.Repository, shallow map[hash.ObjectID]struct{}
 	for id := range merged {
 		ids = append(ids, id)
 	}
+	slices.SortFunc(ids, hash.ObjectID.Compare)
 	return r.WriteShallow(ids)
 }
 

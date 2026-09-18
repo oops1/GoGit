@@ -116,6 +116,10 @@ linters:
         linters:
           - gosec
         text: "G101"
+      - path: internal/gitcore/(linelog|revision)/graph_test\.go
+        linters:
+          - gosec
+        text: "G404"
 formatters:
   enable:
     - gofmt

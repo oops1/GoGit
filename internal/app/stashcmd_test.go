@@ -13,6 +13,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/worktree"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/branches"
 	"github.com/oops1/gogit/internal/ui/stash"
@@ -378,12 +379,34 @@ func TestADropThatFailsIsShown(t *testing.T) {
 	}
 }
 
+func TestOnlyIgnoredFilesLeaveNothingToStash(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		entries []worktree.Entry
+		want    bool
+	}{
+		{"clean", nil, false},
+		{"ignored only", []worktree.Entry{{Path: "out/", IsDir: true, Staged: worktree.StatusIgnored, Unstaged: worktree.StatusIgnored}}, false},
+		{"untracked", []worktree.Entry{{Path: "out/", Unstaged: worktree.StatusIgnored}, {Path: "new.txt", Staged: worktree.StatusUntracked, Unstaged: worktree.StatusUntracked}}, true},
+		{"modified", []worktree.Entry{{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified}}, true},
+		{"unmodified", []worktree.Entry{{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUnmodified}}, false},
+	} {
+		if got := hasStashableChanges(tc.entries); got != tc.want {
+			t.Fatalf("%s: hasStashableChanges = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestStashCommandsFollowTheRepositoryState(t *testing.T) {
 	s := State{ActiveRepository: "r"}
 	if s.Enabled(CmdStashSave) || s.Enabled(CmdStashApply) || s.Enabled(CmdStashDrop) {
 		t.Fatal("stash commands are on without changes or stashes")
 	}
 	s.HasChanges, s.HasStashes = true, true
+	if s.Enabled(CmdStashSave) {
+		t.Fatal("saving a stash is on with only ignored changes")
+	}
+	s.HasStashable = true
 	if !s.Enabled(CmdStashSave) || !s.Enabled(CmdStashApply) || !s.Enabled(CmdStashDrop) {
 		t.Fatal("stash commands are off with changes and stashes")
 	}

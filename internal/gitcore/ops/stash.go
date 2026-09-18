@@ -190,6 +190,10 @@ type stashPush struct {
 	walk      *untrackedWalk
 }
 
+func (p *stashPush) hasUntracked() bool {
+	return p.walk != nil && p.walk.found()
+}
+
 func (m *merger) stashPush(opts StashOptions) (hash.ObjectID, error) {
 	if opts.Staged && opts.untracked() {
 		return hash.Zero, ErrStashStagedUntracked
@@ -271,7 +275,7 @@ func (m *merger) readStashSources(p *stashPush) error {
 	if p.workTree, err = m.stashWorkTree(idx, p.headState, p.spec); err != nil {
 		return err
 	}
-	if !stagedWithin(p.headState, p.indexed, p.spec) && p.workTree == p.indexTree && len(p.untracked) == 0 {
+	if !stagedWithin(p.headState, p.indexed, p.spec) && p.workTree == p.indexTree && !p.hasUntracked() {
 		return ErrNothingToStash
 	}
 	if p.opts.Staged {
@@ -322,7 +326,7 @@ func (m *merger) writeStashCommits(p *stashPush) (hash.ObjectID, error) {
 		return hash.Zero, err
 	}
 	parents = append(parents, indexCommit)
-	if len(p.untracked) > 0 {
+	if p.hasUntracked() {
 		tree, err := m.untrackedTree(p.untracked)
 		if err != nil {
 			return hash.Zero, err
@@ -489,6 +493,9 @@ func (m *merger) stashApply(position int, opts StashApplyOptions) (StashApplyRes
 	if opts.Index && parts.index != parts.base && parts.index != oursTree {
 		if restored, err = m.reinstateIndex(ours, parts); err != nil {
 			return StashApplyResult{}, err
+		}
+		if err := m.refuseStagedChanges(ours); err != nil {
+			return StashApplyResult{}, errors.Join(err, m.restoreUntracked(parts.untracked))
 		}
 	}
 	labels := merge.Labels{Base: stashBaseLabel, Ours: stashOursLabel, Theirs: stashTheirsLabel}

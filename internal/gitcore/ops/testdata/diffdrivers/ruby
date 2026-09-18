@@ -1,0 +1,20 @@
+require 'json'
+module Sample
+  class Parser < Base
+    def initialize(text)
+      @text = text
+    end
+    def parse
+      JSON.parse(@text)
+    end
+    def self.build(*args)
+      new(*args)
+    end
+  end
+end
+class << self
+  define_method(:x) { 1 }
+end
+module_function :helper
+def	tabbed
+end

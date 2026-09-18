@@ -19,6 +19,7 @@ type untrackedWalk struct {
 	trackedPath map[string]bool
 	trackedDir  map[string]bool
 	files       []string
+	nested      bool
 }
 
 func newUntrackedWalk(m *merger, idx *index.Index, spec pathspec.Set, ignored bool) *untrackedWalk {
@@ -38,6 +39,10 @@ func (w *untrackedWalk) list() ([]string, error) {
 	}
 	slices.Sort(w.files)
 	return w.files, nil
+}
+
+func (w *untrackedWalk) found() bool {
+	return len(w.files) > 0 || w.nested
 }
 
 func (w *untrackedWalk) tracked(rel string) bool {
@@ -92,6 +97,7 @@ func (w *untrackedWalk) subdir(rel string) error {
 		return err
 	}
 	if holdsRepository(entries) {
+		w.nested = true
 		return nil
 	}
 	return w.dir(rel)

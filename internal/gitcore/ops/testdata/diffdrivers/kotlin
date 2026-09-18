@@ -1,0 +1,20 @@
+package sample
+data class Point(val x: Int, val y: Int)
+interface Shape {
+    fun area(): Double
+}
+class Circle(private val r: Double) : Shape {
+    override fun area(): Double {
+        return Math.PI * r * r
+    }
+    private inline fun helper() = 1
+}
+fun main() {
+    println(Circle(1.0).area())
+}
+object Registry {
+    val items = mutableListOf<Int>()
+}
+fun <T> List<T>.second(): T = this[1]
+Fun notKotlin() {
+}

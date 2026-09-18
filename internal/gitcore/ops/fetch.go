@@ -8,17 +8,5 @@ import (
 )
 
 func Fetch(ctx context.Context, r *repo.Repository, remoteName string, opts remote.FetchOptions) (remote.FetchResult, error) {
-	if err := ctx.Err(); err != nil {
-		return remote.FetchResult{}, err
-	}
-	cfg := r.Config()
-	name, err := resolveRemoteName(r, cfg, remoteName)
-	if err != nil {
-		return remote.FetchResult{}, err
-	}
-	rem, err := remote.Load(cfg, name)
-	if err != nil {
-		return remote.FetchResult{}, err
-	}
-	return fetchRemote(ctx, r, rem, opts)
+	return FetchRecursive(ctx, r, remoteName, opts, SubmoduleFetchOptions{})
 }

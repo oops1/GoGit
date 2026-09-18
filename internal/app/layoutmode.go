@@ -106,7 +106,16 @@ func (a *App) showSidebarBranchCounts(snap branches.Snapshot) {
 	a.sidebar.SetCount(sidebar.SectionTags, len(snap.Tags))
 	a.sidebar.SetCount(sidebar.SectionRemotes, remote)
 	a.sidebar.SetCount(sidebar.SectionStash, sidebar.NoCount)
-	a.sidebar.SetCount(sidebar.SectionSubmodules, sidebar.NoCount)
+}
+
+func (a *App) showSidebarSubmoduleCount(count int) {
+	if a.sidebar == nil {
+		return
+	}
+	if count == 0 {
+		count = sidebar.NoCount
+	}
+	a.sidebar.SetCount(sidebar.SectionSubmodules, count)
 }
 
 func (a *App) showSidebarWorkingCounts(files, staged int) {

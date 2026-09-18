@@ -1,0 +1,22 @@
+classdef Account < handle
+    properties
+        Balance = 0
+    end
+    methods
+        function obj = deposit(obj, amount)
+            obj.Balance = obj.Balance + amount;
+        end
+    end
+end
+%% Section one
+x = 1;
+%%% Octave section
+y = 2;
+## Octave comment section
+z = 3;
+% plain comment
+function r = helper(a)
+    r = a * 2;
+end
+%%%% four percent
+w = 4;

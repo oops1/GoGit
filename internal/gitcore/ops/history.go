@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
@@ -45,15 +46,20 @@ func FileHistory(ctx context.Context, r *repo.Repository, rev, path string, opts
 	if err != nil {
 		return nil, err
 	}
-	h := &historian{ctx: ctx, rc: rc, opts: opts}
+	graph, err := OpenCommitGraph(r, rc.db)
+	if err != nil {
+		return nil, err
+	}
+	h := &historian{ctx: ctx, rc: rc, opts: opts, graph: graph}
 	return h.collect(start, clean)
 }
 
 type historian struct {
-	ctx  context.Context
-	rc   *repoContext
-	opts HistoryOptions
-	out  []HistoryEntry
+	ctx   context.Context
+	rc    *repoContext
+	opts  HistoryOptions
+	graph *commitgraph.Graph
+	out   []HistoryEntry
 }
 
 func (h *historian) collect(start hash.ObjectID, path string) ([]HistoryEntry, error) {
@@ -71,7 +77,7 @@ func (h *historian) collect(start hash.ObjectID, path string) ([]HistoryEntry, e
 
 func (h *historian) walkPath(start hash.ObjectID, path string) (hash.ObjectID, string, error) {
 	walk := revision.Walk(h.ctx, revision.Options{
-		Context: revision.Context{Objects: mergeStore{db: h.rc.db}},
+		Context: revision.Context{Objects: mergeStore{db: h.rc.db}, Graph: h.graph},
 		Include: []hash.ObjectID{start},
 		Paths:   []string{path},
 	})

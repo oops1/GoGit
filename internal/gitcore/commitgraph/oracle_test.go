@@ -143,7 +143,7 @@ func TestOurGraphIsByteForByteTheOneGitWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ours, err := Encode(hash.SHA1, o.history())
+	ours, err := Encode(hash.SHA1, o.history(), levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestGitVerifiesTheGraphWeWrite(t *testing.T) {
 	o := newOracle(t)
 	buildTangledHistory(o)
 
-	if err := WriteFile(filepath.Join(o.repo, ".git", "objects", "info"), hash.SHA1, o.history()); err != nil {
+	if err := WriteFile(filepath.Join(o.repo, ".git", "objects", "info"), hash.SHA1, o.history(), levelsOnly); err != nil {
 		t.Fatal(err)
 	}
 

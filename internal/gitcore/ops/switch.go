@@ -88,11 +88,18 @@ func Switch(ctx context.Context, r *repo.Repository, target string, opts SwitchO
 		return err
 	}
 
+	moves, err := planSwitchedSubmodules(ctx, r, headTree, targetTree, opts)
+	if err != nil {
+		return err
+	}
 	if err := layoutWorkingTree(ctx, r, wt, db, headTree, targetTree, opts.Force, opts.Report); err != nil {
 		return err
 	}
 
 	if err := updateHeadAfterSwitch(store, fromRef, fromCommit, branchRef, commitID); err != nil {
+		return err
+	}
+	if err := moves.apply(ctx, r); err != nil {
 		return err
 	}
 	runner := openHooks(r, opts.Hooks)

@@ -1,0 +1,32 @@
+unit Sample;
+interface
+type
+  TShape = class(TObject)
+    procedure Draw;
+  end;
+  TPoint = record
+    X, Y: Integer;
+  end;
+implementation
+procedure TShape.Draw;
+begin
+  WriteLn('draw');
+end;
+function Add(A, B: Integer): Integer;
+begin
+  Result := A + B;
+end;
+class procedure TShape.Create;
+begin
+end;
+constructor TShape.Init;
+begin
+end;
+destructor TShape.Done;
+begin
+end;
+initialization
+  Setup;
+finalization
+  Teardown;
+end.

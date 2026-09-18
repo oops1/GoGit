@@ -68,7 +68,15 @@ func (a *App) currentShownDiff() diffTarget {
 }
 
 func (a *App) diffMenu(spot gitdiff.Spot) []widget.MenuItem {
-	return a.diffMenuFor(a.currentShownDiff(), spot)
+	target := a.currentShownDiff()
+	items := a.diffMenuFor(target, spot)
+	if target.file.NewPath == "" && target.file.OldPath == "" {
+		return items
+	}
+	if len(items) > 0 {
+		items = append(items, menuSeparator())
+	}
+	return append(items, a.investigateLinesItem(target, spot))
 }
 
 func (a *App) diffMenuFor(target diffTarget, spot gitdiff.Spot) []widget.MenuItem {

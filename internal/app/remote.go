@@ -108,11 +108,12 @@ func (a *App) runFetchBody(ctx context.Context, o *openedRepository, prog progre
 		return err
 	}
 	defer func() { _ = r.Close() }()
-	result, err := ops.Fetch(ctx, r, a.effectiveDefaultRemote(r), remote.FetchOptions{
+	result, err := ops.FetchRecursive(ctx, r, a.effectiveDefaultRemote(r), remote.FetchOptions{
 		Prune:     prune,
 		Progress:  prog,
 		Transport: a.transportOptions(prog),
-	})
+	}, ops.SubmoduleFetchOptions{Events: submoduleEventLog(reporter, new(int))})
+	reportSubmoduleError(reporter, err)
 	if err != nil {
 		return err
 	}
@@ -190,10 +191,12 @@ func (a *App) runPullBody(ctx context.Context, o *openedRepository, prog progres
 	}
 	defer func() { _ = r.Close() }()
 	result, err := ops.Pull(ctx, r, ops.PullOptions{
-		Progress: prog,
-		Fetch:    remote.FetchOptions{Progress: prog, Transport: a.transportOptions(prog)},
-		Hooks:    ops.HookOptions{Events: hookEvents(reporter)},
+		Progress:        prog,
+		Fetch:           remote.FetchOptions{Progress: prog, Transport: a.transportOptions(prog)},
+		Hooks:           ops.HookOptions{Events: hookEvents(reporter)},
+		SubmoduleEvents: submoduleEventLog(reporter, new(int)),
 	})
+	reportSubmoduleError(reporter, err)
 	reportHookRejection(reporter, err)
 	switch {
 	case errors.Is(err, ops.ErrNotFastForward):
@@ -358,17 +361,20 @@ func (a *App) startClone(result clone.Result) {
 		a.reportIgnoredSSHArguments(reporter)
 		a.reportIgnoredCredentialHelpers(reporter, result.URL)
 		r, err := cloneRepository(ctx, result.URL, result.Directory, ops.CloneOptions{
-			Branch:       result.Branch,
-			SingleBranch: result.Branch != "",
-			Depth:        result.Depth,
-			Progress:     prog,
-			Transport:    a.transportOptions(prog),
-			Hooks:        ops.HookOptions{Events: hookEvents(reporter)},
+			Branch:            result.Branch,
+			SingleBranch:      result.Branch != "",
+			Depth:             result.Depth,
+			Progress:          prog,
+			Transport:         a.transportOptions(prog),
+			Hooks:             ops.HookOptions{Events: hookEvents(reporter)},
+			RecurseSubmodules: result.Submodules,
+			SubmoduleEvents:   submoduleEventLog(reporter, new(int)),
 		})
 		if r == nil {
 			reportTransportError(reporter, err)
 			return err
 		}
+		reportSubmoduleError(reporter, err)
 		if closeErr := r.Close(); closeErr != nil {
 			return errors.Join(err, closeErr)
 		}

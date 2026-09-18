@@ -4,7 +4,10 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/userdiff"
 )
+
+const diffAttribute = "diff"
 
 func repoDiffOptions(r *repo.Repository, opts diff.Options) (diff.Options, error) {
 	if opts.RenameThreshold == 0 {
@@ -20,22 +23,72 @@ func repoDiffOptions(r *repo.Repository, opts diff.Options) (diff.Options, error
 	if opts.BinaryHint != nil {
 		return opts, nil
 	}
-	attributesFile, err := attributesFileOf(r)
+	attrs, err := repoAttributes(r)
 	if err != nil {
 		return diff.Options{}, err
+	}
+	opts.BinaryHint = attrs.DiffBinary
+	opts.FuncNames = diffFuncNames(attrs, userdiff.Load(r.Config()))
+	return opts, nil
+}
+
+func repoAttributes(r *repo.Repository) (*attributes.Attributes, error) {
+	attributesFile, err := attributesFileOf(r)
+	if err != nil {
+		return nil, err
 	}
 	work := attributes.MemoryLoader(nil)
 	if r.WorkTree() != "" {
 		work = attributes.OSLoader(r.WorkTree())
 	}
-	attrs := attributes.New(attributes.AttributeOptions{
+	return attributes.New(attributes.AttributeOptions{
 		Work:           work,
 		Global:         attributes.OSLoader(""),
 		InfoFile:       r.CommonPath("info/attributes"),
 		AttributesFile: attributesFile,
 		IgnoreCase:     r.Core().IgnoreCase,
 		Config:         r.Config(),
-	})
-	opts.BinaryHint = attrs.DiffBinary
-	return opts, nil
+	}), nil
+}
+
+func diffFuncNames(attrs *attributes.Attributes, drivers *userdiff.Drivers) diff.FuncNames {
+	return func(path string) *userdiff.Matcher {
+		return diffDriverMatcher(drivers, attrs.Get(path, diffAttribute)[diffAttribute])
+	}
+}
+
+func diffDriverMatcher(drivers *userdiff.Drivers, value attributes.Value) *userdiff.Matcher {
+	name := userdiff.DefaultDriver
+	switch {
+	case value.IsSet(), value.IsUnset():
+		return nil
+	case value.Kind() == attributes.Valued:
+		if _, known := drivers.Driver(value.Text()); known {
+			name = value.Text()
+		}
+	}
+	matcher, err := drivers.Matcher(name)
+	if err != nil {
+		return nil
+	}
+	return matcher
+}
+
+func lineRangeFuncNames(r *repo.Repository) (func(path string) *userdiff.Matcher, error) {
+	attrs, err := repoAttributes(r)
+	if err != nil {
+		return nil, err
+	}
+	drivers := userdiff.Load(r.Config())
+	return func(path string) *userdiff.Matcher {
+		value := attrs.Get(path, diffAttribute)[diffAttribute]
+		if value.Kind() != attributes.Valued {
+			return nil
+		}
+		matcher, err := drivers.Matcher(value.Text())
+		if err != nil {
+			return nil
+		}
+		return matcher
+	}, nil
 }

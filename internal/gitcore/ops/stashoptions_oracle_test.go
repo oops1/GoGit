@@ -86,7 +86,7 @@ func worktreeListing(o *oracle, dir string) string {
 		switch {
 		case rel == ".":
 			return nil
-		case rel == ".git":
+		case entry.Name() == ".git":
 			return fs.SkipDir
 		case entry.IsDir():
 			lines = append(lines, "dir "+rel)
@@ -111,13 +111,20 @@ func requireSameStashState(o *oracle, gitSide, ourSide string) {
 }
 
 type stashPushCase struct {
-	name     string
-	side     func(*oracle, string) string
-	prepare  func(*oracle, string)
-	args     []string
-	opts     StashOptions
-	gitFails bool
-	wantErr  error
+	name              string
+	side              func(*oracle, string) string
+	prepare           func(*oracle, string)
+	args              []string
+	opts              StashOptions
+	gitFails          bool
+	wantErr           error
+	needsBinaryStaged bool
+}
+
+func gitStashesStagedBinaryContent(o *oracle) bool {
+	dir := stashBinarySide(o, "binary-staged-probe")
+	_, err := o.attempt(dir, "stash", "push", "-q", "--staged")
+	return err == nil
 }
 
 func stashPushCases() []stashPushCase {
@@ -181,12 +188,126 @@ func stashPushCases() []stashPushCase {
 			args: []string{"--staged"}, opts: StashOptions{Staged: true},
 			gitFails: true, wantErr: ErrStashWorktreeKept,
 		},
+		{name: "untracked beside nested repositories", side: stashNestedSide, args: []string{"-u"}, opts: StashOptions{IncludeUntracked: true}},
+		{name: "ignored beside nested repositories", side: stashNestedSide, args: []string{"-a"}, opts: StashOptions{IncludeIgnored: true}},
+		{
+			name: "only a nested repository", side: stashNestedSide,
+			prepare: func(o *oracle, dir string) {
+				o.run(dir, "reset", "-q", "--hard")
+				o.run(dir, "clean", "-q", "-f", "-d", "--", "untracked.txt", "tools", "empty", "fresh")
+			},
+			args: []string{"-u"}, opts: StashOptions{IncludeUntracked: true},
+		},
+		{name: "nested repository path", side: stashNestedSide, args: []string{"-u", "--", "vendor", "a.txt"}, opts: StashOptions{IncludeUntracked: true, Paths: []string{"vendor", "a.txt"}}},
+		{name: "staged binary edit", side: stashBinarySide, args: []string{"--staged"}, opts: StashOptions{Staged: true}, needsBinaryStaged: true},
+		{
+			name: "staged new binary file", side: stashBinarySide,
+			prepare: func(o *oracle, dir string) {
+				o.run(dir, "reset", "-q")
+				stageText(o, dir, "fresh.bin", "fresh\x00bin\n")
+			},
+			args: []string{"--staged"}, opts: StashOptions{Staged: true}, needsBinaryStaged: true,
+		},
+		{
+			name: "staged binary mode change", side: stashBinarySide,
+			prepare: func(o *oracle, dir string) {
+				o.run(dir, "reset", "-q", "--hard")
+				o.run(dir, "update-index", "--chmod=+x", "bin")
+			},
+			args: []string{"--staged"}, opts: StashOptions{Staged: true},
+		},
+		{name: "staged binary made text by attributes", side: stashBinarySide, prepare: markBinaryAsText, args: []string{"--staged"}, opts: StashOptions{Staged: true}},
+		{name: "staged symbolic link", side: stashSymlinkSide, args: []string{"--staged"}, opts: StashOptions{Staged: true}},
+		{
+			name: "staged symbolic link retargeted again", side: stashSymlinkSide,
+			prepare: func(o *oracle, dir string) { relink(o, dir, "c.txt") },
+			args:    []string{"--staged"}, opts: StashOptions{Staged: true}, gitFails: true, wantErr: ErrStashWorktreeKept,
+		},
+		{
+			name: "staged symbolic link replaced by a file", side: stashSymlinkSide,
+			prepare: func(o *oracle, dir string) {
+				o.remove(dir, "link")
+				o.write(dir, "link", "b.txt")
+			},
+			args: []string{"--staged"}, opts: StashOptions{Staged: true}, gitFails: true, wantErr: ErrStashWorktreeKept,
+		},
+	}
+}
+
+func stashNestedSide(o *oracle, name string) string {
+	o.t.Helper()
+	dir := stashRichSide(o, name)
+	for _, nested := range []string{"vendor/lib", "build/cache"} {
+		path := filepath.Join(dir, filepath.FromSlash(nested))
+		if err := os.MkdirAll(path, 0o777); err != nil {
+			o.t.Fatalf("MkdirAll returned error %v", err)
+		}
+		newOracleRepo(o, path)
+		o.write(path, "code.txt", "code\n")
+		o.run(path, "add", ".")
+		o.run(path, "commit", "-q", "-m", "nested")
+	}
+	nested := filepath.Join(dir, "fresh", "unborn")
+	if err := os.MkdirAll(nested, 0o777); err != nil {
+		o.t.Fatalf("MkdirAll returned error %v", err)
+	}
+	newOracleRepo(o, nested)
+	o.write(nested, "draft.txt", "draft\n")
+	return dir
+}
+
+func stashBinarySide(o *oracle, name string) string {
+	o.t.Helper()
+	dir := o.repoDir(name)
+	newOracleRepo(o, dir)
+	o.run(dir, "config", "core.autocrlf", "false")
+	o.write(dir, "a.txt", "a\n")
+	o.write(dir, "bin", "bin\x00base\n")
+	o.run(dir, "add", ".")
+	o.run(dir, "commit", "-q", "-m", "binary")
+	stageText(o, dir, "bin", "bin\x00staged\n")
+	return dir
+}
+
+func markBinaryAsText(o *oracle, dir string) {
+	o.write(dir, ".git/info/attributes", "bin diff\n")
+}
+
+func stashSymlinkSide(o *oracle, name string) string {
+	o.t.Helper()
+	dir := o.repoDir(name)
+	newOracleRepo(o, dir)
+	if strings.TrimSpace(o.run(dir, "config", "--get", "--default", "true", "core.symlinks")) != "true" {
+		o.t.Skip("git does not create symbolic links here")
+	}
+	for _, file := range []string{"a.txt", "b.txt", "c.txt"} {
+		o.write(dir, file, file+"\n")
+	}
+	if err := os.Symlink("a.txt", filepath.Join(dir, "link")); err != nil {
+		o.t.Skipf("symbolic links are not supported: %v", err)
+	}
+	o.run(dir, "add", ".")
+	o.run(dir, "commit", "-q", "-m", "link")
+	relink(o, dir, "b.txt")
+	o.run(dir, "add", "link")
+	return dir
+}
+
+func relink(o *oracle, dir, target string) {
+	o.t.Helper()
+	o.remove(dir, "link")
+	if err := os.Symlink(target, filepath.Join(dir, "link")); err != nil {
+		o.t.Fatalf("Symlink returned error %v", err)
 	}
 }
 
 func TestOracleStashPushOptionsMatchGit(t *testing.T) {
+	binaryStaged := gitStashesStagedBinaryContent(newStashOracle(t))
 	for _, tc := range stashPushCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.needsBinaryStaged && !binaryStaged {
+				t.Skip("the installed git refuses to stash staged binary content")
+			}
 			o := newStashOracle(t)
 			side := tc.side
 			if side == nil {
@@ -301,7 +422,87 @@ func stashApplyCases() []stashApplyCase {
 				o.run(dir, "commit", "-q", "-am", "top")
 			},
 		},
+		{
+			name: "index with overlapping staged changes", side: stashLinesSide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				stageText(o, dir, "m.txt", strings.Replace(numberedLines(1, 12), "l3\n", "Y3\n", 1))
+			},
+			gitFails: true, wantErr: ErrStashIndexConflicts,
+		},
+		{
+			name: "index with staged changes elsewhere in the file", side: stashLinesSide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				stageText(o, dir, "m.txt", strings.Replace(numberedLines(1, 12), "l9\n", "Y9\n", 1))
+			},
+			gitFails: true, wantErr: ErrWouldOverwrite,
+		},
+		{
+			name: "index with a staged change in another file", side: stashLinesSide, pop: true, opts: StashApplyOptions{Index: true},
+			setup:    func(o *oracle, dir string) { o.write(dir, "loose.txt", "loose\n") },
+			push:     []string{"-u"},
+			prepare:  func(o *oracle, dir string) { stageText(o, dir, "keep.txt", "staged\n") },
+			gitFails: true, wantErr: ErrWouldOverwrite,
+		},
+		{
+			name: "staged changes without restoring the index", side: stashLinesSide,
+			prepare: func(o *oracle, dir string) { stageText(o, dir, "keep.txt", "staged\n") },
+		},
+		{
+			name: "binary index", side: stashBinarySide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				stageText(o, dir, "z.txt", "z\n")
+				o.run(dir, "commit", "-q", "-m", "z")
+			},
+		},
+		{
+			name: "binary index changed since", side: stashBinarySide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				stageText(o, dir, "bin", "bin\x00head\n")
+				o.run(dir, "commit", "-q", "-m", "head")
+			},
+			gitFails: true, wantErr: ErrStashIndexConflicts,
+		},
+		{
+			name: "binary made text by attributes in the index", side: stashBinarySide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				markBinaryAsText(o, dir)
+				stageText(o, dir, "bin", "bin\x00base\ntail\n")
+				o.run(dir, "commit", "-q", "-m", "tail")
+			},
+			gitFails: true, wantErr: ErrStashIndexConflicts,
+		},
+		{
+			name: "symbolic link index", side: stashSymlinkSide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				stageText(o, dir, "z.txt", "z\n")
+				o.run(dir, "commit", "-q", "-m", "z")
+			},
+		},
+		{
+			name: "symbolic link index changed since", side: stashSymlinkSide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				relink(o, dir, "c.txt")
+				o.run(dir, "add", "link")
+				o.run(dir, "commit", "-q", "-m", "c")
+			},
+			gitFails: true, wantErr: ErrStashIndexConflicts,
+		},
+		{
+			name: "symbolic link index over a regular file", side: stashSymlinkSide, opts: StashApplyOptions{Index: true},
+			prepare: func(o *oracle, dir string) {
+				o.remove(dir, "link")
+				stageText(o, dir, "link", "a.txt")
+				o.run(dir, "commit", "-q", "-m", "regular")
+			},
+			gitFails: true, wantErr: ErrStashIndexConflicts,
+		},
 	}
+}
+
+func stageText(o *oracle, dir, rel, text string) {
+	o.t.Helper()
+	o.write(dir, rel, text)
+	o.run(dir, "add", rel)
 }
 
 func TestOracleStashApplyOptionsMatchGit(t *testing.T) {

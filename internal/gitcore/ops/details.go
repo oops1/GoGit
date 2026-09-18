@@ -90,6 +90,11 @@ func fileLimitOf(opts DetailsOptions) int {
 
 func refsAround(ctx context.Context, rc *repoContext, commit hash.ObjectID) ([]string, []string, error) {
 	var branches, tags []string
+	graph, err := OpenCommitGraph(rc.repo, rc.db)
+	if err != nil {
+		return nil, nil, err
+	}
+	source := revision.Context{Objects: mergeStore{db: rc.db}, Graph: graph}
 	for ref, err := range rc.refs.Prefix(refs.RefsPrefix) {
 		if err != nil {
 			return nil, nil, err
@@ -99,7 +104,7 @@ func refsAround(ctx context.Context, rc *repoContext, commit hash.ObjectID) ([]s
 		}
 		switch {
 		case ref.Name.IsBranch():
-			contains, err := revision.IsAncestor(revision.Context{Objects: mergeStore{db: rc.db}}, commit, ref.Target)
+			contains, err := revision.IsAncestor(source, commit, ref.Target)
 			if err != nil {
 				return nil, nil, err
 			}

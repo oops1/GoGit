@@ -14,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
+	"github.com/oops1/gogit/internal/gitcore/submodule"
 )
 
 const (
@@ -103,10 +104,7 @@ func (c *gitmodulesCheck) inspectBlob(id hash.ObjectID, data []byte) {
 	}
 }
 
-func submoduleNameAllowed(name string) bool {
-	separator := func(c rune) bool { return c == '/' || c == '\\' }
-	return name != "" && !slices.Contains(strings.FieldsFunc(name, separator), "..")
-}
+var submoduleNameAllowed = submodule.NameAllowed
 
 func startsWithDotSeparator(s string) bool {
 	return len(s) >= 2 && s[0] == '.' && os.IsPathSeparator(s[1])

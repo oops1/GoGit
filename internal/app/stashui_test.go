@@ -88,7 +88,7 @@ func dirtyAppWithUntrackedFile(t *testing.T) (*App, string) {
 	runOnDispatcher(t, a, a.RefreshRepository)
 	waitForFileRowStatus(t, a, "new.txt", changes.RowUntracked)
 	waitForFileRowStatus(t, a, "f.txt", changes.RowModified)
-	waitForAppState(t, a, "local changes", func(s State) bool { return s.HasChanges })
+	waitForAppState(t, a, "local changes", func(s State) bool { return s.HasStashable })
 	return a, target
 }
 
@@ -152,7 +152,7 @@ func TestTheApplyStashMenuIsEmptyWhenTheStashesCannotBeRead(t *testing.T) {
 func TestTheSaveStashButtonFollowsTheChangesAndTheFileSelection(t *testing.T) {
 	a, _ := stashedApp(t)
 	btn := toolbarMenuOnDispatcher(t, a, "btnSaveStash")
-	waitForAppState(t, a, "a clean working tree", func(s State) bool { return !s.HasChanges })
+	waitForAppState(t, a, "a clean working tree", func(s State) bool { return !s.HasStashable })
 	if got := menuButtonStateOf(t, a, btn); got != (menuButtonState{Enabled: true, Menu: true}) {
 		t.Fatalf("save button without changes = %+v", got)
 	}
@@ -313,12 +313,8 @@ func TestSelectingAStashShowsItsFilesAndDiffLikeACommit(t *testing.T) {
 	a, _, id := stashedAppWithUntrackedFile(t)
 
 	selectBranchNode(t, a, branches.StashRef(0))
-	waitForFilesRows(t, a, 2)
+	waitForFilesPaths(t, a, "f.txt", "new.txt")
 
-	paths := []string{filesRowOnDispatcher(t, a, 0).RelPath, filesRowOnDispatcher(t, a, 1).RelPath}
-	if !slices.Equal(paths, []string{"f.txt", "new.txt"}) {
-		t.Fatalf("stash files = %v", paths)
-	}
 	if doc := diffDocumentOnDispatcher(t, a); doc.NewName != "f.txt" || !strings.Contains(doc.Right, "dirty") {
 		t.Fatalf("first diff = %+v", doc)
 	}

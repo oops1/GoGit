@@ -1,0 +1,29 @@
+      PROGRAM MAIN
+C     comment line
+      INTEGER I
+      CALL HELLO(I)
+      END PROGRAM MAIN
+      subroutine hello(n)
+      integer n
+      ! comment
+      print *, n
+      end subroutine hello
+      module shapes
+        interface area
+          module procedure area_circle
+        end interface
+      contains
+        pure recursive function area_circle(r) result(a)
+          real :: r, a
+          a = 3.14 * r * r
+        end function area_circle
+      end module shapes
+      BLOCK DATA INIT
+      COMMON /C/ X
+      END
+* star comment
+c lowercase comment
+      Integer Function Count(n)
+      Count = n
+      end
+      program 9bad

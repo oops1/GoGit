@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
@@ -53,9 +54,11 @@ type walker struct {
 	opts     Options
 	queue    *queue
 	paths    []string
+	keys     [][]commitgraph.BloomKey
 	slop     int
-	date     time.Time
+	when     int64
 	haveDate bool
+	tips     []*node
 }
 
 func Walk(ctx context.Context, opts Options) iter.Seq2[*Commit, error] {
@@ -65,11 +68,14 @@ func Walk(ctx context.Context, opts Options) iter.Seq2[*Commit, error] {
 			yield(nil, err)
 			return
 		}
-		if w.buffered() {
+		switch {
+		case w.streamsTopologically():
+			w.emitTopological(ctx, yield)
+		case w.buffered():
 			w.emitBuffered(ctx, yield)
-			return
+		default:
+			w.emitStream(ctx, yield)
 		}
-		w.emitStream(ctx, yield)
 	}
 }
 
@@ -78,11 +84,16 @@ func newWalker(opts Options) (*walker, error) {
 		return nil, ErrPickaxeConflict
 	}
 	w := &walker{
-		graph: newGraph(newStore(opts.Context.Objects, opts.Context.Shallow)),
+		graph: newGraph(newStore(opts.Context)),
 		opts:  opts,
 		queue: newQueue(byCommitDate),
 		paths: normalizePaths(opts.Paths),
 		slop:  slopMax,
+	}
+	if graph := opts.Context.Graph; graph != nil {
+		for _, path := range w.paths {
+			w.keys = append(w.keys, graph.BloomKeys(path))
+		}
 	}
 	for _, id := range opts.Exclude {
 		if err := w.seed(id, flagUninteresting); err != nil {
@@ -95,6 +106,42 @@ func newWalker(opts Options) (*walker, error) {
 		}
 	}
 	return w, nil
+}
+
+func Count(ctx context.Context, source Context, include []hash.ObjectID) (int, error) {
+	g := newGraph(newStore(source))
+	var pending []*node
+	for _, id := range include {
+		n, err := g.commit(id)
+		if err != nil {
+			return 0, err
+		}
+		if n.flags&flagSeen == 0 {
+			n.flags |= flagSeen
+			pending = append(pending, n)
+		}
+	}
+	count := 0
+	for len(pending) > 0 {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		n := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		count++
+		for _, id := range n.parents {
+			parent := g.node(id)
+			if parent.flags&flagSeen != 0 {
+				continue
+			}
+			parent.flags |= flagSeen
+			if err := g.load(parent); err != nil {
+				return 0, err
+			}
+			pending = append(pending, parent)
+		}
+	}
+	return count, nil
 }
 
 func normalizePaths(paths []string) []string {
@@ -120,6 +167,7 @@ func (w *walker) seed(id hash.ObjectID, flags nodeFlags) error {
 	}
 	n.flags |= flagSeen
 	w.queue.push(n)
+	w.tips = append(w.tips, n)
 	return nil
 }
 
@@ -131,7 +179,7 @@ func (w *walker) buffered() bool {
 func (w *walker) next() (*node, error) {
 	for w.queue.Len() > 0 {
 		n := w.queue.pop()
-		if !w.opts.Since.IsZero() && n.commit.Committer.When.Before(w.opts.Since) {
+		if !w.opts.Since.IsZero() && time.Unix(n.when, 0).Before(w.opts.Since) {
 			n.flags |= flagUninteresting
 		}
 		if err := w.processParents(n); err != nil {
@@ -145,20 +193,24 @@ func (w *walker) next() (*node, error) {
 			}
 			return nil, nil
 		}
-		if !w.opts.Until.IsZero() && n.commit.Committer.When.After(w.opts.Until) {
+		if w.pastUntil(n) {
 			continue
 		}
-		w.date, w.haveDate = n.commit.Committer.When, true
+		w.when, w.haveDate = n.when, true
 		return n, nil
 	}
 	return nil, nil
+}
+
+func (w *walker) pastUntil(n *node) bool {
+	return !w.opts.Until.IsZero() && time.Unix(n.when, 0).After(w.opts.Until)
 }
 
 func (w *walker) stillInteresting() int {
 	if w.queue.Len() == 0 {
 		return 0
 	}
-	if w.haveDate && !w.date.After(w.queue.head().commit.Committer.When) {
+	if w.haveDate && w.when <= w.queue.head().when {
 		return slopMax
 	}
 	for _, item := range w.queue.items {
@@ -220,7 +272,7 @@ func (w *walker) markParentsUninteresting(n *node) {
 				break
 			}
 			current.flags |= flagUninteresting
-			if current.commit == nil || len(current.parents) == 0 {
+			if !current.loaded || len(current.parents) == 0 {
 				break
 			}
 			pending = append(pending, current.parents[1:]...)
@@ -236,8 +288,9 @@ func (w *walker) show(ctx context.Context, n *node) (bool, error) {
 	if len(w.paths) > 0 && n.flags&flagTreeSame != 0 {
 		return false, nil
 	}
-	if !w.matches(n) {
-		return false, nil
+	matched, err := w.matches(n)
+	if err != nil || !matched {
+		return false, err
 	}
 	found, err := w.pickaxe(ctx, n)
 	if err != nil || !found {
@@ -247,17 +300,23 @@ func (w *walker) show(ctx context.Context, n *node) (bool, error) {
 	return true, nil
 }
 
-func (w *walker) matches(n *node) bool {
-	if w.opts.Author != nil && !matchLines(w.opts.Author, n.commit.Author.String()) {
-		return false
+func (w *walker) matches(n *node) (bool, error) {
+	if w.opts.Author == nil && w.opts.Committer == nil && w.opts.Grep == nil {
+		return true, nil
 	}
-	if w.opts.Committer != nil && !matchLines(w.opts.Committer, n.commit.Committer.String()) {
-		return false
+	commit, err := w.full(n)
+	if err != nil {
+		return false, err
 	}
-	if w.opts.Grep != nil && !matchLines(w.opts.Grep, n.commit.Message) {
-		return false
+	switch {
+	case w.opts.Author != nil && !matchLines(w.opts.Author, commit.Author.String()):
+		return false, nil
+	case w.opts.Committer != nil && !matchLines(w.opts.Committer, commit.Committer.String()):
+		return false, nil
+	case w.opts.Grep != nil && !matchLines(w.opts.Grep, commit.Message):
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 func matchLines(pattern *regexp.Regexp, text string) bool {
@@ -269,12 +328,16 @@ func matchLines(pattern *regexp.Regexp, text string) bool {
 	return false
 }
 
-func newCommit(n *node) *Commit {
-	parents := n.commit.Parents
+func (w *walker) newCommit(n *node) (*Commit, error) {
+	commit, err := w.full(n)
+	if err != nil {
+		return nil, err
+	}
+	parents := n.original
 	if n.flags&flagShallow != 0 {
 		parents = nil
 	}
-	return &Commit{ID: n.id, Commit: n.commit, Parents: parents}
+	return &Commit{ID: n.id, Commit: commit, Parents: parents}, nil
 }
 
 type limiter struct {
@@ -295,6 +358,36 @@ func (l *limiter) accept() (bool, bool) {
 	return true, true
 }
 
+func (w *walker) visible(ctx context.Context, n *node, limit *limiter) (*Commit, bool, error) {
+	shown, err := w.show(ctx, n)
+	if err != nil || !shown {
+		return nil, false, err
+	}
+	take, more := limit.accept()
+	if !more {
+		return nil, true, nil
+	}
+	if !take {
+		return nil, false, nil
+	}
+	commit, err := w.newCommit(n)
+	return commit, false, err
+}
+
+func (w *walker) emit(ctx context.Context, n *node, limit *limiter, yield func(*Commit, error) bool) bool {
+	commit, stop, err := w.visible(ctx, n, limit)
+	switch {
+	case err != nil:
+		yield(nil, err)
+		return false
+	case stop:
+		return false
+	case commit == nil:
+		return true
+	}
+	return yield(commit, nil)
+}
+
 func (w *walker) emitStream(ctx context.Context, yield func(*Commit, error) bool) {
 	limit := &limiter{opts: w.opts}
 	for {
@@ -307,22 +400,7 @@ func (w *walker) emitStream(ctx context.Context, yield func(*Commit, error) bool
 			yield(nil, err)
 			return
 		}
-		if n == nil {
-			return
-		}
-		visible, err := w.show(ctx, n)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
-		if !visible {
-			continue
-		}
-		take, more := limit.accept()
-		if !more {
-			return
-		}
-		if take && !yield(newCommit(n), nil) {
+		if n == nil || !w.emit(ctx, n, limit, yield) {
 			return
 		}
 	}
@@ -345,23 +423,23 @@ func (w *walker) emitBuffered(ctx context.Context, yield func(*Commit, error) bo
 		}
 		collected = append(collected, n)
 	}
+	if err := w.loadAuthorDates(collected); err != nil {
+		yield(nil, err)
+		return
+	}
 	limit := &limiter{opts: w.opts}
 	var shown []*Commit
 	for _, n := range sortNodes(collected, w.opts.Order) {
-		visible, err := w.show(ctx, n)
+		commit, stop, err := w.visible(ctx, n, limit)
 		if err != nil {
 			yield(nil, err)
 			return
 		}
-		if !visible {
-			continue
-		}
-		take, more := limit.accept()
-		if !more {
+		if stop {
 			break
 		}
-		if take {
-			shown = append(shown, newCommit(n))
+		if commit != nil {
+			shown = append(shown, commit)
 		}
 	}
 	if w.opts.Reverse {
@@ -372,4 +450,16 @@ func (w *walker) emitBuffered(ctx context.Context, yield func(*Commit, error) bo
 			return
 		}
 	}
+}
+
+func (w *walker) loadAuthorDates(nodes []*node) error {
+	if w.opts.Order != AuthorDate {
+		return nil
+	}
+	for _, n := range nodes {
+		if _, err := w.full(n); err != nil {
+			return err
+		}
+	}
+	return nil
 }

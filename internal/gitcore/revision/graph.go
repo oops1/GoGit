@@ -3,6 +3,7 @@ package revision
 import (
 	"container/heap"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
@@ -19,13 +20,23 @@ const (
 	flagStale
 	flagResult
 	flagShallow
+	flagExplored
+	flagIndegree
 )
 
 type node struct {
-	id      hash.ObjectID
-	commit  *object.Commit
-	parents []hash.ObjectID
-	flags   nodeFlags
+	id         hash.ObjectID
+	commit     *object.Commit
+	original   []hash.ObjectID
+	parents    []hash.ObjectID
+	tree       hash.ObjectID
+	when       int64
+	generation uint64
+	position   commitgraph.Position
+	inGraph    bool
+	loaded     bool
+	degree     int
+	flags      nodeFlags
 }
 
 type graph struct {
@@ -47,20 +58,45 @@ func (g *graph) node(id hash.ObjectID) *node {
 }
 
 func (g *graph) load(n *node) error {
-	if n.commit != nil {
+	if n.loaded {
 		return nil
 	}
-	commit, err := g.store.commit(n.id)
-	if err != nil {
-		return err
+	if pos, ok := g.store.inGraph(n.id); ok {
+		entry := g.store.graph.Entry(pos)
+		n.tree, n.when, n.generation = entry.Tree, entry.Time, entry.Generation
+		n.original = make([]hash.ObjectID, len(entry.Parents))
+		for at, parent := range entry.Parents {
+			n.original[at] = g.store.graph.ID(parent)
+		}
+		n.position, n.inGraph = pos, true
+	} else {
+		commit, err := g.store.commit(n.id)
+		if err != nil {
+			return err
+		}
+		n.commit = commit
+		n.tree, n.when, n.original = commit.Tree, commit.Committer.When.Unix(), commit.Parents
+		n.generation = commitgraph.GenerationInfinity
 	}
-	n.commit = commit
-	n.parents = commit.Parents
+	n.parents = n.original
 	if g.store.isShallow(n.id) {
 		n.parents = nil
 		n.flags |= flagShallow
 	}
+	n.loaded = true
 	return nil
+}
+
+func (g *graph) full(n *node) (*object.Commit, error) {
+	if n.commit != nil {
+		return n.commit, nil
+	}
+	commit, err := g.store.commit(n.id)
+	if err != nil {
+		return nil, err
+	}
+	n.commit = commit
+	return commit, nil
 }
 
 func (g *graph) commit(id hash.ObjectID) (*node, error) {
@@ -117,11 +153,17 @@ func (q *queue) pop() *node {
 func (q *queue) head() *node { return q.items[0].node }
 
 func byCommitDate(a, b entry) bool {
-	first, second := a.node.commit.Committer.When, b.node.commit.Committer.When
-	if !first.Equal(second) {
-		return first.After(second)
+	if a.node.when != b.node.when {
+		return a.node.when > b.node.when
 	}
 	return a.seq < b.seq
+}
+
+func byGenerationThenDate(a, b entry) bool {
+	if a.node.generation != b.node.generation {
+		return a.node.generation > b.node.generation
+	}
+	return byCommitDate(a, b)
 }
 
 func byAuthorDate(a, b entry) bool {

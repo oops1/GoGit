@@ -132,7 +132,7 @@ func TestGCReportsEveryFailingStep(t *testing.T) {
 			swapMaint(t, &dbTempFiles, func(*odb.DB) ([]odb.TempFile, error) { return nil, boom })
 		}},
 		{"writing the commit graph", func(t *testing.T) {
-			swapMaint(t, &writeCommitGraphFile, func(string, hash.Format, []commitgraph.Commit) error { return boom })
+			swapMaint(t, &writeCommitGraphFile, func(string, hash.Format, []commitgraph.Commit, commitgraph.EncodeOptions) error { return boom })
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

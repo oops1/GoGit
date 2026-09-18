@@ -65,10 +65,11 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 	t.Cleanup(func() { loadDialog = prev })
 	full := func() map[string]widget.Widget {
 		return map[string]widget.Widget{
-			"pathLabel": widget.NewLabel("", widget.CurrentTheme().LabelText),
-			"lines":     widget.NewDataGridWidget(),
-			"hint":      widget.NewLabel("", widget.CurrentTheme().LabelText),
-			"close":     widget.NewButton(""),
+			"pathLabel":   widget.NewLabel("", widget.CurrentTheme().LabelText),
+			"lines":       widget.NewDataGridWidget(),
+			"hint":        widget.NewLabel("", widget.CurrentTheme().LabelText),
+			"investigate": widget.NewButton(""),
+			"close":       widget.NewButton(""),
 		}
 	}
 	for name := range full() {
@@ -153,6 +154,29 @@ func TestCloseReachesTheCallback(t *testing.T) {
 	if !closed {
 		t.Fatal("the close callback did not run")
 	}
+}
+
+func TestInvestigateHandsOverTheSelectedLine(t *testing.T) {
+	v := newTestView(t)
+	v.SetLines("f", twoLines())
+	var picked []Line
+	v.OnInvestigate = func(line Line) { picked = append(picked, line) }
+
+	if v.lookBtn.IsEnabled() {
+		t.Fatal("investigate is enabled without a line")
+	}
+	v.lookBtn.OnClick()
+	v.selectRow(t, 1)
+	if !v.lookBtn.IsEnabled() {
+		t.Fatal("investigate is disabled with a line")
+	}
+	v.lookBtn.OnClick()
+
+	if len(picked) != 1 || picked[0].Number != 2 {
+		t.Fatalf("picked = %+v", picked)
+	}
+	v.OnInvestigate = nil
+	v.lookBtn.OnClick()
 }
 
 func TestTheCloseCallbackIsOptional(t *testing.T) {

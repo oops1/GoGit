@@ -46,7 +46,7 @@ func (s *session) Fetch(ctx context.Context, req transport.FetchRequest, neg tra
 		return nil, err
 	}
 
-	included, shallow, err := s.commitClosure(ctx, kinds.commits, haveCommits, req.Depth)
+	included, shallow, err := s.commitClosure(ctx, kinds.commits, haveCommits, req.Depth, req.Shallow)
 	if err != nil {
 		return nil, err
 	}

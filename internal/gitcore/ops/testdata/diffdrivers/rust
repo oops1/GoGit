@@ -1,0 +1,32 @@
+use std::fmt;
+pub struct Point {
+    x: i32,
+    y: i32,
+}
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+pub(crate) enum Shape<T> {
+    Circle(T),
+}
+async fn fetch() -> u8 {
+    0
+}
+unsafe impl Send for Point {}
+extern "C" fn callback(v: i32) {
+}
+macro_rules! square {
+    ($x:expr) => { $x * $x };
+}
+mod tests;
+pub trait Area {
+    fn area(&self) -> f64;
+}
+const fn zero() -> i32 { 0 }
+union Bits { i: u32, f: f32 }
+impl<T> Wrapper<T> {
+}
+pub(in crate::a) fn scoped() {
+}

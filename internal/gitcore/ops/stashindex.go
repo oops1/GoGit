@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -31,7 +32,7 @@ func (m *merger) reinstateIndex(ours merge.Snapshot, parts stashParts) (hash.Obj
 			continue
 		}
 		if err := m.patchIndexPath(target, path, before, had, after, has); err != nil {
-			return hash.Zero, fmt.Errorf("%w: %w", ErrStashIndexConflicts, err)
+			return hash.Zero, err
 		}
 	}
 	tree, err := target.Write(m.store())
@@ -48,18 +49,48 @@ func (m *merger) reinstateIndex(ours merge.Snapshot, parts stashParts) (hash.Obj
 	return tree, m.advance(head, head.old, resetToHeadNote)
 }
 
+func (m *merger) refuseStagedChanges(ours merge.Snapshot) error {
+	head, err := resolveHeadTarget(m.rc.refs)
+	if err != nil {
+		return err
+	}
+	headState, _, err := m.snapshot(head.old)
+	if err != nil {
+		return err
+	}
+	var staged []string
+	for path := range unionKeys(headState, ours, map[string]bool{}) {
+		before, had := headState[path]
+		after, has := ours[path]
+		if had != has || before != after {
+			staged = append(staged, path)
+		}
+	}
+	if len(staged) == 0 {
+		return nil
+	}
+	slices.Sort(staged)
+	return errors.Join(&OverwriteError{Paths: staged}, m.stageOnly(headState))
+}
+
+func sameEntryType(a, b object.Mode) bool {
+	return a.IsSymlink() == b.IsSymlink() && a.IsSubmodule() == b.IsSubmodule()
+}
+
 func (m *merger) patchIndexPath(target merge.Snapshot, path string, before merge.Entry, had bool, after merge.Entry, has bool) error {
 	current, present := target[path]
 	switch {
 	case !had && present:
-		return fmt.Errorf("%s: already exists in index", path)
+		return fmt.Errorf("%w: %s already exists in the index", ErrStashIndexConflicts, path)
 	case !had:
 		target[path] = after
 		return nil
 	case !present:
-		return fmt.Errorf("%s: does not exist in index", path)
+		return fmt.Errorf("%w: %s does not exist in the index", ErrStashIndexConflicts, path)
+	case !sameEntryType(current.Mode, before.Mode):
+		return fmt.Errorf("%w: %s has the wrong type", ErrStashIndexConflicts, path)
 	case !has && current.ID != before.ID:
-		return fmt.Errorf("%s: %w", path, diff.ErrApply)
+		return fmt.Errorf("%w: %s: %w", ErrStashIndexConflicts, path, diff.ErrApply)
 	case !has:
 		delete(target, path)
 		return nil
@@ -83,8 +114,8 @@ func (m *merger) patchIndexPath(target merge.Snapshot, path string, before merge
 }
 
 func (m *merger) forwardHunks(path string, before, after, current merge.Entry) ([]byte, error) {
-	if !before.Mode.IsRegular() || !after.Mode.IsRegular() || !current.Mode.IsRegular() {
-		return nil, fmt.Errorf("%s: %w", path, diff.ErrApply)
+	if !sameEntryType(before.Mode, after.Mode) || before.Mode.IsSubmodule() {
+		return nil, fmt.Errorf("%w: %s: %w", ErrStashIndexConflicts, path, diff.ErrApply)
 	}
 	var blobs [3][]byte
 	for i, id := range []hash.ObjectID{before.ID, after.ID, current.ID} {
@@ -94,12 +125,16 @@ func (m *merger) forwardHunks(path string, before, after, current merge.Entry) (
 		}
 		blobs[i] = data
 	}
-	if looksBinary(blobs[0]) || looksBinary(blobs[1]) {
-		return nil, fmt.Errorf("%s: %w", path, diff.ErrApply)
+	binary, err := m.binaryContent(path, blobs[0], blobs[1])
+	if err != nil {
+		return nil, err
+	}
+	if binary {
+		return nil, fmt.Errorf("%w: %s: the binary patch does not match the current contents: %w", ErrStashIndexConflicts, path, diff.ErrApply)
 	}
 	data, err := applyHunks(blobs[2], diff.Blobs(blobs[0], blobs[1], diff.Defaults()))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrStashIndexConflicts, path, err)
 	}
 	return data, nil
 }

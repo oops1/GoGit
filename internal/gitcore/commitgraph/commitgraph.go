@@ -31,10 +31,12 @@ const (
 	wordSize      = 4
 	dataTail      = 16
 
-	noParent      = 0x70000000
-	octopusFlag   = 0x80000000
-	maxGeneration = 0x3FFFFFFF
-	timeHighMask  = 0x3
+	noParent          = 0x70000000
+	octopusFlag       = 0x80000000
+	maxGeneration     = 0x3FFFFFFF
+	maxOffset         = 0x7FFFFFFF
+	timeHighMask      = 0x3
+	maxLevelBeforeCap = maxGeneration - 1
 
 	lockSuffix = ".lock"
 	dirPerm    = 0o755
@@ -67,6 +69,12 @@ type Commit struct {
 	Tree    hash.ObjectID
 	Parents []hash.ObjectID
 	Time    int64
+	Changed *ChangedPaths
+}
+
+type EncodeOptions struct {
+	TopologicalLevelsOnly bool
+	ChangedPaths          bool
 }
 
 type chunk struct {
@@ -74,7 +82,12 @@ type chunk struct {
 	body []byte
 }
 
-func Encode(format hash.Format, commits []Commit) ([]byte, error) {
+type generation struct {
+	level     uint32
+	corrected uint64
+}
+
+func Encode(format hash.Format, commits []Commit, opts EncodeOptions) ([]byte, error) {
 	if format != hash.SHA1 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
 	}
@@ -87,34 +100,49 @@ func Encode(format hash.Format, commits []Commit) ([]byte, error) {
 		}
 		positions[commit.ID] = uint32(i)
 	}
-	levels, err := generations(sorted, positions)
+	generations, err := computeGenerations(sorted, positions)
 	if err != nil {
 		return nil, err
 	}
-	data, edges := commitData(sorted, positions, levels)
+	data, edges := commitData(sorted, positions, generations)
 	chunks := []chunk{
 		{id: chunkOIDFanout, body: fanout(sorted)},
 		{id: chunkOIDLookup, body: lookup(sorted)},
 		{id: chunkData, body: data},
 	}
+	if !opts.TopologicalLevelsOnly {
+		offsets, overflow := generationData(sorted, generations)
+		chunks = append(chunks, chunk{id: chunkGenerationData, body: offsets})
+		if len(overflow) > 0 {
+			chunks = append(chunks, chunk{id: chunkGenerationOverflow, body: overflow})
+		}
+	}
 	if len(edges) > 0 {
 		chunks = append(chunks, chunk{id: chunkEdges, body: edges})
+	}
+	if opts.ChangedPaths {
+		filters := make([][]byte, len(sorted))
+		for at, commit := range sorted {
+			filters[at] = buildFilter(commit.Changed)
+		}
+		index, bloom := bloomChunks(filters)
+		chunks = append(chunks, chunk{id: chunkBloomIndexes, body: index}, chunk{id: chunkBloomData, body: bloom})
 	}
 	return assemble(chunks), nil
 }
 
-func generations(commits []Commit, positions map[hash.ObjectID]uint32) ([]uint32, error) {
-	levels := make([]uint32, len(commits))
+func computeGenerations(commits []Commit, positions map[hash.ObjectID]uint32) ([]generation, error) {
+	generations := make([]generation, len(commits))
 	onStack := make([]bool, len(commits))
 	for start := range commits {
-		if levels[start] != 0 {
+		if generations[start].level != 0 {
 			continue
 		}
 		stack := []int{start}
 		onStack[start] = true
 		for len(stack) > 0 {
 			top := stack[len(stack)-1]
-			level, pending, err := levelOf(commits[top], positions, levels)
+			computed, pending, err := generationOf(commits[top], positions, generations)
 			if err != nil {
 				return nil, err
 			}
@@ -126,30 +154,39 @@ func generations(commits []Commit, positions map[hash.ObjectID]uint32) ([]uint32
 				stack = append(stack, pending)
 				continue
 			}
-			levels[top] = level
+			generations[top] = computed
 			onStack[top] = false
 			stack = stack[:len(stack)-1]
 		}
 	}
-	return levels, nil
+	return generations, nil
 }
 
-func levelOf(commit Commit, positions map[hash.ObjectID]uint32, levels []uint32) (uint32, int, error) {
-	highest := uint32(0)
+func generationOf(commit Commit, positions map[hash.ObjectID]uint32, generations []generation) (generation, int, error) {
+	highestLevel := uint32(0)
+	highestDate := uint32(0)
 	for _, parent := range commit.Parents {
 		position, ok := positions[parent]
 		if !ok {
-			return 0, 0, fmt.Errorf("%w: %s of %s", ErrMissingParent, parent, commit.ID)
+			return generation{}, 0, fmt.Errorf("%w: %s of %s", ErrMissingParent, parent, commit.ID)
 		}
-		if levels[position] == 0 {
-			return 0, int(position), nil
+		known := generations[position]
+		if known.level == 0 {
+			return generation{}, int(position), nil
 		}
-		highest = max(highest, levels[position])
+		highestLevel = max(highestLevel, known.level)
+		if known.corrected > uint64(highestDate) {
+			highestDate = uint32(known.corrected)
+		}
 	}
-	return min(highest+1, maxGeneration), -1, nil
+	corrected := uint64(highestDate)
+	if when := uint64(max(commit.Time, 0)); when != 0 && when > corrected {
+		corrected = when - 1
+	}
+	return generation{level: min(highestLevel, maxLevelBeforeCap) + 1, corrected: corrected + 1}, -1, nil
 }
 
-func commitData(commits []Commit, positions map[hash.ObjectID]uint32, levels []uint32) ([]byte, []byte) {
+func commitData(commits []Commit, positions map[hash.ObjectID]uint32, generations []generation) ([]byte, []byte) {
 	data := make([]byte, 0, len(commits)*(hash.Size+dataTail))
 	var edges []byte
 	for i, commit := range commits {
@@ -175,10 +212,25 @@ func commitData(commits []Commit, positions map[hash.ObjectID]uint32, levels []u
 		data = binary.BigEndian.AppendUint32(data, first)
 		data = binary.BigEndian.AppendUint32(data, second)
 		when := uint64(max(commit.Time, 0))
-		data = binary.BigEndian.AppendUint32(data, levels[i]<<2|uint32(when>>32)&timeHighMask)
+		data = binary.BigEndian.AppendUint32(data, generations[i].level<<levelShift|uint32(when>>timeLowBits)&timeHighMask)
 		data = binary.BigEndian.AppendUint32(data, uint32(when))
 	}
 	return data, edges
+}
+
+func generationData(commits []Commit, generations []generation) ([]byte, []byte) {
+	offsets := make([]byte, 0, len(commits)*wordSize)
+	var overflow []byte
+	for i, commit := range commits {
+		offset := generations[i].corrected - uint64(max(commit.Time, 0))
+		if offset > maxOffset {
+			offsets = binary.BigEndian.AppendUint32(offsets, overflowFlag|uint32(len(overflow)/overflowEntrySize))
+			overflow = binary.BigEndian.AppendUint64(overflow, offset)
+			continue
+		}
+		offsets = binary.BigEndian.AppendUint32(offsets, uint32(offset))
+	}
+	return offsets, overflow
 }
 
 func fanout(commits []Commit) []byte {
@@ -219,8 +271,8 @@ func assemble(chunks []chunk) []byte {
 	return append(out, sum[:]...)
 }
 
-func WriteFile(infoDir string, format hash.Format, commits []Commit) error {
-	data, err := Encode(format, commits)
+func WriteFile(infoDir string, format hash.Format, commits []Commit, opts EncodeOptions) error {
+	data, err := Encode(format, commits, opts)
 	if err != nil {
 		return err
 	}

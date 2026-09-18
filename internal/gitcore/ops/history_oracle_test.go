@@ -100,6 +100,10 @@ func TestOracleFileHistoryMatchesGitLog(t *testing.T) {
 			if strings.Join(got, " ") != strings.Join(want, " ") {
 				t.Fatalf("history = %v, git says %v", got, want)
 			}
+			o.run(dir, "commit-graph", "write", "--reachable", "--changed-paths")
+			if withGraph := ourHistory(t, o, b, c.path, c.follow); strings.Join(withGraph, " ") != strings.Join(want, " ") {
+				t.Fatalf("history through the commit-graph = %v, git says %v", withGraph, want)
+			}
 		})
 	}
 }

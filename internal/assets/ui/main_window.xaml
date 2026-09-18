@@ -77,6 +77,17 @@
                 <MenuItem Header="{Loc Menu.Remote.Prune}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Remote.Manage}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Remote.Submodule}">
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Update}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Initialize}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Synchronize}" IsEnabled="False"/>
+                    <MenuItem Separator="True"/>
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Add}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Remove}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Unregister}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Remote.Submodule.Reset}" IsEnabled="False"/>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="{Loc Menu.View}">
                 <MenuItem Header="{Loc Menu.View.Panes}">

@@ -159,6 +159,13 @@ func TestStashApplyIndexRefusesAnIndexThatDoesNotFit(t *testing.T) {
 			tr.commitFiles("change", map[string]string{"x": changeLine(tenLines("x"), 0, "HEAD")})
 			tr.setIndexMode("x", object.ModeSymlink, "")
 		}},
+		{"a staged link that replaced a file changed since", func(tr *testRepo) {
+			tr.commitFiles("base", map[string]string{"a": "a\n", "x": tenLines("x")})
+			tr.setIndexMode("x", object.ModeSymlink, "target")
+			tr.writeFile("a", "a2\n")
+			tr.stash(StashOptions{})
+			tr.commitFiles("change", map[string]string{"x": changeLine(tenLines("x"), 0, "HEAD")})
+		}},
 		{"a staged edit of binary content", func(tr *testRepo) {
 			tr.commitFiles("base", map[string]string{"bin": binary("base")})
 			tr.writeFile("bin", binary("staged"))
@@ -228,6 +235,8 @@ func TestStashPushStagedRefusesWorkTreesItCannotReverse(t *testing.T) {
 			tr.commitFiles("base", map[string]string{"x": tenLines("x")})
 			tr.setIndexMode("x", object.ModeSymlink, "target\n")
 			tr.writeFile("x", "elsewhere\n")
+			tr.appendConfig("[core]\n\tsymlinks = false\n")
+			tr.repo = tr.reopen()
 		}},
 		{"a staged binary edit changed on disk", func(tr *testRepo) {
 			tr.commitFiles("base", map[string]string{"bin": binary("base")})
@@ -248,6 +257,35 @@ func TestStashPushStagedRefusesWorkTreesItCannotReverse(t *testing.T) {
 				t.Fatal("a refused staged push reset the index")
 			}
 		})
+	}
+}
+
+func TestStashPushStagedRefusesALinkThatIsAFileOnDisk(t *testing.T) {
+	tr := newTestRepo(t)
+	tr.commitFiles("base", map[string]string{"a": "a\n", "link": "a"})
+	tr.setIndexMode("link", object.ModeSymlink, "b")
+	tr.writeFile("link", "b")
+	tr.appendConfig("[core]\n\tsymlinks = true\n")
+	tr.repo = tr.reopen()
+
+	_, err := StashPush(t.Context(), tr.repo, StashOptions{Staged: true, When: mergeTime})
+
+	if !errors.Is(err, ErrStashWorktreeKept) || tr.readFile("link") != "b" {
+		t.Fatalf("StashPush returned %v", err)
+	}
+}
+
+func TestStashIndexChecksReportAnUnknownDiffAlgorithm(t *testing.T) {
+	index := newTestRepo(t)
+	index.commitFiles("base", map[string]string{"m": tenLines("m")})
+	index.writeFile("m", changeLine(tenLines("m"), 5, "STAGED"))
+	index.stageAll("m")
+	index.stash(StashOptions{})
+	index.commitFiles("shift", map[string]string{"m": "top\n" + tenLines("m")})
+	index.appendConfig("[diff]\n\talgorithm = sideways\n")
+	index.repo = index.reopen()
+	if _, err := StashApply(t.Context(), index.repo, 0, StashApplyOptions{Index: true}); err == nil || errors.Is(err, ErrStashIndexConflicts) {
+		t.Fatalf("applying the index with an unknown diff algorithm returned %v", err)
 	}
 }
 

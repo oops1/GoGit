@@ -28,7 +28,9 @@ type CreateBranchOptions struct {
 }
 
 type SwitchOptions struct {
-	Force  bool
-	Report *CheckoutReport
-	Hooks  HookOptions
+	Force             bool
+	Report            *CheckoutReport
+	Hooks             HookOptions
+	RecurseSubmodules bool
+	SubmoduleEvents   SubmoduleEvents
 }

@@ -67,6 +67,7 @@ func (a *App) startWorking() {
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(false)
 		a.setHasChanges(false)
+		a.setHasStashable(false)
 		a.showMergeState(ops.MergeState{}, 0)
 		a.clearWorkingFlags()
 		return
@@ -114,6 +115,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		entries = entries[:changes.MaxFiles]
 	}
 	modified := hasWorkingChanges(status.Entries)
+	stashable := hasStashableChanges(status.Entries)
 	staged := stagedEntryCount(status.Entries)
 	merging := a.workingMergeState()
 	conflicts := conflictEntryCount(status.Entries)
@@ -134,6 +136,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
 		a.setHasChanges(modified)
+		a.setHasStashable(stashable)
 		a.showMergeState(merging, conflicts)
 		a.syncWatcherSkips()
 	})
@@ -141,6 +144,18 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 
 func hasWorkingChanges(entries []worktree.Entry) bool {
 	for _, e := range entries {
+		if e.Staged != worktree.StatusUnmodified || e.Unstaged != worktree.StatusUnmodified {
+			return true
+		}
+	}
+	return false
+}
+
+func hasStashableChanges(entries []worktree.Entry) bool {
+	for _, e := range entries {
+		if e.Staged == worktree.StatusIgnored || e.Unstaged == worktree.StatusIgnored {
+			continue
+		}
 		if e.Staged != worktree.StatusUnmodified || e.Unstaged != worktree.StatusUnmodified {
 			return true
 		}

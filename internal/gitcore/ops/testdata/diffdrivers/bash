@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+greet() {
+  echo "hello"
+}
+function build {
+  make all
+}
+function clean() (
+  rm -rf out
+)
+  indented_fn  ( ) {
+    true
+  }
+function test_it [[ -n "$1" ]]
+not_a_function
+x=1
+cleanup() ((
+  count++
+))
+function	tabbed	{
+  :
+}
+functionless {
+  echo no
+}

@@ -47,6 +47,8 @@ func dataRow(t *testing.T, data []byte, position int) (hash.ObjectID, uint32, ui
 	return tree, binary.BigEndian.Uint32(words), binary.BigEndian.Uint32(words[4:]), binary.BigEndian.Uint32(words[8:]), binary.BigEndian.Uint32(words[12:])
 }
 
+var levelsOnly = EncodeOptions{TopologicalLevelsOnly: true}
+
 func linearHistory() []Commit {
 	return []Commit{
 		{ID: id(0x30, 3), Tree: id(0xA3, 0), Parents: []hash.ObjectID{id(0x20, 2)}, Time: 300},
@@ -56,7 +58,7 @@ func linearHistory() []Commit {
 }
 
 func TestAGraphStartsWithItsHeaderAndEndsWithItsChecksum(t *testing.T) {
-	data, err := Encode(hash.SHA1, linearHistory())
+	data, err := Encode(hash.SHA1, linearHistory(), levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +79,7 @@ func TestAGraphStartsWithItsHeaderAndEndsWithItsChecksum(t *testing.T) {
 }
 
 func TestTheLookupListsCommitsInHashOrderAndTheFanoutCountsThem(t *testing.T) {
-	data, err := Encode(hash.SHA1, linearHistory())
+	data, err := Encode(hash.SHA1, linearHistory(), levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +99,7 @@ func TestTheLookupListsCommitsInHashOrderAndTheFanoutCountsThem(t *testing.T) {
 }
 
 func TestEachCommitRecordsItsTreeParentsGenerationAndTime(t *testing.T) {
-	data, err := Encode(hash.SHA1, linearHistory())
+	data, err := Encode(hash.SHA1, linearHistory(), levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +117,7 @@ func TestEachCommitRecordsItsTreeParentsGenerationAndTime(t *testing.T) {
 func TestADescendantSortedBeforeItsAncestorsStillGetsTheHigherGeneration(t *testing.T) {
 	child, parent := id(0x01, 1), id(0x02, 2)
 
-	data, err := Encode(hash.SHA1, []Commit{{ID: child, Parents: []hash.ObjectID{parent}}, {ID: parent}})
+	data, err := Encode(hash.SHA1, []Commit{{ID: child, Parents: []hash.ObjectID{parent}}, {ID: parent}}, levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +138,7 @@ func TestAMergeAndAnOctopusSpellTheirParentsTheWayGitDoes(t *testing.T) {
 		{ID: octopus, Parents: []hash.ObjectID{merge, c, d, a}, Time: 1 << 33},
 	}
 
-	data, err := Encode(hash.SHA1, commits)
+	data, err := Encode(hash.SHA1, commits, levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +177,7 @@ func TestEncodingRefusesWhatGitCouldNotRead(t *testing.T) {
 		{"commits that are their own ancestors", hash.SHA1, loop, ErrCycle},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := Encode(tt.format, tt.commits); !errors.Is(err, tt.want) {
+			if _, err := Encode(tt.format, tt.commits, EncodeOptions{}); !errors.Is(err, tt.want) {
 				t.Fatalf("err = %v, want %v", err, tt.want)
 			}
 		})
@@ -183,7 +185,7 @@ func TestEncodingRefusesWhatGitCouldNotRead(t *testing.T) {
 }
 
 func TestAnEmptyGraphIsStillAWellFormedFile(t *testing.T) {
-	data, err := Encode(hash.SHA1, nil)
+	data, err := Encode(hash.SHA1, nil, levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +203,7 @@ func TestWriteFileReplacesTheGraphInTheInfoDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := WriteFile(dir, hash.SHA1, linearHistory()); err != nil {
+	if err := WriteFile(dir, hash.SHA1, linearHistory(), levelsOnly); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,7 +211,7 @@ func TestWriteFileReplacesTheGraphInTheInfoDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, _ := Encode(hash.SHA1, linearHistory())
+	want, _ := Encode(hash.SHA1, linearHistory(), levelsOnly)
 	if !bytes.Equal(got, want) {
 		t.Fatal("the written graph differs from the encoded one")
 	}
@@ -221,7 +223,7 @@ func TestWriteFileReplacesTheGraphInTheInfoDirectory(t *testing.T) {
 func TestWriteFileCreatesAMissingInfoDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "objects", "info")
 
-	if err := WriteFile(dir, hash.SHA1, linearHistory()); err != nil {
+	if err := WriteFile(dir, hash.SHA1, linearHistory(), levelsOnly); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, FileName)); err != nil {
@@ -235,13 +237,13 @@ func TestWriteFileWaitsForNoOneAndReportsAHeldLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := WriteFile(dir, hash.SHA1, linearHistory()); !errors.Is(err, ErrLocked) {
+	if err := WriteFile(dir, hash.SHA1, linearHistory(), levelsOnly); !errors.Is(err, ErrLocked) {
 		t.Fatalf("err = %v, want ErrLocked", err)
 	}
 }
 
 func TestWriteFileReportsAnEncodingError(t *testing.T) {
-	if err := WriteFile(t.TempDir(), hash.SHA256, nil); !errors.Is(err, ErrUnsupportedFormat) {
+	if err := WriteFile(t.TempDir(), hash.SHA256, nil, EncodeOptions{}); !errors.Is(err, ErrUnsupportedFormat) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -282,7 +284,7 @@ func TestWriteFileReportsEveryFailingStepAndLeavesNoLock(t *testing.T) {
 			dir := t.TempDir()
 			tt.fail(t)
 
-			if err := WriteFile(dir, hash.SHA1, linearHistory()); !errors.Is(err, boom) {
+			if err := WriteFile(dir, hash.SHA1, linearHistory(), levelsOnly); !errors.Is(err, boom) {
 				t.Fatalf("err = %v, want boom", err)
 			}
 			if _, err := os.Stat(filepath.Join(dir, FileName+lockSuffix)); !errors.Is(err, fs.ErrNotExist) {

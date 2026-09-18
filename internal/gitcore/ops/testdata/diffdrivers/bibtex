@@ -1,0 +1,21 @@
+@article{key1,
+  author = {A. Author},
+  title = {Title},
+  year = 2020
+}
+@Book{ key2 ,
+  publisher = {Pub},
+}
+@misc  {key-3,
+  note = "x"
+}
+@comment{ignored text here}
+  @inproceedings{indented,
+  pages = {1--2}
+}
+see also @online{web%2,
+  url = {http://example.com}
+}
+@string{ abbrev = "x" }
+plain text
+@

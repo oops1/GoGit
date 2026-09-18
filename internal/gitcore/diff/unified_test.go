@@ -227,32 +227,3 @@ func TestHunkHeadersCarryTheEnclosingFunction(t *testing.T) {
 		t.Errorf("the hunk header is %q instead of the function line", hunks[0].Header)
 	}
 }
-
-func TestFunctionRecordSkipsLinesThatCannotStartAName(t *testing.T) {
-	cases := []struct {
-		record string
-		want   string
-		ok     bool
-	}{
-		{"func alpha() {\n", "func alpha() {", true},
-		{"_private() {\n", "_private() {", true},
-		{"$shell() {\n", "$shell() {", true},
-		{"\tindented\n", "", false},
-		{"", "", false},
-		{"123 not a name\n", "", false},
-	}
-	for _, c := range cases {
-		got, ok := functionRecord(c.record)
-		if got != c.want || ok != c.ok {
-			t.Errorf("functionRecord(%q) returned (%q, %v) instead of (%q, %v)", c.record, got, ok, c.want, c.ok)
-		}
-	}
-}
-
-func TestFunctionRecordTrimsVeryLongLines(t *testing.T) {
-	record := "func " + string(bytes.Repeat([]byte("x"), funcNameLimit)) + "\n"
-	got, ok := functionRecord(record)
-	if !ok || len(got) != funcNameLimit {
-		t.Errorf("functionRecord returned a name of %d bytes and ok=%v", len(got), ok)
-	}
-}

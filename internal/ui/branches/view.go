@@ -2,11 +2,13 @@ package branches
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/treeview"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
+	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/icons"
@@ -40,22 +42,35 @@ type View struct {
 	OnSelect   func(ref refs.Name)
 	OnActivate func(ref refs.Name)
 	OnMenu     func(ref refs.Name) []widget.MenuItem
+
+	mu              sync.Mutex
+	last            Snapshot
+	submodules      []ops.Submodule
+	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
+
+	OnSubmoduleActivate func(ops.Submodule)
+	OnSubmoduleMenu     func(ops.Submodule) []widget.MenuItem
 }
 
 func NewView() *View {
 	return &View{
-		idByItem:  map[*treeview.TreeViewItem]refs.Name{},
-		itemByRef: map[refs.Name]*treeview.TreeViewItem{},
-		keyByItem: map[*treeview.TreeViewItem]string{},
-		expanded:  map[string]bool{},
+		idByItem:        map[*treeview.TreeViewItem]refs.Name{},
+		itemByRef:       map[refs.Name]*treeview.TreeViewItem{},
+		keyByItem:       map[*treeview.TreeViewItem]string{},
+		expanded:        map[string]bool{},
+		submoduleByItem: map[*treeview.TreeViewItem]ops.Submodule{},
 	}
 }
 
 func (v *View) Bind(tree *widget.TreeViewWidget) {
 	v.tree = tree
 	tree.Tree.OnItemInvoked = func(e treeview.ItemInvokedEvent) {
-		if ref, ok := v.idByItem[e.Item]; ok && v.OnActivate != nil {
+		ref, isRef, sub, isSub := v.lookup(e.Item)
+		if isRef && v.OnActivate != nil {
 			v.OnActivate(ref)
+		}
+		if isSub && v.OnSubmoduleActivate != nil {
+			v.OnSubmoduleActivate(sub)
 		}
 	}
 	tree.NodeContextMenu = v.nodeMenu
@@ -63,28 +78,49 @@ func (v *View) Bind(tree *widget.TreeViewWidget) {
 		if e.NewItem == nil {
 			return
 		}
-		if ref, ok := v.idByItem[e.NewItem]; ok && v.OnSelect != nil {
+		if ref, ok, _, _ := v.lookup(e.NewItem); ok && v.OnSelect != nil {
 			v.OnSelect(ref)
 		}
 	}
 }
 
+func (v *View) lookup(item *treeview.TreeViewItem) (refs.Name, bool, ops.Submodule, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	ref, isRef := v.idByItem[item]
+	sub, isSub := v.submoduleByItem[item]
+	return ref, isRef, sub, isSub
+}
+
 func (v *View) nodeMenu(item *treeview.TreeViewItem) []widget.MenuItem {
-	ref, ok := v.idByItem[item]
-	if !ok || v.OnMenu == nil {
+	ref, isRef, sub, isSub := v.lookup(item)
+	if isSub && v.OnSubmoduleMenu != nil {
+		return v.OnSubmoduleMenu(sub)
+	}
+	if !isRef || v.OnMenu == nil {
 		return nil
 	}
 	return v.OnMenu(ref)
 }
 
 func (v *View) Item(ref refs.Name) (*treeview.TreeViewItem, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	item, ok := v.itemByRef[ref]
 	return item, ok
 }
 
 func (v *View) Render(s Snapshot) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.render(s)
+}
+
+func (v *View) render(s Snapshot) {
+	v.last = s
 	v.captureExpanded()
 	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
+	selectedSubmodule, submoduleSelected := v.submoduleByItem[v.tree.Tree.SelectedItem()]
 
 	v.tree.BeginUpdate()
 	v.tree.ClearRoots()
@@ -92,6 +128,7 @@ func (v *View) Render(s Snapshot) {
 	v.idByItem = map[*treeview.TreeViewItem]refs.Name{}
 	v.itemByRef = map[refs.Name]*treeview.TreeViewItem{}
 	v.keyByItem = map[*treeview.TreeViewItem]string{}
+	v.submoduleByItem = map[*treeview.TreeViewItem]ops.Submodule{}
 
 	v.tree.AddRoot(v.buildLocal(s))
 	v.tree.AddRoot(v.buildRemotes(s))
@@ -99,15 +136,25 @@ func (v *View) Render(s Snapshot) {
 	if len(s.Stashes) > 0 {
 		v.tree.AddRoot(v.buildStash(s))
 	}
+	if len(v.submodules) > 0 {
+		v.tree.AddRoot(v.buildSubmodules())
+	}
 
 	v.tree.EndUpdate()
 	if item, ok := v.itemByRef[selected]; ok {
 		selectQuietly(v.tree.Tree, item)
 	}
+	for item, sub := range v.submoduleByItem {
+		if submoduleSelected && sub.Path == selectedSubmodule.Path {
+			selectQuietly(v.tree.Tree, item)
+		}
+	}
 	v.tree.ScrollBy(scroll)
 }
 
 func (v *View) ClearStashSelection() {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	if v.tree == nil {
 		return
 	}

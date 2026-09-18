@@ -193,7 +193,7 @@ func (v *View) showSection() {
 		content = v.parts.Repositories
 	case SectionWorkingCopy, SectionIndex:
 		content = v.work
-	case SectionBranches, SectionTags, SectionRemotes:
+	case SectionBranches, SectionTags, SectionRemotes, SectionSubmodules:
 		content = v.parts.Branches
 	default:
 		content = v.notYet

@@ -20,7 +20,7 @@ var (
 	fsReadFileFile = (*os.Root).ReadFile
 )
 
-func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry) (map[string]unstagedChange, error) {
+func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry, rules gitlinkRules) (map[string]unstagedChange, error) {
 	results := make(map[string]unstagedChange, len(entries))
 	var (
 		mu      sync.Mutex
@@ -37,7 +37,7 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry)
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			change, err := w.unstagedChangeOf(ctx, entry)
+			change, err := w.unstagedChangeOf(ctx, entry, rules)
 			if err != nil {
 				fail(err)
 				return

@@ -222,6 +222,7 @@ func (a *App) clearChangesPanels() {
 	a.setFilesSelected(false)
 	a.setHasStagedChanges(false)
 	a.setHasChanges(false)
+	a.setHasStashable(false)
 }
 
 func (a *App) commitTarget(db *odb.DB, file diff.File) diffTarget {

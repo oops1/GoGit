@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>Title</h1>
+<p>Intro</p>
+  <H2 class="sub">Section</H2>
+<p>Text</p>
+<h3>
+<p>More</p>
+<h7>not a heading</h7>
+<h4 id="x">Deep</h4>
+<p>Deep text</p>
+<h5
+<h6 >Last</h6>
+</body>
+</html>

@@ -1,0 +1,26 @@
+with Ada.Text_IO; use Ada.Text_IO;
+package body Sample is
+   procedure Hello is
+      X : Integer := 1;
+   begin
+      Put_Line ("Hi");
+   end Hello;
+   function Twice (V : Integer) return Integer renames Double;
+   FUNCTION Add (A, B : Integer) return Integer is
+   begin
+      return A + B;
+   end Add;
+   package Inner is new Generic_Pkg (Integer);
+   task type Worker is
+      entry Start;
+   end Worker;
+   protected Counter is
+      procedure Inc;
+   private
+      Value : Natural := 0;
+   end Counter;
+   procedure Separate_One is separate;
+   type T is new Integer;
+   With_Counter : Integer := 0;
+   Package_Name : constant String := "x";
+end Sample;

@@ -263,6 +263,7 @@ func fillContent(p pair, opts Options) File {
 	file.OldSize = len(p.oldData)
 	file.NewSize = len(p.newData)
 	oldPath, newPath := file.paths()
+	opts.FuncMatcher = opts.funcMatcherFor(oldPath, newPath)
 	switch {
 	case binaryFor(oldPath, p.oldData, opts) || binaryFor(newPath, p.newData, opts):
 		file.Binary = true

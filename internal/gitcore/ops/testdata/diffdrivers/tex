@@ -1,0 +1,15 @@
+\documentclass{article}
+\begin{document}
+\section{Introduction}
+Some text.
+\subsection*{Background}
+More text.
+\subsubsection{Details}
+Deep.
+\chapter{One}
+\part{Two}
+\paragraph{Not a section}
+\section {Spaced}
+\section**{Double}
+End.
+\end{document}

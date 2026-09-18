@@ -49,11 +49,13 @@ type View struct {
 	table     *widget.DataGridWidget
 	hintLabel *widget.Label
 	closeBtn  *widget.Button
+	lookBtn   *widget.Button
 
 	lines    []Line
 	selected int
 
-	OnClose func()
+	OnInvestigate func(line Line)
+	OnClose       func()
 }
 
 func NewView() (*View, error) {
@@ -76,7 +78,7 @@ func (v *View) Dialog() *widget.Dialog { return v.dlg }
 
 func (v *View) Restyle(t *widget.Theme) {
 	p := style.Of(t)
-	p.Quiet(v.closeBtn)
+	p.Quiet(v.lookBtn, v.closeBtn)
 	p.Body(v.pathLabel)
 	p.Hints(v.hintLabel)
 }
@@ -91,6 +93,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.hintLabel, ok = named["hint"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: hint", ErrWidgetMissing)
+	}
+	if v.lookBtn, ok = named["investigate"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: investigate", ErrWidgetMissing)
 	}
 	if v.closeBtn, ok = named["close"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: close", ErrWidgetMissing)
@@ -114,6 +119,7 @@ func (v *View) buildColumns() {
 
 func (v *View) wire() {
 	v.table.Grid.OnSelectionChanged = v.onSelected
+	v.lookBtn.OnClick = v.investigate
 	v.closeBtn.OnClick = v.close
 	v.dlg.CancelAction = v.close
 }
@@ -157,6 +163,8 @@ func (v *View) onSelected(ev datagrid.SelectionChangedEvent) {
 }
 
 func (v *View) refresh() {
+	_, chosen := v.Selected()
+	v.lookBtn.SetEnabled(chosen)
 	key, args := v.hint()
 	v.hintLabel.SetText(i18n.Tf(key, args...))
 }
@@ -170,6 +178,13 @@ func (v *View) hint() (string, []any) {
 		return "Dialog.Blame.Hint.PickOne", nil
 	}
 	return "Dialog.Blame.Hint.Line", []any{line.Summary, line.Path}
+}
+
+func (v *View) investigate() {
+	line, chosen := v.Selected()
+	if chosen && v.OnInvestigate != nil {
+		v.OnInvestigate(line)
+	}
 }
 
 func (v *View) close() {

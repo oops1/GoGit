@@ -1,0 +1,24 @@
+defmodule Sample.Worker do
+  @moduledoc "doc"
+  use GenServer
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts)
+  end
+  defp helper(x), do: x * 2
+  defmacro twice(expr) do
+    quote do: unquote(expr) * 2
+  end
+  defimpl String.Chars, for: Sample do
+    def to_string(_), do: "sample"
+  end
+  test "it works" do
+    assert true
+  end
+  defprotocol Size do
+    def size(data)
+  end
+  defmacrop private_macro(x) do
+    x
+  end
+  default_value = 1
+end

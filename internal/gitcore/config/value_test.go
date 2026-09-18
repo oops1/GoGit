@@ -190,3 +190,19 @@ func backslashExpanded(home string) string {
 	}
 	return ""
 }
+
+func TestGetValueSkipsKeysWrittenWithoutAValue(t *testing.T) {
+	text := "[submodule \"lib\"]\n\turl\n\tpath = libs/lib\n\tbranch = a\n\tbranch\n"
+	for name, src := range map[string]interface {
+		GetValue(string) (string, bool)
+	}{"file": mustParse(t, text), "config": loadText(t, text)} {
+		if v, ok := src.GetValue("submodule.lib.path"); !ok || v != "libs/lib" {
+			t.Fatalf("%s: path = %q, %v", name, v, ok)
+		}
+		for _, key := range []string{"submodule.lib.url", "submodule.lib.branch", "submodule.lib.missing", "broken"} {
+			if v, ok := src.GetValue(key); ok || v != "" {
+				t.Fatalf("%s: GetValue(%q) = %q, %v", name, key, v, ok)
+			}
+		}
+	}
+}
