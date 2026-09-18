@@ -125,7 +125,7 @@ func record(t *testing.T, b *builder, opts Options) (walkRecord, error) {
 
 func sameRecords(a, b walkRecord) bool {
 	return slices.Equal(a.names, b.names) && slices.Equal(a.message, b.message) &&
-		slices.EqualFunc(a.parents, b.parents, func(x, y []hash.ObjectID) bool { return slices.Equal(x, y) })
+		slices.EqualFunc(a.parents, b.parents, slices.Equal)
 }
 
 func TestWalksThroughTheCommitGraphMatchWalksThroughObjects(t *testing.T) {

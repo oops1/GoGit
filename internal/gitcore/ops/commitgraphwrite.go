@@ -66,7 +66,8 @@ func fillChangedPaths(ctx context.Context, db *odb.DB, commits []commitgraph.Com
 	}
 	opts := diff.Defaults()
 	opts.DetectRenames = false
-	for at, c := range commits {
+	for at := range commits {
+		c := &commits[at]
 		parent := hash.Zero
 		if len(c.Parents) > 0 {
 			parent = trees[c.Parents[0]]
@@ -79,7 +80,7 @@ func fillChangedPaths(ctx context.Context, db *odb.DB, commits []commitgraph.Com
 		for _, file := range files {
 			changed.Paths = append(changed.Paths, file.NewPath)
 		}
-		commits[at].Changed = changed
+		c.Changed = changed
 	}
 	return nil
 }

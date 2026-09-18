@@ -353,11 +353,6 @@ func TestOpenUsesTheNextObjectDirectoryWhenOneIsCorrupt(t *testing.T) {
 	}
 }
 
-type chainLayer struct {
-	name string
-	data []byte
-}
-
 func topLayer(t *testing.T, below []hash.ObjectID, bases []hash.ObjectID, commits []Commit, extra ...chunk) []byte {
 	t.Helper()
 	sorted := slices.Clone(commits)
@@ -460,12 +455,11 @@ func TestOpenReadsASplitChain(t *testing.T) {
 			t.Fatalf("commit %s reads as %+v at %d", c.ID, entry, pos)
 		}
 	}
-	mixed := topLayer(t, []hash.ObjectID{id(0x10, 1), id(0x20, 2), id(0x30, 3)}, []hash.ObjectID{checksumOf(base)}, nil)
 	levels, err := Encode(hash.SHA1, commits[:3], levelsOnly)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mixed = topLayer(t, []hash.ObjectID{id(0x10, 1), id(0x20, 2), id(0x30, 3)}, []hash.ObjectID{checksumOf(levels)}, commits[3:4])
+	mixed := topLayer(t, []hash.ObjectID{id(0x10, 1), id(0x20, 2), id(0x30, 3)}, []hash.ObjectID{checksumOf(levels)}, commits[3:4])
 	dir := t.TempDir()
 	writeChain(t, dir, chainText(levels, mixed), levels, mixed)
 	if g, err := Open([]string{dir}, OpenOptions{}); g == nil || err != nil || g.CorrectedDates() || g.Layers() != 2 {
