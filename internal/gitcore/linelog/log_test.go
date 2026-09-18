@@ -202,7 +202,7 @@ func TestLogShowsAMergeOnlyWhenEveryParentChangedTheRange(t *testing.T) {
 	if err != nil || !slices.Equal(got.subjects, []string{"both", "theirs", "ours", "base"}) {
 		t.Fatalf("subjects = %v, %v", got.subjects, err)
 	}
-	if !strings.HasPrefix(got.patch, "\n\ndiff --git") {
+	if !strings.HasPrefix(got.patch, "\ndiff --git") {
 		t.Fatalf("the merge printed a patch: %q", got.patch)
 	}
 }

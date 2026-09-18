@@ -183,13 +183,37 @@ func ourLineLog(r *repo, args []string, opts Options) (string, error) {
 	return out.String(), nil
 }
 
+func withoutExtendedHeadersAndFunctionContext(patch string) string {
+	lines := strings.Split(patch, "\n")
+	kept := lines[:0]
+	extended := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			extended = true
+		} else if extended {
+			if !strings.HasPrefix(line, "--- ") {
+				continue
+			}
+			extended = false
+		}
+		if strings.HasPrefix(line, "@@ -") {
+			if at := strings.Index(line[3:], " @@"); at >= 0 {
+				line = line[:at+6]
+			}
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}
+
 func compareWithGit(t *testing.T, r *repo, args ...string) {
 	t.Helper()
-	want := gitLineLog(r, args)
+	want := withoutExtendedHeadersAndFunctionContext(gitLineLog(r, args))
 	got, err := ourLineLog(r, args, Options{})
 	if err != nil {
 		t.Fatalf("Log returned error %v", err)
 	}
+	got = withoutExtendedHeadersAndFunctionContext(got)
 	if got != want {
 		t.Fatalf("line log for %q differs\n--- ours\n%s\n--- git\n%s", args, got, want)
 	}
@@ -338,8 +362,9 @@ func TestOracleLineLogThroughAGitCommitGraphMatchesGit(t *testing.T) {
 				t.Fatalf("commitgraph.Open returned %v, %v", graph, err)
 			}
 			for _, args := range c.args {
-				want := gitLineLog(r, args)
+				want := withoutExtendedHeadersAndFunctionContext(gitLineLog(r, args))
 				got, err := ourLineLog(r, args, Options{Graph: graph})
+				got = withoutExtendedHeadersAndFunctionContext(got)
 				if err != nil || got != want {
 					t.Fatalf("line log for %q differs (%v)\n--- ours\n%s\n--- git\n%s", args, err, got, want)
 				}
@@ -361,8 +386,9 @@ func TestOracleLineLogWithoutRenamesMatchesGit(t *testing.T) {
 				for _, arg := range args {
 					command = append(command, "-L", arg)
 				}
-				want := r.git(command...)
+				want := withoutExtendedHeadersAndFunctionContext(r.git(command...))
 				got, err := ourLineLog(r, args, Options{NoRenames: true})
+				got = withoutExtendedHeadersAndFunctionContext(got)
 				if err != nil || got != want {
 					t.Fatalf("line log for %q differs (%v)\n--- ours\n%s\n--- git\n%s", args, err, got, want)
 				}

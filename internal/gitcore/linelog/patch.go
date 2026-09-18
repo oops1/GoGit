@@ -40,14 +40,19 @@ func hunksOf(entry *fileRanges) []Hunk {
 		if last > j {
 			last--
 		}
+		inside := j == last && d.target[j].Start <= r.Start && r.End <= d.target[j].End &&
+			(d.target[j].Start < r.Start || r.End < d.target[j].End)
 		pStart, pEnd := d.parent[j].Start, d.parent[last].End
+		if inside {
+			pStart = pEnd
+		}
 		if r.Start < d.target[j].Start {
 			pStart -= d.target[j].Start - r.Start
 		}
 		if r.End > d.target[last].End {
 			pEnd += r.End - d.target[last].End
 		}
-		if pStart == 0 && pEnd == 0 {
+		if !entry.pair.oldValid && pStart == 0 && pEnd == 0 {
 			pStart, pEnd = -1, -1
 		}
 		hunk := Hunk{OldStart: pStart + 1, OldLines: pEnd - pStart, NewStart: r.Start + 1, NewLines: r.End - r.Start}
@@ -56,13 +61,18 @@ func hunksOf(entry *fileRanges) []Hunk {
 			for ; cur < d.target[j].Start; cur++ {
 				hunk.Lines = append(hunk.Lines, lineOf(target, cur, diff.KindContext))
 			}
-			for k := d.parent[j].Start; k < d.parent[j].End; k++ {
-				hunk.Lines = append(hunk.Lines, lineOf(parent, k, diff.KindDel))
+			if !inside {
+				for k := d.parent[j].Start; k < d.parent[j].End; k++ {
+					hunk.Lines = append(hunk.Lines, lineOf(parent, k, diff.KindDel))
+				}
 			}
 			for ; cur < d.target[j].End && cur < r.End; cur++ {
 				hunk.Lines = append(hunk.Lines, lineOf(target, cur, diff.KindAdd))
 			}
 			j++
+		}
+		if j > 0 && d.target[j-1].End > r.End {
+			j--
 		}
 		for ; cur < r.End; cur++ {
 			hunk.Lines = append(hunk.Lines, lineOf(target, cur, diff.KindContext))
@@ -80,7 +90,9 @@ func lineOf(t *text, at int, kind diff.Kind) diff.Line {
 
 func (e *Entry) WritePatch(w io.Writer) error {
 	var buf bytes.Buffer
-	buf.WriteByte('\n')
+	if len(e.Files) > 0 {
+		buf.WriteByte('\n')
+	}
 	for _, file := range e.Files {
 		buf.WriteString("diff --git a/" + file.OldPath + " b/" + file.NewPath + "\n")
 		if file.Created {
