@@ -22,11 +22,21 @@ var commandIcons = map[CommandID]string{
 	CmdPruneWorktrees:      "worktree_prune",
 	CmdRepoSettings:        "repo_settings",
 	CmdSettings:            "settings",
+	CmdCopy:                "copy",
+	CmdSelectAll:           "select_all",
 	CmdClose:               "exit",
 	CmdStage:               "stage",
 	CmdUnstage:             "unstage",
 	CmdDiscard:             "discard",
+	CmdIndexEditor:         "index_editor",
+	CmdIgnore:              "ignore",
+	CmdRemove:              "remove",
 	CmdCommit:              "commit",
+	CmdLog:                 "log",
+	CmdBlame:               "blame",
+	CmdInvestigate:         "investigate",
+	CmdRevealRepository:    "reveal",
+	CmdOpenTerminal:        "terminal",
 	CmdStashSave:           "stash_save",
 	CmdStashApply:          "stash_apply",
 	CmdStashDrop:           "stash_drop",
@@ -60,11 +70,13 @@ var commandIcons = map[CommandID]string{
 }
 
 var menuGroupIcons = map[string]string{
-	"Menu.Window.Panes":     "panes",
-	"Menu.View.Theme":       "theme",
-	"Menu.View.Language":    "language",
-	"Menu.Tools.GitFlow":    "merge",
-	"Menu.Remote.Submodule": "clone",
+	"Menu.Window.Panes":      "panes",
+	"Menu.Window.Layout":     "layout",
+	"Menu.View.Theme":        "theme",
+	"Menu.View.Language":     "language",
+	"Menu.Tools.GitFlow":     "merge",
+	"Menu.Tools.Maintenance": "prune_remote",
+	"Menu.Remote.Submodule":  "clone",
 }
 
 var contextIcons = map[string]string{

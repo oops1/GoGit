@@ -480,6 +480,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.retranslateGrids()
 	a.wireViewHandlers()
 	a.applyMenuTexts(viewMenuIndex)
+	a.applyMenuTexts(windowMenuIndex)
 	a.logLanguageMenuLimit()
 	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
@@ -498,6 +499,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdUnstage] = a.unstageSelected
 	a.handlers[CmdDiscard] = a.discardSelected
 	a.handlers[CmdCommit] = a.openCommit
+	a.handlers[CmdRevealRepository] = func() { a.revealPath(a.activeRepositoryPath()) }
+	a.handlers[CmdOpenTerminal] = func() { a.openTerminalAt(a.activeRepositoryPath()) }
 	a.registerRemoteHandlers()
 	a.registerWorktreeHandlers()
 	a.registerMergeHandlers()

@@ -18,6 +18,14 @@ func (a *App) copyToClipboard(text string) {
 	setClipboard(text)
 }
 
+func (a *App) activeRepositoryPath() string {
+	o := a.opened()
+	if o == nil {
+		return ""
+	}
+	return o.path
+}
+
 func (a *App) revealPath(path string) {
 	if path == "" {
 		return

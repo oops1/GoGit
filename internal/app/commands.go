@@ -20,7 +20,9 @@ const (
 	CmdRemoveWorktree       CommandID = "repository.remove-worktree"
 	CmdPruneWorktrees       CommandID = "repository.prune-worktrees"
 	CmdRepoSettings         CommandID = "repository.repo-settings"
-	CmdSettings             CommandID = "repository.settings"
+	CmdSettings             CommandID = "edit.preferences"
+	CmdCopy                 CommandID = "edit.copy"
+	CmdSelectAll            CommandID = "edit.select-all"
 	CmdClose                CommandID = "repository.close"
 	CmdClone                CommandID = "repository.clone"
 	CmdFetch                CommandID = "remote.fetch"
@@ -36,43 +38,54 @@ const (
 	CmdSubmoduleRemove      CommandID = "remote.submodule.remove"
 	CmdSubmoduleUnregister  CommandID = "remote.submodule.unregister"
 	CmdSubmoduleReset       CommandID = "remote.submodule.reset"
-	CmdStage                CommandID = "edit.stage"
-	CmdUnstage              CommandID = "edit.unstage"
-	CmdDiscard              CommandID = "edit.discard"
+	CmdStage                CommandID = "local.stage"
+	CmdUnstage              CommandID = "local.unstage"
+	CmdDiscard              CommandID = "local.discard"
+	CmdIndexEditor          CommandID = "local.index-editor"
 	CmdCommit               CommandID = "local.commit"
 	CmdStashSave            CommandID = "local.stash-save"
 	CmdStashApply           CommandID = "local.stash-apply"
 	CmdStashDrop            CommandID = "local.stash-drop"
 	CmdStashSelection       CommandID = "local.stash-selection"
-	CmdCompareFiles         CommandID = "edit.compare-files"
+	CmdIgnore               CommandID = "local.ignore"
+	CmdRemove               CommandID = "local.remove"
+	CmdCompareFiles         CommandID = "query.compare-files"
+	CmdLog                  CommandID = "query.log"
+	CmdBlame                CommandID = "query.blame"
+	CmdInvestigate          CommandID = "query.investigate"
 	CmdMerge                CommandID = "branch.merge"
 	CmdRebase               CommandID = "branch.rebase"
 	CmdRebaseSteps          CommandID = "branch.rebase.steps"
-	CmdReflog               CommandID = "branch.reflog"
+	CmdReflog               CommandID = "query.reflog"
 	CmdSwitch               CommandID = "branch.switch"
-	CmdCompareRefs          CommandID = "branch.compare"
+	CmdCompareRefs          CommandID = "query.compare-branches"
 	CmdContinue             CommandID = "branch.continue"
 	CmdSkip                 CommandID = "branch.skip"
 	CmdAbortMerge           CommandID = "branch.abort-merge"
-	CmdFlowStartFeature     CommandID = "branch.flow.start-feature"
-	CmdFlowIntegrateDevelop CommandID = "branch.flow.integrate-develop"
-	CmdFlowFinishFeature    CommandID = "branch.flow.finish-feature"
-	CmdFlowStartHotfix      CommandID = "branch.flow.start-hotfix"
-	CmdFlowFinishHotfix     CommandID = "branch.flow.finish-hotfix"
-	CmdFlowStartRelease     CommandID = "branch.flow.start-release"
-	CmdFlowFinishRelease    CommandID = "branch.flow.finish-release"
-	CmdFlowStartSupport     CommandID = "branch.flow.start-support"
-	CmdFlowConfigure        CommandID = "branch.flow.configure"
-	CmdResetLayout          CommandID = "view.reset-layout"
+	CmdFlowStartFeature     CommandID = "tools.flow.start-feature"
+	CmdFlowIntegrateDevelop CommandID = "tools.flow.integrate-develop"
+	CmdFlowFinishFeature    CommandID = "tools.flow.finish-feature"
+	CmdFlowStartHotfix      CommandID = "tools.flow.start-hotfix"
+	CmdFlowFinishHotfix     CommandID = "tools.flow.finish-hotfix"
+	CmdFlowStartRelease     CommandID = "tools.flow.start-release"
+	CmdFlowFinishRelease    CommandID = "tools.flow.finish-release"
+	CmdFlowStartSupport     CommandID = "tools.flow.start-support"
+	CmdFlowConfigure        CommandID = "tools.flow.configure"
+	CmdGc                   CommandID = "tools.gc"
+	CmdFsck                 CommandID = "tools.fsck"
+	CmdRevealRepository     CommandID = "tools.reveal"
+	CmdOpenTerminal         CommandID = "tools.terminal"
+	CmdResetLayout          CommandID = "window.reset-layout"
 	CmdRefresh              CommandID = "view.refresh"
 	CmdCheckUpdates         CommandID = "help.check-updates"
 	CmdAbout                CommandID = "help.about"
 )
 
 const (
-	viewPanePrefix     = "view.pane:"
+	viewPanePrefix     = "window.pane:"
 	viewThemePrefix    = "view.theme:"
 	viewLanguagePrefix = "view.language:"
+	viewLayoutPrefix   = "window.layout:"
 	checkedPrefix      = "✓ "
 )
 
@@ -95,12 +108,24 @@ var viewThemeKeys = map[string]string{
 
 var viewLanguageOrder = []string{"en", "ru"}
 
+var viewLayoutOrder = []string{config.LayoutDocks, config.LayoutSidebar}
+
+var viewLayoutKeys = map[string]string{
+	config.LayoutDocks:   "Layout.Docks",
+	config.LayoutSidebar: "Layout.Sidebar",
+}
+
 func cmdPane(id string) CommandID       { return CommandID(viewPanePrefix + id) }
 func cmdTheme(name string) CommandID    { return CommandID(viewThemePrefix + name) }
 func cmdLanguage(code string) CommandID { return CommandID(viewLanguagePrefix + code) }
+func cmdLayout(mode string) CommandID   { return CommandID(viewLayoutPrefix + mode) }
 
 func paneIDFromCommand(id CommandID) (string, bool) {
 	return cutPrefix(id, viewPanePrefix)
+}
+
+func layoutFromCommand(id CommandID) (string, bool) {
+	return cutPrefix(id, viewLayoutPrefix)
 }
 
 func themeFromCommand(id CommandID) (string, bool) {
@@ -182,9 +207,26 @@ func (s State) flowReady() bool {
 	return s.ActiveRepository != "" && !s.Merging && s.FlowConfigured
 }
 
+var commandsWaitingForTheirCore = map[CommandID]bool{
+	CmdCopy:        true,
+	CmdSelectAll:   true,
+	CmdIndexEditor: true,
+	CmdIgnore:      true,
+	CmdRemove:      true,
+	CmdLog:         true,
+	CmdBlame:       true,
+	CmdInvestigate: true,
+	CmdGc:          true,
+	CmdFsck:        true,
+}
+
 func (s State) Enabled(id CommandID) bool {
+	if commandsWaitingForTheirCore[id] {
+		return false
+	}
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure:
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure,
+		CmdRevealRepository, CmdOpenTerminal:
 		return s.ActiveRepository != ""
 	case CmdFetch, CmdPull, CmdSync, CmdPush, CmdPrune:
 		return s.ActiveRepository != "" && s.HasRemotes

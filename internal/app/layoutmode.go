@@ -42,6 +42,13 @@ func (a *App) retitleSidebar() {
 	}
 }
 
+func (a *App) SetLayout(mode string) {
+	a.cfg.UI.Layout = mode
+	a.cfg.Normalize()
+	a.applyLayoutMode(a.cfg.UI.Layout)
+	a.log.Debug("layout changed", "layout", a.cfg.UI.Layout)
+}
+
 func (a *App) applyLayoutMode(mode string) {
 	if a.sidebar == nil {
 		return

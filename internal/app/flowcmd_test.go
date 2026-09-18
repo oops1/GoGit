@@ -186,9 +186,9 @@ func TestGitFlowCommandsFollowTheSettingsAndTheBranch(t *testing.T) {
 
 	a, _ := flowReadyApp(t, true)
 	disabled := readOnDispatcher(t, a, func() []bool {
-		items := a.menu.Items()[branchMenuIndex].Items
+		items := a.menu.Items()[toolsMenuIndex].Items
 		var off []bool
-		for _, sub := range items[len(items)-1].SubItems {
+		for _, sub := range items[0].SubItems {
 			off = append(off, sub.Disabled)
 		}
 		return off

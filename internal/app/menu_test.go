@@ -26,17 +26,35 @@ func viewTopItems(t *testing.T, a *App) []widget.MenuItem {
 	return items[viewMenuIndex].Items
 }
 
-func viewLeafItem(t *testing.T, a *App, groupPos, leafPos int) widget.MenuItem {
+func windowTopItems(t *testing.T, a *App) []widget.MenuItem {
 	t.Helper()
-	top := viewTopItems(t, a)
+	items := a.menu.Items()
+	if len(items) <= windowMenuIndex {
+		t.Fatal("window menu missing")
+	}
+	return items[windowMenuIndex].Items
+}
+
+func leafItemAt(t *testing.T, top []widget.MenuItem, groupPos, leafPos int) widget.MenuItem {
+	t.Helper()
 	if groupPos < 0 || groupPos >= len(top) {
-		t.Fatalf("view entry %d missing", groupPos)
+		t.Fatalf("menu entry %d missing", groupPos)
 	}
 	subs := top[groupPos].SubItems
 	if leafPos < 0 || leafPos >= len(subs) {
-		t.Fatalf("view leaf %d missing in group %d", leafPos, groupPos)
+		t.Fatalf("menu leaf %d missing in group %d", leafPos, groupPos)
 	}
 	return subs[leafPos]
+}
+
+func viewLeafItem(t *testing.T, a *App, groupPos, leafPos int) widget.MenuItem {
+	t.Helper()
+	return leafItemAt(t, viewTopItems(t, a), groupPos, leafPos)
+}
+
+func windowLeafItem(t *testing.T, a *App, groupPos, leafPos int) widget.MenuItem {
+	t.Helper()
+	return leafItemAt(t, windowTopItems(t, a), groupPos, leafPos)
 }
 
 func leafIndex(t *testing.T, group *menuGroupEntry, cmd CommandID) int {
@@ -102,76 +120,93 @@ func TestViewMenuTreeStructure(t *testing.T) {
 }
 
 func TestViewMenuTreeShapeMatchesSpec(t *testing.T) {
-	if len(viewMenuTree) != 7 {
-		t.Fatalf("view tree entries = %d, want 7", len(viewMenuTree))
+	if len(viewMenuTree) != 4 {
+		t.Fatalf("view tree entries = %d, want 4", len(viewMenuTree))
 	}
-	if viewMenuTree[0].Group == nil || viewMenuTree[0].Group.Key != "Menu.Window.Panes" {
-		t.Fatal("panes group out of place")
+	if viewMenuTree[0].Group == nil || viewMenuTree[0].Group.Key != "Menu.View.Theme" {
+		t.Fatal("theme group out of place")
 	}
-	if len(viewMenuTree[0].Group.Items) != 4 {
-		t.Fatal("panes group must have 4 items")
+	if len(viewMenuTree[0].Group.Items) != 3 {
+		t.Fatal("theme group must have 3 items")
 	}
-	if viewMenuTree[1].Leaf == nil || viewMenuTree[1].Leaf.Command != CmdResetLayout {
-		t.Fatal("reset layout out of place")
+	if viewMenuTree[1].Group == nil || viewMenuTree[1].Group.Key != "Menu.View.Language" {
+		t.Fatal("language group out of place")
+	}
+	if len(viewMenuTree[1].Group.Items) != 2 {
+		t.Fatal("language group must have 2 items")
 	}
 	if !viewMenuTree[2].Separator {
 		t.Fatal("expected separator at index 2")
 	}
-	if viewMenuTree[3].Group == nil || viewMenuTree[3].Group.Key != "Menu.View.Theme" {
-		t.Fatal("theme group out of place")
-	}
-	if len(viewMenuTree[3].Group.Items) != 3 {
-		t.Fatal("theme group must have 3 items")
-	}
-	if viewMenuTree[4].Group == nil || viewMenuTree[4].Group.Key != "Menu.View.Language" {
-		t.Fatal("language group out of place")
-	}
-	if len(viewMenuTree[4].Group.Items) != 2 {
-		t.Fatal("language group must have 2 items")
-	}
-	if !viewMenuTree[5].Separator {
-		t.Fatal("expected separator at index 5")
-	}
-	if viewMenuTree[6].Leaf == nil || viewMenuTree[6].Leaf.Command != CmdRefresh {
+	if viewMenuTree[3].Leaf == nil || viewMenuTree[3].Leaf.Command != CmdRefresh {
 		t.Fatal("refresh out of place")
 	}
 }
 
-func TestViewMenuItemsStartChecked(t *testing.T) {
+func TestWindowMenuTreeShapeMatchesSpec(t *testing.T) {
+	if len(windowMenuTree) != 4 {
+		t.Fatalf("window tree entries = %d, want 4", len(windowMenuTree))
+	}
+	if windowMenuTree[0].Group == nil || windowMenuTree[0].Group.Key != "Menu.Window.Panes" {
+		t.Fatal("panes group out of place")
+	}
+	if len(windowMenuTree[0].Group.Items) != 4 {
+		t.Fatal("panes group must have 4 items")
+	}
+	if windowMenuTree[1].Leaf == nil || windowMenuTree[1].Leaf.Command != CmdResetLayout {
+		t.Fatal("reset layout out of place")
+	}
+	if !windowMenuTree[2].Separator {
+		t.Fatal("expected separator at index 2")
+	}
+	if windowMenuTree[3].Group == nil || windowMenuTree[3].Group.Key != "Menu.Window.Layout" {
+		t.Fatal("layout group out of place")
+	}
+	if len(windowMenuTree[3].Group.Items) != len(viewLayoutOrder) {
+		t.Fatalf("layout group must have %d items", len(viewLayoutOrder))
+	}
+}
+
+func TestViewAndWindowMenuItemsStartChecked(t *testing.T) {
 	a := newTestApp(t)
-	panes := viewMenuTree[0].Group
+	panes := windowMenuTree[0].Group
 	for i, leaf := range panes.Items {
-		text := viewLeafItem(t, a, 0, i).Text
+		text := windowLeafItem(t, a, 0, i).Text
 		if text[:len(checkedPrefix)] != checkedPrefix {
 			t.Fatalf("pane %s must start checked", leaf.Command)
 		}
 	}
-	theme := viewMenuTree[3].Group
+	theme := viewMenuTree[0].Group
 	systemIdx := leafIndex(t, theme, cmdTheme(config.ThemeSystem))
-	if viewLeafItem(t, a, 3, systemIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if viewLeafItem(t, a, 0, systemIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("system theme must start checked")
 	}
 	darkIdx := leafIndex(t, theme, cmdTheme(config.ThemeDark))
-	if viewLeafItem(t, a, 3, darkIdx).Text[:len(checkedPrefix)] == checkedPrefix {
+	if viewLeafItem(t, a, 0, darkIdx).Text[:len(checkedPrefix)] == checkedPrefix {
 		t.Fatal("dark theme must not start checked")
 	}
-	lang := viewMenuTree[4].Group
+	lang := viewMenuTree[1].Group
 	enIdx := leafIndex(t, lang, cmdLanguage("en"))
-	if viewLeafItem(t, a, 4, enIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if viewLeafItem(t, a, 1, enIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("english must start checked")
+	}
+	layout := windowMenuTree[3].Group
+	docksIdx := leafIndex(t, layout, cmdLayout(config.LayoutDocks))
+	if windowLeafItem(t, a, 3, docksIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+		t.Fatal("dock panes must start checked")
 	}
 }
 
 func TestTogglingPaneFlipsCheckmark(t *testing.T) {
 	a := newTestApp(t)
-	panes := viewMenuTree[0].Group
+	panes := windowMenuTree[0].Group
 	idx := leafIndex(t, panes, cmdPane("journal"))
-	before := viewLeafItem(t, a, 0, idx)
+	before := windowLeafItem(t, a, 0, idx)
 	if before.Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("journal should start checked")
 	}
 	before.OnClick()
-	after := viewLeafItem(t, a, 0, idx)
+	after := windowLeafItem(t, a, 0, idx)
 	if after.Text[:len(checkedPrefix)] == checkedPrefix {
 		t.Fatal("journal should be unchecked after toggling off")
 	}
@@ -182,55 +217,83 @@ func TestTogglingPaneFlipsCheckmark(t *testing.T) {
 	if !a.PaneVisible("journal") {
 		t.Fatal("journal pane should be visible again")
 	}
-	if viewLeafItem(t, a, 0, idx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if windowLeafItem(t, a, 0, idx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("journal should be checked again")
+	}
+}
+
+func TestSelectingLayoutModeUpdatesConfigAndCheckmarks(t *testing.T) {
+	a := newTestApp(t)
+	layout := windowMenuTree[3].Group
+	docksIdx := leafIndex(t, layout, cmdLayout(config.LayoutDocks))
+	sidebarIdx := leafIndex(t, layout, cmdLayout(config.LayoutSidebar))
+
+	windowLeafItem(t, a, 3, sidebarIdx).OnClick()
+
+	if a.Config().UI.Layout != config.LayoutSidebar {
+		t.Fatalf("layout = %q", a.Config().UI.Layout)
+	}
+	if windowLeafItem(t, a, 3, sidebarIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+		t.Fatal("the side bar should be checked")
+	}
+	if windowLeafItem(t, a, 3, docksIdx).Text[:len(checkedPrefix)] == checkedPrefix {
+		t.Fatal("dock panes should no longer be checked")
+	}
+
+	windowLeafItem(t, a, 3, docksIdx).OnClick()
+
+	if a.Config().UI.Layout != config.LayoutDocks {
+		t.Fatalf("layout back = %q", a.Config().UI.Layout)
+	}
+	if windowLeafItem(t, a, 3, docksIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+		t.Fatal("dock panes should be checked again")
 	}
 }
 
 func TestSelectingThemeUpdatesConfigAndCheckmarks(t *testing.T) {
 	a := newTestApp(t)
-	theme := viewMenuTree[3].Group
+	theme := viewMenuTree[0].Group
 	darkIdx := leafIndex(t, theme, cmdTheme(config.ThemeDark))
 	systemIdx := leafIndex(t, theme, cmdTheme(config.ThemeSystem))
-	viewLeafItem(t, a, 3, darkIdx).OnClick()
+	viewLeafItem(t, a, 0, darkIdx).OnClick()
 	if a.Config().Theme != config.ThemeDark {
 		t.Fatalf("theme = %q", a.Config().Theme)
 	}
-	if viewLeafItem(t, a, 3, darkIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if viewLeafItem(t, a, 0, darkIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("dark theme should be checked")
 	}
-	if viewLeafItem(t, a, 3, systemIdx).Text[:len(checkedPrefix)] == checkedPrefix {
+	if viewLeafItem(t, a, 0, systemIdx).Text[:len(checkedPrefix)] == checkedPrefix {
 		t.Fatal("system theme should no longer be checked")
 	}
 }
 
 func TestSelectingLanguageUpdatesMenusAndConfig(t *testing.T) {
 	a := newTestApp(t)
-	lang := viewMenuTree[4].Group
+	lang := viewMenuTree[1].Group
 	ruIdx := leafIndex(t, lang, cmdLanguage("ru"))
-	viewLeafItem(t, a, 4, ruIdx).OnClick()
+	viewLeafItem(t, a, 1, ruIdx).OnClick()
 	if a.Config().Language != "ru" {
 		t.Fatalf("language = %q", a.Config().Language)
 	}
-	if viewLeafItem(t, a, 4, ruIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if viewLeafItem(t, a, 1, ruIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("ru should be checked")
 	}
 	if text, _, _ := a.MenuItemByCommand(CmdAddOrCreate); text != "Добавить или создать..." {
 		t.Fatalf("repository menu not retranslated: %q", text)
 	}
-	if text := viewTopItems(t, a)[1].Text; text != "Сбросить раскладку" {
-		t.Fatalf("top-level view menu not retranslated: %q", text)
+	if text := windowTopItems(t, a)[1].Text; text != "Сбросить раскладку" {
+		t.Fatalf("top-level window menu not retranslated: %q", text)
 	}
-	panes := viewMenuTree[0].Group
+	panes := windowMenuTree[0].Group
 	journalIdx := leafIndex(t, panes, cmdPane("journal"))
-	if text := viewLeafItem(t, a, 0, journalIdx).Text; text != checkedPrefix+"Журнал" {
+	if text := windowLeafItem(t, a, 0, journalIdx).Text; text != checkedPrefix+"Журнал" {
 		t.Fatalf("nested pane menu not retranslated: %q", text)
 	}
 }
 
 func TestRefreshCommandFollowsActiveRepositoryAndF5Dispatches(t *testing.T) {
 	a := newTestApp(t)
-	if !viewTopItems(t, a)[6].Disabled {
+	if !viewTopItems(t, a)[3].Disabled {
 		t.Fatal("refresh must be disabled without an active repository")
 	}
 	called := 0
@@ -240,14 +303,14 @@ func TestRefreshCommandFollowsActiveRepositoryAndF5Dispatches(t *testing.T) {
 		t.Fatal("F5 must not dispatch refresh without an active repository")
 	}
 	a.SetActiveRepository("r1", false)
-	if viewTopItems(t, a)[6].Disabled {
+	if viewTopItems(t, a)[3].Disabled {
 		t.Fatal("refresh must be enabled with an active repository")
 	}
 	a.Engine().SendKeyEvent(widget.KeyEvent{Code: widget.KeyF5, Pressed: true})
 	if called != 1 {
 		t.Fatalf("F5 must dispatch refresh, called = %d", called)
 	}
-	viewTopItems(t, a)[6].OnClick()
+	viewTopItems(t, a)[3].OnClick()
 	if called != 2 {
 		t.Fatal("clicking the refresh menu item must dispatch")
 	}
@@ -257,7 +320,7 @@ func TestResetLayoutMenuItemDispatches(t *testing.T) {
 	a := newTestApp(t)
 	called := 0
 	a.SetHandler(CmdResetLayout, func() { called++ })
-	viewTopItems(t, a)[1].OnClick()
+	windowTopItems(t, a)[1].OnClick()
 	if called != 1 {
 		t.Fatal("reset layout menu item must dispatch")
 	}

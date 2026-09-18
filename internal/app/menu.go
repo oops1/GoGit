@@ -7,11 +7,18 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 )
 
-const repositoryMenuIndex = 0
-const editMenuIndex = 1
-const branchMenuIndex = 2
-const remoteMenuIndex = 3
-const viewMenuIndex = 4
+const (
+	repositoryMenuIndex = iota
+	editMenuIndex
+	viewMenuIndex
+	remoteMenuIndex
+	localMenuIndex
+	branchMenuIndex
+	queryMenuIndex
+	toolsMenuIndex
+	windowMenuIndex
+	helpMenuIndex
+)
 
 type menuLeafEntry struct {
 	Key     string
@@ -37,57 +44,62 @@ type menuDef struct {
 
 var repositoryMenuTree = buildRepositoryMenuTree()
 var editMenuTree = buildEditMenuTree()
-var branchMenuTree = buildBranchMenuTree()
-var remoteMenuTree = buildRemoteMenuTree()
 var viewMenuTree = buildViewMenuTree()
+var remoteMenuTree = buildRemoteMenuTree()
+var localMenuTree = buildLocalMenuTree()
+var branchMenuTree = buildBranchMenuTree()
+var queryMenuTree = buildQueryMenuTree()
+var toolsMenuTree = buildToolsMenuTree()
+var windowMenuTree = buildWindowMenuTree()
 var helpMenuTree = buildHelpMenuTree()
 
 var menuBarDefs = []menuDef{
 	{TitleKey: "Menu.Repository", Tree: repositoryMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.Edit", Tree: editMenuTree, LeafText: plainLeafText},
-	{TitleKey: "Menu.Branch", Tree: branchMenuTree, LeafText: plainLeafText},
-	{TitleKey: "Menu.Remote", Tree: remoteMenuTree, LeafText: plainLeafText},
 	{TitleKey: "Menu.View", Tree: viewMenuTree, LeafText: (*App).viewLeafText},
+	{TitleKey: "Menu.Remote", Tree: remoteMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Local", Tree: localMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Branch", Tree: branchMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Query", Tree: queryMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Tools", Tree: toolsMenuTree, LeafText: plainLeafText},
+	{TitleKey: "Menu.Window", Tree: windowMenuTree, LeafText: (*App).viewLeafText},
 	{TitleKey: "Menu.Help", Tree: helpMenuTree, LeafText: plainLeafText},
 }
 
+func menuLeaf(key string, cmd CommandID) menuTreeEntry {
+	return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
+}
+
+var menuSeparatorEntry = menuTreeEntry{Separator: true}
+
 func buildRepositoryMenuTree() []menuTreeEntry {
-	leaf := func(key string, cmd CommandID) menuTreeEntry {
-		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
-	}
-	separator := menuTreeEntry{Separator: true}
 	return []menuTreeEntry{
-		leaf("Menu.Repository.AddOrCreate", CmdAddOrCreate),
-		leaf("Menu.Repository.AddGroup", CmdAddGroup),
-		leaf("Menu.Repository.Clone", CmdClone),
-		leaf("Menu.Repository.Search", CmdSearch),
-		leaf("Menu.Repository.CloseRepository", CmdCloseRepository),
-		separator,
-		leaf("Menu.Repository.AddWorktree", CmdAddWorktree),
-		leaf("Menu.Repository.RemoveWorktree", CmdRemoveWorktree),
-		leaf("Menu.Repository.PruneWorktrees", CmdPruneWorktrees),
-		separator,
-		leaf("Menu.Repository.RepoSettings", CmdRepoSettings),
-		leaf("Menu.Edit.Preferences", CmdSettings),
-		leaf("Menu.Repository.Close", CmdClose),
+		menuLeaf("Menu.Repository.AddOrCreate", CmdAddOrCreate),
+		menuLeaf("Menu.Repository.AddGroup", CmdAddGroup),
+		menuLeaf("Menu.Repository.Clone", CmdClone),
+		menuLeaf("Menu.Repository.Search", CmdSearch),
+		menuLeaf("Menu.Repository.CloseRepository", CmdCloseRepository),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Repository.AddWorktree", CmdAddWorktree),
+		menuLeaf("Menu.Repository.RemoveWorktree", CmdRemoveWorktree),
+		menuLeaf("Menu.Repository.PruneWorktrees", CmdPruneWorktrees),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Repository.RepoSettings", CmdRepoSettings),
+		menuLeaf("Menu.Repository.Close", CmdClose),
 	}
 }
 
 func buildRemoteMenuTree() []menuTreeEntry {
-	leaf := func(key string, cmd CommandID) menuTreeEntry {
-		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
-	}
-	separator := menuTreeEntry{Separator: true}
 	return []menuTreeEntry{
-		leaf("Menu.Remote.Fetch", CmdFetch),
-		leaf("Menu.Remote.Pull", CmdPull),
-		leaf("Menu.Remote.Push", CmdPush),
-		leaf("Menu.Remote.Sync", CmdSync),
-		separator,
-		leaf("Menu.Remote.Prune", CmdPrune),
-		separator,
-		leaf("Menu.Remote.Manage", CmdManageRemotes),
-		separator,
+		menuLeaf("Menu.Remote.Fetch", CmdFetch),
+		menuLeaf("Menu.Remote.Pull", CmdPull),
+		menuLeaf("Menu.Remote.Push", CmdPush),
+		menuLeaf("Menu.Remote.Sync", CmdSync),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Remote.Prune", CmdPrune),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Remote.Manage", CmdManageRemotes),
+		menuSeparatorEntry,
 		{Group: &menuGroupEntry{Key: "Menu.Remote.Submodule", Items: submoduleMenuLeaves}},
 	}
 }
@@ -104,62 +116,102 @@ var submoduleMenuLeaves = []menuLeafEntry{
 }
 
 func buildEditMenuTree() []menuTreeEntry {
-	leaf := func(key string, cmd CommandID) menuTreeEntry {
-		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
-	}
 	return []menuTreeEntry{
-		leaf("Menu.Local.Stage", CmdStage),
-		leaf("Menu.Local.Unstage", CmdUnstage),
-		leaf("Menu.Local.Discard", CmdDiscard),
-		{Separator: true},
-		leaf("Menu.Local.Commit", CmdCommit),
-		{Separator: true},
-		leaf("Menu.Local.SaveStash", CmdStashSave),
-		leaf("Menu.Local.ApplyStash", CmdStashApply),
-		leaf("Menu.Local.DropStash", CmdStashDrop),
-		{Separator: true},
-		leaf("Menu.Query.CompareFiles", CmdCompareFiles),
+		menuLeaf("Menu.Edit.Copy", CmdCopy),
+		menuLeaf("Menu.Edit.SelectAll", CmdSelectAll),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Edit.Preferences", CmdSettings),
+	}
+}
+
+func buildLocalMenuTree() []menuTreeEntry {
+	return []menuTreeEntry{
+		menuLeaf("Menu.Local.Commit", CmdCommit),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Local.Stage", CmdStage),
+		menuLeaf("Menu.Local.Unstage", CmdUnstage),
+		menuLeaf("Menu.Local.Discard", CmdDiscard),
+		menuLeaf("Menu.Files.IndexEditor", CmdIndexEditor),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Local.SaveStash", CmdStashSave),
+		menuLeaf("Menu.Local.ApplyStash", CmdStashApply),
+		menuLeaf("Menu.Local.DropStash", CmdStashDrop),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Files.Ignore", CmdIgnore),
+		menuLeaf("Menu.Files.Remove", CmdRemove),
 	}
 }
 
 func buildBranchMenuTree() []menuTreeEntry {
 	return []menuTreeEntry{
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Switch", Command: CmdSwitch}},
-		{Separator: true},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Merge", Command: CmdMerge}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Rebase", Command: CmdRebase}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.RebaseInteractive", Command: CmdRebaseSteps}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Query.Reflog", Command: CmdReflog}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Query.CompareBranches", Command: CmdCompareRefs}},
-		{Separator: true},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
-		{Separator: true},
+		menuLeaf("Menu.Branch.Switch", CmdSwitch),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Branch.Merge", CmdMerge),
+		menuLeaf("Menu.Branch.Rebase", CmdRebase),
+		menuLeaf("Menu.Branch.RebaseInteractive", CmdRebaseSteps),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Branch.Continue", CmdContinue),
+		menuLeaf("Menu.Branch.Skip", CmdSkip),
+		menuLeaf("Menu.Branch.AbortMerge", CmdAbortMerge),
+	}
+}
+
+func buildQueryMenuTree() []menuTreeEntry {
+	return []menuTreeEntry{
+		menuLeaf("Menu.Query.Log", CmdLog),
+		menuLeaf("Menu.Context.Blame", CmdBlame),
+		menuLeaf("Menu.Files.Investigate", CmdInvestigate),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Query.CompareFiles", CmdCompareFiles),
+		menuLeaf("Menu.Query.CompareBranches", CmdCompareRefs),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Query.Reflog", CmdReflog),
+	}
+}
+
+var maintenanceMenuLeaves = []menuLeafEntry{
+	{Key: "Menu.Tools.Maintenance.Gc", Command: CmdGc},
+	{Key: "Menu.Tools.Maintenance.Fsck", Command: CmdFsck},
+}
+
+func buildToolsMenuTree() []menuTreeEntry {
+	return []menuTreeEntry{
 		{Group: &menuGroupEntry{Key: "Menu.Tools.GitFlow", Items: flowMenuLeaves}},
+		menuSeparatorEntry,
+		{Group: &menuGroupEntry{Key: "Menu.Tools.Maintenance", Items: maintenanceMenuLeaves}},
+		menuSeparatorEntry,
+		menuLeaf("Menu.Context.Reveal", CmdRevealRepository),
+		menuLeaf("Menu.Context.Terminal", CmdOpenTerminal),
 	}
 }
 
 func buildViewMenuTree() []menuTreeEntry {
-	panes := buildViewLeafGroup("Menu.Window.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
 	theme := buildViewLeafGroup("Menu.View.Theme", viewThemeOrder, viewThemeKeys, cmdTheme)
 	language := buildViewLeafGroup("Menu.View.Language", viewLanguageOrder, nil, cmdLanguage)
 	return []menuTreeEntry{
-		{Group: &panes},
-		{Leaf: &menuLeafEntry{Key: "Menu.Window.ResetLayout", Command: CmdResetLayout}},
-		{Separator: true},
 		{Group: &theme},
 		{Group: &language},
-		{Separator: true},
-		{Leaf: &menuLeafEntry{Key: "Menu.View.Refresh", Command: CmdRefresh}},
+		menuSeparatorEntry,
+		menuLeaf("Menu.View.Refresh", CmdRefresh),
+	}
+}
+
+func buildWindowMenuTree() []menuTreeEntry {
+	panes := buildViewLeafGroup("Menu.Window.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
+	layout := buildViewLeafGroup("Menu.Window.Layout", viewLayoutOrder, viewLayoutKeys, cmdLayout)
+	return []menuTreeEntry{
+		{Group: &panes},
+		menuLeaf("Menu.Window.ResetLayout", CmdResetLayout),
+		menuSeparatorEntry,
+		{Group: &layout},
 	}
 }
 
 func buildHelpMenuTree() []menuTreeEntry {
 	return []menuTreeEntry{
-		{Leaf: &menuLeafEntry{Key: "Menu.Help.CheckUpdates", Command: CmdCheckUpdates}},
-		{Separator: true},
-		{Leaf: &menuLeafEntry{Key: "Menu.Help.About", Command: CmdAbout}},
+		menuLeaf("Menu.Help.CheckUpdates", CmdCheckUpdates),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Help.About", CmdAbout),
 	}
 }
 
@@ -219,7 +271,14 @@ func (a *App) wireViewHandlers() {
 		paneID := id
 		a.handlers[cmdPane(paneID)] = func() {
 			a.SetPaneVisible(paneID, !a.PaneVisible(paneID))
-			a.applyMenuTexts(viewMenuIndex)
+			a.applyMenuTexts(windowMenuIndex)
+		}
+	}
+	for _, name := range viewLayoutOrder {
+		mode := name
+		a.handlers[cmdLayout(mode)] = func() {
+			a.SetLayout(mode)
+			a.applyMenuTexts(windowMenuIndex)
 		}
 	}
 	for _, name := range viewThemeOrder {
@@ -372,6 +431,9 @@ func (a *App) viewLeafLabelChecked(leaf menuLeafEntry) (string, bool) {
 	}
 	if code, ok := languageFromCommand(leaf.Command); ok {
 		return i18n.T(leaf.Key), i18n.Current() == code
+	}
+	if mode, ok := layoutFromCommand(leaf.Command); ok {
+		return i18n.T(leaf.Key), a.cfg.UI.Layout == mode
 	}
 	return i18n.T(leaf.Key), false
 }
