@@ -6,6 +6,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
+	"github.com/oops1/gogit/internal/gitcore/pack"
 )
 
 func TestGetAsksForAMissingObjectOnceAndReadsWhatArrives(t *testing.T) {
@@ -68,6 +69,23 @@ func TestLookupsReportWhatTheMissingObjectHookFailedWith(t *testing.T) {
 	}
 	if _, _, err := db.Info(id); !errors.Is(err, failure) {
 		t.Fatalf("Info returned %v, want %v", err, failure)
+	}
+}
+
+func TestLookupsReportAFailedReloadBeforeAskingForTheObject(t *testing.T) {
+	objects := newObjectsDir(t)
+	copyFixturePacks(t, objects)
+	db := openDB(t, objects, Options{Missing: func(hash.ObjectID) error {
+		t.Error("the missing object hook ran although the reload failed")
+		return nil
+	}})
+	swapMaintain(t, &packReload, func(*pack.Store) (bool, error) { return false, errInjected })
+	id := hash.SumSHA1("blob", []byte("never stored anywhere"))
+	if _, _, err := db.Get(id); !errors.Is(err, errInjected) {
+		t.Fatalf("Get returned %v, want %v", err, errInjected)
+	}
+	if _, _, err := db.Info(id); !errors.Is(err, errInjected) {
+		t.Fatalf("Info returned %v, want %v", err, errInjected)
 	}
 }
 
