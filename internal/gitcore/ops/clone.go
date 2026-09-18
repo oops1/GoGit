@@ -48,6 +48,7 @@ type CloneOptions struct {
 	Branch            string
 	SingleBranch      bool
 	Depth             int
+	Filter            string
 	RemoteName        string
 	NoCheckout        bool
 	Progress          progress.Func
@@ -161,13 +162,18 @@ func cloneInto(ctx context.Context, url, dir string, opts CloneOptions) (*repo.R
 	if err != nil {
 		return failClone(r, err)
 	}
-	if err := writeCloneRemoteConfig(file, remoteName, url, spec, cloneSubmoduleValues(r, opts)...); err != nil {
+	if _, err := transport.ParseFilter(opts.Filter); err != nil {
+		return failClone(r, err)
+	}
+	values := append(cloneSubmoduleValues(r, opts), partialCloneValues(remoteName, opts.Filter)...)
+	if err := writeCloneRemoteConfig(file, remoteName, url, spec, values...); err != nil {
 		return failClone(r, err)
 	}
 
 	rem := remote.Remote{Name: remoteName, URLs: []string{url}, Fetch: []refspec.RefSpec{spec}}
 	result, err := fetchCloneObjects(ctx, r, rem, remote.FetchOptions{
 		Depth:     opts.Depth,
+		Filter:    opts.Filter,
 		WantHead:  true,
 		Progress:  prog,
 		Transport: opts.Transport,

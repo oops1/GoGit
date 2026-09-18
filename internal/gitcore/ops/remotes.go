@@ -19,6 +19,10 @@ func networkView(r *repo.Repository) (*repo.Repository, error) {
 }
 
 func fetchRemote(ctx context.Context, r *repo.Repository, rem remote.Remote, opts remote.FetchOptions) (remote.FetchResult, error) {
+	opts, err := withPromisorFilter(r, rem, opts)
+	if err != nil {
+		return remote.FetchResult{}, err
+	}
 	view, err := networkView(r)
 	if err != nil {
 		return remote.FetchResult{}, err
