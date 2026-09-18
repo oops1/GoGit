@@ -275,17 +275,7 @@ func TestStashPushStagedRefusesALinkThatIsAFileOnDisk(t *testing.T) {
 	}
 }
 
-func TestStashBinaryChecksReportAnUnknownDiffAlgorithm(t *testing.T) {
-	staged := newTestRepo(t)
-	staged.commitFiles("base", map[string]string{"a": "a\n"})
-	staged.writeFile("a", "a2\n")
-	staged.stageAll("a")
-	staged.appendConfig("[diff]\n\talgorithm = sideways\n")
-	staged.repo = staged.reopen()
-	if _, err := StashPush(t.Context(), staged.repo, StashOptions{Staged: true, When: mergeTime}); err == nil {
-		t.Fatal("a staged push accepted an unknown diff algorithm")
-	}
-
+func TestStashIndexChecksReportAnUnknownDiffAlgorithm(t *testing.T) {
 	index := newTestRepo(t)
 	index.commitFiles("base", map[string]string{"m": tenLines("m")})
 	index.writeFile("m", changeLine(tenLines("m"), 5, "STAGED"))

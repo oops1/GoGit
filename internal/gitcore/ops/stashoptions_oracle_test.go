@@ -111,13 +111,20 @@ func requireSameStashState(o *oracle, gitSide, ourSide string) {
 }
 
 type stashPushCase struct {
-	name     string
-	side     func(*oracle, string) string
-	prepare  func(*oracle, string)
-	args     []string
-	opts     StashOptions
-	gitFails bool
-	wantErr  error
+	name              string
+	side              func(*oracle, string) string
+	prepare           func(*oracle, string)
+	args              []string
+	opts              StashOptions
+	gitFails          bool
+	wantErr           error
+	needsBinaryStaged bool
+}
+
+func gitStashesStagedBinaryContent(o *oracle) bool {
+	dir := stashBinarySide(o, "binary-staged-probe")
+	_, err := o.attempt(dir, "stash", "push", "-q", "--staged")
+	return err == nil
 }
 
 func stashPushCases() []stashPushCase {
@@ -192,14 +199,14 @@ func stashPushCases() []stashPushCase {
 			args: []string{"-u"}, opts: StashOptions{IncludeUntracked: true},
 		},
 		{name: "nested repository path", side: stashNestedSide, args: []string{"-u", "--", "vendor", "a.txt"}, opts: StashOptions{IncludeUntracked: true, Paths: []string{"vendor", "a.txt"}}},
-		{name: "staged binary edit", side: stashBinarySide, args: []string{"--staged"}, opts: StashOptions{Staged: true}, gitFails: true, wantErr: ErrStashWorktreeKept},
+		{name: "staged binary edit", side: stashBinarySide, args: []string{"--staged"}, opts: StashOptions{Staged: true}, needsBinaryStaged: true},
 		{
 			name: "staged new binary file", side: stashBinarySide,
 			prepare: func(o *oracle, dir string) {
 				o.run(dir, "reset", "-q")
 				stageText(o, dir, "fresh.bin", "fresh\x00bin\n")
 			},
-			args: []string{"--staged"}, opts: StashOptions{Staged: true}, gitFails: true, wantErr: ErrStashWorktreeKept,
+			args: []string{"--staged"}, opts: StashOptions{Staged: true}, needsBinaryStaged: true,
 		},
 		{
 			name: "staged binary mode change", side: stashBinarySide,
@@ -295,8 +302,12 @@ func relink(o *oracle, dir, target string) {
 }
 
 func TestOracleStashPushOptionsMatchGit(t *testing.T) {
+	binaryStaged := gitStashesStagedBinaryContent(newStashOracle(t))
 	for _, tc := range stashPushCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.needsBinaryStaged && !binaryStaged {
+				t.Skip("the installed git refuses to stash staged binary content")
+			}
 			o := newStashOracle(t)
 			side := tc.side
 			if side == nil {

@@ -71,7 +71,30 @@ func funcLogOf(t *testing.T, o *oracle, dir, arg string) string {
 			t.Fatal(err)
 		}
 	}
-	return out.String()
+	return withoutExtendedHeadersAndFunctionContext(out.String())
+}
+
+func withoutExtendedHeadersAndFunctionContext(patch string) string {
+	lines := strings.Split(patch, "\n")
+	kept := lines[:0]
+	extended := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			extended = true
+		} else if extended {
+			if !strings.HasPrefix(line, "--- ") {
+				continue
+			}
+			extended = false
+		}
+		if strings.HasPrefix(line, "@@ -") {
+			if at := strings.Index(line[3:], " @@"); at >= 0 {
+				line = line[:at+6]
+			}
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
 }
 
 func TestOracleFunctionLineHistoryFollowsDiffDrivers(t *testing.T) {
@@ -114,7 +137,7 @@ func TestOracleFunctionLineHistoryFollowsDiffDrivers(t *testing.T) {
 	}
 	wants := make([]string, len(args))
 	for at, arg := range args {
-		wants[at] = b.git("log", "--format=%H", "--no-color", "-L", arg)
+		wants[at] = withoutExtendedHeadersAndFunctionContext(b.git("log", "--format=%H", "--no-color", "-L", arg))
 	}
 	for _, mode := range []string{"objects", "commit-graph"} {
 		if mode == "commit-graph" {

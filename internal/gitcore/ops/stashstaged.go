@@ -75,11 +75,6 @@ func (m *merger) reverseStaged(sw *switcher, path string, before merge.Entry, ha
 		return worktreeEdit{}, err
 	}
 	edit := worktreeEdit{path: path, mode: before.Mode}
-	if before.ID != after.ID {
-		if err := m.refuseBinaryStaged(path, before, had, after, has); err != nil {
-			return edit, err
-		}
-	}
 	switch {
 	case !has && exists:
 		return edit, fmt.Errorf("%w: %s already exists in the working tree", ErrStashWorktreeKept, path)
@@ -114,31 +109,6 @@ func (m *merger) reverseStaged(sw *switcher, path string, before merge.Entry, ha
 	}
 	edit.data, err = m.reverseHunks(path, before, after, current)
 	return edit, err
-}
-
-func (m *merger) refuseBinaryStaged(path string, before merge.Entry, had bool, after merge.Entry, has bool) error {
-	var blobs [][]byte
-	for _, side := range []struct {
-		entry   merge.Entry
-		present bool
-	}{{before, had}, {after, has}} {
-		if !side.present {
-			continue
-		}
-		_, data, err := dbGet(m.rc.db, side.entry.ID)
-		if err != nil {
-			return err
-		}
-		blobs = append(blobs, data)
-	}
-	binary, err := m.binaryContent(path, blobs...)
-	if err != nil {
-		return err
-	}
-	if binary {
-		return fmt.Errorf("%w: %s: cannot apply a binary patch without the full index line", ErrStashWorktreeKept, path)
-	}
-	return nil
 }
 
 func (m *merger) reverseHunks(path string, before, after merge.Entry, current []byte) ([]byte, error) {
