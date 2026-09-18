@@ -236,10 +236,10 @@ func TestTheToolbarGitFlowMenuFollowsTheMode(t *testing.T) {
 	light := readOnDispatcher(t, a, func() []widget.MenuItem { btn.OnOpening(); return btn.Items })
 	runOnDispatcher(t, a, func() { light[0].OnClick() })
 
-	if len(full) != len(flowMenuLeaves) || !full[3].Separator || full[0].Text != i18n.T("Menu.Branch.GitFlow.StartFeature") {
+	if len(full) != len(flowMenuLeaves) || !full[3].Separator || full[0].Text != i18n.T("Menu.Tools.GitFlow.StartFeature") {
 		t.Fatalf("full menu = %+v", full)
 	}
-	if len(light) != 5 || light[4].Text != i18n.T("Menu.Branch.GitFlow.Configure") || light[1].Disabled != true {
+	if len(light) != 5 || light[4].Text != i18n.T("Menu.Tools.GitFlow.Configure") || light[1].Disabled != true {
 		t.Fatalf("light menu = %+v", light)
 	}
 	waitForFlowView(t, a, starts, 1)

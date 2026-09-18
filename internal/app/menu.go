@@ -68,7 +68,7 @@ func buildRepositoryMenuTree() []menuTreeEntry {
 		leaf("Menu.Repository.PruneWorktrees", CmdPruneWorktrees),
 		separator,
 		leaf("Menu.Repository.RepoSettings", CmdRepoSettings),
-		leaf("Menu.Repository.Settings", CmdSettings),
+		leaf("Menu.Edit.Preferences", CmdSettings),
 		leaf("Menu.Repository.Close", CmdClose),
 	}
 }
@@ -108,17 +108,17 @@ func buildEditMenuTree() []menuTreeEntry {
 		return menuTreeEntry{Leaf: &menuLeafEntry{Key: key, Command: cmd}}
 	}
 	return []menuTreeEntry{
-		leaf("Menu.Edit.Stage", CmdStage),
-		leaf("Menu.Edit.Unstage", CmdUnstage),
-		leaf("Menu.Edit.Discard", CmdDiscard),
+		leaf("Menu.Local.Stage", CmdStage),
+		leaf("Menu.Local.Unstage", CmdUnstage),
+		leaf("Menu.Local.Discard", CmdDiscard),
 		{Separator: true},
-		leaf("Menu.Edit.Commit", CmdCommit),
+		leaf("Menu.Local.Commit", CmdCommit),
 		{Separator: true},
-		leaf("Menu.Edit.SaveStash", CmdStashSave),
-		leaf("Menu.Edit.ApplyStash", CmdStashApply),
-		leaf("Menu.Edit.DropStash", CmdStashDrop),
+		leaf("Menu.Local.SaveStash", CmdStashSave),
+		leaf("Menu.Local.ApplyStash", CmdStashApply),
+		leaf("Menu.Local.DropStash", CmdStashDrop),
 		{Separator: true},
-		leaf("Menu.Edit.Compare", CmdCompareFiles),
+		leaf("Menu.Query.CompareFiles", CmdCompareFiles),
 	}
 }
 
@@ -129,24 +129,24 @@ func buildBranchMenuTree() []menuTreeEntry {
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Merge", Command: CmdMerge}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Rebase", Command: CmdRebase}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.RebaseInteractive", Command: CmdRebaseSteps}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Reflog", Command: CmdReflog}},
-		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Compare", Command: CmdCompareRefs}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Query.Reflog", Command: CmdReflog}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Query.CompareBranches", Command: CmdCompareRefs}},
 		{Separator: true},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Continue", Command: CmdContinue}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.Skip", Command: CmdSkip}},
 		{Leaf: &menuLeafEntry{Key: "Menu.Branch.AbortMerge", Command: CmdAbortMerge}},
 		{Separator: true},
-		{Group: &menuGroupEntry{Key: "Menu.Branch.GitFlow", Items: flowMenuLeaves}},
+		{Group: &menuGroupEntry{Key: "Menu.Tools.GitFlow", Items: flowMenuLeaves}},
 	}
 }
 
 func buildViewMenuTree() []menuTreeEntry {
-	panes := buildViewLeafGroup("Menu.View.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
+	panes := buildViewLeafGroup("Menu.Window.Panes", viewPaneIDs, viewPaneKeys, cmdPane)
 	theme := buildViewLeafGroup("Menu.View.Theme", viewThemeOrder, viewThemeKeys, cmdTheme)
 	language := buildViewLeafGroup("Menu.View.Language", viewLanguageOrder, nil, cmdLanguage)
 	return []menuTreeEntry{
 		{Group: &panes},
-		{Leaf: &menuLeafEntry{Key: "Menu.View.ResetLayout", Command: CmdResetLayout}},
+		{Leaf: &menuLeafEntry{Key: "Menu.Window.ResetLayout", Command: CmdResetLayout}},
 		{Separator: true},
 		{Group: &theme},
 		{Group: &language},

@@ -23,21 +23,21 @@
                 <MenuItem Header="{Loc Menu.Repository.PruneWorktrees}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Repository.RepoSettings}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Repository.Settings}"/>
+                <MenuItem Header="{Loc Menu.Edit.Preferences}"/>
                 <MenuItem Header="{Loc Menu.Repository.Close}"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Edit}">
-                <MenuItem Header="{Loc Menu.Edit.Stage}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Edit.Unstage}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Edit.Discard}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.Stage}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.Unstage}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.Discard}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
-                <MenuItem Header="{Loc Menu.Edit.Commit}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.Commit}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
-                <MenuItem Header="{Loc Menu.Edit.SaveStash}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Edit.ApplyStash}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Edit.DropStash}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.SaveStash}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.ApplyStash}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Local.DropStash}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
-                <MenuItem Header="{Loc Menu.Edit.Compare}"/>
+                <MenuItem Header="{Loc Menu.Query.CompareFiles}"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Branch}">
                 <MenuItem Header="{Loc Menu.Branch.Switch}" IsEnabled="False"/>
@@ -45,27 +45,27 @@
                 <MenuItem Header="{Loc Menu.Branch.Merge}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.Rebase}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.RebaseInteractive}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Branch.Reflog}" IsEnabled="False"/>
-                <MenuItem Header="{Loc Menu.Branch.Compare}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Query.Reflog}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Query.CompareBranches}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Branch.Continue}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.Skip}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Branch.AbortMerge}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
-                <MenuItem Header="{Loc Menu.Branch.GitFlow}">
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartFeature}" IsEnabled="False"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.IntegrateDevelop}" IsEnabled="False"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishFeature}" IsEnabled="False"/>
+                <MenuItem Header="{Loc Menu.Tools.GitFlow}">
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.StartFeature}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.IntegrateDevelop}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.FinishFeature}" IsEnabled="False"/>
                     <MenuItem Separator="True"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartHotfix}" IsEnabled="False"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishHotfix}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.StartHotfix}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.FinishHotfix}" IsEnabled="False"/>
                     <MenuItem Separator="True"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartRelease}" IsEnabled="False"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.FinishRelease}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.StartRelease}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.FinishRelease}" IsEnabled="False"/>
                     <MenuItem Separator="True"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.StartSupport}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.StartSupport}" IsEnabled="False"/>
                     <MenuItem Separator="True"/>
-                    <MenuItem Header="{Loc Menu.Branch.GitFlow.Configure}" IsEnabled="False"/>
+                    <MenuItem Header="{Loc Menu.Tools.GitFlow.Configure}" IsEnabled="False"/>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Remote}">
@@ -90,13 +90,13 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="{Loc Menu.View}">
-                <MenuItem Header="{Loc Menu.View.Panes}">
+                <MenuItem Header="{Loc Menu.Window.Panes}">
                     <MenuItem Header="{Loc Pane.Repositories}"/>
                     <MenuItem Header="{Loc Pane.Branches}"/>
                     <MenuItem Header="{Loc Pane.Files}"/>
                     <MenuItem Header="{Loc Pane.Journal}"/>
                 </MenuItem>
-                <MenuItem Header="{Loc Menu.View.ResetLayout}"/>
+                <MenuItem Header="{Loc Menu.Window.ResetLayout}"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.View.Theme}">
                     <MenuItem Header="{Loc Theme.System}"/>

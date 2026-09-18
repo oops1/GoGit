@@ -157,7 +157,7 @@ func TestTheSaveStashButtonFollowsTheChangesAndTheFileSelection(t *testing.T) {
 		t.Fatalf("save button without changes = %+v", got)
 	}
 	clean := openedMenuItems(t, a, btn)
-	want := []string{i18n.T("Menu.Edit.SaveStash"), i18n.T("Menu.Files.StashSelection")}
+	want := []string{i18n.T("Menu.Local.SaveStash"), i18n.T("Menu.Files.StashSelection")}
 	if !slices.Equal(menuTexts(clean), want) || !clean[0].Disabled || !clean[1].Disabled {
 		t.Fatalf("save menu without changes = %+v", clean)
 	}

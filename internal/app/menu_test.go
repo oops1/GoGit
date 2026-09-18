@@ -105,7 +105,7 @@ func TestViewMenuTreeShapeMatchesSpec(t *testing.T) {
 	if len(viewMenuTree) != 7 {
 		t.Fatalf("view tree entries = %d, want 7", len(viewMenuTree))
 	}
-	if viewMenuTree[0].Group == nil || viewMenuTree[0].Group.Key != "Menu.View.Panes" {
+	if viewMenuTree[0].Group == nil || viewMenuTree[0].Group.Key != "Menu.Window.Panes" {
 		t.Fatal("panes group out of place")
 	}
 	if len(viewMenuTree[0].Group.Items) != 4 {
