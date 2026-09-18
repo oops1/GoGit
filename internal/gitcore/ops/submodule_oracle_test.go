@@ -123,10 +123,17 @@ func (f *submoduleForge) compareFiles(gitDir, ourDir string, rels ...string) {
 	}
 }
 
+func withoutTopDir(text, dir string) string {
+	for _, form := range []string{dir, realPath(dir)} {
+		text = strings.ReplaceAll(text, filepath.ToSlash(form), "<top>")
+	}
+	return text
+}
+
 func (f *submoduleForge) compareOutput(gitDir, ourDir, rel string, args ...string) {
 	f.o.t.Helper()
-	want := strings.ReplaceAll(f.o.run(filepath.Join(gitDir, filepath.FromSlash(rel)), args...), filepath.ToSlash(gitDir), "<top>")
-	got := strings.ReplaceAll(f.o.run(filepath.Join(ourDir, filepath.FromSlash(rel)), args...), filepath.ToSlash(ourDir), "<top>")
+	want := withoutTopDir(f.o.run(filepath.Join(gitDir, filepath.FromSlash(rel)), args...), gitDir)
+	got := withoutTopDir(f.o.run(filepath.Join(ourDir, filepath.FromSlash(rel)), args...), ourDir)
 	if want != got {
 		f.o.t.Fatalf("git %s in %s differs:\ngit:\n%s\nours:\n%s", strings.Join(args, " "), rel, want, got)
 	}
