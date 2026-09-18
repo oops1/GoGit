@@ -503,6 +503,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdOpenTerminal] = func() { a.openTerminalAt(a.activeRepositoryPath()) }
 	a.registerRemoteHandlers()
 	a.registerWorktreeHandlers()
+	a.registerSparseHandlers()
 	a.registerMergeHandlers()
 	a.registerFlowHandlers()
 	a.registerRebaseHandlers()

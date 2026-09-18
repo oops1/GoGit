@@ -19,6 +19,7 @@ const (
 	CmdAddWorktree          CommandID = "repository.add-worktree"
 	CmdRemoveWorktree       CommandID = "repository.remove-worktree"
 	CmdPruneWorktrees       CommandID = "repository.prune-worktrees"
+	CmdSparseCheckout       CommandID = "repository.sparse-checkout"
 	CmdRepoSettings         CommandID = "repository.repo-settings"
 	CmdSettings             CommandID = "edit.preferences"
 	CmdCopy                 CommandID = "edit.copy"
@@ -224,7 +225,7 @@ func (s State) Enabled(id CommandID) bool {
 		return false
 	}
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure,
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdSparseCheckout, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure,
 		CmdRevealRepository, CmdOpenTerminal:
 		return s.ActiveRepository != ""
 	case CmdFetch, CmdPull, CmdSync, CmdPush, CmdPrune:
