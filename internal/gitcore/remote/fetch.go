@@ -47,6 +47,8 @@ type FetchOptions struct {
 	DeepenSince time.Time
 	DeepenNot   []string
 	Unshallow   bool
+	Filter      string
+	ObjectsOnly bool
 	Tags        TagMode
 	Prune       bool
 	Force       bool
@@ -66,6 +68,9 @@ type FetchResult struct {
 }
 
 func fetchRefspecs(rem Remote, opts FetchOptions) []refspec.RefSpec {
+	if opts.ObjectsOnly {
+		return nil
+	}
 	if len(opts.Refspecs) > 0 {
 		return opts.Refspecs
 	}
@@ -156,7 +161,7 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	defer resp.Pack.Close()
 
 	prog.Phase("receiving")
-	indexed, err := pack.IndexPack(ctx, resp.Pack, r.PackDir(), pack.IndexOptions{Bases: db, FixThin: true, Progress: prog, KeepName: fetchKeepMessage()})
+	indexed, err := pack.IndexPack(ctx, resp.Pack, r.PackDir(), pack.IndexOptions{Bases: db, FixThin: true, Progress: prog, KeepName: fetchKeepMessage(), Promisor: opts.Filter != ""})
 	if err != nil {
 		return FetchResult{}, err
 	}
@@ -183,8 +188,10 @@ func Fetch(ctx context.Context, r *repo.Repository, rem Remote, opts FetchOption
 	if updateErr != nil {
 		errs = append(errs, updateErr)
 	}
-	if err := writeFetchHead(r, url, applied, adv.Head); err != nil {
-		errs = append(errs, err)
+	if !opts.ObjectsOnly {
+		if err := writeFetchHead(r, url, applied, adv.Head); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	if err := applyShallowResponse(r, shallow, resp); err != nil {
 		errs = append(errs, err)
@@ -222,6 +229,7 @@ func buildFetchRequest(matched []matchedRef, opts FetchOptions, shallow map[hash
 	}
 	req := transport.FetchRequest{
 		Wants:       wants,
+		Filter:      opts.Filter,
 		DeepenSince: opts.DeepenSince,
 		DeepenNot:   opts.DeepenNot,
 		IncludeTags: opts.Tags == TagsFollow,
