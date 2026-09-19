@@ -70,6 +70,7 @@ func NewView() *View {
 
 func (v *View) Bind(tree *widget.TreeViewWidget) {
 	v.tree = tree
+	tree.Tree.SelectionMode = treeview.SelectionExtended
 	tree.Tree.OnItemInvoked = func(e treeview.ItemInvokedEvent) {
 		ref, isRef, sub, isSub := v.lookup(e.Item)
 		if isRef && v.OnActivate != nil {
@@ -125,7 +126,8 @@ func (v *View) Render(s Snapshot) {
 func (v *View) render(s Snapshot) {
 	v.last = s
 	v.captureExpanded()
-	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
+	selectedRefs, currentRef := v.captureSelection()
+	scroll := v.tree.Tree.ScrollY()
 	selectedSubmodule, submoduleSelected := v.submoduleByItem[v.tree.Tree.SelectedItem()]
 
 	v.tree.BeginUpdate()
@@ -153,15 +155,47 @@ func (v *View) render(s Snapshot) {
 	}
 
 	v.tree.EndUpdate()
-	if item, ok := v.itemByRef[selected]; ok {
-		selectQuietly(v.tree.Tree, item)
-	}
+	v.restoreSelection(selectedRefs, currentRef)
 	for item, sub := range v.submoduleByItem {
 		if submoduleSelected && sub.Path == selectedSubmodule.Path {
 			selectQuietly(v.tree.Tree, item)
 		}
 	}
 	v.tree.ScrollBy(scroll)
+}
+
+func (v *View) captureSelection() ([]refs.Name, refs.Name) {
+	items := v.tree.Tree.SelectedItems()
+	selected := make([]refs.Name, 0, len(items))
+	for _, item := range items {
+		if ref, ok := v.idByItem[item]; ok {
+			selected = append(selected, ref)
+		}
+	}
+	current := v.idByItem[v.tree.Tree.SelectedItem()]
+	return selected, current
+}
+
+func (v *View) restoreSelection(selected []refs.Name, current refs.Name) {
+	items := make([]*treeview.TreeViewItem, 0, len(selected))
+	currentIndex := -1
+	for _, ref := range selected {
+		item, ok := v.itemByRef[ref]
+		if !ok {
+			continue
+		}
+		if ref == current {
+			currentIndex = len(items)
+		}
+		items = append(items, item)
+	}
+	if len(items) == 0 {
+		return
+	}
+	if last := len(items) - 1; currentIndex >= 0 && currentIndex != last {
+		items[currentIndex], items[last] = items[last], items[currentIndex]
+	}
+	selectItemsQuietly(v.tree.Tree, items)
 }
 
 func (v *View) ClearStashSelection() {
@@ -179,6 +213,13 @@ func selectQuietly(tree *treeview.TreeView, item *treeview.TreeViewItem) {
 	handler := tree.OnSelectedItemChanged
 	tree.OnSelectedItemChanged = nil
 	tree.SetSelectedItem(item)
+	tree.OnSelectedItemChanged = handler
+}
+
+func selectItemsQuietly(tree *treeview.TreeView, items []*treeview.TreeViewItem) {
+	handler := tree.OnSelectedItemChanged
+	tree.OnSelectedItemChanged = nil
+	tree.SetSelectedItems(items)
 	tree.OnSelectedItemChanged = handler
 }
 
