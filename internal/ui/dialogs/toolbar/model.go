@@ -28,7 +28,6 @@ func NewModel(catalog []Entry, selected, defaults []string, captions bool) *Mode
 	m := &Model{
 		catalog:  slices.Clone(catalog),
 		labels:   make(map[string]string, len(catalog)),
-		defaults: slices.Clone(defaults),
 		captions: captions,
 	}
 	for _, entry := range catalog {
@@ -54,8 +53,6 @@ func (m *Model) known(ids []string) []string {
 }
 
 func (m *Model) Captions() bool { return m.captions }
-
-func (m *Model) SetCaptions(v bool) { m.captions = v }
 
 func (m *Model) Items() []string { return slices.Clone(m.selected) }
 

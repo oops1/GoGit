@@ -52,9 +52,8 @@ func TestNewModelDropsItemsTheCatalogDoesNotKnowAndRepeatedCommands(t *testing.T
 	if m.Captions() {
 		t.Fatal("captions must follow the flag they were built with")
 	}
-	m.SetCaptions(true)
-	if !m.Captions() {
-		t.Fatal("captions must be settable")
+	if !NewModel(sampleCatalog(), nil, nil, true).Captions() {
+		t.Fatal("captions must follow the flag they were built with")
 	}
 }
 
