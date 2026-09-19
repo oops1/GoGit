@@ -547,3 +547,59 @@ func TestDefaultLeavesTheToolbarItemsToTheApplication(t *testing.T) {
 		t.Fatalf("toolbar items = %v, want none", got)
 	}
 }
+
+func TestBranchesPaneSortFallsBackToNameForUnknownValues(t *testing.T) {
+	if Default().UI.Branches.Sort != BranchSortName {
+		t.Fatalf("default branches sort = %q", Default().UI.Branches.Sort)
+	}
+	if !Default().UI.Branches.GroupByPath {
+		t.Fatal("grouping branches by path must be on by default")
+	}
+	for text, want := range map[string]string{
+		"[ui.branches]\nsort = \"name_reverse_numbers\"\n": BranchSortNameReverseNumbers,
+		"[ui.branches]\nsort = \"commit_time\"\n":          BranchSortCommitTime,
+		"[ui.branches]\nsort = \"whenever\"\n":             BranchSortName,
+		"":                                                 BranchSortName,
+	} {
+		cfg, err := Parse([]byte(text))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.UI.Branches.Sort != want {
+			t.Fatalf("branches sort from %q = %q, want %q", text, cfg.UI.Branches.Sort, want)
+		}
+	}
+}
+
+func TestBranchesPaneOptionsSurviveEncodeAndParse(t *testing.T) {
+	cfg := Default()
+	cfg.UI.Branches = BranchesPane{
+		Sort:                BranchSortCommitTime,
+		FlowSections:        true,
+		GroupByPath:         true,
+		GroupExceptSingles:  true,
+		GroupsFirst:         true,
+		GroupAfterLastSlash: true,
+	}
+	data, err := cfg.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.UI.Branches != cfg.UI.Branches {
+		t.Fatalf("branches pane options = %+v, want %+v", back.UI.Branches, cfg.UI.Branches)
+	}
+}
+
+func TestBranchesPaneGroupingByPathCanBeTurnedOff(t *testing.T) {
+	cfg, err := Parse([]byte("[ui.branches]\ngroup_by_path = false\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.Branches.GroupByPath {
+		t.Fatal("the stored false must survive the default")
+	}
+}
