@@ -8,6 +8,12 @@ annotate_race() {
     while IFS= read -r line; do echo "::error::$line"; done
   grep -E "FAIL|panic:|_test\.go:" "$1" | head -40 |
     while IFS= read -r line; do echo "::error::$line"; done
+  {
+    echo "### $suite failures on $RUNNER_OS"
+    echo '```'
+    sed -n '/WARNING: DATA RACE/,$p' "$1" | head -400
+    echo '```'
+  } >> "$GITHUB_STEP_SUMMARY"
 }
 
 annotate_oracle() {
@@ -23,12 +29,16 @@ annotate_oracle() {
   } >> "$GITHUB_STEP_SUMMARY"
 }
 
+ops_fault_tests() {
+  printf '%s' 'TestMergeFailuresSurfaceTheCauseAtEveryStep|TestStashFailuresSurfaceTheCauseAtEveryStep|TestFetchRecursionSurvivesInjectedFaults|TestSwitchRecursionSurvivesInjectedFaults|TestSubmoduleAddSurvivesInjectedFaults|TestSubmoduleDeinitSurvivesInjectedFaults|TestSubmoduleRemoveSurvivesInjectedFaults'
+}
+
 ops_oracle_tests() {
   grep -ho '^func Test[A-Za-z0-9_]*' internal/gitcore/ops/*_oracle_test.go | sed 's/^func //' | sort -u | paste -sd'|' -
 }
 
 case "$suite" in
-  race-ops|oracle-ops-unit|oracle-ops-git)
+  race-ops|oracle-ops-unit|oracle-ops-git|oracle-ops-faults)
     packages="./internal/gitcore/ops/"
     ;;
   race-app|oracle-app)
@@ -58,7 +68,11 @@ case "$suite" in
     exit "$status"
     ;;
   oracle-ops-unit)
-    selection=(-skip "^($(ops_oracle_tests))\$")
+    selection=(-skip "^($(ops_oracle_tests)|$(ops_fault_tests))\$")
+    ;;
+  oracle-ops-faults)
+    selection=(-run "^($(ops_fault_tests))\$")
+    gate=false
     ;;
   oracle-ops-git)
     selection=(-run "^($(ops_oracle_tests))\$")
