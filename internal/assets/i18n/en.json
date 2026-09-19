@@ -827,6 +827,7 @@
   "Dialog.Unlock.Wrong": "Wrong password",
   "Dialog.Update.Available": "Version %s is available, you have %s. Open the download page?",
   "Dialog.Update.Failed": "Could not check for updates: %s",
+  "Dialog.Update.RateLimited": "GitHub is not answering requests from this address right now: its hourly quota is spent. Try again later.",
   "Dialog.Update.Title": "Updates",
   "Dialog.Update.UpToDate": "You are running the latest version, %s.",
   "Dialog.VaultRollback.Message": "The secret store file is older than the last one Go.Git saw. It may have been restored from a backup or replaced by someone else. Open it anyway?",

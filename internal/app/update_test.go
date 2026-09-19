@@ -24,6 +24,9 @@ func stubLatestRelease(t *testing.T, info releaseInfo, err error) {
 	prev := fetchRelease
 	fetchRelease = func(context.Context, string) (releaseInfo, error) { return info, err }
 	t.Cleanup(func() { fetchRelease = prev })
+	prevFeed := fetchReleaseFeed
+	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) { return releaseInfo{}, err }
+	t.Cleanup(func() { fetchReleaseFeed = prevFeed })
 }
 
 type recordedMessage struct {

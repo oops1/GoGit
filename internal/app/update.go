@@ -63,7 +63,7 @@ func (a *App) startUpdateCheck(announce bool) {
 	updateWG.Go(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
 		defer cancel()
-		latest, err := fetchRelease(ctx, releaseFeedURL)
+		latest, err := latestRelease(ctx)
 		a.Post(func() { a.reportUpdate(current, latest, err, announce) })
 	})
 }
@@ -80,7 +80,7 @@ func (a *App) reportUpdate(current string, latest releaseInfo, err error, announ
 	if err != nil {
 		a.log.Warn("check for updates failed", "error", err)
 		if announce {
-			a.showError(title, i18n.Tf("Dialog.Update.Failed", err.Error()))
+			a.showError(title, updateFailureText(err))
 		}
 		return
 	}
@@ -115,7 +115,7 @@ func downloadReleaseFrom(ctx context.Context, rawURL string) (releaseInfo, error
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return releaseInfo{}, fmt.Errorf("%w: %s", ErrReleaseUnavailable, resp.Status)
+		return releaseInfo{}, errorOfStatus(resp)
 	}
 	var info releaseInfo
 	if err := json.NewDecoder(io.LimitReader(resp.Body, updateBodyLimit)).Decode(&info); err != nil {
@@ -166,4 +166,18 @@ func numberAt(numbers []int, i int) int {
 		return numbers[i]
 	}
 	return 0
+}
+
+func errorOfStatus(resp *http.Response) error {
+	if rateLimited(resp) {
+		return ErrReleaseRateLimited
+	}
+	return fmt.Errorf("%w: %s", ErrReleaseUnavailable, resp.Status)
+}
+
+func updateFailureText(err error) string {
+	if errors.Is(err, ErrReleaseRateLimited) {
+		return i18n.T("Dialog.Update.RateLimited")
+	}
+	return i18n.Tf("Dialog.Update.Failed", err.Error())
 }
