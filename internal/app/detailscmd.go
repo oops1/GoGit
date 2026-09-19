@@ -71,7 +71,7 @@ func (a *App) selectJournalCommit(id hash.ObjectID) {
 	items := grid.ItemsSource()
 	for index := range items.Count() {
 		if row, ok := items.Get(index).(journal.Row); ok && row.ID == id {
-			grid.SetSelectedIndex(index)
+			grid.SetSelectedIndexQuiet(index)
 			return
 		}
 	}
