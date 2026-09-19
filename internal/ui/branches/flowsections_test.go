@@ -120,3 +120,38 @@ func TestFlowBranchNameKeepsAnUnprefixedName(t *testing.T) {
 		t.Fatalf("flowBranchName(develop) = %q", got)
 	}
 }
+
+func TestLightFlowPutsTheBaseBranchAboveTheSections(t *testing.T) {
+	v, tw := bound(t)
+	v.SetFlow(ops.DefaultLightFlowConfig(), true)
+	s := flowFixture(t)
+	s.Local = append(s.Local, Branch{Name: refs.BranchName("master"), Target: oid(t, "55")})
+	v.Render(s)
+
+	root := tw.Tree.Roots()[0]
+	if root.Text != "master" {
+		t.Fatalf("first root = %q, want the base branch", root.Text)
+	}
+	if ref, ok := v.idByItem[root]; !ok || ref != refs.BranchName("master") {
+		t.Fatalf("first root tracks %v, %v", ref, ok)
+	}
+	want := []string{"develop", "release", "  1.0"}
+	if got := localOutline(t, v, tw.Tree); !slices.Equal(got, want) {
+		t.Fatalf("local branches = %v, want the base branch taken out", got)
+	}
+}
+
+func TestFullFlowLeavesTheBaseBranchInLocal(t *testing.T) {
+	v, tw := bound(t)
+	v.SetFlow(ops.DefaultFlowConfig(), true)
+	s := flowFixture(t)
+	s.Local = append(s.Local, Branch{Name: refs.BranchName("master"), Target: oid(t, "55")})
+	v.Render(s)
+
+	if got := v.keyByItem[tw.Tree.Roots()[0]]; got != flowKey(ops.FlowKindFeature) {
+		t.Fatalf("first root key = %q, want the feature section", got)
+	}
+	if got := localOutline(t, v, tw.Tree); !slices.Contains(got, "master") {
+		t.Fatalf("local branches = %v, want master among them", got)
+	}
+}

@@ -136,6 +136,9 @@ func (v *View) render(s Snapshot) {
 	v.keyByItem = map[*treeview.TreeViewItem]string{}
 	v.submoduleByItem = map[*treeview.TreeViewItem]ops.Submodule{}
 
+	if base := v.buildFlowBase(s); base != nil {
+		v.tree.AddRoot(base)
+	}
 	for _, section := range v.buildFlowSections(s) {
 		v.tree.AddRoot(section)
 	}
@@ -227,6 +230,9 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 	for _, b := range s.Local {
 		short := b.Name.Short()
 		if _, inFlow := v.flowKindOf(short); inFlow {
+			continue
+		}
+		if short == v.flowBaseBranch() {
 			continue
 		}
 		current := !s.Detached && short == s.Current

@@ -119,3 +119,29 @@ func (v *View) flowBranchName(short string) string {
 	}
 	return name
 }
+
+func (v *View) flowBaseBranch() string {
+	if !v.flowConfigured || !v.flow.Light() {
+		return ""
+	}
+	return v.flow.Develop
+}
+
+func (v *View) buildFlowBase(s Snapshot) *treeview.TreeViewItem {
+	base := v.flowBaseBranch()
+	if base == "" {
+		return nil
+	}
+	for _, b := range s.Local {
+		if b.Name.Short() != base {
+			continue
+		}
+		current := !s.Detached && base == s.Current
+		icon := "branch"
+		if current {
+			icon = "branch_current"
+		}
+		return v.leafItem(pathEntry{path: base, ref: b.Name, current: current, icon: icon, when: b.When}, base)
+	}
+	return nil
+}
