@@ -8,6 +8,9 @@ annotate_race() {
     while IFS= read -r line; do echo "::error::$line"; done
   grep -E "FAIL|panic:|_test\.go:" "$1" | head -40 |
     while IFS= read -r line; do echo "::error::$line"; done
+  if ! grep -q "WARNING: DATA RACE" "$1"; then
+    tail -n 80 "$1" | while IFS= read -r line; do echo "::error::${line:0:1200}"; done
+  fi
   {
     echo "### $suite failures on $RUNNER_OS"
     echo '```'
