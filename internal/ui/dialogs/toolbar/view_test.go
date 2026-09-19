@@ -27,7 +27,6 @@ func newTestView(t *testing.T, model *Model) *View {
 
 func pick(list *widget.ListView, at int) {
 	list.SetSelected(at)
-	list.OnSelect(at, "")
 }
 
 func TestNewViewPropagatesLoadDialogError(t *testing.T) {
@@ -156,6 +155,54 @@ func TestUpAndDownReorderTheRow(t *testing.T) {
 	v.downBtn.OnClick()
 	if got := v.Result().Items; !slices.Equal(got, []string{"remote.pull", SeparatorID, "local.commit"}) {
 		t.Fatalf("after down = %v", got)
+	}
+}
+
+func TestTheSelectedListIsDragReorderable(t *testing.T) {
+	v := newTestView(t, newSampleModel())
+	if !v.selected.Reorderable {
+		t.Fatal("the selected list must allow drag reordering")
+	}
+	if v.available.Reorderable {
+		t.Fatal("the available list must not allow drag reordering")
+	}
+}
+
+func TestDraggingARowReordersTheModelAndFollowsTheDrop(t *testing.T) {
+	v := newTestView(t, newSampleModel())
+	v.selected.OnReorder(2, 0)
+	if got := v.Result().Items; !slices.Equal(got, []string{"local.commit", "remote.pull", SeparatorID}) {
+		t.Fatalf("after drag = %v", got)
+	}
+	if got := v.selected.Selected(); got != 0 {
+		t.Fatalf("the dropped item must stay selected, got %d", got)
+	}
+}
+
+func TestDroppingARowOnItselfChangesNothing(t *testing.T) {
+	v := newTestView(t, newSampleModel())
+	pick(v.selected, 1)
+	v.selected.OnReorder(1, 1)
+	if got := v.Result().Items; !slices.Equal(got, sampleDefaults()) {
+		t.Fatalf("row = %v, want unchanged", got)
+	}
+}
+
+func TestEmptyingTheSelectedListDisablesItsButtons(t *testing.T) {
+	v := newTestView(t, NewModel(sampleCatalog(), []string{"remote.pull"}, sampleDefaults(), true))
+	pick(v.selected, 0)
+	v.removeBtn.OnClick()
+	if got := v.selected.Items(); len(got) != 0 {
+		t.Fatalf("selected = %v, want empty", got)
+	}
+	if v.removeBtn.IsEnabled() {
+		t.Fatal("remove must disable once the row is empty")
+	}
+	if v.upBtn.IsEnabled() || v.downBtn.IsEnabled() {
+		t.Fatal("move buttons must disable once the row is empty")
+	}
+	if v.okBtn.IsEnabled() {
+		t.Fatal("ok must disable once the row carries no commands")
 	}
 }
 

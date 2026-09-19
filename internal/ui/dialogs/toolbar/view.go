@@ -54,6 +54,8 @@ func NewView(model *Model) (*View, error) {
 	v.captionsBox.SetChecked(model.Captions())
 	v.available.OnSelect = func(int, string) { v.refresh() }
 	v.selected.OnSelect = func(int, string) { v.refresh() }
+	v.selected.Reorderable = true
+	v.selected.OnReorder = v.reorder
 	v.addBtn.OnClick = v.add
 	v.removeBtn.OnClick = v.remove
 	v.upBtn.OnClick = func() { v.move(-1) }
@@ -126,7 +128,6 @@ func (v *View) render(available, selected int) {
 	v.selected.SetItems(labelsOf(v.model.Selected()))
 	v.available.SetSelected(clampIndex(available, len(v.available.Items())))
 	v.selected.SetSelected(clampIndex(selected, len(v.selected.Items())))
-	v.refresh()
 }
 
 func labelsOf(entries []Entry) []string {
@@ -184,6 +185,13 @@ func (v *View) move(by int) {
 		return
 	}
 	v.render(v.available.Selected(), at+by)
+}
+
+func (v *View) reorder(from, to int) {
+	if !v.model.Move(from, to) {
+		return
+	}
+	v.render(v.available.Selected(), to)
 }
 
 func (v *View) reset() {
