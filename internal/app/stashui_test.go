@@ -259,21 +259,6 @@ func TestTheApplyDialogPassesTheRestoreIndexChoice(t *testing.T) {
 	}
 }
 
-func TestMissingToolbarMenuButtonsAreSkipped(t *testing.T) {
-	a := newTestApp(t)
-	for _, entry := range toolbarMenuButtons() {
-		delete(a.named, entry.Name)
-	}
-
-	a.wireToolbarMenus()
-	a.refreshToolbarMenus(State{ActiveRepository: "r"})
-	a.applyToolbarIcons(nil)
-
-	if got := len(a.toolbarCaptionWidths()); got != len(toolbarButtons) {
-		t.Fatalf("caption widths = %d, want only the plain buttons", got)
-	}
-}
-
 func stashedAppWithUntrackedFile(t *testing.T) (*App, string, hash.ObjectID) {
 	t.Helper()
 	a, target := blockedSwitchApp(t, "dirty\n")

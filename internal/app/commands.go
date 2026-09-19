@@ -159,20 +159,6 @@ var gridColumnKeys = map[string][]string{
 	"journalGrid": {"", "Journal.Column.Message", "Journal.Column.Author", "Journal.Column.Date", "Journal.Column.Hash"},
 }
 
-var toolbarButtons = map[CommandID]string{
-	CmdPull:   "btnPull",
-	CmdSync:   "btnSync",
-	CmdPush:   "btnPush",
-	CmdCommit: "btnCommit",
-}
-
-var toolbarIcons = map[CommandID]string{
-	CmdPull:   "pull",
-	CmdSync:   "sync",
-	CmdPush:   "push",
-	CmdCommit: "commit",
-}
-
 type State struct {
 	ActiveRepository string
 	ActiveIsWorktree bool

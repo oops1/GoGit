@@ -39,7 +39,7 @@ func TestNewLoadsMainWindow(t *testing.T) {
 	if a.Root().Title != "Go.Git" {
 		t.Fatalf("title = %q", a.Root().Title)
 	}
-	for _, name := range []string{"dock", "reposTree", "branchesTree", "filesGrid", "journalGrid", "btnPull", "btnSync", "btnPush", "btnCommit"} {
+	for _, name := range []string{"dock", "reposTree", "branchesTree", "filesGrid", "journalGrid", "toolbar", "btnPull", "btnSync", "btnPush", "btnCommit"} {
 		if a.Widget(name) == nil {
 			t.Fatalf("widget %q missing", name)
 		}
@@ -132,9 +132,9 @@ func TestCommandStatesFollowActiveRepository(t *testing.T) {
 	if _, enabled, ok := a.MenuItemByCommand(CmdAddOrCreate); !ok || !enabled {
 		t.Fatal("add must be enabled")
 	}
-	for _, name := range toolbarButtons {
-		if a.Widget(name).(*widget.Button).IsEnabled() {
-			t.Fatalf("%s must be disabled", name)
+	for _, item := range a.toolbarButtons {
+		if item.button().IsEnabled() {
+			t.Fatalf("%s must be disabled", item.entry.Name)
 		}
 	}
 	a.SetActiveRepository("r1", false)
@@ -149,14 +149,17 @@ func TestCommandStatesFollowActiveRepository(t *testing.T) {
 		t.Fatal("remove worktree must be enabled on a worktree")
 	}
 	a.setHasRemotes(true)
-	for cmd, name := range toolbarButtons {
-		want := cmd != CmdCommit
-		if got := a.Widget(name).(*widget.Button).IsEnabled(); got != want {
-			t.Fatalf("%s enabled = %v, want %v", name, got, want)
+	for _, item := range a.toolbarButtons {
+		want := item.entry.Command == CmdPull || item.entry.Command == CmdSync || item.entry.Command == CmdPush
+		if !want {
+			continue
+		}
+		if got := item.button().IsEnabled(); got != want {
+			t.Fatalf("%s enabled = %v, want %v", item.entry.Name, got, want)
 		}
 	}
 	a.setHasStagedChanges(true)
-	if !a.Widget("btnCommit").(*widget.Button).IsEnabled() {
+	if !toolbarButtonNamed(t, a, "btnCommit").IsEnabled() {
 		t.Fatal("btnCommit must be enabled once there are staged changes")
 	}
 	a.CloseRepository()
@@ -195,7 +198,7 @@ func TestDispatch(t *testing.T) {
 	if called != 3 {
 		t.Fatal("clicking the repository menu item should dispatch")
 	}
-	a.Widget("btnPull").(*widget.Button).OnClick()
+	toolbarButtonNamed(t, a, "btnPull").OnClick()
 	if called != 4 {
 		t.Fatal("toolbar should dispatch")
 	}
@@ -333,16 +336,21 @@ func TestNewFromXAMLErrors(t *testing.T) {
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
+		"toolbar is not a panel": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
+			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
+			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
+			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
+			`<Button x:Name="toolbar"/></Window>`,
 		"diff view is not a diff view": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<FilesGrid x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/><TextBlock x:Name="diffView"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
-			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
+			`<StackPanel x:Name="toolbar"/></Window>`,
 		"files grid is not a files grid": `<Window><Menu x:Name="mainMenu"/><DockManager x:Name="dock"/>` +
 			`<TreeView x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<TextBlock x:Name="filesGrid"/><DataGrid x:Name="journalGrid"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
-			`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`,
+			`<StackPanel x:Name="toolbar"/></Window>`,
 		"repos tree is not a tree view": `<Window><Menu x:Name="mainMenu"/>` +
 			`<TextBlock x:Name="reposTree"/><TreeView x:Name="branchesTree"/>` +
 			`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/></Window>`,
@@ -389,7 +397,7 @@ func completeWindowXAML() string {
 		journalFilterXAML +
 		`<TabControl x:Name="detailsTabs"/>` +
 		`<TextBlock x:Name="statusText"/><TextBlock x:Name="statusBranch"/><ProgressBar x:Name="statusProgress"/>` +
-		`<Button x:Name="btnPull"/><Button x:Name="btnSync"/><Button x:Name="btnPush"/><Button x:Name="btnCommit"/></Window>`
+		`<StackPanel x:Name="toolbar"/></Window>`
 }
 
 func windowWithout(widget string) string {

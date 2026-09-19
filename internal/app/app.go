@@ -99,6 +99,7 @@ type App struct {
 	selectedNode      string
 	selectedCommit    hash.ObjectID
 
+	toolbarButtons      []toolbarButton
 	filesWorkingCopyBtn *widget.Button
 	banner              mergeBanner
 	askInput            func(title, prompt string, cb func(text string, ok bool))
@@ -276,10 +277,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if _, ok := named["dock"].(*widget.DockManager); !ok {
 		return nil, fmt.Errorf("%w: dock", ErrWidgetMissing)
 	}
-	for _, name := range toolbarButtons {
-		if _, ok := named[name].(*widget.Button); !ok {
-			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
-		}
+	if _, ok := named["toolbar"].(*widget.StackPanel); !ok {
+		return nil, fmt.Errorf("%w: toolbar", ErrWidgetMissing)
 	}
 	for name := range gridColumnKeys {
 		if _, ok := named[name].(*widget.DataGridWidget); !ok {

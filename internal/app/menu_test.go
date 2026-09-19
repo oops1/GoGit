@@ -407,10 +407,7 @@ func TestRemoteMenuAndToolbarShowTranslatedTextNotRawKeys(t *testing.T) {
 			}
 		}
 		for name, key := range toolbarKeys {
-			btn, ok := a.Widget(name).(*widget.Button)
-			if !ok {
-				t.Fatalf("widget %s is not a Button", name)
-			}
+			btn := toolbarButtonNamed(t, a, name)
 			if btn.Text == "" || btn.Text == key {
 				t.Fatalf("lang %q: %s caption shows %q instead of translated text", lang, name, btn.Text)
 			}

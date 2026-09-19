@@ -307,12 +307,7 @@ func (a *App) wireHotkeys() {
 }
 
 func (a *App) wireToolbar() {
-	for id, name := range toolbarButtons {
-		btn := a.named[name].(*widget.Button)
-		cmd := id
-		btn.OnClick = func() { a.Dispatch(cmd) }
-	}
-	a.wireToolbarMenus()
+	a.buildToolbar()
 }
 
 func (a *App) refreshCommands() {
@@ -324,10 +319,7 @@ func (a *App) refreshCommands() {
 		}
 		applyTreeEnabled(items[i].Items, def.Tree, state)
 	}
-	for id, name := range toolbarButtons {
-		a.named[name].(*widget.Button).SetEnabled(state.Enabled(id))
-	}
-	a.refreshToolbarMenus(state)
+	a.refreshToolbarButtons(state)
 	a.applyMenuIcons()
 }
 
@@ -354,7 +346,7 @@ func (a *App) retranslate() {
 	a.retranslateFilesStatusButtons()
 	a.retranslateRepoTrees()
 	a.retranslateFilesState()
-	a.applyToolbarIcons(nil)
+	a.retranslateToolbar()
 	a.root.Title = i18n.T("App.Title")
 	a.updateStatusText()
 	a.applyFilesFilter()
