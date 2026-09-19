@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Width="660" Height="460">
+
+    <Grid.RowDefinitions>
+        <RowDefinition Height="22"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="26"/>
+        <RowDefinition Height="12"/>
+        <RowDefinition Height="30"/>
+    </Grid.RowDefinitions>
+    <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="8"/>
+        <ColumnDefinition Width="130"/>
+        <ColumnDefinition Width="8"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="8"/>
+        <ColumnDefinition Width="110"/>
+    </Grid.ColumnDefinitions>
+
+    <TextBlock x:Name="availableLabel" Grid.Row="0" Grid.Column="0"
+               Text="{Loc Dialog.Toolbar.Available}"/>
+    <ListView x:Name="available" Grid.Row="1" Grid.Column="0"/>
+
+    <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Vertical" Spacing="8">
+        <Button x:Name="add" Height="28" Content="{Loc Dialog.Toolbar.Add}"/>
+        <Button x:Name="remove" Height="28" Content="{Loc Dialog.Toolbar.Remove}"/>
+    </StackPanel>
+
+    <TextBlock x:Name="selectedLabel" Grid.Row="0" Grid.Column="4"
+               Text="{Loc Dialog.Toolbar.Selected}"/>
+    <ListView x:Name="selected" Grid.Row="1" Grid.Column="4"/>
+
+    <StackPanel Grid.Row="1" Grid.Column="6" Orientation="Vertical" Spacing="8">
+        <Button x:Name="moveUp" Height="28" Content="{Loc Dialog.Toolbar.MoveUp}"/>
+        <Button x:Name="moveDown" Height="28" Content="{Loc Dialog.Toolbar.MoveDown}"/>
+        <Button x:Name="reset" Height="28" Content="{Loc Dialog.Toolbar.Reset}"/>
+    </StackPanel>
+
+    <CheckBox x:Name="captions" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="7"
+              Content="{Loc Dialog.Toolbar.Captions}"/>
+
+    <Button x:Name="ok" Grid.Row="5" Grid.Column="4" Margin="0,0,6,0"
+            Content="{Loc Dialog.Toolbar.OK}"/>
+    <Button x:Name="cancel" Grid.Row="5" Grid.Column="6"
+            Content="{Loc Dialog.Toolbar.Cancel}"/>
+</Grid>
