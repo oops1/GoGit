@@ -166,6 +166,7 @@ type State struct {
 	ActiveRepository string
 	ActiveIsWorktree bool
 	FilesSelected    bool
+	FilePicked       bool
 	HasStagedChanges bool
 	HasChanges       bool
 	HasStashable     bool
@@ -219,8 +220,10 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.HasRemotes
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
-	case CmdStage, CmdUnstage, CmdDiscard, CmdIndexEditor, CmdBlame, CmdInvestigate:
+	case CmdStage, CmdUnstage, CmdDiscard, CmdIndexEditor:
 		return s.ActiveRepository != "" && s.FilesSelected
+	case CmdBlame, CmdInvestigate:
+		return s.ActiveRepository != "" && s.FilePicked
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)
 	case CmdStashSave:

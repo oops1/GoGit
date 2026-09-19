@@ -579,6 +579,16 @@ func (a *App) setFilesSelected(v bool) {
 	}
 }
 
+func (a *App) setFilePicked(v bool) {
+	a.mu.Lock()
+	changed := a.state.FilePicked != v
+	a.state.FilePicked = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
 func (a *App) setHasStagedChanges(v bool) {
 	a.mu.Lock()
 	changed := a.state.HasStagedChanges != v
@@ -1114,7 +1124,6 @@ func (a *App) Run() error {
 	go a.FollowSystemTheme(ctx)
 	a.scheduleUpdateCheck()
 	go a.runWatchdog(ctx, a.watches())
-	go a.keepPopupsInCanvas(ctx, widget.PopupsHosted)
 	win := window.New(a.eng, a.root.Title)
 	a.applyWindowIcon(win)
 	if a.OnExit == nil {

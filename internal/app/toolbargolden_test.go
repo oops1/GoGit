@@ -32,6 +32,7 @@ func renderToolbarFrame(t *testing.T, theme string, captions bool) *image.RGBA {
 	a.setHasRemotes(true)
 	a.setHasStagedChanges(true)
 	a.setFilesSelected(true)
+	a.setFilePicked(true)
 
 	panel, ok := a.toolbarPanel()
 	if !ok {
