@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -102,6 +103,7 @@ type Git struct {
 type UI struct {
 	ShowToolbar           bool     `toml:"show_toolbar"`
 	ToolbarCaptions       bool     `toml:"toolbar_captions"`
+	ToolbarItems          []string `toml:"toolbar_items"`
 	ShowStatusBar         bool     `toml:"show_status_bar"`
 	FilesColumns          []string `toml:"files_columns"`
 	FilesVisibleColumns   []string `toml:"files_visible_columns"`
@@ -210,6 +212,7 @@ func (c *Config) Normalize() {
 	if c.UI.Layout != LayoutSidebar {
 		c.UI.Layout = LayoutDocks
 	}
+	c.UI.ToolbarItems = trimmedList(c.UI.ToolbarItems)
 	if c.Window.Width < MinWindowWidth {
 		c.Window.Width = MinWindowWidth
 	}
@@ -295,6 +298,22 @@ func (c *Config) mergeChanges(current []byte) error {
 	c.Security.VaultGeneration = max(c.Security.VaultGeneration, disk.Security.VaultGeneration)
 	c.extras = mergeExtras(c.extras, disk.extras)
 	return nil
+}
+
+func trimmedList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func mergeByID[T any](base, ours, theirs []T, id func(T) string) []T {

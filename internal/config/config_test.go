@@ -511,3 +511,39 @@ func TestTheLayoutIsDocksUnlessTheSideBarIsAskedFor(t *testing.T) {
 		}
 	}
 }
+
+func TestToolbarItemsSurviveASaveAndLoadRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.UI.ToolbarItems = []string{"remote.pull", "|", "local.commit", "<->", "branch.merge"}
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	back, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(back.UI.ToolbarItems, cfg.UI.ToolbarItems) {
+		t.Fatalf("toolbar items = %v, want %v", back.UI.ToolbarItems, cfg.UI.ToolbarItems)
+	}
+}
+
+func TestNormalizeDropsBlankToolbarItems(t *testing.T) {
+	cfg := Default()
+	cfg.UI.ToolbarItems = []string{" remote.pull ", "", "   "}
+	cfg.Normalize()
+	if !slices.Equal(cfg.UI.ToolbarItems, []string{"remote.pull"}) {
+		t.Fatalf("toolbar items = %v", cfg.UI.ToolbarItems)
+	}
+	cfg.UI.ToolbarItems = []string{" ", ""}
+	cfg.Normalize()
+	if cfg.UI.ToolbarItems != nil {
+		t.Fatalf("a list of blanks left %v behind", cfg.UI.ToolbarItems)
+	}
+}
+
+func TestDefaultLeavesTheToolbarItemsToTheApplication(t *testing.T) {
+	if got := Default().UI.ToolbarItems; got != nil {
+		t.Fatalf("toolbar items = %v, want none", got)
+	}
+}
