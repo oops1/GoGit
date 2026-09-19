@@ -46,13 +46,30 @@ func bisectFilesOf(o *oracle, dir string) string {
 	return strings.Join(names, " ")
 }
 
+const bisectLogSection = "== log\n"
+
 func bisectStateOf(o *oracle, dir string) string {
 	o.t.Helper()
 	branch, _ := o.attempt(dir, "symbolic-ref", "-q", "HEAD")
+	log, _ := o.attempt(dir, "bisect", "log")
 	return "== status\n" + o.run(dir, "status", "--porcelain=v2", "--branch") +
 		"== branch\n" + branch +
 		"== refs\n" + o.run(dir, "for-each-ref") +
-		"== files\n" + bisectFilesOf(o, dir)
+		"== files\n" + bisectFilesOf(o, dir) + "\n" +
+		bisectFileContentsOf(o, dir) +
+		bisectLogSection + log
+}
+
+func bisectFileContentsOf(o *oracle, dir string) string {
+	o.t.Helper()
+	var text strings.Builder
+	for _, name := range strings.Fields(bisectFilesOf(o, dir)) {
+		if name == "BISECT_LOG" {
+			continue
+		}
+		text.WriteString("== " + name + "\n" + o.read(dir, ".git/"+name))
+	}
+	return text.String()
 }
 
 func TestOracleBisectStartedByGitIsSeenAndEndedLikeGitBisectReset(t *testing.T) {
