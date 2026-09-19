@@ -203,6 +203,9 @@ type App struct {
 	submoduleGen atomic.Uint64
 	submoduleWG  sync.WaitGroup
 
+	branchDivergenceGen atomic.Uint64
+	branchDivergenceWG  sync.WaitGroup
+
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
 	commands         commandWatch
@@ -654,6 +657,7 @@ func (a *App) CloseRepository() {
 	a.updateStatusText()
 	a.statusBranchLabel.SetText("")
 	a.clearSubmodules()
+	a.clearBranchDivergence()
 	a.clearFlowLayout()
 	a.branchesView.Render(branches.Snapshot{})
 	a.journalView.Reset()
@@ -682,6 +686,7 @@ func (a *App) ActivateRepository(id string) {
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		a.statusBranchLabel.SetText("")
 		a.clearSubmodules()
+		a.clearBranchDivergence()
 		a.clearFlowLayout()
 		a.branchesView.Render(branches.Snapshot{})
 		a.journalView.Reset()
@@ -706,6 +711,7 @@ func (a *App) ActivateRepository(id string) {
 	a.enrichBranchSnapshot(opened, &snap)
 	a.branchesView.Render(snap)
 	a.refreshSubmodules(opened)
+	a.refreshBranchDivergence(opened, snap)
 	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(opened)
@@ -806,6 +812,7 @@ func (a *App) RefreshRepository() {
 	a.enrichBranchSnapshot(o, &snap)
 	a.branchesView.Render(snap)
 	a.refreshSubmodules(o)
+	a.refreshBranchDivergence(o, snap)
 	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
@@ -1059,6 +1066,7 @@ func (a *App) applyTheme() {
 	a.applyMergeBannerTheme(theme)
 	a.journalView.Restyle(theme)
 	a.detailsView.Restyle(theme)
+	a.branchesView.Restyle(theme)
 	a.restyleSidebar(theme)
 }
 
@@ -1144,6 +1152,7 @@ func (a *App) Close() {
 		a.closePostQueue()
 		a.branchWG.Wait()
 		a.submoduleWG.Wait()
+		a.branchDivergenceWG.Wait()
 		a.releaseDialogs(true)
 		a.stopWatcher()
 		a.stopJournal()
