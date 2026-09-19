@@ -235,6 +235,7 @@ func (a *App) openFinishFlow(kind string) {
 			a.eng.CloseModal(view.Dialog())
 			a.finishFlow(kind, target.Name, model)
 		}
+		view.OnSelectFromLog = func() { a.openFlowLog(view) }
 		view.OnCancel = func() { a.eng.CloseModal(view.Dialog()) }
 		a.showModal(view.Dialog(), view)
 	})
