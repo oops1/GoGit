@@ -65,7 +65,7 @@ func TestObsoleteLocalCountsTheCurrentBranchWhenHeadIsDetached(t *testing.T) {
 	}
 }
 
-func TestSelectObsoleteSelectsTheFirstOneInTheTree(t *testing.T) {
+func TestSelectObsoleteSelectsTheOnlyObsoleteBranch(t *testing.T) {
 	v, tw := bound(t)
 	v.Render(obsoleteFixture(t))
 	var picked refs.Name
@@ -80,6 +80,88 @@ func TestSelectObsoleteSelectsTheFirstOneInTheTree(t *testing.T) {
 	}
 	if item, _ := v.Item(refs.BranchName("gone")); tw.Tree.SelectedItem() != item {
 		t.Fatal("the obsolete branch must end up selected in the tree")
+	}
+}
+
+func manyObsoleteFixture(t *testing.T) Snapshot {
+	t.Helper()
+	return Snapshot{
+		Current: "main",
+		Local: []Branch{
+			{
+				Name:     refs.BranchName("main"),
+				Target:   oid(t, "11"),
+				Upstream: refs.RemoteBranchName("origin", "main"),
+			},
+			{
+				Name:     refs.BranchName("gone-a"),
+				Target:   oid(t, "22"),
+				Upstream: refs.RemoteBranchName("origin", "gone-a"),
+			},
+			{
+				Name:     refs.BranchName("gone-b"),
+				Target:   oid(t, "33"),
+				Upstream: refs.RemoteBranchName("origin", "gone-b"),
+			},
+		},
+		Remotes: []Remote{{
+			Name:     "origin",
+			Branches: []Branch{{Name: refs.RemoteBranchName("origin", "main"), Target: oid(t, "11")}},
+		}},
+	}
+}
+
+func TestSelectObsoleteSelectsEveryObsoleteBranchAtOnce(t *testing.T) {
+	v, tw := bound(t)
+	v.Render(manyObsoleteFixture(t))
+	var picked refs.Name
+	v.OnSelect = func(ref refs.Name) { picked = ref }
+
+	want := []refs.Name{refs.BranchName("gone-a"), refs.BranchName("gone-b")}
+	stale := v.SelectObsolete()
+	if !slices.Equal(stale, want) {
+		t.Fatalf("obsolete = %v, want %v", stale, want)
+	}
+
+	if got := len(tw.Tree.SelectedItems()); got != len(want) {
+		t.Fatalf("selected items = %d, want %d", got, len(want))
+	}
+	for _, ref := range want {
+		item, ok := v.Item(ref)
+		if !ok {
+			t.Fatalf("%s not tracked in the tree", ref)
+		}
+		if !tw.Tree.IsItemSelected(item) {
+			t.Fatalf("%s must end up selected in the tree", ref)
+		}
+	}
+	if picked != refs.BranchName("gone-b") {
+		t.Fatalf("current selection = %q, want the last obsolete branch", picked)
+	}
+}
+
+func TestSelectObsoleteMultiSelectionSurvivesARerender(t *testing.T) {
+	v, tw := bound(t)
+	snap := manyObsoleteFixture(t)
+	v.Render(snap)
+	v.SelectObsolete()
+
+	v.Render(snap)
+
+	if got := len(tw.Tree.SelectedItems()); got != 2 {
+		t.Fatalf("selected items after rerender = %d, want 2", got)
+	}
+	for _, ref := range []refs.Name{refs.BranchName("gone-a"), refs.BranchName("gone-b")} {
+		item, ok := v.Item(ref)
+		if !ok {
+			t.Fatalf("%s not tracked after rerender", ref)
+		}
+		if !tw.Tree.IsItemSelected(item) {
+			t.Fatalf("%s dropped out of the selection after rerender", ref)
+		}
+	}
+	if tw.Tree.SelectedItem() == nil {
+		t.Fatal("the rerender must keep a current item for the multi-selection")
 	}
 }
 

@@ -27,19 +27,25 @@ func ObsoleteLocal(s Snapshot) []refs.Name {
 }
 
 func (v *View) SelectObsolete() []refs.Name {
-	stale, item := v.firstObsolete()
-	if item != nil {
-		v.tree.Tree.SetSelectedItem(item)
+	stale, items := v.obsoleteItems()
+	if len(items) > 0 {
+		v.tree.Tree.SetSelectedItems(items)
 	}
 	return stale
 }
 
-func (v *View) firstObsolete() ([]refs.Name, *treeview.TreeViewItem) {
+func (v *View) obsoleteItems() ([]refs.Name, []*treeview.TreeViewItem) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	stale := ObsoleteLocal(v.last)
 	if v.tree == nil || len(stale) == 0 {
 		return stale, nil
 	}
-	return stale, v.itemByRef[stale[0]]
+	items := make([]*treeview.TreeViewItem, 0, len(stale))
+	for _, ref := range stale {
+		if item, ok := v.itemByRef[ref]; ok {
+			items = append(items, item)
+		}
+	}
+	return stale, items
 }
