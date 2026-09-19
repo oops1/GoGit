@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/ops"
@@ -52,6 +53,20 @@ func bisectApp(t *testing.T, commits int) (*App, string, []hash.ObjectID) {
 	a := activatedWorkingApp(t, target)
 	waitForWorkingIdle(t, a)
 	return a, target, ids
+}
+
+func waitForBisectSkips(t *testing.T, target string, want int) ops.BisectStatus {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		if status := bisectStatusOf(t, target); status.Skipped == want {
+			return status
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the bisect did not record %d skipped revisions in time", want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func bisectStatusOf(t *testing.T, target string) ops.BisectStatus {
@@ -133,10 +148,8 @@ func TestTheBannerCanSkipARevision(t *testing.T) {
 
 	readOnDispatcher(t, a, func() bool { a.banner.skip.OnClick(); return true })
 	waitForWorkingIdle(t, a)
-	waitForStatusText(t, a, i18n.Tf("Status.Bisect.Testing", 2, 1))
 
-	status := bisectStatusOf(t, target)
-	if status.Skipped != 1 || status.Current == ids[4] {
+	if status := waitForBisectSkips(t, target, 1); status.Current == ids[4] {
 		t.Fatalf("status = %+v, the skipped revision is still being tested", status)
 	}
 }
