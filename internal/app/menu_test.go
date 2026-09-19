@@ -144,8 +144,8 @@ func TestViewMenuTreeShapeMatchesSpec(t *testing.T) {
 }
 
 func TestWindowMenuTreeShapeMatchesSpec(t *testing.T) {
-	if len(windowMenuTree) != 4 {
-		t.Fatalf("window tree entries = %d, want 4", len(windowMenuTree))
+	if len(windowMenuTree) != 5 {
+		t.Fatalf("window tree entries = %d, want 5", len(windowMenuTree))
 	}
 	if windowMenuTree[0].Group == nil || windowMenuTree[0].Group.Key != "Menu.Window.Panes" {
 		t.Fatal("panes group out of place")
@@ -156,13 +156,16 @@ func TestWindowMenuTreeShapeMatchesSpec(t *testing.T) {
 	if windowMenuTree[1].Leaf == nil || windowMenuTree[1].Leaf.Command != CmdResetLayout {
 		t.Fatal("reset layout out of place")
 	}
-	if !windowMenuTree[2].Separator {
-		t.Fatal("expected separator at index 2")
+	if windowMenuTree[2].Leaf == nil || windowMenuTree[2].Leaf.Command != CmdConfigureToolbar {
+		t.Fatal("configure toolbar out of place")
 	}
-	if windowMenuTree[3].Group == nil || windowMenuTree[3].Group.Key != "Menu.Window.Layout" {
+	if !windowMenuTree[3].Separator {
+		t.Fatal("expected separator at index 3")
+	}
+	if windowMenuTree[4].Group == nil || windowMenuTree[4].Group.Key != "Menu.Window.Layout" {
 		t.Fatal("layout group out of place")
 	}
-	if len(windowMenuTree[3].Group.Items) != len(layoutModeOrder) {
+	if len(windowMenuTree[4].Group.Items) != len(layoutModeOrder) {
 		t.Fatalf("layout group must have %d items", len(layoutModeOrder))
 	}
 }
@@ -190,9 +193,9 @@ func TestViewAndWindowMenuItemsStartChecked(t *testing.T) {
 	if viewLeafItem(t, a, 1, enIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("english must start checked")
 	}
-	layout := windowMenuTree[3].Group
+	layout := windowMenuTree[4].Group
 	docksIdx := leafIndex(t, layout, cmdLayout(config.LayoutDocks))
-	if windowLeafItem(t, a, 3, docksIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if windowLeafItem(t, a, 4, docksIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("dock panes must start checked")
 	}
 }
@@ -224,28 +227,28 @@ func TestTogglingPaneFlipsCheckmark(t *testing.T) {
 
 func TestSelectingLayoutModeUpdatesConfigAndCheckmarks(t *testing.T) {
 	a := newTestApp(t)
-	layout := windowMenuTree[3].Group
+	layout := windowMenuTree[4].Group
 	docksIdx := leafIndex(t, layout, cmdLayout(config.LayoutDocks))
 	sidebarIdx := leafIndex(t, layout, cmdLayout(config.LayoutSidebar))
 
-	windowLeafItem(t, a, 3, sidebarIdx).OnClick()
+	windowLeafItem(t, a, 4, sidebarIdx).OnClick()
 
 	if a.Config().UI.Layout != config.LayoutSidebar {
 		t.Fatalf("layout = %q", a.Config().UI.Layout)
 	}
-	if windowLeafItem(t, a, 3, sidebarIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if windowLeafItem(t, a, 4, sidebarIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("the side bar should be checked")
 	}
-	if windowLeafItem(t, a, 3, docksIdx).Text[:len(checkedPrefix)] == checkedPrefix {
+	if windowLeafItem(t, a, 4, docksIdx).Text[:len(checkedPrefix)] == checkedPrefix {
 		t.Fatal("dock panes should no longer be checked")
 	}
 
-	windowLeafItem(t, a, 3, docksIdx).OnClick()
+	windowLeafItem(t, a, 4, docksIdx).OnClick()
 
 	if a.Config().UI.Layout != config.LayoutDocks {
 		t.Fatalf("layout back = %q", a.Config().UI.Layout)
 	}
-	if windowLeafItem(t, a, 3, docksIdx).Text[:len(checkedPrefix)] != checkedPrefix {
+	if windowLeafItem(t, a, 4, docksIdx).Text[:len(checkedPrefix)] != checkedPrefix {
 		t.Fatal("dock panes should be checked again")
 	}
 }

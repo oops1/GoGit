@@ -512,6 +512,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.registerStashHandlers()
 	a.registerIndexEditorHandlers()
 	a.registerCompareHandlers()
+	a.registerToolbarHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)

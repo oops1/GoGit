@@ -65,6 +65,7 @@ var commandIcons = map[CommandID]string{
 	CmdSubmoduleUnregister: "close_repo",
 	CmdSubmoduleReset:      "reset",
 	CmdResetLayout:         "layout",
+	CmdConfigureToolbar:    "toolbar",
 	CmdRefresh:             "refresh",
 	CmdCheckUpdates:        "update",
 	CmdAbout:               "about",

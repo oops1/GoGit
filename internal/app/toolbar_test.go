@@ -289,6 +289,55 @@ func TestTheToolbarSkipsItemsItDoesNotKnow(t *testing.T) {
 	}
 }
 
+func TestASpacerDrawsNothingWhereThereIsNothingToDraw(t *testing.T) {
+	(&toolbarStretch{}).Draw(nil)
+	(&toolbarSeparator{}).Draw(nil)
+	invisible := &toolbarSeparator{}
+	invisible.SetBounds(rectOfSize(0, 0, 9, 40))
+	invisible.Draw(nil)
+}
+
+func TestTheSeparatorTakesItsColourFromTheTheme(t *testing.T) {
+	separator := &toolbarSeparator{}
+	for _, theme := range []*widget.Theme{widget.Win11LightTheme(), widget.Win11DarkTheme()} {
+		separator.ApplyTheme(theme)
+		if separator.Color != theme.Border {
+			t.Fatalf("colour = %v, want %v", separator.Color, theme.Border)
+		}
+	}
+}
+
+func TestClickingASplitButtonAndItsMenuRunsTheCommand(t *testing.T) {
+	a := newTestApp(t)
+	called := 0
+	a.SetHandler(CmdPull, func() { called++ })
+	a.SetActiveRepository("r", false)
+	a.setHasRemotes(true)
+
+	item := toolbarItemNamed(t, a, "btnPull")
+	runOnDispatcher(t, a, item.button().OnClick)
+	items := readOnDispatcher(t, a, func() []widget.MenuItem {
+		item.menu.OnOpening()
+		return item.menu.Items
+	})
+	pull, found := findMenuItem(items, i18n.T("Menu.Remote.Pull"))
+	if !found {
+		t.Fatalf("the pull menu = %v", items)
+	}
+	runOnDispatcher(t, a, pull.OnClick)
+	if called != 2 {
+		t.Fatalf("the command ran %d times, want 2", called)
+	}
+
+	commits := 0
+	a.SetHandler(CmdCommit, func() { commits++ })
+	a.setHasStagedChanges(true)
+	runOnDispatcher(t, a, toolbarButtonNamed(t, a, "btnCommit").OnClick)
+	if commits != 1 {
+		t.Fatalf("the plain button ran the command %d times, want 1", commits)
+	}
+}
+
 func TestTheToolbarSurvivesAWindowWithoutOne(t *testing.T) {
 	a := newTestApp(t)
 	delete(a.named, "toolbar")

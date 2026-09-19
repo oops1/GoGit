@@ -77,6 +77,7 @@ const (
 	CmdRevealRepository     CommandID = "tools.reveal"
 	CmdOpenTerminal         CommandID = "tools.terminal"
 	CmdResetLayout          CommandID = "window.reset-layout"
+	CmdConfigureToolbar     CommandID = "window.configure-toolbar"
 	CmdRefresh              CommandID = "view.refresh"
 	CmdCheckUpdates         CommandID = "help.check-updates"
 	CmdAbout                CommandID = "help.about"

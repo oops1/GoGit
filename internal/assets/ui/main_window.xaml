@@ -136,6 +136,7 @@
                     <MenuItem Header="{Loc Pane.Journal}"/>
                 </MenuItem>
                 <MenuItem Header="{Loc Menu.Window.ResetLayout}"/>
+                <MenuItem Header="{Loc Menu.Window.ConfigureToolbar}"/>
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Window.Layout}">
                     <MenuItem Header="{Loc Layout.Docks}"/>

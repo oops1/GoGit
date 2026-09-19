@@ -204,6 +204,7 @@ func buildWindowMenuTree() []menuTreeEntry {
 	return []menuTreeEntry{
 		{Group: &panes},
 		menuLeaf("Menu.Window.ResetLayout", CmdResetLayout),
+		menuLeaf("Menu.Window.ConfigureToolbar", CmdConfigureToolbar),
 		menuSeparatorEntry,
 		{Group: &layout},
 	}
