@@ -198,15 +198,13 @@ func (s State) flowReady() bool {
 }
 
 var commandsWaitingForTheirCore = map[CommandID]bool{
-	CmdCopy:        true,
-	CmdSelectAll:   true,
-	CmdIgnore:      true,
-	CmdRemove:      true,
-	CmdLog:         true,
-	CmdBlame:       true,
-	CmdInvestigate: true,
-	CmdGc:          true,
-	CmdFsck:        true,
+	CmdCopy:      true,
+	CmdSelectAll: true,
+	CmdIgnore:    true,
+	CmdRemove:    true,
+	CmdLog:       true,
+	CmdGc:        true,
+	CmdFsck:      true,
 }
 
 func (s State) Enabled(id CommandID) bool {
@@ -221,7 +219,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.HasRemotes
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
-	case CmdStage, CmdUnstage, CmdDiscard, CmdIndexEditor:
+	case CmdStage, CmdUnstage, CmdDiscard, CmdIndexEditor, CmdBlame, CmdInvestigate:
 		return s.ActiveRepository != "" && s.FilesSelected
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)

@@ -492,6 +492,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdCompareFiles] = a.openCompare
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdBlame] = a.blameSelectedFile
+	a.handlers[CmdInvestigate] = a.investigateSelectedFile
 	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
 	a.handlers[CmdSettings] = a.openSettings
 	a.handlers[CmdAbout] = a.openAbout

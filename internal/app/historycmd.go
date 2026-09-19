@@ -11,6 +11,7 @@ import (
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/blameview"
+	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/filehistory"
 )
 
@@ -214,4 +215,24 @@ func (a *App) revealCommit(id hash.ObjectID) {
 	a.selectJournalCommit(id)
 	a.showCommitDetails(id)
 	a.startDiff(id)
+}
+
+func (a *App) selectedFilePath() string {
+	row, ok := a.filesGrid.Data().Grid.SelectedItem().(changes.Row)
+	if !ok {
+		return ""
+	}
+	return row.RelPath
+}
+
+func (a *App) blameSelectedFile() {
+	if path := a.selectedFilePath(); path != "" {
+		a.openBlame(a.filesRevision(), path)
+	}
+}
+
+func (a *App) investigateSelectedFile() {
+	if path := a.selectedFilePath(); path != "" {
+		a.investigateFile(path)
+	}
 }
