@@ -109,3 +109,7 @@ func insideRoundedSquare(x, y, size, radius int) bool {
 	dx, dy := x-cx, y-cy
 	return dx*dx+dy*dy <= radius*radius
 }
+
+func AuthorBadgeTextColor(author string) color.RGBA {
+	return badgeTextColor(authorColor(author))
+}

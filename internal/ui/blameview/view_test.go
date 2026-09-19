@@ -191,3 +191,54 @@ func TestRestyleAcceptsBothThemes(t *testing.T) {
 		v.Restyle(theme)
 	}
 }
+
+func TestTheRowsAreTightAndUnstriped(t *testing.T) {
+	v := newTestView(t)
+
+	if v.table.Grid.ZebraStripes {
+		t.Fatal("the blame rows must not alternate their background")
+	}
+	if v.table.Grid.RowHeight != rowHeight || v.table.Grid.FontSize != fontSize {
+		t.Fatalf("row height = %d, font = %v", v.table.Grid.RowHeight, v.table.Grid.FontSize)
+	}
+	cols := v.table.Grid.Columns()
+	if len(cols) != 5 {
+		t.Fatalf("columns = %d", len(cols))
+	}
+	text := cols[4].Width()
+	if text != datagrid.StarWidth(1) {
+		t.Fatalf("the text column takes %v, want the rest of the row", text)
+	}
+	for at, col := range cols[:4] {
+		if got := col.Width(); got.Value > commitWidth+whenWidth {
+			t.Fatalf("column %d takes %v, want it narrow", at, got)
+		}
+	}
+}
+
+func TestActivatingARowAsksForItsCommit(t *testing.T) {
+	v := newTestView(t)
+	v.SetLines("f", twoLines())
+	var asked hash.ObjectID
+	v.OnCommit = func(got hash.ObjectID) { asked = got }
+
+	v.table.Grid.OnRowActivated(1, nil)
+
+	if asked != id("two") {
+		t.Fatalf("asked for %s, want the commit of the activated row", asked)
+	}
+}
+
+func TestActivatingARowWithoutAHandlerOrOutsideTheListIsQuiet(t *testing.T) {
+	v := newTestView(t)
+	v.SetLines("f", twoLines())
+
+	v.table.Grid.OnRowActivated(0, nil)
+
+	asked := false
+	v.OnCommit = func(hash.ObjectID) { asked = true }
+	v.table.Grid.OnRowActivated(7, nil)
+	if asked {
+		t.Fatal("a row outside the list must not name a commit")
+	}
+}
