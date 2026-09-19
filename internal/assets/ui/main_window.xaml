@@ -127,6 +127,8 @@
                 <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Context.Reveal}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Context.Terminal}" IsEnabled="False"/>
+                <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Tools.Console}" IsEnabled="False"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Window}">
                 <MenuItem Header="{Loc Menu.Window.Panes}">
@@ -142,9 +144,6 @@
                     <MenuItem Header="{Loc Layout.Docks}"/>
                     <MenuItem Header="{Loc Layout.Sidebar}"/>
                 </MenuItem>
-            </MenuItem>
-            <MenuItem Header="{Loc Menu.Tools}">
-                <MenuItem Header="{Loc Menu.Tools.Console}" IsEnabled="False"/>
             </MenuItem>
             <MenuItem Header="{Loc Menu.Help}">
                 <MenuItem Header="{Loc Menu.Help.CheckUpdates}"/>
