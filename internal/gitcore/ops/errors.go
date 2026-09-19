@@ -44,6 +44,10 @@ var (
 	ErrNotBisecting       = errors.New("ops: no bisect is in progress")
 	ErrBranchBisected     = errors.New("ops: branch is being bisected")
 
+	ErrBisectGoodWithoutBad  = errors.New("ops: a bisect that names good revisions must name the bad one too")
+	ErrBisectMergeBaseBad    = errors.New("ops: the merge base is bad, so the change was undone between it and the good revisions")
+	ErrBisectGoodNotAncestor = errors.New("ops: some good revisions are not ancestors of the bad revision")
+
 	ErrStashStagedUntracked = errors.New("ops: a stash of staged changes cannot include untracked files")
 	ErrNoStagedChanges      = errors.New("ops: there are no staged changes to stash")
 	ErrStashWorktreeKept    = errors.New("ops: the stash was saved but its changes could not be removed from the working tree")
