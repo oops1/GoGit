@@ -297,6 +297,30 @@ func TestASpacerDrawsNothingWhereThereIsNothingToDraw(t *testing.T) {
 	invisible.Draw(nil)
 }
 
+func TestAToolbarBuiltUnderATestedThemeWearsIt(t *testing.T) {
+	for _, theme := range []string{config.ThemeLight, config.ThemeDark} {
+		cfg := config.Default()
+		cfg.Theme = theme
+		a := newTestAppWithConfig(t, cfg)
+		want := a.theme()
+		for _, item := range a.toolbarButtons {
+			if got := item.button().Background; got != want.BtnBG {
+				t.Fatalf("theme %q: button %q background = %v, want %v", theme, item.entry.Name, got, want.BtnBG)
+			}
+		}
+		a.applyToolbarConfiguration(toolbarConfigurationOf(defaultToolbarItems(), true))
+		for _, item := range a.toolbarButtons {
+			if got := item.button().Background; got != want.BtnBG {
+				t.Fatalf("theme %q: rebuilt button %q background = %v, want %v", theme, item.entry.Name, got, want.BtnBG)
+			}
+		}
+	}
+}
+
+func toolbarConfigurationOf(items []string, captions bool) toolbar.Result {
+	return toolbar.Result{Items: items, Captions: captions}
+}
+
 func TestTheSeparatorTakesItsColourFromTheTheme(t *testing.T) {
 	separator := &toolbarSeparator{}
 	for _, theme := range []*widget.Theme{widget.Win11LightTheme(), widget.Win11DarkTheme()} {

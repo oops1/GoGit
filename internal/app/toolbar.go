@@ -117,12 +117,12 @@ func (a *App) buildToolbar() {
 	panel.Spacing = 0
 	a.toolbarButtons = nil
 	for _, id := range a.configuredToolbarItems() {
-		switch {
-		case id == toolbar.SeparatorID:
+		switch id {
+		case toolbar.SeparatorID:
 			separator := &toolbarSeparator{Color: widget.CurrentTheme().Border}
 			setToolbarMargin(separator)
 			panel.AddChild(separator)
-		case id == toolbar.StretchID:
+		case toolbar.StretchID:
 			stretch := &toolbarStretch{panel: panel}
 			setToolbarMargin(stretch)
 			panel.AddChild(stretch)
@@ -134,6 +134,7 @@ func (a *App) buildToolbar() {
 			a.addToolbarButton(panel, entry)
 		}
 	}
+	widget.ApplyThemeTree(panel, a.theme())
 	a.applyToolbarIcons(a.theme())
 	a.refreshToolbarButtons(a.State())
 }
