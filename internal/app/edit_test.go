@@ -41,6 +41,9 @@ func setTestUserIdentity(t *testing.T, target string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if bytes.Contains(data, []byte("[user]")) {
+		return
+	}
 	data = append(data, []byte("[user]\n\tname = Go Git\n\temail = gogit@example.com\n")...)
 	if err := r.CommonRoot().WriteFile("config", data, 0o666); err != nil {
 		t.Fatal(err)
