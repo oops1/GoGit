@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/oops1/headless-gui/v3 v3.21.0
+	github.com/oops1/headless-gui/v3 v3.22.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.41.0
