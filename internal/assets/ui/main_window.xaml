@@ -143,6 +143,9 @@
                     <MenuItem Header="{Loc Layout.Sidebar}"/>
                 </MenuItem>
             </MenuItem>
+            <MenuItem Header="{Loc Menu.Tools}">
+                <MenuItem Header="{Loc Menu.Tools.Console}" IsEnabled="False"/>
+            </MenuItem>
             <MenuItem Header="{Loc Menu.Help}">
                 <MenuItem Header="{Loc Menu.Help.CheckUpdates}"/>
                 <MenuItem Separator="True"/>

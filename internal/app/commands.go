@@ -78,6 +78,7 @@ const (
 	CmdOpenTerminal         CommandID = "tools.terminal"
 	CmdResetLayout          CommandID = "window.reset-layout"
 	CmdConfigureToolbar     CommandID = "window.configure-toolbar"
+	CmdConsole              CommandID = "tools.console"
 	CmdRefresh              CommandID = "view.refresh"
 	CmdCheckUpdates         CommandID = "help.check-updates"
 	CmdAbout                CommandID = "help.about"
@@ -243,7 +244,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.flowReady() && s.FlowPending.Name == "" && s.FlowCurrent.Kind == ops.FlowKindFeature
 	case CmdFlowFinishFeature, CmdFlowFinishRelease, CmdFlowFinishHotfix:
 		return s.flowReady() && s.flowFinishTarget().Kind == flowFinishCommands[id]
-	case CmdReflog, CmdCompareRefs:
+	case CmdReflog, CmdCompareRefs, CmdConsole:
 		return s.ActiveRepository != ""
 	case CmdAbortMerge, CmdContinue:
 		return s.ActiveRepository != "" && s.Merging

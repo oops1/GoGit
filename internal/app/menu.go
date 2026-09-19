@@ -184,6 +184,8 @@ func buildToolsMenuTree() []menuTreeEntry {
 		menuSeparatorEntry,
 		menuLeaf("Menu.Context.Reveal", CmdRevealRepository),
 		menuLeaf("Menu.Context.Terminal", CmdOpenTerminal),
+		menuSeparatorEntry,
+		menuLeaf("Menu.Tools.Console", CmdConsole),
 	}
 }
 
@@ -301,6 +303,9 @@ func (a *App) wireHotkeys() {
 	a.root.InputBindings = append(a.root.InputBindings, widget.InputBinding{
 		Key:     widget.KeyF5,
 		Command: widget.NewRelayCommand(func() { a.Dispatch(CmdRefresh) }),
+	}, widget.InputBinding{
+		Key:     widget.KeyF9,
+		Command: widget.NewRelayCommand(func() { a.Dispatch(CmdConsole) }),
 	}, widget.InputBinding{
 		Key:     widget.KeyEscape,
 		Command: widget.NewRelayCommand(a.leaveCommitView),
