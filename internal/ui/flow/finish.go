@@ -45,6 +45,7 @@ type FinishView struct {
 	textLabel    *widget.Label
 	messageLabel *widget.Label
 	messageBox   *widget.TextBox
+	logBtn       *widget.Button
 	deleteBox    *widget.CheckBox
 	pushBox      *widget.CheckBox
 	hintLabel    *widget.Label
@@ -65,8 +66,9 @@ type FinishView struct {
 	known   FinishKnown
 	current Hint
 
-	OnOK     func(FinishModel)
-	OnCancel func()
+	OnOK            func(FinishModel)
+	OnCancel        func()
+	OnSelectFromLog func()
 }
 
 func NewFinishView(kind string) (*FinishView, error) {
@@ -81,6 +83,7 @@ func NewFinishView(kind string) (*FinishView, error) {
 		bindWidget(named, "text", &v.textLabel),
 		bindWidget(named, "messageLabel", &v.messageLabel),
 		bindWidget(named, "message", &v.messageBox),
+		bindWidget(named, "selectFromLog", &v.logBtn),
 		bindWidget(named, "deleteBranch", &v.deleteBox),
 		bindWidget(named, "push", &v.pushBox),
 		bindWidget(named, "hint", &v.hintLabel),
@@ -122,6 +125,7 @@ func NewFinishView(kind string) (*FinishView, error) {
 	}
 	v.okBtn.OnClick = v.confirm
 	v.cancelBtn.OnClick = v.cancel
+	v.logBtn.OnClick = v.selectFromLog
 	v.dlg.CancelAction = v.cancel
 	return v, nil
 }
@@ -131,7 +135,7 @@ func (v *FinishView) Dialog() *widget.Dialog { return v.dlg }
 func (v *FinishView) Restyle(t *widget.Theme) {
 	p := style.Of(t)
 	p.Areas(v.messageBox)
-	p.Quiet(v.cancelBtn)
+	p.Quiet(v.cancelBtn, v.logBtn)
 	p.Primary(v.okBtn)
 	p.Body(v.headerLabel, v.textLabel, v.messageLabel)
 	p.Hints(v.hintLabel)
@@ -147,6 +151,7 @@ func (v *FinishView) SetKnown(known FinishKnown) {
 	editable := !known.Resuming
 	v.messageBox.SetText(ops.DefaultFlowMessage(known.Name))
 	v.messageBox.SetEnabled(editable)
+	v.logBtn.SetEnabled(editable)
 	v.deleteBox.SetEnabled(editable)
 	v.pushBox.SetEnabled(known.CanPush && editable)
 	if v.tagged() {
@@ -218,6 +223,20 @@ func (v *FinishView) refresh() {
 	}
 	v.hintLabel.SetText(hintText(v.current))
 	v.okBtn.SetEnabled(v.current.OK)
+}
+
+func (v *FinishView) SetMessage(message string) {
+	if !v.logBtn.IsEnabled() {
+		return
+	}
+	v.messageBox.SetText(message)
+	v.refresh()
+}
+
+func (v *FinishView) selectFromLog() {
+	if v.logBtn.IsEnabled() && v.OnSelectFromLog != nil {
+		v.OnSelectFromLog()
+	}
 }
 
 func (v *FinishView) confirm() {

@@ -179,6 +179,7 @@ func TestViewsPropagateTheDialogLoadError(t *testing.T) {
 		"config":     func() error { _, err := NewConfigView(); return err },
 		"configured": func() error { _, err := NewConfiguredView(); return err },
 		"integrate":  func() error { _, err := NewIntegrateView(); return err },
+		"log":        func() error { _, err := NewLogView(); return err },
 	} {
 		if err := open(); !errors.Is(err, boom) {
 			t.Fatalf("%s: %v", name, err)
@@ -198,7 +199,8 @@ func finishWidgets(kind string) func() map[string]widget.Widget {
 	return func() map[string]widget.Widget {
 		named := map[string]widget.Widget{
 			"header": label(), "text": label(), "messageLabel": label(), "message": widget.NewTextBox(""),
-			"deleteBranch": widget.NewCheckBox(""), "push": widget.NewCheckBox(""), "hint": label(),
+			"selectFromLog": widget.NewButton(""),
+			"deleteBranch":  widget.NewCheckBox(""), "push": widget.NewCheckBox(""), "hint": label(),
 			"ok": widget.NewButton(""), "cancel": widget.NewButton(""),
 		}
 		if kind == ops.FlowKindFeature {
@@ -260,6 +262,7 @@ func TestViewsReportEveryMissingWidget(t *testing.T) {
 		"config":         {configWidgets, func() error { _, err := NewConfigView(); return err }},
 		"configured":     {configuredWidgets, func() error { _, err := NewConfiguredView(); return err }},
 		"integrate":      {integrateWidgets, func() error { _, err := NewIntegrateView(); return err }},
+		"log":            {logWidgets, func() error { _, err := NewLogView(); return err }},
 	} {
 		for name := range c.widgets() {
 			named := c.widgets()

@@ -51,6 +51,13 @@ func previewFlowDialogs(t *testing.T) map[string]func() (previewView, error) {
 			return v, err
 		},
 		"configured": func() (previewView, error) { return NewConfiguredView() },
+		"select-log": func() (previewView, error) {
+			v, err := NewLogView()
+			if err == nil {
+				v.SetCommits(twoCommits())
+			}
+			return v, err
+		},
 		"integrate": func() (previewView, error) {
 			v, err := NewIntegrateView()
 			if err == nil {
