@@ -16,7 +16,7 @@ import (
 )
 
 func testSignature() object.Signature {
-	return object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(1700000000, 0)}
+	return object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(1700000000, 0).UTC()}
 }
 
 type testRepo struct {
@@ -179,7 +179,7 @@ func (r *testRepo) commitAll(message string) hash.ObjectID {
 	}
 	r.saveIndex(idx)
 	r.clock += 60
-	sig := object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(r.clock, 0)}
+	sig := object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(r.clock, 0).UTC()}
 	commit := &object.Commit{Tree: treeID, Author: sig, Committer: sig, Message: message + "\n"}
 	store := r.refs()
 	if parent := r.headCommit(store); !parent.IsZero() {

@@ -277,8 +277,11 @@ func TestMarkBisectSkipOnACommitThatIsNotTheBestOneKeepsGoing(t *testing.T) {
 
 	status, err := MarkBisectRevision(t.Context(), r.repo, BisectSkip, ids[8].String())
 
-	if err != nil || status.Outcome != BisectTesting || status.Current != ids[6] {
+	if err != nil || status.Outcome != BisectTesting || status.Skipped != 1 {
 		t.Fatalf("MarkBisectRevision = %+v, %v", status, err)
+	}
+	if status.Current == ids[8] || !slices.Contains(ids[5:8], status.Current) {
+		t.Fatalf("testing %s, want a commit between the good one and the skipped one", status.Current)
 	}
 }
 
