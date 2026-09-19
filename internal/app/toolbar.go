@@ -135,7 +135,7 @@ func (a *App) buildToolbar() {
 		}
 	}
 	widget.ApplyThemeTree(panel, a.theme())
-	a.applyToolbarIcons(a.theme())
+	a.applyToolbarIcons()
 	a.refreshToolbarButtons(a.State())
 }
 
@@ -172,7 +172,7 @@ func (a *App) addToolbarButton(panel *widget.StackPanel, entry toolbarEntry) {
 	panel.AddChild(item.widget())
 }
 
-func (a *App) applyToolbarIcons(*widget.Theme) {
+func (a *App) applyToolbarIcons() {
 	captions := a.cfg.UI.ToolbarCaptions
 	for _, item := range a.toolbarButtons {
 		styleToolbarButton(item.button(), item.entry.Icon, captions, a.toolbarButtonWidth(item), a.toolbarButtonHeight())
@@ -245,7 +245,7 @@ func (a *App) retranslateToolbar() {
 		button.SetText(i18n.T(item.entry.LabelKey))
 		button.SetToolTip(i18n.T(item.entry.TipKey))
 	}
-	a.applyToolbarIcons(nil)
+	a.applyToolbarIcons()
 }
 
 func (a *App) refreshToolbarButtons(state State) {

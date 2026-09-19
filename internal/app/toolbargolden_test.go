@@ -47,7 +47,7 @@ func renderToolbarFrame(t *testing.T, theme string, captions bool) *image.RGBA {
 	t.Cleanup(canvas.Stop)
 	canvas.SetTheme(a.theme())
 	widget.ApplyThemeTree(panel, a.theme())
-	a.applyToolbarIcons(a.theme())
+	a.applyToolbarIcons()
 	panel.SetBounds(rectOfSize(0, 0, config.MinWindowWidth, height))
 	canvas.SetRoot(panel)
 	frame := canvas.RenderOnce()

@@ -48,7 +48,7 @@ func TestToolbarButtonsKeepTheirOwnColoursInBothThemes(t *testing.T) {
 func TestToolbarDropsCaptionsWhenTheSettingIsOff(t *testing.T) {
 	a := newTestApp(t)
 	a.cfg.UI.ToolbarCaptions = false
-	a.applyToolbarIcons(a.theme())
+	a.applyToolbarIcons()
 
 	btn := toolbarButtonNamed(t, a, "btnPull")
 	if btn.IconPos != widget.IconOnly {

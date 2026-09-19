@@ -1029,7 +1029,7 @@ func (a *App) applyTheme() {
 	theme := a.theme()
 	a.eng.SetTheme(theme)
 	a.applyWindowFrame()
-	a.applyToolbarIcons(theme)
+	a.applyToolbarIcons()
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
 	a.applyWorkingCopyButtonVisuals(theme)
