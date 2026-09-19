@@ -43,36 +43,6 @@ func (s *toolbarSeparator) ApplyTheme(t *widget.Theme) { s.Color = t.Border }
 
 func (*toolbarSeparator) DesiredSize() (int, int) { return toolbarSeparatorWidth, 0 }
 
-type toolbarStretch struct {
-	widget.Base
-	panel *widget.StackPanel
-}
-
-func (*toolbarStretch) Draw(widget.DrawContext) {}
-
-func (s *toolbarStretch) DesiredSize() (int, int) { return s.share(), 0 }
-
-func (s *toolbarStretch) share() int {
-	if s.panel == nil {
-		return 1
-	}
-	fixed, stretches := 0, 0
-	for _, child := range s.panel.Children() {
-		fixed += toolbarItemMargin * 2
-		if _, ok := child.(*toolbarStretch); ok {
-			stretches++
-			continue
-		}
-		width, _ := toolbarItemSize(child)
-		fixed += width
-	}
-	if stretches == 0 {
-		return 1
-	}
-	free := s.panel.Bounds().Dx() - s.panel.Padding*2 - fixed
-	return max(free/stretches, 1)
-}
-
 func toolbarItemSize(w widget.Widget) (int, int) {
 	if sizer, ok := w.(widget.DesiredSizer); ok {
 		if width, height := sizer.DesiredSize(); width > 0 {
@@ -123,9 +93,8 @@ func (a *App) buildToolbar() {
 			setToolbarMargin(separator)
 			panel.AddChild(separator)
 		case toolbar.StretchID:
-			stretch := &toolbarStretch{panel: panel}
+			stretch := panel.AddStretch()
 			setToolbarMargin(stretch)
-			panel.AddChild(stretch)
 		default:
 			entry, found := toolbarEntryByID(id)
 			if !found {

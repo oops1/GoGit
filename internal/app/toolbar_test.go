@@ -36,7 +36,7 @@ func toolbarItemIDs(a *App) []string {
 		switch child.(type) {
 		case *toolbarSeparator:
 			ids = append(ids, toolbar.SeparatorID)
-		case *toolbarStretch:
+		case *widget.Stretch:
 			ids = append(ids, toolbar.StretchID)
 		default:
 			for _, item := range a.toolbarButtons {
@@ -240,11 +240,11 @@ func TestTheStretchesShareWhateverTheButtonsLeaveOver(t *testing.T) {
 		t.Fatal("the toolbar panel is missing")
 	}
 	panel.SetBounds(rectOfSize(0, 0, 2000, 60))
-	stretches := []*toolbarStretch{}
+	stretches := []*widget.Stretch{}
 	fixed := panel.Padding * 2
 	for _, child := range panel.Children() {
 		fixed += toolbarItemMargin * 2
-		if stretch, is := child.(*toolbarStretch); is {
+		if stretch, is := child.(*widget.Stretch); is {
 			stretches = append(stretches, stretch)
 			continue
 		}
@@ -254,29 +254,16 @@ func TestTheStretchesShareWhateverTheButtonsLeaveOver(t *testing.T) {
 	if len(stretches) != 2 {
 		t.Fatalf("stretches = %d, want 2", len(stretches))
 	}
-	want := (2000 - fixed) / 2
+	free := 2000 - fixed
+	first := free / 2
+	want := []int{first, free - first}
 	for i, stretch := range stretches {
-		if got, _ := stretch.DesiredSize(); got != want {
-			t.Fatalf("stretch %d takes %d points, want %d", i, got, want)
-		}
-		if stretch.Bounds().Dx() != want {
-			t.Fatalf("stretch %d is laid out %d wide, want %d", i, stretch.Bounds().Dx(), want)
+		if got := stretch.Bounds().Dx(); got != want[i] {
+			t.Fatalf("stretch %d is laid out %d wide, want %d", i, got, want[i])
 		}
 	}
 	if last := panel.Children()[len(panel.Children())-1]; last.Bounds().Max.X > 2000 {
 		t.Fatalf("the row ends at %d, past the panel", last.Bounds().Max.X)
-	}
-}
-
-func TestAStretchWithoutAPanelAsksForNothing(t *testing.T) {
-	lonely := &toolbarStretch{}
-	if got, _ := lonely.DesiredSize(); got != 1 {
-		t.Fatalf("width = %d, want 1", got)
-	}
-	panel := widget.NewStackPanel(widget.OrientationHorizontal)
-	orphan := &toolbarStretch{panel: panel}
-	if got, _ := orphan.DesiredSize(); got != 1 {
-		t.Fatalf("width without stretches in the panel = %d, want 1", got)
 	}
 }
 
@@ -290,7 +277,7 @@ func TestTheToolbarSkipsItemsItDoesNotKnow(t *testing.T) {
 }
 
 func TestASpacerDrawsNothingWhereThereIsNothingToDraw(t *testing.T) {
-	(&toolbarStretch{}).Draw(nil)
+	(&widget.Stretch{}).Draw(nil)
 	(&toolbarSeparator{}).Draw(nil)
 	invisible := &toolbarSeparator{}
 	invisible.SetBounds(rectOfSize(0, 0, 9, 40))
@@ -382,7 +369,7 @@ func fixedToolbarWidth(a *App) int {
 	total := panel.Padding * 2
 	for _, child := range panel.Children() {
 		total += toolbarItemMargin * 2
-		if _, stretch := child.(*toolbarStretch); stretch {
+		if _, stretch := child.(*widget.Stretch); stretch {
 			continue
 		}
 		width, _ := toolbarItemSize(child)
