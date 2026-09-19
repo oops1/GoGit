@@ -3,6 +3,7 @@ package branches
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/treeview"
@@ -31,6 +32,7 @@ type pathEntry struct {
 	label   string
 	current bool
 	icon    string
+	when    time.Time
 }
 
 type View struct {
@@ -45,6 +47,9 @@ type View struct {
 
 	mu              sync.Mutex
 	last            Snapshot
+	options         Options
+	flow            ops.FlowConfig
+	flowConfigured  bool
 	submodules      []ops.Submodule
 	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
 
@@ -59,6 +64,7 @@ func NewView() *View {
 		keyByItem:       map[*treeview.TreeViewItem]string{},
 		expanded:        map[string]bool{},
 		submoduleByItem: map[*treeview.TreeViewItem]ops.Submodule{},
+		options:         DefaultOptions(),
 	}
 }
 
@@ -130,6 +136,9 @@ func (v *View) render(s Snapshot) {
 	v.keyByItem = map[*treeview.TreeViewItem]string{}
 	v.submoduleByItem = map[*treeview.TreeViewItem]ops.Submodule{}
 
+	for _, section := range v.buildFlowSections(s) {
+		v.tree.AddRoot(section)
+	}
 	v.tree.AddRoot(v.buildLocal(s))
 	v.tree.AddRoot(v.buildRemotes(s))
 	v.tree.AddRoot(v.buildTags(s))
@@ -217,6 +226,9 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 	entries := make([]pathEntry, 0, len(s.Local))
 	for _, b := range s.Local {
 		short := b.Name.Short()
+		if _, inFlow := v.flowKindOf(short); inFlow {
+			continue
+		}
 		current := !s.Detached && short == s.Current
 		icon := "branch"
 		if current {
@@ -227,6 +239,7 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 			ref:     b.Name,
 			current: current,
 			icon:    icon,
+			when:    b.When,
 		})
 	}
 	v.buildPathTree(root, localGroupKey, entries)
@@ -246,11 +259,14 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 				continue
 			}
 			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
+			if v.flowHoldsRemote(relative) {
+				continue
+			}
 			icon := "branch_remote"
 			if remote.Head != "" && b.Name == remote.Head {
 				icon = "branch_head"
 			}
-			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon})
+			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon, when: b.When})
 		}
 		v.buildPathTree(node, key, entries)
 	}
@@ -266,7 +282,7 @@ func (v *View) buildTags(s Snapshot) *treeview.TreeViewItem {
 		short := t.Name.Short()
 		byName[short] = t.Name
 		if strings.Contains(short, "/") {
-			nested = append(nested, pathEntry{path: short, ref: t.Name, icon: "tag"})
+			nested = append(nested, pathEntry{path: short, ref: t.Name, icon: "tag", when: t.When})
 			continue
 		}
 		names = append(names, short)
@@ -303,25 +319,20 @@ func (v *View) buildStash(s Snapshot) *treeview.TreeViewItem {
 }
 
 func (v *View) buildPathTree(root *treeview.TreeViewItem, rootKey string, entries []pathEntry) {
-	nodes := map[string]*treeview.TreeViewItem{rootKey: root}
-	for _, e := range entries {
-		segments := strings.Split(e.path, "/")
-		key := rootKey
-		parent := root
-		for i, segment := range segments {
-			key = key + "/" + segment
-			if i == len(segments)-1 {
-				parent.AddChild(v.leafItem(e, segment))
-				continue
-			}
-			node, ok := nodes[key]
-			if !ok {
-				node = v.newGroupItem(key, segment)
-				parent.AddChild(node)
-				nodes[key] = node
-			}
-			parent = node
+	sortRefEntries(entries, v.options.Sort)
+	v.addRefNodes(root, rootKey, groupRefEntries(entries, v.options.Grouping))
+}
+
+func (v *View) addRefNodes(parent *treeview.TreeViewItem, key string, nodes []refNode) {
+	for _, node := range nodes {
+		if node.leaf {
+			parent.AddChild(v.leafItem(node.entry, node.label))
+			continue
 		}
+		childKey := key + "/" + node.label
+		group := v.newGroupItem(childKey, node.label)
+		parent.AddChild(group)
+		v.addRefNodes(group, childKey, node.children)
 	}
 }
 
