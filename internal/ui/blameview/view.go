@@ -28,6 +28,9 @@ var loadDialog = dialogs.Load
 const (
 	shortLength = 7
 
+	minDialogWidth  = 720
+	minDialogHeight = 420
+
 	rowHeight       = 18
 	fontSize        = 9.0
 	textHeightRatio = 1.4
@@ -85,6 +88,8 @@ func NewView() (*View, error) {
 		return nil, err
 	}
 	v.hintLabel.Muted = true
+	dlg.SetResizable(true)
+	dlg.SetMinSize(minDialogWidth, minDialogHeight)
 	v.buildColumns()
 	v.wire()
 	v.refresh()
@@ -99,6 +104,7 @@ func (v *View) Restyle(t *widget.Theme) {
 	p.Body(v.pathLabel)
 	p.Hints(v.hintLabel)
 	v.linkColor = p.Accent
+	v.table.Grid.GridLineColor = v.table.Grid.Background
 }
 
 func (v *View) bind(named map[string]widget.Widget) error {
@@ -125,6 +131,7 @@ func (v *View) buildColumns() {
 	v.table.Grid.RowHeight = rowHeight
 	v.table.Grid.FontSize = fontSize
 	v.table.Grid.ZebraStripes = false
+	v.table.Grid.GridLineColor = v.table.Grid.Background
 	commit := datagrid.NewTemplateColumn(i18n.T("Dialog.Blame.Column.Commit"), v.drawCommitCell)
 	commit.SetWidth(datagrid.PixelWidth(commitWidth))
 	when := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.When"), "When")

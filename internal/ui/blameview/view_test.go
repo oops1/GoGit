@@ -242,3 +242,21 @@ func TestActivatingARowWithoutAHandlerOrOutsideTheListIsQuiet(t *testing.T) {
 		t.Fatal("a row outside the list must not name a commit")
 	}
 }
+
+func TestTheDialogCanBeResizedAndHasNoGridLines(t *testing.T) {
+	v := newTestView(t)
+
+	if !v.dlg.IsResizable() {
+		t.Fatal("the blame dialog must be resizable")
+	}
+	if w, h := v.dlg.MinSize(); w != minDialogWidth || h != minDialogHeight {
+		t.Fatalf("minimum size = %dx%d", w, h)
+	}
+	if v.table.Grid.GridLineColor != v.table.Grid.Background {
+		t.Fatalf("grid lines = %+v, want them to vanish into the background", v.table.Grid.GridLineColor)
+	}
+	v.Restyle(widget.DarkTheme())
+	if v.table.Grid.GridLineColor != v.table.Grid.Background {
+		t.Fatal("a theme change brought the grid lines back")
+	}
+}
