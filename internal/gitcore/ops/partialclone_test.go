@@ -22,7 +22,7 @@ func promisorPackMarks(t *testing.T, r *repo.Repository) []string {
 	return marks
 }
 
-func blobOf(t *testing.T, r *repo.Repository, content string) hash.ObjectID {
+func blobIDInRepo(t *testing.T, r *repo.Repository, content string) hash.ObjectID {
 	t.Helper()
 	id, err := hash.Sum(r.ObjectFormat, "blob", []byte(content))
 	if err != nil {
@@ -58,7 +58,7 @@ func TestCloneWithAFilterRecordsThePromisorRemote(t *testing.T) {
 		t.Fatalf("odb.Open returned error %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	if has, err := db.Has(blobOf(t, r, "hello\n")); err != nil || has {
+	if has, err := db.Has(blobIDInRepo(t, r, "hello\n")); err != nil || has {
 		t.Fatalf("the filtered clone brought the blob: %v, %v", has, err)
 	}
 }
@@ -115,7 +115,7 @@ func TestFetchMissingObjectsBringsTheFilteredBlobs(t *testing.T) {
 	}
 	defer func() { _ = r.Close() }()
 
-	wanted := blobOf(t, r, "hello\n")
+	wanted := blobIDInRepo(t, r, "hello\n")
 	if err := FetchMissingObjects(t.Context(), r, []hash.ObjectID{wanted}); err != nil {
 		t.Fatalf("FetchMissingObjects returned error %v", err)
 	}
