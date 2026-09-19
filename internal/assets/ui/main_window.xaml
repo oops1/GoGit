@@ -125,6 +125,8 @@
                     <MenuItem Header="{Loc Menu.Tools.Maintenance.Fsck}" IsEnabled="False"/>
                 </MenuItem>
                 <MenuItem Separator="True"/>
+                <MenuItem Header="{Loc Menu.Tools.Bisect}"/>
+                <MenuItem Separator="True"/>
                 <MenuItem Header="{Loc Menu.Context.Reveal}" IsEnabled="False"/>
                 <MenuItem Header="{Loc Menu.Context.Terminal}" IsEnabled="False"/>
                 <MenuItem Separator="True"/>
@@ -176,6 +178,12 @@
                                     Content="{Loc Banner.Merge.Abort}"/>
                             <Button x:Name="mergeBannerCommit" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
                                     Content="{Loc Banner.Merge.Commit}"/>
+                            <Button x:Name="mergeBannerSkip" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Visibility="Collapsed" Content="{Loc Banner.Bisect.Skip}"/>
+                            <Button x:Name="mergeBannerBad" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Visibility="Collapsed" Content="{Loc Banner.Bisect.Bad}"/>
+                            <Button x:Name="mergeBannerGood" DockPanel.Dock="Right" Height="24" Margin="6,0,0,0"
+                                    Visibility="Collapsed" Content="{Loc Banner.Bisect.Good}"/>
                             <TextBlock x:Name="mergeBannerText" Text="" Margin="6,4,0,4" TextTrimming="CharacterEllipsis"/>
                         </DockPanel>
                         <DockPanel x:Name="filesFilterRow" DockPanel.Dock="Top" Margin="4,4,4,2">
