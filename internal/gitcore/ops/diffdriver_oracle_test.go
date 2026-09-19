@@ -125,8 +125,23 @@ func sameText(t *testing.T, what, ours, git string) {
 	t.Errorf("%s differs in length: ours %d lines, git %d lines", what, len(oursLines), len(gitLines))
 }
 
+func gitTakesTheWholeLineForBashFunctions(o *oracle) bool {
+	dir := o.repoDir("bash-driver-probe")
+	newOracleRepo(o, dir)
+	o.write(dir, ".gitattributes", "probe.sh diff=bash\n")
+	body := "greet() {\n\techo one\n\techo two\n\techo three\n\techo four\n}\n"
+	o.write(dir, "probe.sh", body)
+	o.run(dir, "add", "-A")
+	o.run(dir, "commit", "-q", "-m", "probe")
+	o.write(dir, "probe.sh", strings.Replace(body, "echo four", "echo FOUR", 1))
+	return strings.Contains(o.run(dir, "diff", "-U0"), "@@ greet() {")
+}
+
 func TestOracleHunkHeadersFollowBuiltinDiffDrivers(t *testing.T) {
 	o := newOracle(t)
+	if !gitTakesTheWholeLineForBashFunctions(o) {
+		t.Skip("the installed git predates the userdiff patterns we carry and trims function headers")
+	}
 	dir := o.repoDir("drivers")
 	newOracleRepo(o, dir)
 	o.run(dir, "config", "core.autocrlf", "false")
