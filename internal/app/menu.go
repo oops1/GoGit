@@ -345,6 +345,7 @@ func (a *App) retranslate() {
 	}
 	a.retranslateGrids()
 	a.retranslateFilesStatusButtons()
+	a.wireBranchesPaneButtons()
 	a.retranslateRepoTrees()
 	a.retranslateFilesState()
 	a.retranslateToolbar()
@@ -364,6 +365,7 @@ func (a *App) retranslateRepoTrees() {
 		a.log.Warn("retranslate branches failed", "path", o.path, "error", err)
 		return
 	}
+	a.enrichBranchSnapshot(o, &snap)
 	a.branchesView.Render(snap)
 	a.showJournalBranches(snap)
 	a.statusBranchLabel.SetText(a.branchStatusTextWithDivergence(snap))
