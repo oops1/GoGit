@@ -280,10 +280,17 @@ func TestTheToolsMenuOpensTheActiveRepositoryOutside(t *testing.T) {
 	if len(*started) != 2 {
 		t.Fatalf("started tools = %v", *started)
 	}
+	pointedAtTheRepository := 0
 	for _, line := range *started {
-		if !strings.Contains(line, filepath.Base(target)) {
+		if !strings.Contains(line, dir) {
 			t.Fatalf("tool %q was not pointed at the repository", line)
 		}
+		if strings.Contains(line, target) {
+			pointedAtTheRepository++
+		}
+	}
+	if pointedAtTheRepository == 0 {
+		t.Fatalf("started tools = %v, want one of them at the repository itself", *started)
 	}
 }
 

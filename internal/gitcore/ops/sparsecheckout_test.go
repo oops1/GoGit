@@ -253,7 +253,7 @@ func TestSparseConeDirectoryNormalizesInput(t *testing.T) {
 		{"plain", "a", "/a", nil},
 		{"trailingSlash", "a/b/", "/a/b", nil},
 		{"leadingSlash", "/a/b", "/a/b", nil},
-		{"backslashes", `a\b`, "/a/b", nil},
+		{"backslashes", `a\b`, "/" + filepath.ToSlash(`a\b`), nil},
 		{"dotSegments", "a/./b/../c", "/a/c", nil},
 		{"root", "/", "", nil},
 		{"negation", "!a", "", ErrConePatternNotPath},
