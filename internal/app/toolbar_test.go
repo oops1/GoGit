@@ -172,7 +172,7 @@ func TestTheDefaultToolbarFitsTheSmallestWindow(t *testing.T) {
 	a := newTestApp(t)
 	for _, lang := range []string{"en", "ru"} {
 		a.SetLanguage(lang)
-		if got := a.toolbarWidth(); got > config.MinWindowWidth {
+		if got := fixedToolbarWidth(a); got > config.MinWindowWidth {
 			t.Fatalf("lang %q: the toolbar wants %d points, the window is %d wide",
 				lang, got, config.MinWindowWidth)
 		}
@@ -365,9 +365,28 @@ func TestClickingASplitButtonAndItsMenuRunsTheCommand(t *testing.T) {
 func TestTheToolbarSurvivesAWindowWithoutOne(t *testing.T) {
 	a := newTestApp(t)
 	delete(a.named, "toolbar")
+	before := len(a.toolbarButtons)
 	a.buildToolbar()
 	a.relayoutToolbar()
-	if got := a.toolbarWidth(); got != 0 {
-		t.Fatalf("width without a panel = %d", got)
+	a.retranslateToolbar()
+	if len(a.toolbarButtons) != before {
+		t.Fatalf("buttons without a panel = %d, want the %d it already had", len(a.toolbarButtons), before)
 	}
+}
+
+func fixedToolbarWidth(a *App) int {
+	panel, ok := a.toolbarPanel()
+	if !ok {
+		return 0
+	}
+	total := panel.Padding * 2
+	for _, child := range panel.Children() {
+		total += toolbarItemMargin * 2
+		if _, stretch := child.(*toolbarStretch); stretch {
+			continue
+		}
+		width, _ := toolbarItemSize(child)
+		total += width
+	}
+	return total
 }

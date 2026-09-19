@@ -222,19 +222,6 @@ func toolbarCaptionButtonWidth(text string) int {
 	return min(max(w, toolbarButtonMinWidth), toolbarButtonMaxWidth)
 }
 
-func (a *App) toolbarWidth() int {
-	panel, ok := a.toolbarPanel()
-	if !ok {
-		return 0
-	}
-	total := panel.Padding * 2
-	for _, child := range panel.Children() {
-		width, _ := toolbarItemSize(child)
-		total += width + toolbarItemMargin*2
-	}
-	return total
-}
-
 func (a *App) relayoutToolbar() {
 	panel, ok := a.toolbarPanel()
 	if !ok {
