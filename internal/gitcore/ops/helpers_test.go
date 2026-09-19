@@ -326,3 +326,10 @@ func newCountingContext(t testing.TB, failAt int) context.Context {
 	calls := 0
 	return countingContext{Context: t.Context(), calls: &calls, failAt: failAt}
 }
+
+func swapSeam[F any](t *testing.T, seam *F, wrap func(original F) F) {
+	t.Helper()
+	original := *seam
+	*seam = wrap(original)
+	t.Cleanup(func() { *seam = original })
+}
