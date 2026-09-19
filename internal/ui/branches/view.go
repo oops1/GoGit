@@ -1,6 +1,7 @@
 package branches
 
 import (
+	"image/color"
 	"strings"
 	"sync"
 	"time"
@@ -12,7 +13,9 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/ui/icons"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const (
@@ -52,6 +55,8 @@ type View struct {
 	flowConfigured  bool
 	submodules      []ops.Submodule
 	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
+	divergence      map[refs.Name]repo.Divergence
+	secondary       color.RGBA
 
 	OnSubmoduleActivate func(ops.Submodule)
 	OnSubmoduleMenu     func(ops.Submodule) []widget.MenuItem
@@ -65,6 +70,7 @@ func NewView() *View {
 		expanded:        map[string]bool{},
 		submoduleByItem: map[*treeview.TreeViewItem]ops.Submodule{},
 		options:         DefaultOptions(),
+		secondary:       style.Of(widget.CurrentTheme()).Secondary,
 	}
 }
 
@@ -388,8 +394,16 @@ func (v *View) leafItem(e pathEntry, segment string) *treeview.TreeViewItem {
 	if label == "" {
 		label = segment
 	}
+	diverged := false
+	if d, ok := v.divergence[e.ref]; ok {
+		label += divergenceSuffix(d)
+		diverged = true
+	}
 	item := treeview.NewItem(label)
 	item.Icon = icons.Tree(e.icon, treeIconSize)
+	if diverged {
+		item.Foreground = v.secondary
+	}
 	v.track(item, e.ref)
 	return item
 }
