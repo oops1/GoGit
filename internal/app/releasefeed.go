@@ -58,13 +58,16 @@ func downloadReleaseAtom(ctx context.Context, rawURL string) (releaseInfo, error
 }
 
 func latestRelease(ctx context.Context) (releaseInfo, error) {
-	info, err := fetchRelease(ctx, releaseFeedURL)
-	if err == nil {
+	info, feedErr := fetchReleaseFeed(ctx, releaseAtomURL)
+	if feedErr == nil {
 		return info, nil
 	}
-	fallback, feedErr := fetchReleaseFeed(ctx, releaseAtomURL)
-	if feedErr == nil {
+	fallback, apiErr := fetchRelease(ctx, releaseFeedURL)
+	if apiErr == nil {
 		return fallback, nil
 	}
-	return releaseInfo{}, err
+	if errors.Is(apiErr, ErrReleaseRateLimited) {
+		return releaseInfo{}, apiErr
+	}
+	return releaseInfo{}, feedErr
 }

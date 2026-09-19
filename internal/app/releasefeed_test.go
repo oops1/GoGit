@@ -49,14 +49,15 @@ func TestAPlainRefusalKeepsItsStatus(t *testing.T) {
 	}
 }
 
-func TestTheAtomFeedAnswersWhenTheApiWillNot(t *testing.T) {
+func TestTheFeedIsAskedBeforeTheApi(t *testing.T) {
 	feed := serving(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(atomBody))
 	})
+	asked := false
 	restore := releaseFeedURL
 	releaseFeedURL = serving(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("X-RateLimit-Remaining", "0")
-		w.WriteHeader(http.StatusForbidden)
+		asked = true
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 	t.Cleanup(func() { releaseFeedURL = restore })
 	prev := fetchReleaseFeed
@@ -70,18 +71,55 @@ func TestTheAtomFeedAnswersWhenTheApiWillNot(t *testing.T) {
 	if err != nil || info.Tag != "v9.9.9" || info.Page != "https://example.test/releases/tag/v9.9.9" {
 		t.Fatalf("latestRelease = %+v, %v", info, err)
 	}
+	if asked {
+		t.Fatal("the api was asked although the feed answered")
+	}
 }
 
-func TestBothSourcesFailingKeepsTheApiError(t *testing.T) {
+func TestTheApiAnswersWhenTheFeedWillNot(t *testing.T) {
 	restore := releaseFeedURL
-	releaseFeedURL = serving(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) })
+	releaseFeedURL = serving(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"tag_name":"v8.8.8","html_url":"https://example.test/8"}`))
+	})
 	t.Cleanup(func() { releaseFeedURL = restore })
 	prev := fetchReleaseFeed
 	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) { return releaseInfo{}, errors.New("no feed") }
 	t.Cleanup(func() { fetchReleaseFeed = prev })
 
-	if _, err := latestRelease(t.Context()); !errors.Is(err, ErrReleaseUnavailable) {
-		t.Fatalf("error = %v, want the api failure", err)
+	info, err := latestRelease(t.Context())
+
+	if err != nil || info.Tag != "v8.8.8" {
+		t.Fatalf("latestRelease = %+v, %v", info, err)
+	}
+}
+
+func TestASpentQuotaIsNamedEvenWhenTheFeedFailedFirst(t *testing.T) {
+	restore := releaseFeedURL
+	releaseFeedURL = serving(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusForbidden)
+	})
+	t.Cleanup(func() { releaseFeedURL = restore })
+	prev := fetchReleaseFeed
+	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) { return releaseInfo{}, errors.New("no feed") }
+	t.Cleanup(func() { fetchReleaseFeed = prev })
+
+	if _, err := latestRelease(t.Context()); !errors.Is(err, ErrReleaseRateLimited) {
+		t.Fatalf("error = %v, want the spent quota", err)
+	}
+}
+
+func TestBothSourcesFailingKeepsTheFeedError(t *testing.T) {
+	restore := releaseFeedURL
+	releaseFeedURL = serving(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusInternalServerError) })
+	t.Cleanup(func() { releaseFeedURL = restore })
+	prev := fetchReleaseFeed
+	feedErr := errors.New("no feed")
+	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) { return releaseInfo{}, feedErr }
+	t.Cleanup(func() { fetchReleaseFeed = prev })
+
+	if _, err := latestRelease(t.Context()); !errors.Is(err, feedErr) {
+		t.Fatalf("error = %v, want the feed failure", err)
 	}
 }
 

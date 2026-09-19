@@ -25,7 +25,7 @@ func stubLatestRelease(t *testing.T, info releaseInfo, err error) {
 	fetchRelease = func(context.Context, string) (releaseInfo, error) { return info, err }
 	t.Cleanup(func() { fetchRelease = prev })
 	prevFeed := fetchReleaseFeed
-	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) { return releaseInfo{}, err }
+	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) { return info, err }
 	t.Cleanup(func() { fetchReleaseFeed = prevFeed })
 }
 
@@ -307,12 +307,12 @@ func TestScheduledCheckSkipsAFreshTimestamp(t *testing.T) {
 	stubClock(t, now)
 	a.cfg.Updates.LastCheck = now.Add(-time.Hour)
 	calls := 0
-	prev := fetchRelease
-	fetchRelease = func(context.Context, string) (releaseInfo, error) {
+	prev := fetchReleaseFeed
+	fetchReleaseFeed = func(context.Context, string) (releaseInfo, error) {
 		calls++
 		return releaseInfo{}, nil
 	}
-	t.Cleanup(func() { fetchRelease = prev })
+	t.Cleanup(func() { fetchReleaseFeed = prev })
 
 	a.scheduleUpdateCheck()
 	updateWG.Wait()
