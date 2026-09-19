@@ -221,7 +221,7 @@ func TestTheToolsMenuGathersFlowMaintenanceAndTheOutsideWorld(t *testing.T) {
 	if toolsMenuTree[2].Group == nil || toolsMenuTree[2].Group.Key != "Menu.Tools.Maintenance" {
 		t.Fatal("repository maintenance must follow git-flow")
 	}
-	if got := treeCommands(toolsMenuTree); !slices.Equal(got, []CommandID{CmdRevealRepository, CmdOpenTerminal, CmdConsole}) {
+	if got := treeCommands(toolsMenuTree); !slices.Equal(got, []CommandID{CmdBisect, CmdRevealRepository, CmdOpenTerminal, CmdConsole}) {
 		t.Fatalf("tools menu leaves = %v", got)
 	}
 	if got := groupCommands(*toolsMenuTree[2].Group); !slices.Equal(got, []CommandID{CmdGc, CmdFsck}) {

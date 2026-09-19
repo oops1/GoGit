@@ -506,6 +506,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.registerWorktreeHandlers()
 	a.registerSparseHandlers()
 	a.registerMergeHandlers()
+	a.registerBisectHandlers()
 	a.registerFlowHandlers()
 	a.registerRebaseHandlers()
 	a.registerReflogHandlers()

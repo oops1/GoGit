@@ -72,6 +72,7 @@ const (
 	CmdFlowFinishRelease    CommandID = "tools.flow.finish-release"
 	CmdFlowStartSupport     CommandID = "tools.flow.start-support"
 	CmdFlowConfigure        CommandID = "tools.flow.configure"
+	CmdBisect               CommandID = "tools.bisect"
 	CmdGc                   CommandID = "tools.gc"
 	CmdFsck                 CommandID = "tools.fsck"
 	CmdRevealRepository     CommandID = "tools.reveal"
@@ -234,7 +235,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.HasSubmodules
 	case CmdSubmoduleAdd:
 		return s.ActiveRepository != ""
-	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
+	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch, CmdBisect:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdFlowStartFeature:
 		return s.flowReady()

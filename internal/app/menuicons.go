@@ -36,6 +36,7 @@ var commandIcons = map[CommandID]string{
 	CmdLog:                 "log",
 	CmdBlame:               "blame",
 	CmdInvestigate:         "investigate",
+	CmdBisect:              "bisect",
 	CmdRevealRepository:    "reveal",
 	CmdOpenTerminal:        "terminal",
 	CmdStashSave:           "stash_save",

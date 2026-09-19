@@ -68,7 +68,7 @@ func (a *App) startWorking() {
 		a.setHasStagedChanges(false)
 		a.setHasChanges(false)
 		a.setHasStashable(false)
-		a.showMergeState(ops.MergeState{}, 0)
+		a.showMergeState(ops.MergeState{}, ops.BisectStatus{}, 0)
 		a.clearWorkingFlags()
 		return
 	}
@@ -118,6 +118,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	stashable := hasStashableChanges(status.Entries)
 	staged := stagedEntryCount(status.Entries)
 	merging := a.workingMergeState()
+	bisecting := a.workingBisectStatus(merging)
 	conflicts := conflictEntryCount(status.Entries)
 	a.filesMu.Lock()
 	a.filesMode = filesModeWorking
@@ -137,7 +138,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		a.setHasStagedChanges(staged > 0)
 		a.setHasChanges(modified)
 		a.setHasStashable(stashable)
-		a.showMergeState(merging, conflicts)
+		a.showMergeState(merging, bisecting, conflicts)
 		a.syncWatcherSkips()
 	})
 }

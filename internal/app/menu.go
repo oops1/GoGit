@@ -182,6 +182,8 @@ func buildToolsMenuTree() []menuTreeEntry {
 		menuSeparatorEntry,
 		{Group: &menuGroupEntry{Key: "Menu.Tools.Maintenance", Items: maintenanceMenuLeaves}},
 		menuSeparatorEntry,
+		menuLeaf("Menu.Tools.Bisect", CmdBisect),
+		menuSeparatorEntry,
 		menuLeaf("Menu.Context.Reveal", CmdRevealRepository),
 		menuLeaf("Menu.Context.Terminal", CmdOpenTerminal),
 		menuSeparatorEntry,

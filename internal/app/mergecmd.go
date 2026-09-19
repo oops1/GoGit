@@ -39,6 +39,9 @@ type mergeBanner struct {
 	text   *widget.Label
 	commit *widget.Button
 	abort  *widget.Button
+	good   *widget.Button
+	bad    *widget.Button
+	skip   *widget.Button
 }
 
 func bindMergeBanner(named map[string]widget.Widget) (mergeBanner, error) {
@@ -50,11 +53,19 @@ func bindMergeBanner(named map[string]widget.Widget) (mergeBanner, error) {
 	if b.text, ok = named["mergeBannerText"].(*widget.Label); !ok {
 		return mergeBanner{}, fmt.Errorf("%w: mergeBannerText", ErrWidgetMissing)
 	}
-	if b.commit, ok = named["mergeBannerCommit"].(*widget.Button); !ok {
-		return mergeBanner{}, fmt.Errorf("%w: mergeBannerCommit", ErrWidgetMissing)
+	buttons := map[string]**widget.Button{
+		"mergeBannerCommit": &b.commit,
+		"mergeBannerAbort":  &b.abort,
+		"mergeBannerGood":   &b.good,
+		"mergeBannerBad":    &b.bad,
+		"mergeBannerSkip":   &b.skip,
 	}
-	if b.abort, ok = named["mergeBannerAbort"].(*widget.Button); !ok {
-		return mergeBanner{}, fmt.Errorf("%w: mergeBannerAbort", ErrWidgetMissing)
+	for name, target := range buttons {
+		button, found := named[name].(*widget.Button)
+		if !found {
+			return mergeBanner{}, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
+		}
+		*target = button
 	}
 	return b, nil
 }
@@ -63,7 +74,7 @@ func (a *App) applyMergeBannerTheme(t *widget.Theme) {
 	p := style.Of(t)
 	p.Banner(a.banner.panel, a.banner.text)
 	p.Primary(a.banner.commit)
-	p.Quiet(a.banner.abort)
+	p.Quiet(a.banner.abort, a.banner.good, a.banner.bad, a.banner.skip)
 }
 
 func (a *App) registerMergeHandlers() {
@@ -283,16 +294,20 @@ func (a *App) workingMergeState() ops.MergeState {
 	return state
 }
 
-func (a *App) showMergeState(state ops.MergeState, conflicts int) {
+func (a *App) showMergeState(state ops.MergeState, bisect ops.BisectStatus, conflicts int) {
 	a.setMerging(state.InProgress(), state.Operation() == ops.OperationRebase)
 	a.banner.panel.SetVisible(state.InProgress() || state.Bisecting)
 	a.banner.abort.SetVisible(state.InProgress())
+	marking := state.Bisecting && !state.InProgress() && bisectAcceptsMarks(bisect)
+	for _, button := range []*widget.Button{a.banner.good, a.banner.bad, a.banner.skip} {
+		button.SetVisible(marking)
+	}
 	switch {
 	case state.InProgress():
 		a.banner.text.SetText(bannerText(state, conflicts))
 		a.banner.commit.SetText(i18n.T(bannerActionKey(state.Operation())))
 	case state.Bisecting:
-		a.banner.text.SetText(i18n.Tf("Banner.Bisect.Active", bisectOriginLabel(state.BisectStart)))
+		a.banner.text.SetText(bisectBannerText(bisect))
 		a.banner.commit.SetText(i18n.T("Banner.Bisect.Reset"))
 	}
 }
