@@ -106,7 +106,7 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 	items = append(items,
 		a.investigateFileItem(rel, tracked),
 		menuSeparator(),
-		enabledItem("Menu.Edit.Commit", a.openCommit, state.Enabled(CmdCommit)),
+		enabledItem("Menu.Local.Commit", a.openCommit, state.Enabled(CmdCommit)),
 		enabledItem("Menu.Files.StashSelection", a.openStashSelection, state.Enabled(CmdStashSelection)),
 		menuSeparator(),
 	)
@@ -117,7 +117,7 @@ func (a *App) filesMenu(item any, row int) []widget.MenuItem {
 	return append(items,
 		edit[0],
 		edit[1],
-		laterItem("Menu.Files.IndexEditor"),
+		enabledItem("Menu.Files.IndexEditor", func() { a.openIndexEditor(rel) }, state.Enabled(CmdIndexEditor) && !conflict),
 		laterItem("Menu.Files.Rename"),
 		menuSeparator(),
 		enabledItem("Menu.Files.ConflictSolver", func() { a.openConflictEditor(rel) }, conflict),
@@ -154,9 +154,9 @@ func (a *App) editItems() []widget.MenuItem {
 		id  CommandID
 		run func()
 	}{
-		{"Menu.Edit.Stage", CmdStage, a.stageSelected},
-		{"Menu.Edit.Unstage", CmdUnstage, a.unstageSelected},
-		{"Menu.Edit.Discard", CmdDiscard, a.discardSelected},
+		{"Menu.Local.Stage", CmdStage, a.stageSelected},
+		{"Menu.Local.Unstage", CmdUnstage, a.unstageSelected},
+		{"Menu.Local.Discard", CmdDiscard, a.discardSelected},
 	} {
 		items = append(items, enabledItem(entry.key, entry.run, state.Enabled(entry.id)))
 	}

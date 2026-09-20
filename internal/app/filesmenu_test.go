@@ -23,10 +23,10 @@ func TestTheFilesMenuFollowsSmartGitAndGreysWhatIsNotThereYet(t *testing.T) {
 	want := []string{
 		key("Menu.Files.OpenFile"), key("Menu.Context.Reveal"), key("Menu.Files.Edit"), key("Menu.Files.SetExecutable"), key("Menu.Files.UnsetExecutable"), "-",
 		key("Menu.Files.ShowChanges"), key("Menu.Context.FileHistory"), key("Menu.Context.Blame"), key("Menu.Files.Investigate"), "-",
-		key("Menu.Edit.Commit"), key("Menu.Files.StashSelection"), "-",
-		key("Menu.Edit.Stage"), key("Menu.Edit.Unstage"), key("Menu.Files.IndexEditor"), key("Menu.Files.Rename"), "-",
+		key("Menu.Local.Commit"), key("Menu.Files.StashSelection"), "-",
+		key("Menu.Local.Stage"), key("Menu.Local.Unstage"), key("Menu.Files.IndexEditor"), key("Menu.Files.Rename"), "-",
 		key("Menu.Files.ConflictSolver"), key("Menu.Files.Resolve"), "-",
-		key("Menu.Files.Ignore"), key("Menu.Edit.Discard"), key("Menu.Files.Remove"), key("Menu.Files.Delete"), "-",
+		key("Menu.Files.Ignore"), key("Menu.Local.Discard"), key("Menu.Files.Remove"), key("Menu.Files.Delete"), "-",
 		key("Menu.Files.CopyName"), key("Menu.Context.CopyPath"), key("Menu.Files.CopyRelativePath"), "-",
 		key("Menu.Files.SelectDirectory"), key("Menu.Files.SelectRoot"),
 	}
@@ -37,7 +37,7 @@ func TestTheFilesMenuFollowsSmartGitAndGreysWhatIsNotThereYet(t *testing.T) {
 		"Menu.Files.Edit", "Menu.Files.SetExecutable", "Menu.Files.UnsetExecutable", "Menu.Files.Investigate",
 		"Menu.Files.StashSelection", "Menu.Files.IndexEditor", "Menu.Files.Rename", "Menu.Files.Ignore", "Menu.Files.Remove",
 		"Menu.Files.SelectDirectory", "Menu.Files.SelectRoot",
-		"Menu.Context.FileHistory", "Menu.Context.Blame", "Menu.Edit.Unstage", "Menu.Edit.Discard",
+		"Menu.Context.FileHistory", "Menu.Context.Blame", "Menu.Local.Unstage", "Menu.Local.Discard",
 		"Menu.Files.ConflictSolver", "Menu.Files.Resolve", "Menu.Files.Delete",
 	} {
 		if item, _ := findMenuItem(items, key(k)); !item.Disabled {

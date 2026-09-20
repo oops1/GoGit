@@ -157,7 +157,7 @@ func TestTheSaveStashButtonFollowsTheChangesAndTheFileSelection(t *testing.T) {
 		t.Fatalf("save button without changes = %+v", got)
 	}
 	clean := openedMenuItems(t, a, btn)
-	want := []string{i18n.T("Menu.Edit.SaveStash"), i18n.T("Menu.Files.StashSelection")}
+	want := []string{i18n.T("Menu.Local.SaveStash"), i18n.T("Menu.Files.StashSelection")}
 	if !slices.Equal(menuTexts(clean), want) || !clean[0].Disabled || !clean[1].Disabled {
 		t.Fatalf("save menu without changes = %+v", clean)
 	}
@@ -256,21 +256,6 @@ func TestTheApplyDialogPassesTheRestoreIndexChoice(t *testing.T) {
 	indexed := []ops.StashApplyOptions{{Index: true}}
 	if !slices.Equal(applied, indexed) || !slices.Equal(popped, indexed) {
 		t.Fatalf("applied = %+v, popped = %+v", applied, popped)
-	}
-}
-
-func TestMissingToolbarMenuButtonsAreSkipped(t *testing.T) {
-	a := newTestApp(t)
-	for _, entry := range toolbarMenuButtons() {
-		delete(a.named, entry.Name)
-	}
-
-	a.wireToolbarMenus()
-	a.refreshToolbarMenus(State{ActiveRepository: "r"})
-	a.applyToolbarIcons(nil)
-
-	if got := len(a.toolbarCaptionWidths()); got != len(toolbarButtons) {
-		t.Fatalf("caption widths = %d, want only the plain buttons", got)
 	}
 }
 

@@ -235,6 +235,7 @@ func (a *App) openFinishFlow(kind string) {
 			a.eng.CloseModal(view.Dialog())
 			a.finishFlow(kind, target.Name, model)
 		}
+		view.OnSelectFromLog = func() { a.openFlowLog(view) }
 		view.OnCancel = func() { a.eng.CloseModal(view.Dialog()) }
 		a.showModal(view.Dialog(), view)
 	})
@@ -407,8 +408,10 @@ func (a *App) switchOffFlow() {
 
 func (a *App) refreshFlowState(o *openedRepository, current string) {
 	var status flowStatus
+	var layout ops.FlowConfig
 	if r, err := a.freshRepo(o); err == nil {
 		cfg, configured := ops.ReadFlowConfig(r)
+		layout = cfg
 		status.configured, status.light = configured, configured && cfg.Light()
 		if kind, name, ok := cfg.BranchKind(current); configured && ok {
 			status.current = FlowBranch{Kind: kind, Name: name}
@@ -418,7 +421,16 @@ func (a *App) refreshFlowState(o *openedRepository, current string) {
 		}
 		_ = r.Close()
 	}
+	a.showFlowLayout(layout, status.configured)
 	a.setFlowState(status)
+}
+
+func (a *App) showFlowLayout(layout ops.FlowConfig, configured bool) {
+	a.branchesView.SetFlow(layout, configured)
+}
+
+func (a *App) clearFlowLayout() {
+	a.showFlowLayout(ops.FlowConfig{}, false)
 }
 
 func (a *App) setFlowState(status flowStatus) {

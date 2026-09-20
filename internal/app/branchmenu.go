@@ -16,11 +16,11 @@ var runDeleteBranch = ops.DeleteBranch
 
 var currentFlowItems = map[string][]menuLeafEntry{
 	ops.FlowKindFeature: {
-		{Key: "Menu.Branch.GitFlow.IntegrateDevelop", Command: CmdFlowIntegrateDevelop},
-		{Key: "Menu.Branch.GitFlow.FinishFeature", Command: CmdFlowFinishFeature},
+		{Key: "Menu.Tools.GitFlow.IntegrateDevelop", Command: CmdFlowIntegrateDevelop},
+		{Key: "Menu.Tools.GitFlow.FinishFeature", Command: CmdFlowFinishFeature},
 	},
-	ops.FlowKindRelease: {{Key: "Menu.Branch.GitFlow.FinishRelease", Command: CmdFlowFinishRelease}},
-	ops.FlowKindHotfix:  {{Key: "Menu.Branch.GitFlow.FinishHotfix", Command: CmdFlowFinishHotfix}},
+	ops.FlowKindRelease: {{Key: "Menu.Tools.GitFlow.FinishRelease", Command: CmdFlowFinishRelease}},
+	ops.FlowKindHotfix:  {{Key: "Menu.Tools.GitFlow.FinishHotfix", Command: CmdFlowFinishHotfix}},
 }
 
 func (a *App) branchMenu(ref refs.Name) []widget.MenuItem {

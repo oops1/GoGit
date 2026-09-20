@@ -465,9 +465,9 @@ func swapCloneRepoOpen(t testing.TB, replacement func(string, repo.OpenOptions) 
 
 func swapCloneRepoOpenLayout(t testing.TB, replacement func(repo.Layout, repo.OpenOptions) (*repo.Repository, error)) {
 	t.Helper()
-	original := cloneRepoOpenLayout
-	cloneRepoOpenLayout = replacement
-	t.Cleanup(func() { cloneRepoOpenLayout = original })
+	original := repoOpenLayout
+	repoOpenLayout = replacement
+	t.Cleanup(func() { repoOpenLayout = original })
 }
 
 func TestPrepareCloneDirectoryFailsWhenMkdirAllFails(t *testing.T) {

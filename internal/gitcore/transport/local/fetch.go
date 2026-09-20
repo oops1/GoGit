@@ -51,7 +51,23 @@ func (s *session) Fetch(ctx context.Context, req transport.FetchRequest, neg tra
 		return nil, err
 	}
 
-	collector := newObjectCollector(s.db)
+	filter, err := transport.ParseFilter(req.Filter)
+	if err != nil {
+		return nil, err
+	}
+
+	collector := newObjectCollector(s.db, filter)
+	for _, id := range kinds.tags {
+		collector.include(id)
+	}
+	for _, id := range kinds.trees {
+		if err := collector.includeTree(ctx, id, 0); err != nil {
+			return nil, err
+		}
+	}
+	for _, id := range kinds.blobs {
+		collector.include(id)
+	}
 	for _, id := range haveCommits {
 		commit, err := s.db.Commit(id)
 		if err != nil {
@@ -69,20 +85,9 @@ func (s *session) Fetch(ctx context.Context, req transport.FetchRequest, neg tra
 	slices.SortFunc(commitIDs, func(a, b hash.ObjectID) int { return a.Compare(b) })
 	for _, id := range commitIDs {
 		collector.include(id)
-		if err := collector.includeTree(ctx, included[id].Tree); err != nil {
+		if err := collector.includeTree(ctx, included[id].Tree, 0); err != nil {
 			return nil, err
 		}
-	}
-	for _, id := range kinds.tags {
-		collector.include(id)
-	}
-	for _, id := range kinds.trees {
-		if err := collector.includeTree(ctx, id); err != nil {
-			return nil, err
-		}
-	}
-	for _, id := range kinds.blobs {
-		collector.include(id)
 	}
 
 	pr, pw := io.Pipe()

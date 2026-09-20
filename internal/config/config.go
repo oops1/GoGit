@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -40,6 +41,12 @@ const (
 	SwitchChangesStash     = "stash"
 	SwitchChangesMerge     = "merge"
 	SwitchChangesOverwrite = "overwrite"
+)
+
+const (
+	BranchSortName               = "name"
+	BranchSortNameReverseNumbers = "name_reverse_numbers"
+	BranchSortCommitTime         = "commit_time"
 )
 
 const (
@@ -100,16 +107,27 @@ type Git struct {
 }
 
 type UI struct {
-	ShowToolbar           bool     `toml:"show_toolbar"`
-	ToolbarCaptions       bool     `toml:"toolbar_captions"`
-	ShowStatusBar         bool     `toml:"show_status_bar"`
-	FilesColumns          []string `toml:"files_columns"`
-	FilesVisibleColumns   []string `toml:"files_visible_columns"`
-	FilesStatusFilter     []string `toml:"files_status_filter"`
-	FilesSubdirectories   bool     `toml:"files_subdirectories"`
-	JournalFullAuthorName bool     `toml:"journal_full_author_name"`
-	CollapsedGroups       []string `toml:"collapsed_groups"`
-	Layout                string   `toml:"layout"`
+	ShowToolbar           bool         `toml:"show_toolbar"`
+	ToolbarCaptions       bool         `toml:"toolbar_captions"`
+	ToolbarItems          []string     `toml:"toolbar_items"`
+	ShowStatusBar         bool         `toml:"show_status_bar"`
+	FilesColumns          []string     `toml:"files_columns"`
+	FilesVisibleColumns   []string     `toml:"files_visible_columns"`
+	FilesStatusFilter     []string     `toml:"files_status_filter"`
+	FilesSubdirectories   bool         `toml:"files_subdirectories"`
+	JournalFullAuthorName bool         `toml:"journal_full_author_name"`
+	CollapsedGroups       []string     `toml:"collapsed_groups"`
+	Layout                string       `toml:"layout"`
+	Branches              BranchesPane `toml:"branches"`
+}
+
+type BranchesPane struct {
+	Sort                string `toml:"sort"`
+	FlowSections        bool   `toml:"flow_sections"`
+	GroupByPath         bool   `toml:"group_by_path"`
+	GroupExceptSingles  bool   `toml:"group_except_singles"`
+	GroupsFirst         bool   `toml:"groups_first"`
+	GroupAfterLastSlash bool   `toml:"group_after_last_slash"`
 }
 
 type Updates struct {
@@ -147,7 +165,11 @@ func Default() *Config {
 		Theme:    ThemeSystem,
 		Window:   Window{Width: 1280, Height: 800},
 		Git:      Git{LogMaxCount: 500, FetchInterval: 300, PullStrategy: PullStrategyFF, DefaultRemote: "origin", CredentialSource: CredentialSourceVault, BanAttribution: true, SwitchChanges: SwitchChangesAsk},
-		UI:       UI{ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true, FilesSubdirectories: true, Layout: LayoutDocks},
+		UI: UI{
+			ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true,
+			FilesSubdirectories: true, Layout: LayoutDocks,
+			Branches: BranchesPane{Sort: BranchSortName, GroupByPath: true},
+		},
 	}
 }
 
@@ -209,6 +231,12 @@ func (c *Config) Normalize() {
 	}
 	if c.UI.Layout != LayoutSidebar {
 		c.UI.Layout = LayoutDocks
+	}
+	c.UI.ToolbarItems = trimmedList(c.UI.ToolbarItems)
+	switch c.UI.Branches.Sort {
+	case BranchSortNameReverseNumbers, BranchSortCommitTime:
+	default:
+		c.UI.Branches.Sort = BranchSortName
 	}
 	if c.Window.Width < MinWindowWidth {
 		c.Window.Width = MinWindowWidth
@@ -295,6 +323,22 @@ func (c *Config) mergeChanges(current []byte) error {
 	c.Security.VaultGeneration = max(c.Security.VaultGeneration, disk.Security.VaultGeneration)
 	c.extras = mergeExtras(c.extras, disk.extras)
 	return nil
+}
+
+func trimmedList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func mergeByID[T any](base, ours, theirs []T, id func(T) string) []T {

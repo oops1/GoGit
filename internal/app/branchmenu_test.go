@@ -69,7 +69,7 @@ func TestTheCurrentFlowBranchOffersItsGitFlowActions(t *testing.T) {
 	runOnDispatcher(t, a, func() { a.setFlowState(flowOn(featureBranch, FlowBranch{})) })
 
 	items := branchMenuOf(t, a, refs.BranchName("main"))
-	integrate, found := findMenuItem(items, i18n.T("Menu.Branch.GitFlow.IntegrateDevelop"))
+	integrate, found := findMenuItem(items, i18n.T("Menu.Tools.GitFlow.IntegrateDevelop"))
 	if !found || integrate.Disabled || hasMenuItem(items, i18n.T("Menu.Ref.Merge")) {
 		t.Fatalf("menu = %v", menuTexts(items))
 	}

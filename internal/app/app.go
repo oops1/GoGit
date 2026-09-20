@@ -99,6 +99,7 @@ type App struct {
 	selectedNode      string
 	selectedCommit    hash.ObjectID
 
+	toolbarButtons      []toolbarButton
 	filesWorkingCopyBtn *widget.Button
 	banner              mergeBanner
 	askInput            func(title, prompt string, cb func(text string, ok bool))
@@ -202,6 +203,9 @@ type App struct {
 	submoduleGen atomic.Uint64
 	submoduleWG  sync.WaitGroup
 
+	branchDivergenceGen atomic.Uint64
+	branchDivergenceWG  sync.WaitGroup
+
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
 	commands         commandWatch
@@ -276,10 +280,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	if _, ok := named["dock"].(*widget.DockManager); !ok {
 		return nil, fmt.Errorf("%w: dock", ErrWidgetMissing)
 	}
-	for _, name := range toolbarButtons {
-		if _, ok := named[name].(*widget.Button); !ok {
-			return nil, fmt.Errorf("%w: %s", ErrWidgetMissing, name)
-		}
+	if _, ok := named["toolbar"].(*widget.StackPanel); !ok {
+		return nil, fmt.Errorf("%w: toolbar", ErrWidgetMissing)
 	}
 	for name := range gridColumnKeys {
 		if _, ok := named[name].(*widget.DataGridWidget); !ok {
@@ -449,6 +451,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.reposView.SetCollapsedGroups(cfg.UI.CollapsedGroups)
 	a.branchesView = branches.NewView()
 	a.branchesView.Bind(branchesTreeWidget)
+	a.applyBranchesPaneOptions()
+	a.wireBranchesPaneButtons()
 	a.journalView = journal.NewView()
 	a.journalView.Bind(a.named["journalGrid"].(*widget.DataGridWidget))
 	a.journalView.SetFullAuthorName(cfg.UI.JournalFullAuthorName)
@@ -478,8 +482,9 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.wireMenuBar()
 	a.wireToolbar()
 	a.retranslateGrids()
-	a.wireViewHandlers()
+	a.wireCheckableHandlers()
 	a.applyMenuTexts(viewMenuIndex)
+	a.applyMenuTexts(windowMenuIndex)
 	a.logLanguageMenuLimit()
 	a.wireHotkeys()
 	a.handlers[CmdClose] = a.exit
@@ -490,6 +495,8 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdCompareFiles] = a.openCompare
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
 	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdBlame] = a.blameSelectedFile
+	a.handlers[CmdInvestigate] = a.investigateSelectedFile
 	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
 	a.handlers[CmdSettings] = a.openSettings
 	a.handlers[CmdAbout] = a.openAbout
@@ -498,16 +505,23 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdUnstage] = a.unstageSelected
 	a.handlers[CmdDiscard] = a.discardSelected
 	a.handlers[CmdCommit] = a.openCommit
+	a.handlers[CmdRevealRepository] = func() { a.revealPath(a.activeRepositoryPath()) }
+	a.handlers[CmdOpenTerminal] = func() { a.openTerminalAt(a.activeRepositoryPath()) }
 	a.registerRemoteHandlers()
 	a.registerWorktreeHandlers()
+	a.registerSparseHandlers()
 	a.registerMergeHandlers()
+	a.registerBisectHandlers()
 	a.registerFlowHandlers()
 	a.registerRebaseHandlers()
 	a.registerReflogHandlers()
 	a.registerSwitchHandlers()
 	a.registerSubmoduleHandlers()
 	a.registerStashHandlers()
+	a.registerIndexEditorHandlers()
 	a.registerCompareHandlers()
+	a.registerToolbarHandlers()
+	a.registerConsoleHandlers()
 	a.langID = widget.AddLanguageListener(func(string) { a.retranslate() })
 	a.refreshCommands()
 	a.log.Debug("app started", "language", cfg.Language, "theme", cfg.Theme)
@@ -562,6 +576,16 @@ func (a *App) setFilesSelected(v bool) {
 	a.mu.Lock()
 	changed := a.state.FilesSelected != v
 	a.state.FilesSelected = v
+	a.mu.Unlock()
+	if changed {
+		a.refreshCommands()
+	}
+}
+
+func (a *App) setFilePicked(v bool) {
+	a.mu.Lock()
+	changed := a.state.FilePicked != v
+	a.state.FilePicked = v
 	a.mu.Unlock()
 	if changed {
 		a.refreshCommands()
@@ -633,6 +657,8 @@ func (a *App) CloseRepository() {
 	a.updateStatusText()
 	a.statusBranchLabel.SetText("")
 	a.clearSubmodules()
+	a.clearBranchDivergence()
+	a.clearFlowLayout()
 	a.branchesView.Render(branches.Snapshot{})
 	a.journalView.Reset()
 	a.reposView.Render(a.registry, a.repoTreeState())
@@ -660,6 +686,8 @@ func (a *App) ActivateRepository(id string) {
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		a.statusBranchLabel.SetText("")
 		a.clearSubmodules()
+		a.clearBranchDivergence()
+		a.clearFlowLayout()
 		a.branchesView.Render(branches.Snapshot{})
 		a.journalView.Reset()
 		a.refreshBranchCache()
@@ -680,8 +708,10 @@ func (a *App) ActivateRepository(id string) {
 	a.adoptWorktreesOf(node, opened)
 	a.updateStatusText()
 	a.clearSubmodules()
+	a.enrichBranchSnapshot(opened, &snap)
 	a.branchesView.Render(snap)
 	a.refreshSubmodules(opened)
+	a.refreshBranchDivergence(opened, snap)
 	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(opened)
@@ -779,8 +809,10 @@ func (a *App) RefreshRepository() {
 		a.statusLabel.SetText(i18n.Tf("Status.OpenFailed", err))
 		return
 	}
+	a.enrichBranchSnapshot(o, &snap)
 	a.branchesView.Render(snap)
 	a.refreshSubmodules(o)
+	a.refreshBranchDivergence(o, snap)
 	a.setHasStashes(len(snap.Stashes) > 0)
 	a.showJournalBranches(snap)
 	a.refreshDivergence(o)
@@ -1024,7 +1056,7 @@ func (a *App) applyTheme() {
 	theme := a.theme()
 	a.eng.SetTheme(theme)
 	a.applyWindowFrame()
-	a.applyToolbarIcons(theme)
+	a.applyToolbarIcons()
 	a.applyFilesStatusButtonVisuals(theme)
 	a.applyFilesSubdirsButtonVisuals(theme)
 	a.applyWorkingCopyButtonVisuals(theme)
@@ -1034,6 +1066,7 @@ func (a *App) applyTheme() {
 	a.applyMergeBannerTheme(theme)
 	a.journalView.Restyle(theme)
 	a.detailsView.Restyle(theme)
+	a.branchesView.Restyle(theme)
 	a.restyleSidebar(theme)
 }
 
@@ -1099,7 +1132,6 @@ func (a *App) Run() error {
 	go a.FollowSystemTheme(ctx)
 	a.scheduleUpdateCheck()
 	go a.runWatchdog(ctx, a.watches())
-	go a.keepPopupsInCanvas(ctx, widget.PopupsHosted)
 	win := window.New(a.eng, a.root.Title)
 	a.applyWindowIcon(win)
 	if a.OnExit == nil {
@@ -1120,6 +1152,7 @@ func (a *App) Close() {
 		a.closePostQueue()
 		a.branchWG.Wait()
 		a.submoduleWG.Wait()
+		a.branchDivergenceWG.Wait()
 		a.releaseDialogs(true)
 		a.stopWatcher()
 		a.stopJournal()

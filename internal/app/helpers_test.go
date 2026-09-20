@@ -17,7 +17,8 @@ const filesStatusButtonsXAML = `<Button x:Name="filesFilterStaged"/><Button x:Na
 	`<Button x:Name="filesFilterUnchanged"/>`
 
 const mergeBannerXAML = `<DockPanel x:Name="mergeBanner"><TextBlock x:Name="mergeBannerText"/>` +
-	`<Button x:Name="mergeBannerCommit"/><Button x:Name="mergeBannerAbort"/></DockPanel>`
+	`<Button x:Name="mergeBannerCommit"/><Button x:Name="mergeBannerAbort"/>` +
+	`<Button x:Name="mergeBannerGood"/><Button x:Name="mergeBannerBad"/><Button x:Name="mergeBannerSkip"/></DockPanel>`
 
 const filesSubdirsButtonXAML = `<Button x:Name="filesFilterSubdirs"/><Button x:Name="filesWorkingCopy"/>`
 

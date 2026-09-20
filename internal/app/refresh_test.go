@@ -101,7 +101,7 @@ func TestARefreshPutsTheJournalSelectionBackOnTheShownCommitWithoutReloadingIt(t
 	row := journalRowOnDispatcher(t, a, 1)
 	selectJournalRow(t, a, 1)
 	waitForDetails(t, a, row.ID)
-	runOnDispatcher(t, a, func() { a.journalGrid().Grid.SetSelectedIndex(0) })
+	runOnDispatcher(t, a, func() { a.journalGrid().Grid.SetSelectedIndexQuiet(0) })
 
 	runOnDispatcher(t, a, a.RefreshRepository)
 

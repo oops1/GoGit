@@ -155,7 +155,7 @@ func TestTheFilesMenuActsOnTheFileUnderTheCursor(t *testing.T) {
 	if len(*started) != 1 {
 		t.Fatalf("started = %v, want the file opened", *started)
 	}
-	if _, ok := findMenuItem(items, i18n.T("Menu.Edit.Stage")); !ok {
+	if _, ok := findMenuItem(items, i18n.T("Menu.Local.Stage")); !ok {
 		t.Fatalf("menu = %v, want the staging items", menuTexts(items))
 	}
 }

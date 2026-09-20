@@ -1,71 +1,190 @@
 package app
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/dialogs/toolbar"
 	"github.com/oops1/gogit/internal/ui/settings"
 )
 
-type toolbarTestButton struct {
-	btn   *widget.Button
-	arrow int
-}
-
-func (b toolbarTestButton) captionWidth() int {
-	return toolbarCaptionButtonWidth(b.btn.Text) + b.arrow
-}
-
-func allToolbarButtons(t *testing.T, a *App) map[string]toolbarTestButton {
+func toolbarItemNamed(t *testing.T, a *App, name string) toolbarButton {
 	t.Helper()
-	buttons := map[string]toolbarTestButton{}
-	for _, name := range toolbarButtons {
-		buttons[name] = toolbarTestButton{btn: a.Widget(name).(*widget.Button)}
-	}
-	for _, entry := range toolbarMenuButtons() {
-		menu, ok := a.Widget(entry.Name).(*widget.MenuButton)
-		if !ok {
-			t.Fatalf("toolbar button %q is %T, want a menu button", entry.Name, a.Widget(entry.Name))
+	for _, item := range a.toolbarButtons {
+		if item.entry.Name == name {
+			return item
 		}
-		buttons[entry.Name] = toolbarTestButton{btn: menu.Button, arrow: toolbarMenuArrowWidth}
 	}
-	return buttons
+	t.Fatalf("the toolbar has no button %q", name)
+	return toolbarButton{}
+}
+
+func toolbarButtonNamed(t *testing.T, a *App, name string) *widget.Button {
+	t.Helper()
+	return toolbarItemNamed(t, a, name).button()
+}
+
+func toolbarItemIDs(a *App) []string {
+	panel, _ := a.toolbarPanel()
+	ids := make([]string, 0, len(panel.Children()))
+	for _, child := range panel.Children() {
+		switch child.(type) {
+		case *toolbarSeparator:
+			ids = append(ids, toolbar.SeparatorID)
+		case *widget.Stretch:
+			ids = append(ids, toolbar.StretchID)
+		default:
+			for _, item := range a.toolbarButtons {
+				if item.widget() == child {
+					ids = append(ids, item.entry.ID)
+				}
+			}
+		}
+	}
+	return ids
+}
+
+func TestTheDefaultToolbarRepeatsTheSmartGitRow(t *testing.T) {
+	a := newTestApp(t)
+	if got := toolbarItemIDs(a); !slices.Equal(got, defaultToolbarItems()) {
+		t.Fatalf("toolbar = %v, want %v", got, defaultToolbarItems())
+	}
+	groups := [][]string{
+		{string(CmdPull), string(CmdSync), string(CmdPush)},
+		{string(CmdCommit)},
+		{string(CmdStage), string(CmdIndexEditor), string(CmdUnstage)},
+		{string(CmdDiscard)},
+		{string(CmdStashSave), string(CmdStashApply)},
+	}
+	if got := toolbarGroups(a, toolbar.SeparatorID); !slices.EqualFunc(got[:len(groups)], groups, slices.Equal) {
+		t.Fatalf("groups before the first stretch = %v", got[:len(groups)])
+	}
+	stretched := toolbarGroups(a, toolbar.StretchID)
+	if len(stretched) != 3 {
+		t.Fatalf("the row must be split by two stretches, got %d parts", len(stretched))
+	}
+	if !slices.Equal(stretched[1], []string{string(CmdLog), string(CmdBlame), string(CmdInvestigate)}) {
+		t.Fatalf("the middle group = %v", stretched[1])
+	}
+	if !slices.Equal(stretched[2], []string{toolbarFlowID, toolbar.SeparatorID, string(CmdMerge), string(CmdRebase)}) {
+		t.Fatalf("the trailing group = %v", stretched[2])
+	}
+}
+
+func toolbarGroups(a *App, at string) [][]string {
+	groups := [][]string{{}}
+	for _, id := range toolbarItemIDs(a) {
+		if id == at {
+			groups = append(groups, []string{})
+			continue
+		}
+		if at == toolbar.SeparatorID && id == toolbar.StretchID {
+			break
+		}
+		groups[len(groups)-1] = append(groups[len(groups)-1], id)
+	}
+	return groups
+}
+
+func TestTheToolbarGivesTheArrowedButtonsAMenu(t *testing.T) {
+	a := newTestApp(t)
+	withArrow := []string{"btnPull", "btnSync", "btnPush", "btnSaveStash", "btnApplyStash", "btnLog", "btnGitFlow"}
+	for _, name := range withArrow {
+		item := toolbarItemNamed(t, a, name)
+		if item.menu == nil {
+			t.Fatalf("button %q must carry a drop-down menu", name)
+		}
+		if want := name != "btnGitFlow"; item.menu.Split != want {
+			t.Fatalf("button %q split = %v, want %v", name, item.menu.Split, want)
+		}
+		items := readOnDispatcher(t, a, func() []widget.MenuItem {
+			item.menu.OnOpening()
+			return item.menu.Items
+		})
+		if len(items) == 0 && name != "btnApplyStash" {
+			t.Fatalf("button %q opens an empty menu", name)
+		}
+	}
+	for _, name := range []string{"btnCommit", "btnStage", "btnMerge"} {
+		if toolbarItemNamed(t, a, name).menu != nil {
+			t.Fatalf("button %q must be a plain button", name)
+		}
+	}
+}
+
+func TestEveryToolbarButtonEitherRunsACommandOrStaysDisabled(t *testing.T) {
+	a := newTestApp(t)
+	full := State{
+		ActiveRepository: "r1", ActiveIsWorktree: true, FilesSelected: true,
+		HasStagedChanges: true, HasChanges: true, HasStashable: true, HasRemotes: true,
+		HasStashes: true, HasSubmodules: true, FlowConfigured: true,
+	}
+	seen := map[string]bool{}
+	for _, entry := range toolbarCatalog() {
+		if seen[entry.ID] {
+			t.Fatalf("catalog entry %q is listed twice", entry.ID)
+		}
+		seen[entry.ID] = true
+		if entry.Command == "" {
+			continue
+		}
+		if handlerOf(a, entry.Command) == nil && full.Enabled(entry.Command) {
+			t.Fatalf("button %q has no handler yet, so it must stay disabled", entry.Name)
+		}
+	}
+}
+
+func TestEveryToolbarCatalogEntryIsTranslatedAndDrawn(t *testing.T) {
+	a := newTestApp(t)
+	for _, lang := range []string{"en", "ru"} {
+		a.SetLanguage(lang)
+		for _, entry := range toolbarCatalog() {
+			checkTranslated(t, lang, entry.LabelKey, i18n.T(entry.LabelKey))
+			checkTranslated(t, lang, entry.TipKey, i18n.T(entry.TipKey))
+			if toolbarIcon(entry.Icon) == nil {
+				t.Fatalf("catalog entry %q has no icon %q", entry.ID, entry.Icon)
+			}
+		}
+	}
 }
 
 func TestToolbarButtonWidthFitsCaptionInEveryLanguage(t *testing.T) {
 	a := newTestApp(t)
 	for _, lang := range []string{"en", "ru"} {
 		a.SetLanguage(lang)
-		for name, button := range allToolbarButtons(t, a) {
-			btn := button.btn
-			want := button.captionWidth()
+		for _, item := range a.toolbarButtons {
+			btn := item.button()
+			want := toolbarCaptionButtonWidth(btn.Text)
 			if got := btn.Bounds().Dx(); got < want {
-				t.Fatalf("lang %q: button %q width = %d, want at least %d for caption %q", lang, name, got, want, btn.Text)
+				t.Fatalf("lang %q: button %q width = %d, want at least %d for caption %q",
+					lang, item.entry.Name, got, want, btn.Text)
 			}
 		}
 	}
 }
 
-func TestToolbarButtonsShareOneWidthAcrossAllCaptions(t *testing.T) {
+func TestTheDefaultToolbarFitsTheSmallestWindow(t *testing.T) {
 	a := newTestApp(t)
-	a.SetLanguage("ru")
-	widths := map[int]bool{}
-	for _, button := range allToolbarButtons(t, a) {
-		widths[button.btn.Bounds().Dx()] = true
-	}
-	if len(widths) != 1 {
-		t.Fatalf("toolbar buttons have %d distinct widths, want 1", len(widths))
+	for _, lang := range []string{"en", "ru"} {
+		a.SetLanguage(lang)
+		if got := fixedToolbarWidth(a); got > config.MinWindowWidth {
+			t.Fatalf("lang %q: the toolbar wants %d points, the window is %d wide",
+				lang, got, config.MinWindowWidth)
+		}
 	}
 }
 
 func TestToolbarButtonWidthIsClampedToTheMaximum(t *testing.T) {
-	a := newTestApp(t)
-	btn := a.Widget("btnCommit").(*widget.Button)
-	btn.Text = strings.Repeat("Ж", 100)
-	if got := a.toolbarCaptionsWidth(); got != toolbarButtonMaxWidth {
+	if got := toolbarCaptionButtonWidth(strings.Repeat("Ж", 100)); got != toolbarButtonMaxWidth {
 		t.Fatalf("width = %d, want the clamped maximum %d", got, toolbarButtonMaxWidth)
+	}
+	if got := toolbarCaptionButtonWidth(""); got != toolbarButtonMinWidth {
+		t.Fatalf("width = %d, want the minimum %d", got, toolbarButtonMinWidth)
 	}
 }
 
@@ -73,9 +192,13 @@ func TestToolbarButtonWidthStaysCompactWithoutCaptions(t *testing.T) {
 	a := newTestApp(t)
 	a.cfg.UI.ToolbarCaptions = false
 	a.SetLanguage("ru")
-	for name, button := range allToolbarButtons(t, a) {
-		if got := button.btn.Bounds().Dx(); got != toolbarCompactWidth {
-			t.Fatalf("button %q width = %d, want %d", name, got, toolbarCompactWidth)
+	for _, item := range a.toolbarButtons {
+		want := toolbarCompactWidth
+		if item.menu != nil {
+			want += toolbarMenuArrowWidth
+		}
+		if got := item.button().Bounds().Dx(); got != want {
+			t.Fatalf("button %q width = %d, want %d", item.entry.Name, got, want)
 		}
 	}
 }
@@ -86,31 +209,171 @@ func TestApplySettingsRecomputesToolbarWidthWhenCaptionsAreToggled(t *testing.T)
 	m := settings.FromConfig(a.cfg)
 	m.ToolbarCaptions = false
 	a.applySettings(m, true)
-	for name, button := range allToolbarButtons(t, a) {
-		btn := button.btn
-		if got := btn.Bounds().Dx(); got != toolbarCompactWidth {
-			t.Fatalf("captions off: button %q width = %d, want %d", name, got, toolbarCompactWidth)
+	for _, item := range a.toolbarButtons {
+		btn := item.button()
+		if btn.Bounds().Dy() != toolbarCompactHeight {
+			t.Fatalf("captions off: button %q height = %d, want %d", item.entry.Name, btn.Bounds().Dy(), toolbarCompactHeight)
 		}
 		if btn.IconPos != widget.IconOnly {
-			t.Fatalf("captions off: button %q icon position = %v, want IconOnly", name, btn.IconPos)
+			t.Fatalf("captions off: button %q icon position = %v, want IconOnly", item.entry.Name, btn.IconPos)
 		}
 	}
 
 	m.ToolbarCaptions = true
 	a.applySettings(m, true)
-	widths := map[int]bool{}
-	for name, button := range allToolbarButtons(t, a) {
-		btn := button.btn
-		want := button.captionWidth()
-		if got := btn.Bounds().Dx(); got < want {
-			t.Fatalf("captions on: button %q width = %d, want at least %d for caption %q", name, got, want, btn.Text)
+	for _, item := range a.toolbarButtons {
+		btn := item.button()
+		if got, want := btn.Bounds().Dx(), toolbarCaptionButtonWidth(btn.Text); got < want {
+			t.Fatalf("captions on: button %q width = %d, want at least %d for caption %q",
+				item.entry.Name, got, want, btn.Text)
 		}
 		if btn.IconPos != widget.IconTop {
-			t.Fatalf("captions on: button %q icon position = %v, want IconTop", name, btn.IconPos)
+			t.Fatalf("captions on: button %q icon position = %v, want IconTop", item.entry.Name, btn.IconPos)
 		}
-		widths[btn.Bounds().Dx()] = true
 	}
-	if len(widths) != 1 {
-		t.Fatalf("toolbar row is uneven: buttons have %d distinct widths, want 1", len(widths))
+}
+
+func TestTheStretchesShareWhateverTheButtonsLeaveOver(t *testing.T) {
+	a := newTestApp(t)
+	panel, ok := a.toolbarPanel()
+	if !ok {
+		t.Fatal("the toolbar panel is missing")
 	}
+	panel.SetBounds(rectOfSize(0, 0, 2000, 60))
+	stretches := []*widget.Stretch{}
+	fixed := panel.Padding * 2
+	for _, child := range panel.Children() {
+		fixed += toolbarItemMargin * 2
+		if stretch, is := child.(*widget.Stretch); is {
+			stretches = append(stretches, stretch)
+			continue
+		}
+		width, _ := toolbarItemSize(child)
+		fixed += width
+	}
+	if len(stretches) != 2 {
+		t.Fatalf("stretches = %d, want 2", len(stretches))
+	}
+	free := 2000 - fixed
+	first := free / 2
+	want := []int{first, free - first}
+	for i, stretch := range stretches {
+		if got := stretch.Bounds().Dx(); got != want[i] {
+			t.Fatalf("stretch %d is laid out %d wide, want %d", i, got, want[i])
+		}
+	}
+	if last := panel.Children()[len(panel.Children())-1]; last.Bounds().Max.X > 2000 {
+		t.Fatalf("the row ends at %d, past the panel", last.Bounds().Max.X)
+	}
+}
+
+func TestTheToolbarSkipsItemsItDoesNotKnow(t *testing.T) {
+	cfg := config.Default()
+	cfg.UI.ToolbarItems = []string{"no.such.command", string(CmdCommit), toolbar.SeparatorID}
+	a := newTestAppWithConfig(t, cfg)
+	if got := toolbarItemIDs(a); !slices.Equal(got, []string{string(CmdCommit), toolbar.SeparatorID}) {
+		t.Fatalf("toolbar = %v", got)
+	}
+}
+
+func TestASpacerDrawsNothingWhereThereIsNothingToDraw(t *testing.T) {
+	(&widget.Stretch{}).Draw(nil)
+	(&toolbarSeparator{}).Draw(nil)
+	invisible := &toolbarSeparator{}
+	invisible.SetBounds(rectOfSize(0, 0, 9, 40))
+	invisible.Draw(nil)
+}
+
+func TestAToolbarBuiltUnderATestedThemeWearsIt(t *testing.T) {
+	for _, theme := range []string{config.ThemeLight, config.ThemeDark} {
+		cfg := config.Default()
+		cfg.Theme = theme
+		a := newTestAppWithConfig(t, cfg)
+		want := a.theme()
+		for _, item := range a.toolbarButtons {
+			if got := item.button().Background; got != want.BtnBG {
+				t.Fatalf("theme %q: button %q background = %v, want %v", theme, item.entry.Name, got, want.BtnBG)
+			}
+		}
+		a.applyToolbarConfiguration(toolbarConfigurationOf(defaultToolbarItems(), true))
+		for _, item := range a.toolbarButtons {
+			if got := item.button().Background; got != want.BtnBG {
+				t.Fatalf("theme %q: rebuilt button %q background = %v, want %v", theme, item.entry.Name, got, want.BtnBG)
+			}
+		}
+	}
+}
+
+func toolbarConfigurationOf(items []string, captions bool) toolbar.Result {
+	return toolbar.Result{Items: items, Captions: captions}
+}
+
+func TestTheSeparatorTakesItsColourFromTheTheme(t *testing.T) {
+	separator := &toolbarSeparator{}
+	for _, theme := range []*widget.Theme{widget.Win11LightTheme(), widget.Win11DarkTheme()} {
+		separator.ApplyTheme(theme)
+		if separator.Color != theme.Border {
+			t.Fatalf("colour = %v, want %v", separator.Color, theme.Border)
+		}
+	}
+}
+
+func TestClickingASplitButtonAndItsMenuRunsTheCommand(t *testing.T) {
+	a := newTestApp(t)
+	called := 0
+	a.SetHandler(CmdPull, func() { called++ })
+	a.SetActiveRepository("r", false)
+	a.setHasRemotes(true)
+
+	item := toolbarItemNamed(t, a, "btnPull")
+	runOnDispatcher(t, a, item.button().OnClick)
+	items := readOnDispatcher(t, a, func() []widget.MenuItem {
+		item.menu.OnOpening()
+		return item.menu.Items
+	})
+	pull, found := findMenuItem(items, i18n.T("Menu.Remote.Pull"))
+	if !found {
+		t.Fatalf("the pull menu = %v", items)
+	}
+	runOnDispatcher(t, a, pull.OnClick)
+	if called != 2 {
+		t.Fatalf("the command ran %d times, want 2", called)
+	}
+
+	commits := 0
+	a.SetHandler(CmdCommit, func() { commits++ })
+	a.setHasStagedChanges(true)
+	runOnDispatcher(t, a, toolbarButtonNamed(t, a, "btnCommit").OnClick)
+	if commits != 1 {
+		t.Fatalf("the plain button ran the command %d times, want 1", commits)
+	}
+}
+
+func TestTheToolbarSurvivesAWindowWithoutOne(t *testing.T) {
+	a := newTestApp(t)
+	delete(a.named, "toolbar")
+	before := len(a.toolbarButtons)
+	a.buildToolbar()
+	a.relayoutToolbar()
+	a.retranslateToolbar()
+	if len(a.toolbarButtons) != before {
+		t.Fatalf("buttons without a panel = %d, want the %d it already had", len(a.toolbarButtons), before)
+	}
+}
+
+func fixedToolbarWidth(a *App) int {
+	panel, ok := a.toolbarPanel()
+	if !ok {
+		return 0
+	}
+	total := panel.Padding * 2
+	for _, child := range panel.Children() {
+		total += toolbarItemMargin * 2
+		if _, stretch := child.(*widget.Stretch); stretch {
+			continue
+		}
+		width, _ := toolbarItemSize(child)
+		total += width
+	}
+	return total
 }

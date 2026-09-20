@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [race-ops, race-app, race-rest, oracle-ops-unit, oracle-ops-git, oracle-app, oracle-rest]
+        suite: [race-ops, race-app, race-rest, oracle-ops-unit, oracle-ops-git, oracle-ops-faults, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash
@@ -65,6 +65,14 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ matrix.suite }}-
       - run: bash .github/ci/suite.sh ${{ matrix.suite }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-${{ runner.os }}-logs
+          path: |
+            race.log
+            oracle.log
+          if-no-files-found: ignore
 
   suites-windows:
     needs: changes
@@ -74,7 +82,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [race-ops, race-app, race-rest, oracle-ops-unit, oracle-ops-git, oracle-app, oracle-rest]
+        suite: [race-ops, race-rest, oracle-ops-unit, oracle-ops-git, oracle-ops-faults, oracle-app, oracle-rest]
     defaults:
       run:
         shell: bash
@@ -97,6 +105,14 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ matrix.suite }}-
       - run: bash .github/ci/suite.sh ${{ matrix.suite }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suite }}-${{ runner.os }}-logs
+          path: |
+            race.log
+            oracle.log
+          if-no-files-found: ignore
 
   test-ubuntu:
     needs: [changes, suites-ubuntu]

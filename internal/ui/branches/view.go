@@ -1,8 +1,10 @@
 package branches
 
 import (
+	"image/color"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/treeview"
@@ -11,7 +13,9 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/repo"
 	"github.com/oops1/gogit/internal/ui/icons"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const (
@@ -31,6 +35,7 @@ type pathEntry struct {
 	label   string
 	current bool
 	icon    string
+	when    time.Time
 }
 
 type View struct {
@@ -45,8 +50,13 @@ type View struct {
 
 	mu              sync.Mutex
 	last            Snapshot
+	options         Options
+	flow            ops.FlowConfig
+	flowConfigured  bool
 	submodules      []ops.Submodule
 	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
+	divergence      map[refs.Name]repo.Divergence
+	secondary       color.RGBA
 
 	OnSubmoduleActivate func(ops.Submodule)
 	OnSubmoduleMenu     func(ops.Submodule) []widget.MenuItem
@@ -59,11 +69,14 @@ func NewView() *View {
 		keyByItem:       map[*treeview.TreeViewItem]string{},
 		expanded:        map[string]bool{},
 		submoduleByItem: map[*treeview.TreeViewItem]ops.Submodule{},
+		options:         DefaultOptions(),
+		secondary:       style.Of(widget.CurrentTheme()).Secondary,
 	}
 }
 
 func (v *View) Bind(tree *widget.TreeViewWidget) {
 	v.tree = tree
+	tree.Tree.SelectionMode = treeview.SelectionExtended
 	tree.Tree.OnItemInvoked = func(e treeview.ItemInvokedEvent) {
 		ref, isRef, sub, isSub := v.lookup(e.Item)
 		if isRef && v.OnActivate != nil {
@@ -119,7 +132,8 @@ func (v *View) Render(s Snapshot) {
 func (v *View) render(s Snapshot) {
 	v.last = s
 	v.captureExpanded()
-	selected, scroll := v.idByItem[v.tree.Tree.SelectedItem()], v.tree.Tree.ScrollY()
+	selectedRefs, currentRef := v.captureSelection()
+	scroll := v.tree.Tree.ScrollY()
 	selectedSubmodule, submoduleSelected := v.submoduleByItem[v.tree.Tree.SelectedItem()]
 
 	v.tree.BeginUpdate()
@@ -130,6 +144,12 @@ func (v *View) render(s Snapshot) {
 	v.keyByItem = map[*treeview.TreeViewItem]string{}
 	v.submoduleByItem = map[*treeview.TreeViewItem]ops.Submodule{}
 
+	if base := v.buildFlowBase(s); base != nil {
+		v.tree.AddRoot(base)
+	}
+	for _, section := range v.buildFlowSections(s) {
+		v.tree.AddRoot(section)
+	}
 	v.tree.AddRoot(v.buildLocal(s))
 	v.tree.AddRoot(v.buildRemotes(s))
 	v.tree.AddRoot(v.buildTags(s))
@@ -141,15 +161,47 @@ func (v *View) render(s Snapshot) {
 	}
 
 	v.tree.EndUpdate()
-	if item, ok := v.itemByRef[selected]; ok {
-		selectQuietly(v.tree.Tree, item)
-	}
+	v.restoreSelection(selectedRefs, currentRef)
 	for item, sub := range v.submoduleByItem {
 		if submoduleSelected && sub.Path == selectedSubmodule.Path {
 			selectQuietly(v.tree.Tree, item)
 		}
 	}
 	v.tree.ScrollBy(scroll)
+}
+
+func (v *View) captureSelection() ([]refs.Name, refs.Name) {
+	items := v.tree.Tree.SelectedItems()
+	selected := make([]refs.Name, 0, len(items))
+	for _, item := range items {
+		if ref, ok := v.idByItem[item]; ok {
+			selected = append(selected, ref)
+		}
+	}
+	current := v.idByItem[v.tree.Tree.SelectedItem()]
+	return selected, current
+}
+
+func (v *View) restoreSelection(selected []refs.Name, current refs.Name) {
+	items := make([]*treeview.TreeViewItem, 0, len(selected))
+	currentIndex := -1
+	for _, ref := range selected {
+		item, ok := v.itemByRef[ref]
+		if !ok {
+			continue
+		}
+		if ref == current {
+			currentIndex = len(items)
+		}
+		items = append(items, item)
+	}
+	if len(items) == 0 {
+		return
+	}
+	if last := len(items) - 1; currentIndex >= 0 && currentIndex != last {
+		items[currentIndex], items[last] = items[last], items[currentIndex]
+	}
+	selectItemsQuietly(v.tree.Tree, items)
 }
 
 func (v *View) ClearStashSelection() {
@@ -167,6 +219,13 @@ func selectQuietly(tree *treeview.TreeView, item *treeview.TreeViewItem) {
 	handler := tree.OnSelectedItemChanged
 	tree.OnSelectedItemChanged = nil
 	tree.SetSelectedItem(item)
+	tree.OnSelectedItemChanged = handler
+}
+
+func selectItemsQuietly(tree *treeview.TreeView, items []*treeview.TreeViewItem) {
+	handler := tree.OnSelectedItemChanged
+	tree.OnSelectedItemChanged = nil
+	tree.SetSelectedItems(items)
 	tree.OnSelectedItemChanged = handler
 }
 
@@ -217,6 +276,12 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 	entries := make([]pathEntry, 0, len(s.Local))
 	for _, b := range s.Local {
 		short := b.Name.Short()
+		if _, inFlow := v.flowKindOf(short); inFlow {
+			continue
+		}
+		if short == v.flowBaseBranch() {
+			continue
+		}
 		current := !s.Detached && short == s.Current
 		icon := "branch"
 		if current {
@@ -227,6 +292,7 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 			ref:     b.Name,
 			current: current,
 			icon:    icon,
+			when:    b.When,
 		})
 	}
 	v.buildPathTree(root, localGroupKey, entries)
@@ -246,11 +312,14 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 				continue
 			}
 			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
+			if v.flowHoldsRemote(relative) {
+				continue
+			}
 			icon := "branch_remote"
 			if remote.Head != "" && b.Name == remote.Head {
 				icon = "branch_head"
 			}
-			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon})
+			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon, when: b.When})
 		}
 		v.buildPathTree(node, key, entries)
 	}
@@ -266,7 +335,7 @@ func (v *View) buildTags(s Snapshot) *treeview.TreeViewItem {
 		short := t.Name.Short()
 		byName[short] = t.Name
 		if strings.Contains(short, "/") {
-			nested = append(nested, pathEntry{path: short, ref: t.Name, icon: "tag"})
+			nested = append(nested, pathEntry{path: short, ref: t.Name, icon: "tag", when: t.When})
 			continue
 		}
 		names = append(names, short)
@@ -303,25 +372,20 @@ func (v *View) buildStash(s Snapshot) *treeview.TreeViewItem {
 }
 
 func (v *View) buildPathTree(root *treeview.TreeViewItem, rootKey string, entries []pathEntry) {
-	nodes := map[string]*treeview.TreeViewItem{rootKey: root}
-	for _, e := range entries {
-		segments := strings.Split(e.path, "/")
-		key := rootKey
-		parent := root
-		for i, segment := range segments {
-			key = key + "/" + segment
-			if i == len(segments)-1 {
-				parent.AddChild(v.leafItem(e, segment))
-				continue
-			}
-			node, ok := nodes[key]
-			if !ok {
-				node = v.newGroupItem(key, segment)
-				parent.AddChild(node)
-				nodes[key] = node
-			}
-			parent = node
+	sortRefEntries(entries, v.options.Sort)
+	v.addRefNodes(root, rootKey, groupRefEntries(entries, v.options.Grouping))
+}
+
+func (v *View) addRefNodes(parent *treeview.TreeViewItem, key string, nodes []refNode) {
+	for _, node := range nodes {
+		if node.leaf {
+			parent.AddChild(v.leafItem(node.entry, node.label))
+			continue
 		}
+		childKey := key + "/" + node.label
+		group := v.newGroupItem(childKey, node.label)
+		parent.AddChild(group)
+		v.addRefNodes(group, childKey, node.children)
 	}
 }
 
@@ -330,8 +394,16 @@ func (v *View) leafItem(e pathEntry, segment string) *treeview.TreeViewItem {
 	if label == "" {
 		label = segment
 	}
+	diverged := false
+	if d, ok := v.divergence[e.ref]; ok {
+		label += divergenceSuffix(d)
+		diverged = true
+	}
 	item := treeview.NewItem(label)
 	item.Icon = icons.Tree(e.icon, treeIconSize)
+	if diverged {
+		item.Foreground = v.secondary
+	}
 	v.track(item, e.ref)
 	return item
 }

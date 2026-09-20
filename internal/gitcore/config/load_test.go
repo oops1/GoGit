@@ -157,19 +157,26 @@ func TestLoadUsesDefaultSystemPathWhenUnset(t *testing.T) {
 	}
 }
 
-func TestSystemPathForKnowsBothPlatforms(t *testing.T) {
-	if got := systemPathFor("linux", ""); got != "/etc/gitconfig" {
-		t.Errorf("linux system path = %q", got)
+func TestSystemPathsKnowBothPlatforms(t *testing.T) {
+	if got := systemPathsFor("linux", "", ""); len(got) != 1 || got[0] != "/etc/gitconfig" {
+		t.Errorf("linux system paths = %q", got)
 	}
-	if got := systemPathFor("windows", ""); got != "" {
-		t.Errorf("windows system path without ProgramData = %q", got)
+	if got := systemPathsFor("windows", "", ""); len(got) != 0 {
+		t.Errorf("windows system paths without anything to look at = %q", got)
 	}
-	got := systemPathFor("windows", "C:\\ProgramData")
-	if !strings.Contains(got, "Git") || !strings.HasSuffix(got, "config") {
-		t.Errorf("windows system path = %q", got)
+	got := systemPathsFor("windows", `C:\ProgramData`, "")
+	if len(got) != 1 || !strings.Contains(got[0], "Git") || !strings.HasSuffix(got[0], "config") {
+		t.Errorf("windows system paths = %q", got)
 	}
-	if defaultSystemPath() == "" && systemPathFor("linux", "") == "" {
-		t.Error("defaultSystemPath is unusable")
+	got = systemPathsFor("windows", `C:\ProgramData`, `C:\Program Files\Git`)
+	if len(got) != 2 || !strings.HasSuffix(got[1], filepath.Join("etc", "gitconfig")) {
+		t.Errorf("windows system paths with git installed = %q", got)
+	}
+	if got := systemPathsFor("windows", "", `C:\Program Files\Git`); len(got) != 1 {
+		t.Errorf("windows system paths without ProgramData = %q", got)
+	}
+	if len(defaultSystemPaths()) == 0 {
+		t.Error("defaultSystemPaths is empty on this platform")
 	}
 }
 
@@ -847,5 +854,29 @@ func TestLoadReadsGitGeneratedFixtures(t *testing.T) {
 	}
 	if origin, _ := cfg.Origin("user.name"); origin.Level != LevelLocal {
 		t.Errorf("user.name origin = %+v", origin)
+	}
+}
+
+func TestLoadReadsEverySystemFileGitReads(t *testing.T) {
+	isolateEnv(t)
+	programData := t.TempDir()
+	prefix := t.TempDir()
+	writeFile(t, filepath.Join(programData, "Git", "config"), "[core]\n\tautocrlf = input\n")
+	writeFile(t, filepath.Join(prefix, "etc", "gitconfig"), "[core]\n\tautocrlf = true\n\tfilemode = false\n")
+
+	cfg, err := loadWithSystemPaths(systemPathsFor("windows", programData, prefix))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	core, err := cfg.Core()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if core.AutoCRLF != AutoCRLFTrue {
+		t.Fatalf("core.autocrlf = %q, want the later system file to win", core.AutoCRLF)
+	}
+	if core.FileMode {
+		t.Fatal("core.filemode from the git installation was not read")
 	}
 }

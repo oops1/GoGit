@@ -3,6 +3,7 @@ package blameview
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
+	"github.com/oops1/gogit/internal/ui/journal"
 	"github.com/oops1/gogit/internal/ui/style"
 )
 
@@ -23,7 +25,23 @@ var ErrWidgetMissing = errors.New("blameview: named widget missing")
 
 var loadDialog = dialogs.Load
 
-const shortLength = 7
+const (
+	shortLength = 7
+
+	minDialogWidth  = 720
+	minDialogHeight = 420
+
+	rowHeight       = 18
+	fontSize        = 9.0
+	textHeightRatio = 1.4
+	cellPadding     = 4
+	badgePadding    = 1
+	badgeSize       = 16
+	whenWidth       = 74
+	numberWidth     = 44
+
+	commitWidth = 58
+)
 
 type Line struct {
 	Commit  hash.ObjectID
@@ -51,10 +69,12 @@ type View struct {
 	closeBtn  *widget.Button
 	lookBtn   *widget.Button
 
-	lines    []Line
-	selected int
+	lines     []Line
+	selected  int
+	linkColor color.RGBA
 
 	OnInvestigate func(line Line)
+	OnCommit      func(id hash.ObjectID)
 	OnClose       func()
 }
 
@@ -68,6 +88,8 @@ func NewView() (*View, error) {
 		return nil, err
 	}
 	v.hintLabel.Muted = true
+	dlg.SetResizable(true)
+	dlg.SetMinSize(minDialogWidth, minDialogHeight)
 	v.buildColumns()
 	v.wire()
 	v.refresh()
@@ -81,6 +103,8 @@ func (v *View) Restyle(t *widget.Theme) {
 	p.Quiet(v.lookBtn, v.closeBtn)
 	p.Body(v.pathLabel)
 	p.Hints(v.hintLabel)
+	v.linkColor = p.Accent
+	v.table.Grid.GridLineColor = v.table.Grid.Background
 }
 
 func (v *View) bind(named map[string]widget.Widget) error {
@@ -104,21 +128,76 @@ func (v *View) bind(named map[string]widget.Widget) error {
 }
 
 func (v *View) buildColumns() {
-	commit := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.Commit"), "Commit")
-	commit.SetWidth(datagrid.PixelWidth(90))
+	v.table.Grid.RowHeight = rowHeight
+	v.table.Grid.FontSize = fontSize
+	v.table.Grid.ZebraStripes = false
+	v.table.Grid.GridLineColor = v.table.Grid.Background
+	commit := datagrid.NewTemplateColumn(i18n.T("Dialog.Blame.Column.Commit"), v.drawCommitCell)
+	commit.SetWidth(datagrid.PixelWidth(commitWidth))
 	when := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.When"), "When")
-	when.SetWidth(datagrid.PixelWidth(120))
-	author := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.Author"), "Author")
-	author.SetWidth(datagrid.PixelWidth(130))
+	when.SetWidth(datagrid.PixelWidth(whenWidth))
+	author := datagrid.NewTemplateColumn(i18n.T("Dialog.Blame.Column.Author"), v.drawAuthorCell)
+	author.SetWidth(datagrid.PixelWidth(badgeSize + 2*badgePadding))
 	number := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.Line"), "Number")
-	number.SetWidth(datagrid.PixelWidth(60))
+	number.SetWidth(datagrid.PixelWidth(numberWidth))
 	text := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.Text"), "Text")
 	text.SetWidth(datagrid.StarWidth(1))
 	v.table.Grid.SetColumns([]datagrid.Column{commit, when, author, number, text})
 }
 
+func (v *View) drawCommitCell(cdc datagrid.CellDrawContext) {
+	row, ok := cdc.Item.(Row)
+	if !ok || row.Commit == "" {
+		return
+	}
+	width := cdc.DrawCtx.MeasureText(row.Commit, cdc.FontSize)
+	x := cdc.Rect.Min.X + cellPadding
+	y := cdc.Rect.Min.Y + (cdc.Rect.Dy()-int(cdc.FontSize*textHeightRatio))/2
+	cdc.DrawCtx.DrawTextSize(row.Commit, x, y, cdc.FontSize, v.linkColor)
+	cdc.DrawCtx.FillRect(x, y+int(cdc.FontSize*textHeightRatio), width, 1, v.linkColor)
+}
+
+func (v *View) drawAuthorCell(cdc datagrid.CellDrawContext) {
+	row, ok := cdc.Item.(Row)
+	if !ok {
+		return
+	}
+	initials := journal.Initials(row.Author)
+	if initials == "" {
+		return
+	}
+	size := min(badgeSize, cdc.Rect.Dy()-2*badgePadding)
+	if size <= 0 {
+		return
+	}
+	x := cdc.Rect.Min.X + badgePadding
+	y := cdc.Rect.Min.Y + (cdc.Rect.Dy()-size)/2
+	cdc.DrawCtx.DrawImageScaled(journal.AuthorBadge(row.Author, size), x, y, size, size)
+	textWidth := cdc.DrawCtx.MeasureText(initials, cdc.FontSize)
+	textHeight := int(cdc.FontSize * textHeightRatio)
+	cdc.DrawCtx.DrawTextSize(initials, x+(size-textWidth)/2, y+(size-textHeight)/2, cdc.FontSize,
+		journal.AuthorBadgeTextColor(row.Author))
+}
+
+func (v *View) commitOf(index int) (hash.ObjectID, bool) {
+	if index < 0 || index >= len(v.lines) {
+		return hash.ObjectID{}, false
+	}
+	return v.lines[index].Commit, true
+}
+
+func (v *View) onRowActivated(index int, _ interface{}) {
+	if v.OnCommit == nil {
+		return
+	}
+	if id, ok := v.commitOf(index); ok {
+		v.OnCommit(id)
+	}
+}
+
 func (v *View) wire() {
 	v.table.Grid.OnSelectionChanged = v.onSelected
+	v.table.Grid.OnRowActivated = v.onRowActivated
 	v.lookBtn.OnClick = v.investigate
 	v.closeBtn.OnClick = v.close
 	v.dlg.CancelAction = v.close

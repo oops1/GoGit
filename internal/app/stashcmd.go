@@ -82,7 +82,7 @@ func stashLabels(entries []branches.Stash) []string {
 func (a *App) saveStashMenuItems() []widget.MenuItem {
 	state := a.State()
 	return []widget.MenuItem{
-		enabledItem("Menu.Edit.SaveStash", func() { a.Dispatch(CmdStashSave) }, state.Enabled(CmdStashSave)),
+		enabledItem("Menu.Local.SaveStash", func() { a.Dispatch(CmdStashSave) }, state.Enabled(CmdStashSave)),
 		enabledItem("Menu.Files.StashSelection", func() { a.Dispatch(CmdStashSelection) }, state.Enabled(CmdStashSelection)),
 	}
 }

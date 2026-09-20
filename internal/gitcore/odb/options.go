@@ -24,6 +24,7 @@ type Options struct {
 	PackBytes       int64
 	MaxDepth        int
 	MaxShortMatches int
+	Missing         func(hash.ObjectID) error
 }
 
 func (o Options) normalized() (Options, error) {

@@ -55,6 +55,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"shallow":    widget.NewCheckBox(""),
 		"depth":      widget.NewNumericUpDown(),
 		"submodules": widget.NewCheckBox(""),
+		"partial":    widget.NewCheckBox(""),
 		"ok":         widget.NewButton(""),
 		"cancel":     widget.NewButton(""),
 	}
@@ -92,7 +93,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"url", "directory", "browse", "check", "status", "branch", "shallow", "depth", "submodules", "ok", "cancel"}
+	keys := []string{"url", "directory", "browse", "check", "status", "branch", "shallow", "depth", "submodules", "partial", "ok", "cancel"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)

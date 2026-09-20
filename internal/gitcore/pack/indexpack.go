@@ -23,6 +23,7 @@ const (
 	tempPackPattern  = "incoming-*" + packSuffix
 	tempIndexPattern = "incoming-*" + indexSuffix
 	keepSuffix       = ".keep"
+	promisorSuffix   = ".promisor"
 	keepFileMode     = 0o600
 	entryPrealloc    = 4096
 )
@@ -36,6 +37,7 @@ type IndexOptions struct {
 	FixThin  bool
 	Progress progress.Func
 	KeepName string
+	Promisor bool
 }
 
 type IndexResult struct {
@@ -128,6 +130,11 @@ func IndexPack(ctx context.Context, src io.Reader, dir string, opts IndexOptions
 		IndexPath: indexPath,
 		Objects:   len(entries),
 		Bytes:     size,
+	}
+	if opts.Promisor {
+		if _, err := writeKeepFile(filepath.Join(dir, "pack-"+checksum.String()+promisorSuffix), ""); err != nil {
+			return IndexResult{}, err
+		}
 	}
 	if opts.KeepName != "" {
 		keepPath := filepath.Join(dir, "pack-"+checksum.String()+keepSuffix)

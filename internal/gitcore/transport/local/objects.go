@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/revision"
+	"github.com/oops1/gogit/internal/gitcore/transport"
 )
 
 type wantKinds struct {
@@ -77,12 +78,33 @@ func commitOnly(ctx context.Context, db *odb.DB, ids []hash.ObjectID) ([]hash.Ob
 
 type objectCollector struct {
 	db      *odb.DB
+	filter  transport.Filter
 	visited map[hash.ObjectID]struct{}
 	ids     []hash.ObjectID
 }
 
-func newObjectCollector(db *odb.DB) *objectCollector {
-	return &objectCollector{db: db, visited: make(map[hash.ObjectID]struct{})}
+func newObjectCollector(db *odb.DB, filter transport.Filter) *objectCollector {
+	return &objectCollector{db: db, filter: filter, visited: make(map[hash.ObjectID]struct{})}
+}
+
+func (c *objectCollector) includeBlob(id hash.ObjectID, depth int) error {
+	if c.filter.IsZero() {
+		c.include(id)
+		return nil
+	}
+	if _, seen := c.visited[id]; seen {
+		return nil
+	}
+	size, err := c.db.Size(id)
+	if err != nil {
+		return err
+	}
+	if c.filter.OmitsBlob(size, depth) {
+		c.exclude(id)
+		return nil
+	}
+	c.include(id)
+	return nil
 }
 
 func (c *objectCollector) exclude(id hash.ObjectID) bool {
@@ -127,7 +149,10 @@ func (c *objectCollector) excludeTree(ctx context.Context, id hash.ObjectID) err
 	return nil
 }
 
-func (c *objectCollector) includeTree(ctx context.Context, id hash.ObjectID) error {
+func (c *objectCollector) includeTree(ctx context.Context, id hash.ObjectID, depth int) error {
+	if c.filter.OmitsTree(depth) {
+		return nil
+	}
 	if !c.include(id) {
 		return nil
 	}
@@ -143,12 +168,14 @@ func (c *objectCollector) includeTree(ctx context.Context, id hash.ObjectID) err
 			continue
 		}
 		if entry.Mode.IsTree() {
-			if err := c.includeTree(ctx, entry.ID); err != nil {
+			if err := c.includeTree(ctx, entry.ID, depth+1); err != nil {
 				return err
 			}
 			continue
 		}
-		c.include(entry.ID)
+		if err := c.includeBlob(entry.ID, depth+1); err != nil {
+			return err
+		}
 	}
 	return nil
 }

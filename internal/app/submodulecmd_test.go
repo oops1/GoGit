@@ -37,6 +37,7 @@ func allowLocalSubmodules(t *testing.T) {
 
 func commitTestFiles(t *testing.T, dir string, files map[string]string, links map[string]hash.ObjectID) hash.ObjectID {
 	t.Helper()
+	setTestUserIdentity(t, dir)
 	r, err := gitrepo.Open(dir, gitrepo.OpenOptions{})
 	if err != nil {
 		t.Fatal(err)

@@ -73,23 +73,7 @@ func clearBisectState(r *repo.Repository) error {
 		return err
 	}
 	defer func() { _ = rc.close() }()
-	tx := rc.refs.Begin()
-	for ref, err := range rc.refs.Prefix(refs.BisectPrefix) {
-		if err == nil {
-			err = txDelete(tx, ref.Name, ref.Target)
-		}
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-	if err := txCommit(tx); err != nil {
-		return err
-	}
-	if err := removeStateFiles(r, bisectStateFiles...); err != nil {
-		return err
-	}
-	return removeStateFiles(r, bisectStartFile)
+	return clearBisectStateWith(rc)
 }
 
 func bisectOf(gitDir string) (origin string, detached, bisecting bool) {

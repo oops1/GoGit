@@ -17,6 +17,12 @@ type Divergence struct {
 	Behind int
 }
 
+type BranchPair struct {
+	Name   refs.Name
+	Local  hash.ObjectID
+	Remote hash.ObjectID
+}
+
 var openDivergenceObjects = odb.Open
 
 var openDivergenceRefs = refs.Open
@@ -55,34 +61,54 @@ func AheadBehind(r *gitrepo.Repository) (Divergence, bool, error) {
 		return Divergence{}, false, err
 	}
 
-	shallow, err := r.Shallow()
+	result, err := ManyAheadBehind(r, []BranchPair{{Name: head.SymbolicTarget, Local: localCommit, Remote: remoteCommit}})
 	if err != nil {
 		return Divergence{}, false, err
+	}
+	return result[head.SymbolicTarget], true, nil
+}
+
+func ManyAheadBehind(r *gitrepo.Repository, pairs []BranchPair) (map[refs.Name]Divergence, error) {
+	result := make(map[refs.Name]Divergence, len(pairs))
+	if len(pairs) == 0 {
+		return result, nil
+	}
+
+	shallow, err := r.Shallow()
+	if err != nil {
+		return nil, err
 	}
 
 	db, err := openDivergenceObjects(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
 	if err != nil {
-		return Divergence{}, false, err
+		return nil, err
 	}
 	defer func() { _ = db.Close() }()
 
 	settings, err := r.CommitGraphSettings()
 	if err != nil {
-		return Divergence{}, false, err
+		return nil, err
 	}
 	revCtx := revision.Context{Objects: db, Shallow: shallow}
 	if settings.Enabled {
 		revCtx.Graph, _ = commitgraph.Open(db.Dirs(), settings.Open)
 	}
-	ahead, err := countDivergenceCommits(revCtx, localCommit, remoteCommit)
-	if err != nil {
-		return Divergence{}, false, err
+
+	for _, pair := range pairs {
+		ahead, err := countDivergenceCommits(revCtx, pair.Local, pair.Remote)
+		if err != nil {
+			return nil, err
+		}
+		behind, err := countDivergenceCommits(revCtx, pair.Remote, pair.Local)
+		if err != nil {
+			return nil, err
+		}
+		if ahead == 0 && behind == 0 {
+			continue
+		}
+		result[pair.Name] = Divergence{Ahead: ahead, Behind: behind}
 	}
-	behind, err := countDivergenceCommits(revCtx, remoteCommit, localCommit)
-	if err != nil {
-		return Divergence{}, false, err
-	}
-	return Divergence{Ahead: ahead, Behind: behind}, true, nil
+	return result, nil
 }
 
 func lookupDivergenceTarget(store *refs.Store, name refs.Name) (hash.ObjectID, bool, error) {

@@ -22,13 +22,6 @@ type faultSeam struct {
 	install func(t *testing.T, failAt int, calls *int)
 }
 
-func swapSeam[F any](t *testing.T, seam *F, wrap func(original F) F) {
-	t.Helper()
-	original := *seam
-	*seam = wrap(original)
-	t.Cleanup(func() { *seam = original })
-}
-
 func hit(calls *int, failAt int) bool {
 	*calls++
 	return *calls == failAt

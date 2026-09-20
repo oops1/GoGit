@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -16,6 +17,8 @@ type Branch struct {
 	Name           refs.Name
 	Target         hash.ObjectID
 	SymbolicTarget refs.Name
+	Upstream       refs.Name
+	When           time.Time
 }
 
 type Remote struct {
@@ -28,6 +31,7 @@ type Tag struct {
 	Name   refs.Name
 	Target hash.ObjectID
 	Peeled hash.ObjectID
+	When   time.Time
 }
 
 type Stash struct {

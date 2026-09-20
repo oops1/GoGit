@@ -29,6 +29,7 @@ type Result struct {
 	Branch     string
 	Depth      int
 	Submodules bool
+	Partial    bool
 }
 
 type View struct {
@@ -42,6 +43,7 @@ type View struct {
 	shallowCheck *widget.CheckBox
 	depthInput   *widget.NumericUpDown
 	submodules   *widget.CheckBox
+	partialCheck *widget.CheckBox
 	okBtn        *widget.Button
 	cancelBtn    *widget.Button
 
@@ -107,6 +109,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.submodules, ok = named["submodules"].(*widget.CheckBox); !ok {
 		return fmt.Errorf("%w: submodules", ErrWidgetMissing)
+	}
+	if v.partialCheck, ok = named["partial"].(*widget.CheckBox); !ok {
+		return fmt.Errorf("%w: partial", ErrWidgetMissing)
 	}
 	if v.okBtn, ok = named["ok"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: ok", ErrWidgetMissing)
@@ -191,6 +196,7 @@ func (v *View) SetBusy(busy bool) {
 	v.checkBtn.SetEnabled(!busy)
 	v.branchDrop.SetEnabled(!busy)
 	v.shallowCheck.SetEnabled(!busy)
+	v.partialCheck.SetEnabled(!busy)
 	if busy {
 		v.depthInput.SetEnabled(false)
 	} else {
@@ -213,6 +219,7 @@ func (v *View) result() Result {
 		Branch:     v.branchDrop.SelectedText(),
 		Depth:      v.depth(),
 		Submodules: v.submodules.IsChecked(),
+		Partial:    v.partialCheck.IsChecked(),
 	}
 }
 

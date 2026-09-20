@@ -38,6 +38,7 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	row, ok := e.SelectedItem.(changes.Row)
 	if !ok || e.SelectedIndex < 0 {
 		a.setFilesSelected(false)
+		a.setFilePicked(false)
 		return
 	}
 	a.filesMu.Lock()
@@ -47,6 +48,7 @@ func (a *App) onFilesRowSelected(e datagrid.SelectionChangedEvent) {
 	entries := a.currentEntries
 	a.filesMu.Unlock()
 	a.setFilesSelected(mode == filesModeWorking && row.RelPath != "")
+	a.setFilePicked(row.RelPath != "")
 	if mode == filesModeCommit {
 		if file, ok := fileOf(files, row); ok {
 			a.showDiff(a.commitTarget(db, file))

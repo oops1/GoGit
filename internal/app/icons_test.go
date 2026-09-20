@@ -12,8 +12,8 @@ import (
 
 func TestToolbarButtonsHaveIconsAfterConstruction(t *testing.T) {
 	a := newTestApp(t)
-	for name, button := range allToolbarButtons(t, a) {
-		btn := button.btn
+	for _, item := range a.toolbarButtons {
+		btn, name := item.button(), item.entry.Name
 		if btn.Icon == nil {
 			t.Fatalf("button %q has no icon", name)
 		}
@@ -29,10 +29,10 @@ func TestToolbarButtonsHaveIconsAfterConstruction(t *testing.T) {
 func TestToolbarButtonsKeepTheirOwnColoursInBothThemes(t *testing.T) {
 	a := newTestApp(t)
 	a.SetTheme(config.ThemeDark)
-	dark := a.Widget("btnPull").(*widget.Button).Icon
+	dark := toolbarButtonNamed(t, a, "btnPull").Icon
 
 	a.SetTheme(config.ThemeLight)
-	light := a.Widget("btnPull").(*widget.Button).Icon
+	light := toolbarButtonNamed(t, a, "btnPull").Icon
 
 	if dark == nil || light == nil {
 		t.Fatal("expected non-nil icons in both themes")
@@ -48,14 +48,14 @@ func TestToolbarButtonsKeepTheirOwnColoursInBothThemes(t *testing.T) {
 func TestToolbarDropsCaptionsWhenTheSettingIsOff(t *testing.T) {
 	a := newTestApp(t)
 	a.cfg.UI.ToolbarCaptions = false
-	a.applyToolbarIcons(a.theme())
+	a.applyToolbarIcons()
 
-	btn := a.Widget("btnPull").(*widget.Button)
+	btn := toolbarButtonNamed(t, a, "btnPull")
 	if btn.IconPos != widget.IconOnly {
 		t.Fatalf("icon position = %v, want IconOnly", btn.IconPos)
 	}
-	if got := btn.Bounds().Dx(); got != toolbarCompactWidth {
-		t.Fatalf("button width = %d, want %d", got, toolbarCompactWidth)
+	if got, want := btn.Bounds().Dx(), toolbarCompactWidth+toolbarMenuArrowWidth; got != want {
+		t.Fatalf("button width = %d, want %d", got, want)
 	}
 }
 func TestActiveRepositoryIconDiffersFromAnInactiveRepository(t *testing.T) {

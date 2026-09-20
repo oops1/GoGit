@@ -15,10 +15,14 @@ import (
 )
 
 func networkView(r *repo.Repository) (*repo.Repository, error) {
-	return cloneRepoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, r.Options())
+	return repoOpenLayout(repo.Layout{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: true}, r.Options())
 }
 
 func fetchRemote(ctx context.Context, r *repo.Repository, rem remote.Remote, opts remote.FetchOptions) (remote.FetchResult, error) {
+	opts, err := withPromisorFilter(r, rem, opts)
+	if err != nil {
+		return remote.FetchResult{}, err
+	}
 	view, err := networkView(r)
 	if err != nil {
 		return remote.FetchResult{}, err

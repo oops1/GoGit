@@ -534,12 +534,15 @@ func TestTheBannerNamesTheOperationInProgress(t *testing.T) {
 }
 
 func TestNewFailsWithoutTheMergeBanner(t *testing.T) {
-	for _, missing := range []string{"mergeBanner", "mergeBannerText", "mergeBannerCommit", "mergeBannerAbort"} {
+	for _, missing := range []string{"mergeBanner", "mergeBannerText", "mergeBannerCommit", "mergeBannerAbort", "mergeBannerGood", "mergeBannerBad", "mergeBannerSkip"} {
 		named := map[string]widget.Widget{
 			"mergeBanner":       widget.NewDockPanel(),
 			"mergeBannerText":   widget.NewLabel("", widget.CurrentTheme().LabelText),
 			"mergeBannerCommit": widget.NewButton(""),
 			"mergeBannerAbort":  widget.NewButton(""),
+			"mergeBannerGood":   widget.NewButton(""),
+			"mergeBannerBad":    widget.NewButton(""),
+			"mergeBannerSkip":   widget.NewButton(""),
 		}
 		delete(named, missing)
 		if _, err := bindMergeBanner(named); !errors.Is(err, ErrWidgetMissing) {

@@ -19,8 +19,11 @@ const (
 	CmdAddWorktree          CommandID = "repository.add-worktree"
 	CmdRemoveWorktree       CommandID = "repository.remove-worktree"
 	CmdPruneWorktrees       CommandID = "repository.prune-worktrees"
+	CmdSparseCheckout       CommandID = "repository.sparse-checkout"
 	CmdRepoSettings         CommandID = "repository.repo-settings"
-	CmdSettings             CommandID = "repository.settings"
+	CmdSettings             CommandID = "edit.preferences"
+	CmdCopy                 CommandID = "edit.copy"
+	CmdSelectAll            CommandID = "edit.select-all"
 	CmdClose                CommandID = "repository.close"
 	CmdClone                CommandID = "repository.clone"
 	CmdFetch                CommandID = "remote.fetch"
@@ -36,43 +39,57 @@ const (
 	CmdSubmoduleRemove      CommandID = "remote.submodule.remove"
 	CmdSubmoduleUnregister  CommandID = "remote.submodule.unregister"
 	CmdSubmoduleReset       CommandID = "remote.submodule.reset"
-	CmdStage                CommandID = "edit.stage"
-	CmdUnstage              CommandID = "edit.unstage"
-	CmdDiscard              CommandID = "edit.discard"
+	CmdStage                CommandID = "local.stage"
+	CmdUnstage              CommandID = "local.unstage"
+	CmdDiscard              CommandID = "local.discard"
+	CmdIndexEditor          CommandID = "local.index-editor"
 	CmdCommit               CommandID = "local.commit"
 	CmdStashSave            CommandID = "local.stash-save"
 	CmdStashApply           CommandID = "local.stash-apply"
 	CmdStashDrop            CommandID = "local.stash-drop"
 	CmdStashSelection       CommandID = "local.stash-selection"
-	CmdCompareFiles         CommandID = "edit.compare-files"
+	CmdIgnore               CommandID = "local.ignore"
+	CmdRemove               CommandID = "local.remove"
+	CmdCompareFiles         CommandID = "query.compare-files"
+	CmdLog                  CommandID = "query.log"
+	CmdBlame                CommandID = "query.blame"
+	CmdInvestigate          CommandID = "query.investigate"
 	CmdMerge                CommandID = "branch.merge"
 	CmdRebase               CommandID = "branch.rebase"
 	CmdRebaseSteps          CommandID = "branch.rebase.steps"
-	CmdReflog               CommandID = "branch.reflog"
+	CmdReflog               CommandID = "query.reflog"
 	CmdSwitch               CommandID = "branch.switch"
-	CmdCompareRefs          CommandID = "branch.compare"
+	CmdCompareRefs          CommandID = "query.compare-branches"
 	CmdContinue             CommandID = "branch.continue"
 	CmdSkip                 CommandID = "branch.skip"
 	CmdAbortMerge           CommandID = "branch.abort-merge"
-	CmdFlowStartFeature     CommandID = "branch.flow.start-feature"
-	CmdFlowIntegrateDevelop CommandID = "branch.flow.integrate-develop"
-	CmdFlowFinishFeature    CommandID = "branch.flow.finish-feature"
-	CmdFlowStartHotfix      CommandID = "branch.flow.start-hotfix"
-	CmdFlowFinishHotfix     CommandID = "branch.flow.finish-hotfix"
-	CmdFlowStartRelease     CommandID = "branch.flow.start-release"
-	CmdFlowFinishRelease    CommandID = "branch.flow.finish-release"
-	CmdFlowStartSupport     CommandID = "branch.flow.start-support"
-	CmdFlowConfigure        CommandID = "branch.flow.configure"
-	CmdResetLayout          CommandID = "view.reset-layout"
+	CmdFlowStartFeature     CommandID = "tools.flow.start-feature"
+	CmdFlowIntegrateDevelop CommandID = "tools.flow.integrate-develop"
+	CmdFlowFinishFeature    CommandID = "tools.flow.finish-feature"
+	CmdFlowStartHotfix      CommandID = "tools.flow.start-hotfix"
+	CmdFlowFinishHotfix     CommandID = "tools.flow.finish-hotfix"
+	CmdFlowStartRelease     CommandID = "tools.flow.start-release"
+	CmdFlowFinishRelease    CommandID = "tools.flow.finish-release"
+	CmdFlowStartSupport     CommandID = "tools.flow.start-support"
+	CmdFlowConfigure        CommandID = "tools.flow.configure"
+	CmdBisect               CommandID = "tools.bisect"
+	CmdGc                   CommandID = "tools.gc"
+	CmdFsck                 CommandID = "tools.fsck"
+	CmdRevealRepository     CommandID = "tools.reveal"
+	CmdOpenTerminal         CommandID = "tools.terminal"
+	CmdResetLayout          CommandID = "window.reset-layout"
+	CmdConfigureToolbar     CommandID = "window.configure-toolbar"
+	CmdConsole              CommandID = "tools.console"
 	CmdRefresh              CommandID = "view.refresh"
 	CmdCheckUpdates         CommandID = "help.check-updates"
 	CmdAbout                CommandID = "help.about"
 )
 
 const (
-	viewPanePrefix     = "view.pane:"
+	viewPanePrefix     = "window.pane:"
 	viewThemePrefix    = "view.theme:"
 	viewLanguagePrefix = "view.language:"
+	layoutModePrefix   = "window.layout:"
 	checkedPrefix      = "✓ "
 )
 
@@ -95,12 +112,24 @@ var viewThemeKeys = map[string]string{
 
 var viewLanguageOrder = []string{"en", "ru"}
 
+var layoutModeOrder = []string{config.LayoutDocks, config.LayoutSidebar}
+
+var layoutModeKeys = map[string]string{
+	config.LayoutDocks:   "Layout.Docks",
+	config.LayoutSidebar: "Layout.Sidebar",
+}
+
 func cmdPane(id string) CommandID       { return CommandID(viewPanePrefix + id) }
 func cmdTheme(name string) CommandID    { return CommandID(viewThemePrefix + name) }
 func cmdLanguage(code string) CommandID { return CommandID(viewLanguagePrefix + code) }
+func cmdLayout(mode string) CommandID   { return CommandID(layoutModePrefix + mode) }
 
 func paneIDFromCommand(id CommandID) (string, bool) {
 	return cutPrefix(id, viewPanePrefix)
+}
+
+func layoutFromCommand(id CommandID) (string, bool) {
+	return cutPrefix(id, layoutModePrefix)
 }
 
 func themeFromCommand(id CommandID) (string, bool) {
@@ -133,24 +162,11 @@ var gridColumnKeys = map[string][]string{
 	"journalGrid": {"", "Journal.Column.Message", "Journal.Column.Author", "Journal.Column.Date", "Journal.Column.Hash"},
 }
 
-var toolbarButtons = map[CommandID]string{
-	CmdPull:   "btnPull",
-	CmdSync:   "btnSync",
-	CmdPush:   "btnPush",
-	CmdCommit: "btnCommit",
-}
-
-var toolbarIcons = map[CommandID]string{
-	CmdPull:   "pull",
-	CmdSync:   "sync",
-	CmdPush:   "push",
-	CmdCommit: "commit",
-}
-
 type State struct {
 	ActiveRepository string
 	ActiveIsWorktree bool
 	FilesSelected    bool
+	FilePicked       bool
 	HasStagedChanges bool
 	HasChanges       bool
 	HasStashable     bool
@@ -182,16 +198,32 @@ func (s State) flowReady() bool {
 	return s.ActiveRepository != "" && !s.Merging && s.FlowConfigured
 }
 
+var commandsWaitingForTheirCore = map[CommandID]bool{
+	CmdCopy:      true,
+	CmdSelectAll: true,
+	CmdIgnore:    true,
+	CmdRemove:    true,
+	CmdLog:       true,
+	CmdGc:        true,
+	CmdFsck:      true,
+}
+
 func (s State) Enabled(id CommandID) bool {
+	if commandsWaitingForTheirCore[id] {
+		return false
+	}
 	switch id {
-	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure:
+	case CmdCloseRepository, CmdAddWorktree, CmdPruneWorktrees, CmdSparseCheckout, CmdManageRemotes, CmdRefresh, CmdRepoSettings, CmdFlowConfigure,
+		CmdRevealRepository, CmdOpenTerminal:
 		return s.ActiveRepository != ""
 	case CmdFetch, CmdPull, CmdSync, CmdPush, CmdPrune:
 		return s.ActiveRepository != "" && s.HasRemotes
 	case CmdRemoveWorktree:
 		return s.ActiveRepository != "" && s.ActiveIsWorktree
-	case CmdStage, CmdUnstage, CmdDiscard:
+	case CmdStage, CmdUnstage, CmdDiscard, CmdIndexEditor:
 		return s.ActiveRepository != "" && s.FilesSelected
+	case CmdBlame, CmdInvestigate:
+		return s.ActiveRepository != "" && s.FilePicked
 	case CmdCommit:
 		return s.ActiveRepository != "" && (s.HasStagedChanges || s.HasChanges || s.Merging)
 	case CmdStashSave:
@@ -204,7 +236,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.ActiveRepository != "" && s.HasSubmodules
 	case CmdSubmoduleAdd:
 		return s.ActiveRepository != ""
-	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch:
+	case CmdMerge, CmdRebase, CmdRebaseSteps, CmdSwitch, CmdBisect:
 		return s.ActiveRepository != "" && !s.Merging
 	case CmdFlowStartFeature:
 		return s.flowReady()
@@ -214,7 +246,7 @@ func (s State) Enabled(id CommandID) bool {
 		return s.flowReady() && s.FlowPending.Name == "" && s.FlowCurrent.Kind == ops.FlowKindFeature
 	case CmdFlowFinishFeature, CmdFlowFinishRelease, CmdFlowFinishHotfix:
 		return s.flowReady() && s.flowFinishTarget().Kind == flowFinishCommands[id]
-	case CmdReflog, CmdCompareRefs:
+	case CmdReflog, CmdCompareRefs, CmdConsole:
 		return s.ActiveRepository != ""
 	case CmdAbortMerge, CmdContinue:
 		return s.ActiveRepository != "" && s.Merging

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
@@ -25,7 +24,7 @@ func CheckoutTree(ctx context.Context, r *repo.Repository, commit hash.ObjectID,
 	}
 	defer func() { _ = wt.close() }()
 
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := objectDatabase(ctx, r)
 	if err != nil {
 		return err
 	}

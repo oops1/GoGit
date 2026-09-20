@@ -364,6 +364,7 @@ func (a *App) startClone(result clone.Result) {
 			Branch:            result.Branch,
 			SingleBranch:      result.Branch != "",
 			Depth:             result.Depth,
+			Filter:            cloneFilterOf(result),
 			Progress:          prog,
 			Transport:         a.transportOptions(prog),
 			Hooks:             ops.HookOptions{Events: hookEvents(reporter)},
@@ -383,6 +384,13 @@ func (a *App) startClone(result clone.Result) {
 		reportHookRejection(reporter, err)
 		return err
 	})
+}
+
+func cloneFilterOf(result clone.Result) string {
+	if !result.Partial {
+		return ""
+	}
+	return transport.FilterBlobNone
 }
 
 func (a *App) addClonedRepository(dir string) {

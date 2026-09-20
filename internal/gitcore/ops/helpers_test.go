@@ -16,7 +16,7 @@ import (
 )
 
 func testSignature() object.Signature {
-	return object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(1700000000, 0)}
+	return object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(1700000000, 0).UTC()}
 }
 
 type testRepo struct {
@@ -179,7 +179,7 @@ func (r *testRepo) commitAll(message string) hash.ObjectID {
 	}
 	r.saveIndex(idx)
 	r.clock += 60
-	sig := object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(r.clock, 0)}
+	sig := object.Signature{Name: "ann", Email: "ann@example.com", When: time.Unix(r.clock, 0).UTC()}
 	commit := &object.Commit{Tree: treeID, Author: sig, Committer: sig, Message: message + "\n"}
 	store := r.refs()
 	if parent := r.headCommit(store); !parent.IsZero() {
@@ -325,4 +325,11 @@ func newCountingContext(t testing.TB, failAt int) context.Context {
 	t.Helper()
 	calls := 0
 	return countingContext{Context: t.Context(), calls: &calls, failAt: failAt}
+}
+
+func swapSeam[F any](t *testing.T, seam *F, wrap func(original F) F) {
+	t.Helper()
+	original := *seam
+	*seam = wrap(original)
+	t.Cleanup(func() { *seam = original })
 }

@@ -100,24 +100,7 @@ func groupAtDepth(names []string, depth int) []TagNode {
 }
 
 func compareTagNames(a, b string) int {
-	ai, bi := 0, 0
-	for ai < len(a) && bi < len(b) {
-		if isDigit(a[ai]) && isDigit(b[bi]) {
-			aNum, aNext := scanNumber(a, ai)
-			bNum, bNext := scanNumber(b, bi)
-			if aNum != bNum {
-				return compareInt(aNum, bNum)
-			}
-			ai, bi = aNext, bNext
-			continue
-		}
-		if a[ai] != b[bi] {
-			return compareByte(a[ai], b[bi])
-		}
-		ai++
-		bi++
-	}
-	return compareInt(len(a)-ai, len(b)-bi)
+	return compareNatural(a, b, false)
 }
 
 func scanNumber(s string, at int) (int, int) {

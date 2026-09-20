@@ -8,7 +8,6 @@ import (
 	"iter"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -109,18 +108,25 @@ func (l *loader) system() error {
 	if skip {
 		return nil
 	}
-	path := l.opts.SystemFile
-	if path == "" {
-		if v, ok := os.LookupEnv("GIT_CONFIG_SYSTEM"); ok {
-			path = v
-		} else {
-			path = defaultSystemPath()
+	if l.opts.SystemFile != "" {
+		return l.addFile(LevelSystem, l.opts.SystemFile)
+	}
+	if v, ok := os.LookupEnv("GIT_CONFIG_SYSTEM"); ok {
+		if v == "" {
+			return nil
+		}
+		return l.addFile(LevelSystem, v)
+	}
+	return l.addSystemFiles(defaultSystemPaths())
+}
+
+func (l *loader) addSystemFiles(paths []string) error {
+	for _, path := range paths {
+		if err := l.addFile(LevelSystem, path); err != nil {
+			return err
 		}
 	}
-	if path == "" {
-		return nil
-	}
-	return l.addFile(LevelSystem, path)
+	return nil
 }
 
 func (l *loader) global() error {
@@ -153,20 +159,6 @@ func globalPaths() []string {
 		paths = append(paths, filepath.Join(home, ".gitconfig"))
 	}
 	return paths
-}
-
-func defaultSystemPath() string {
-	return systemPathFor(runtime.GOOS, os.Getenv("ProgramData"))
-}
-
-func systemPathFor(goos, programData string) string {
-	if goos == "windows" {
-		if programData == "" {
-			return ""
-		}
-		return filepath.Join(programData, "Git", "config")
-	}
-	return "/etc/gitconfig"
 }
 
 func (l *loader) local() error {

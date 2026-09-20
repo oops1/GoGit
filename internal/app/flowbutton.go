@@ -11,19 +11,19 @@ import (
 const flowToolbarIcon = "gitflow"
 
 var flowMenuLeaves = []menuLeafEntry{
-	{Key: "Menu.Branch.GitFlow.StartFeature", Command: CmdFlowStartFeature},
-	{Key: "Menu.Branch.GitFlow.IntegrateDevelop", Command: CmdFlowIntegrateDevelop},
-	{Key: "Menu.Branch.GitFlow.FinishFeature", Command: CmdFlowFinishFeature},
+	{Key: "Menu.Tools.GitFlow.StartFeature", Command: CmdFlowStartFeature},
+	{Key: "Menu.Tools.GitFlow.IntegrateDevelop", Command: CmdFlowIntegrateDevelop},
+	{Key: "Menu.Tools.GitFlow.FinishFeature", Command: CmdFlowFinishFeature},
 	{},
-	{Key: "Menu.Branch.GitFlow.StartHotfix", Command: CmdFlowStartHotfix},
-	{Key: "Menu.Branch.GitFlow.FinishHotfix", Command: CmdFlowFinishHotfix},
+	{Key: "Menu.Tools.GitFlow.StartHotfix", Command: CmdFlowStartHotfix},
+	{Key: "Menu.Tools.GitFlow.FinishHotfix", Command: CmdFlowFinishHotfix},
 	{},
-	{Key: "Menu.Branch.GitFlow.StartRelease", Command: CmdFlowStartRelease},
-	{Key: "Menu.Branch.GitFlow.FinishRelease", Command: CmdFlowFinishRelease},
+	{Key: "Menu.Tools.GitFlow.StartRelease", Command: CmdFlowStartRelease},
+	{Key: "Menu.Tools.GitFlow.FinishRelease", Command: CmdFlowFinishRelease},
 	{},
-	{Key: "Menu.Branch.GitFlow.StartSupport", Command: CmdFlowStartSupport},
+	{Key: "Menu.Tools.GitFlow.StartSupport", Command: CmdFlowStartSupport},
 	{},
-	{Key: "Menu.Branch.GitFlow.Configure", Command: CmdFlowConfigure},
+	{Key: "Menu.Tools.GitFlow.Configure", Command: CmdFlowConfigure},
 }
 
 const flowLightLeaves = 4
