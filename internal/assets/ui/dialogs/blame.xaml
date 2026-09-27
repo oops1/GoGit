@@ -19,10 +19,8 @@
     <TextBlock x:Name="pathLabel" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
                Text="{Loc Dialog.Blame.PathLabel}"/>
 
-    <DataGrid x:Name="lines" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
-              Width="860" Height="380"
-              IsReadOnly="True" AutoGenerateColumns="False"
-              CanUserSortColumns="False" SelectionMode="Single"/>
+    <BlameGrid x:Name="lines" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+               Width="860" Height="380"/>
 
     <TextBlock x:Name="hint" Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
                Text="" FontSize="11" TextWrapping="Wrap"/>

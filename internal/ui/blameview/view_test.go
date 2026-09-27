@@ -66,7 +66,7 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 	full := func() map[string]widget.Widget {
 		return map[string]widget.Widget{
 			"pathLabel":   widget.NewLabel("", widget.CurrentTheme().LabelText),
-			"lines":       widget.NewDataGridWidget(),
+			"lines":       newCodeGrid(),
 			"hint":        widget.NewLabel("", widget.CurrentTheme().LabelText),
 			"investigate": widget.NewButton(""),
 			"close":       widget.NewButton(""),
@@ -252,11 +252,16 @@ func TestTheDialogCanBeResizedAndHasNoGridLines(t *testing.T) {
 	if w, h := v.dlg.MinSize(); w != minDialogWidth || h != minDialogHeight {
 		t.Fatalf("minimum size = %dx%d", w, h)
 	}
-	if v.table.Grid.GridLineColor != v.table.Grid.Background {
-		t.Fatalf("grid lines = %+v, want them to vanish into the background", v.table.Grid.GridLineColor)
-	}
-	v.Restyle(widget.DarkTheme())
-	if v.table.Grid.GridLineColor != v.table.Grid.Background {
-		t.Fatal("a theme change brought the grid lines back")
+	for _, theme := range []*widget.Theme{widget.LightTheme(), widget.DarkTheme()} {
+		v.table.ApplyTheme(theme)
+		if v.table.Grid.Background != theme.InputBG {
+			t.Fatalf("code background = %+v, want the editor colour %+v", v.table.Grid.Background, theme.InputBG)
+		}
+		if v.table.Grid.GridLineColor != theme.InputBG || v.table.Grid.AlternateBG != theme.InputBG {
+			t.Fatalf("lines = %+v, stripes = %+v, want them to vanish", v.table.Grid.GridLineColor, v.table.Grid.AlternateBG)
+		}
+		if v.table.Grid.ZebraStripes {
+			t.Fatal("the blame rows must not alternate their background")
+		}
 	}
 }

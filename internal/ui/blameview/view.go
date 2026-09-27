@@ -64,7 +64,7 @@ type Row struct {
 type View struct {
 	dlg       *widget.Dialog
 	pathLabel *widget.Label
-	table     *widget.DataGridWidget
+	table     *codeGrid
 	hintLabel *widget.Label
 	closeBtn  *widget.Button
 	lookBtn   *widget.Button
@@ -79,6 +79,7 @@ type View struct {
 }
 
 func NewView() (*View, error) {
+	registerGrid()
 	dlg, named, err := loadDialog(dialogName, i18n.T("Dialog.Blame.Title"))
 	if err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func (v *View) Restyle(t *widget.Theme) {
 	p.Body(v.pathLabel)
 	p.Hints(v.hintLabel)
 	v.linkColor = p.Accent
-	v.table.Grid.GridLineColor = v.table.Grid.Background
+	v.table.paint(p.Field)
 }
 
 func (v *View) bind(named map[string]widget.Widget) error {
@@ -112,7 +113,7 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.pathLabel, ok = named["pathLabel"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: pathLabel", ErrWidgetMissing)
 	}
-	if v.table, ok = named["lines"].(*widget.DataGridWidget); !ok {
+	if v.table, ok = named["lines"].(*codeGrid); !ok {
 		return fmt.Errorf("%w: lines", ErrWidgetMissing)
 	}
 	if v.hintLabel, ok = named["hint"].(*widget.Label); !ok {
@@ -128,10 +129,6 @@ func (v *View) bind(named map[string]widget.Widget) error {
 }
 
 func (v *View) buildColumns() {
-	v.table.Grid.RowHeight = rowHeight
-	v.table.Grid.FontSize = fontSize
-	v.table.Grid.ZebraStripes = false
-	v.table.Grid.GridLineColor = v.table.Grid.Background
 	commit := datagrid.NewTemplateColumn(i18n.T("Dialog.Blame.Column.Commit"), v.drawCommitCell)
 	commit.SetWidth(datagrid.PixelWidth(commitWidth))
 	when := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.When"), "When")
