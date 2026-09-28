@@ -68,12 +68,11 @@ func parseV1Advertisement(version int, firstLine []byte, dec *Decoder) (Advertis
 }
 
 func splitFirstRefLine(line []byte) (name, oidText, capsText string, err error) {
-	nul := bytes.IndexByte(line, 0)
-	if nul < 0 {
-		return "", "", "", fmt.Errorf("%w: the first advertised line has no capability separator", ErrAdvertisementMalformed)
+	head := strings.TrimSuffix(string(line), "\n")
+	if nul := bytes.IndexByte(line, 0); nul >= 0 {
+		head = string(line[:nul])
+		capsText = strings.TrimSuffix(string(line[nul+1:]), "\n")
 	}
-	head := string(line[:nul])
-	capsText = strings.TrimSuffix(string(line[nul+1:]), "\n")
 	oidText, name, ok := strings.Cut(head, " ")
 	if !ok {
 		return "", "", "", fmt.Errorf("%w: the first advertised line %q has no object id", ErrAdvertisementMalformed, head)

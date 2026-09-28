@@ -208,7 +208,6 @@ func TestParseAdvertisementErrors(t *testing.T) {
 		raw  []byte
 	}{
 		{"empty-stream", nil},
-		{"missing-nul-separator", pktLines(t, idOf(1).String()+" HEAD\n")},
 		{"missing-object-id", pktLines(t, idOf(1).String()+"HEAD\x00\n")},
 		{"bad-object-id", pktLines(t, "zz HEAD\x00\n", "shallow\n")},
 		{"line-without-object-id", pktLines(t, idOf(1).String()+" HEAD\x00\n", "onlyname\n")},
@@ -347,4 +346,29 @@ func pktLinesNoFlush(t *testing.T, lines ...string) []byte {
 		writePktString(t, enc, line)
 	}
 	return buf.Bytes()
+}
+
+func TestParseAdvertisementFirstLineWithoutCapabilitiesIsAccepted(t *testing.T) {
+	raw := pktLines(t, idOf(1).String()+" HEAD\n", idOf(1).String()+" refs/heads/main\n")
+	adv, err := ParseAdvertisement(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseAdvertisement returned error %v, want a ref list without capabilities", err)
+	}
+	if len(adv.Refs) != 2 || adv.Refs[0].Name != "HEAD" || adv.Refs[1].Name != "refs/heads/main" {
+		t.Fatalf("Refs = %v", adv.Refs)
+	}
+	if names := adv.Capabilities.Names(); len(names) != 0 {
+		t.Fatalf("Capabilities = %v, want none", names)
+	}
+}
+
+func TestParseAdvertisementEmptyRepositoryWithoutCapabilitiesIsAccepted(t *testing.T) {
+	raw := pktLines(t, hash.Zero.String()+" "+emptyAdvertisementRef+"\n")
+	adv, err := ParseAdvertisement(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("ParseAdvertisement returned error %v, want an empty ref list", err)
+	}
+	if len(adv.Refs) != 0 {
+		t.Fatalf("Refs = %v, want none for an empty repository", adv.Refs)
+	}
 }
