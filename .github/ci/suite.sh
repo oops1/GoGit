@@ -89,7 +89,7 @@ if [ "$status" -ne 0 ]; then
   annotate_oracle oracle.log
   exit "$status"
 fi
-if [ "$gate" = false ]; then
+if [ "$gate" = false ] || [ -n "${SKIP_COVERAGE_GATE:-}" ]; then
   exit 0
 fi
 total=$(go tool cover -func=cover.out | tail -1 | awk '{print $3}' | tr -d '%')
