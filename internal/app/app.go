@@ -208,6 +208,7 @@ type App struct {
 
 	watchdogInterval time.Duration
 	watchdogStall    time.Duration
+	memory           *memoryWatch
 	commands         commandWatch
 
 	postClosed     atomic.Bool
@@ -376,6 +377,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 		scope:             scope,
 		menu:              menu,
 		handlers:          map[CommandID]func(){},
+		memory:            newMemoryWatch(),
 		watchdogInterval:  defaultWatchdogInterval,
 		watchdogStall:     defaultWatchdogStall,
 		detect:            systheme.Detect,
