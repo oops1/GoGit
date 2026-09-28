@@ -74,6 +74,7 @@ func (p Palette) Lists(dropdowns ...*widget.Dropdown) {
 		dropdown.BorderColor = p.Border
 		dropdown.TextColor = p.Text
 		dropdown.ArrowColor = p.Text
+		dropdown.ArrowStyle = widget.ArrowChevron
 		dropdown.PaddingX = FieldPaddingX
 	}
 }
