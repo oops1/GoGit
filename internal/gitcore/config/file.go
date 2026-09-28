@@ -3,11 +3,17 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"iter"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+)
+
+const (
+	newFileMode = fs.FileMode(0o666)
+	newDirMode  = fs.FileMode(0o777)
 )
 
 type File struct {
@@ -300,20 +306,33 @@ func (f *File) RenameSection(oldName, newName string) error {
 }
 
 func (f *File) Save(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), newDirMode); err != nil {
 		return err
 	}
 	return writeAtomic(path, f.Encode())
 }
 
+func modeForSave(path string) (fs.FileMode, bool) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return newFileMode, false
+	}
+	return info.Mode().Perm(), true
+}
+
 func writeAtomic(path string, data []byte) error {
 	lock := path + ".lock"
-	fh, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	mode, keep := modeForSave(path)
+	fh, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return err
 	}
 	_, err = fh.Write(data)
-	err = errors.Join(err, fh.Sync(), fh.Close())
+	var kept error
+	if keep {
+		kept = os.Chmod(lock, mode)
+	}
+	err = errors.Join(err, fh.Sync(), fh.Close(), kept)
 	if err == nil {
 		err = os.Rename(lock, path)
 	}
