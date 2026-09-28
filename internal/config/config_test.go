@@ -603,3 +603,75 @@ func TestBranchesPaneGroupingByPathCanBeTurnedOff(t *testing.T) {
 		t.Fatal("the stored false must survive the default")
 	}
 }
+
+func TestDefaultColorsAreEmpty(t *testing.T) {
+	if Default().UI.Colors != (Colors{}) {
+		t.Fatalf("default colors = %+v, want empty", Default().UI.Colors)
+	}
+}
+
+func TestColorsSurviveASaveAndLoadRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.UI.Colors = Colors{
+		Accent:    "#4C9AFF",
+		Surface:   "#1E1E1E",
+		Field:     "#2D2D30",
+		Text:      "#F1F1F1",
+		Secondary: "#A0A0A0",
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	back, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.UI.Colors != cfg.UI.Colors {
+		t.Fatalf("colors = %+v, want %+v", back.UI.Colors, cfg.UI.Colors)
+	}
+}
+
+func TestNormalizeTrimsColorValues(t *testing.T) {
+	cfg := Default()
+	cfg.UI.Colors = Colors{
+		Accent:    "  #4C9AFF  ",
+		Surface:   " #1E1E1E",
+		Field:     "#2D2D30 ",
+		Text:      "\t#F1F1F1\n",
+		Secondary: "  ",
+	}
+	cfg.Normalize()
+	want := Colors{Accent: "#4C9AFF", Surface: "#1E1E1E", Field: "#2D2D30", Text: "#F1F1F1", Secondary: ""}
+	if cfg.UI.Colors != want {
+		t.Fatalf("colors = %+v, want %+v", cfg.UI.Colors, want)
+	}
+}
+
+func TestParseWithAnEmptyColorsSectionGivesEmptyStrings(t *testing.T) {
+	cfg, err := Parse([]byte("[ui.colors]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.Colors != (Colors{}) {
+		t.Fatalf("colors = %+v, want empty", cfg.UI.Colors)
+	}
+}
+
+func TestSaveKeepsColorKeysUnknownToThisBuild(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui.colors]\naccent = \"#4C9AFF\"\nfuture_hue = \"#000000\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadConfig(t, path)
+	cfg.UI.Colors.Accent = "#FFFFFF"
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	raw := decodeRaw(t, path)
+	ui, _ := raw["ui"].(map[string]any)
+	colors, _ := ui["colors"].(map[string]any)
+	if colors["future_hue"] != "#000000" || colors["accent"] != "#FFFFFF" {
+		t.Fatalf("colors = %v", colors)
+	}
+}

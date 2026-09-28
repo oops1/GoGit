@@ -2,6 +2,7 @@ package remotes
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/oops1/headless-gui/v3/engine"
@@ -35,14 +36,15 @@ func clickButton(btn *widget.Button) {
 
 func fullNamedWidgets() map[string]widget.Widget {
 	return map[string]widget.Widget{
-		"table":  widget.NewDataGridWidget(),
-		"name":   widget.NewTextInput(""),
-		"url":    widget.NewTextInput(""),
-		"add":    widget.NewButton(""),
-		"edit":   widget.NewButton(""),
-		"remove": widget.NewButton(""),
-		"close":  widget.NewButton(""),
-		"error":  widget.NewWin10Label(""),
+		"table":   widget.NewDataGridWidget(),
+		"name":    widget.NewTextInput(""),
+		"url":     widget.NewTextInput(""),
+		"pushurl": widget.NewTextInput(""),
+		"add":     widget.NewButton(""),
+		"edit":    widget.NewButton(""),
+		"remove":  widget.NewButton(""),
+		"close":   widget.NewButton(""),
+		"error":   widget.NewWin10Label(""),
 	}
 }
 
@@ -78,7 +80,7 @@ func TestNewViewPropagatesBindError(t *testing.T) {
 }
 
 func TestBindReturnsErrorForEachMissingOrMistypedWidget(t *testing.T) {
-	keys := []string{"table", "name", "url", "add", "edit", "remove", "close", "error"}
+	keys := []string{"table", "name", "url", "pushurl", "add", "edit", "remove", "close", "error"}
 	for _, key := range keys {
 		named := fullNamedWidgets()
 		delete(named, key)
@@ -289,7 +291,7 @@ func TestAddClickedCallsOnAddAndClearsError(t *testing.T) {
 func TestEditClickedDoesNothingWithoutSelection(t *testing.T) {
 	v := newTestView(t, nil)
 	called := 0
-	v.OnEdit = func(string, string) { called++ }
+	v.OnEdit = func(string, string, []string) { called++ }
 
 	v.onEditClicked()
 
@@ -305,7 +307,7 @@ func TestEditClickedAllowsKeepingTheSameName(t *testing.T) {
 	v.urlInput.SetText("https://example.com/new.git")
 
 	var gotName, gotURL string
-	v.OnEdit = func(name, url string) { gotName, gotURL = name, url }
+	v.OnEdit = func(name, url string, _ []string) { gotName, gotURL = name, url }
 	clickButton(v.editBtn)
 
 	if gotName != "origin" || gotURL != "https://example.com/new.git" {
@@ -320,7 +322,7 @@ func TestEditClickedValidatesEmptyNameAndURL(t *testing.T) {
 	v.nameInput.SetText("")
 
 	called := 0
-	v.OnEdit = func(string, string) { called++ }
+	v.OnEdit = func(string, string, []string) { called++ }
 	clickButton(v.editBtn)
 
 	if called != 0 {
@@ -352,7 +354,7 @@ func TestEditClickedValidatesDuplicateAgainstAnotherEntry(t *testing.T) {
 	v.nameInput.SetText("upstream")
 
 	called := 0
-	v.OnEdit = func(string, string) { called++ }
+	v.OnEdit = func(string, string, []string) { called++ }
 	clickButton(v.editBtn)
 
 	if called != 0 {
@@ -447,5 +449,49 @@ func TestTheDialogWearsTheColoursOfTheTheme(t *testing.T) {
 	}
 	if v.closeBtn.Background != p.Field || v.closeBtn.BorderColor != p.Border {
 		t.Fatalf("quiet button = %v, want the field fill", v.closeBtn.Background)
+	}
+}
+
+func TestSelectingARemoteShowsItsOwnPushAddresses(t *testing.T) {
+	entries := []Entry{{
+		Name:     "origin",
+		FetchURL: "https://example.com/a.git",
+		PushURL:  "https://example.com/a.git, http://mirror.example/a.git",
+		PushURLs: []string{"https://example.com/a.git", "http://mirror.example/a.git"},
+	}}
+	v := newTestView(t, entries)
+
+	v.onSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: entries[0]})
+
+	if got := v.pushInput.GetText(); got != "https://example.com/a.git, http://mirror.example/a.git" {
+		t.Fatalf("push addresses = %q", got)
+	}
+}
+
+func TestEditHandsOverEveryPushAddressTyped(t *testing.T) {
+	entries := []Entry{{Name: "origin", FetchURL: "https://example.com/a.git"}}
+	v := newTestView(t, entries)
+	v.onSelectionChanged(datagrid.SelectionChangedEvent{SelectedIndex: 0, SelectedItem: entries[0]})
+
+	var got []string
+	v.OnEdit = func(_, _ string, pushURLs []string) { got = pushURLs }
+	for _, typed := range []string{
+		"https://example.com/a.git, http://mirror.example/a.git",
+		"https://example.com/a.git http://mirror.example/a.git",
+		"  https://example.com/a.git ;http://mirror.example/a.git,,  ",
+	} {
+		v.pushInput.SetText(typed)
+		clickButton(v.editBtn)
+		want := []string{"https://example.com/a.git", "http://mirror.example/a.git"}
+		if !slices.Equal(got, want) {
+			t.Fatalf("typed %q gave %v, want %v", typed, got, want)
+		}
+	}
+
+	v.pushInput.SetText("   ")
+	got = []string{"not empty"}
+	clickButton(v.editBtn)
+	if len(got) != 0 {
+		t.Fatalf("push addresses = %v, want none for an empty field", got)
 	}
 }

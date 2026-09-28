@@ -61,6 +61,12 @@ func (v *View) buildHints() {
 	addCheckboxHint(v.sectionGeneral, "Dialog.Settings.ShowStatusBar.Hint", 18)
 	addCheckboxHint(v.sectionGeneral, "Dialog.Settings.ToolbarCaptions.Hint", 21)
 	addCheckboxHint(v.sectionGeneral, "Dialog.Settings.JournalFullAuthorName.Hint", 24)
+	addGroupDescription(v.sectionGeneral, "Dialog.Settings.Group.Colors.Desc", 29)
+	addColorHint(v.sectionGeneral, "Dialog.Settings.Color.Accent.Hint", colorAccentRow, 2)
+	addColorHint(v.sectionGeneral, "Dialog.Settings.Color.Surface.Hint", colorSurfaceRow, 2)
+	addColorHint(v.sectionGeneral, "Dialog.Settings.Color.Field.Hint", colorFieldRow, 2)
+	addColorHint(v.sectionGeneral, "Dialog.Settings.Color.Text.Hint", colorTextRow, 2)
+	addColorHint(v.sectionGeneral, "Dialog.Settings.Color.Secondary.Hint", colorSecondaryRow, 2)
 	v.sectionGeneral.SetBounds(v.sectionGeneral.Bounds())
 
 	addGroupDescription(v.sectionGit, "Dialog.Settings.Group.FetchSync.Desc", 1)

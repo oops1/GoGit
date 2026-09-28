@@ -9,6 +9,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/refspec"
 	"github.com/oops1/gogit/internal/gitcore/remote"
+	"github.com/oops1/gogit/internal/gitcore/transport"
 )
 
 var fetchOptions = []option{
@@ -177,6 +178,9 @@ func pushRefspecs(env Env, wanted []string) ([]refspec.RefSpec, error) {
 }
 
 func formatPush(result remote.PushResult) string {
+	if len(result.Targets) > 1 {
+		return formatPushTargets(result.Targets)
+	}
 	lines := make([]string, 0, len(result.Changes)+len(result.Rejected))
 	for _, change := range result.Changes {
 		lines = append(lines, changeMarker(change)+" "+change.Source.Short()+" -> "+change.Pushed.Short())
@@ -186,6 +190,27 @@ func formatPush(result remote.PushResult) string {
 	}
 	if len(lines) == 0 {
 		lines = append(lines, "Everything up-to-date")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatPushTargets(targets []remote.TargetResult) string {
+	var lines []string
+	for _, target := range targets {
+		lines = append(lines, "To "+transport.SafeURL(target.URL))
+		for _, sent := range target.Sent {
+			lines = append(lines, "  "+sent.Source.Short()+" -> "+sent.Target.Short())
+		}
+		for _, rejected := range target.Rejected {
+			lines = append(lines, "! "+rejected.Name+" "+rejected.Message)
+		}
+		if target.Err != nil {
+			lines = append(lines, "! "+target.Err.Error())
+			continue
+		}
+		if len(target.Sent) == 0 && len(target.Rejected) == 0 {
+			lines = append(lines, "  Everything up-to-date")
+		}
 	}
 	return strings.Join(lines, "\n")
 }

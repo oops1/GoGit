@@ -75,6 +75,9 @@ func TestEveryControlOfADialogGetsTheSameColours(t *testing.T) {
 	if dropdown.Background != p.Field || dropdown.PaddingX != FieldPaddingX || dropdown.ArrowColor != p.Text {
 		t.Fatalf("dropdown = %+v, want the same field colours as the input", dropdown)
 	}
+	if dropdown.ArrowStyle != widget.ArrowChevron {
+		t.Fatalf("dropdown arrow = %v, want a chevron without a divider", dropdown.ArrowStyle)
+	}
 	if primary.Background != p.Accent || primary.TextColor != p.OnAccent || primary.HoverBG != p.AccentHover {
 		t.Fatal("the primary button must be filled with the accent")
 	}

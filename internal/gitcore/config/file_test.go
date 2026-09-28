@@ -293,6 +293,7 @@ func TestMutatorsRejectBadNames(t *testing.T) {
 	}{
 		{"setWithoutSection", func() error { return f.Set("b", "1") }, ErrInvalidName},
 		{"addWithoutSection", func() error { return f.Add("b", "1") }, ErrInvalidName},
+		{"setAllWithoutSection", func() error { return f.SetAll("b", []string{"1"}) }, ErrInvalidName},
 		{"unsetWithoutSection", func() error { return f.Unset("b") }, ErrInvalidName},
 		{"unsetAllWithoutSection", func() error { return f.UnsetAll("b") }, ErrInvalidName},
 		{"removeSectionEmpty", func() error { return f.RemoveSection("") }, ErrInvalidSection},

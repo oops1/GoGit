@@ -33,7 +33,7 @@ func (e *env) myers() {
 	a, b := e.a, e.b
 	ndiags := a.nreff + b.nreff + 3
 	kvd := &kvector{
-		values: make([]int, 2*ndiags+2),
+		values: e.vectorFor(2*ndiags + 2),
 		fbase:  b.nreff + 1,
 		bbase:  ndiags + b.nreff + 1,
 	}

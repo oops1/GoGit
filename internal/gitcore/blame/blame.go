@@ -61,6 +61,7 @@ type origin struct {
 	entry object.TreeEntry
 	data  []byte
 	read  bool
+	split []string
 	spans []span
 }
 
@@ -119,6 +120,7 @@ func File(ctx context.Context, src Objects, start hash.ObjectID, path string, op
 		opts.Diff = diff.Defaults()
 	}
 	opts.Diff.Context = 0
+	opts.Diff.Lines = diff.NewLineTable()
 	b := &blamer{ctx: ctx, src: src, opts: opts, nodes: map[hash.ObjectID]*node{}, entries: map[entryKey]entryResult{}}
 	first, err := b.node(start)
 	if err != nil {
@@ -182,7 +184,7 @@ func (b *blamer) process(n *node) error {
 			return err
 		}
 		b.assign(o)
-		o.spans, o.data, o.read = nil, nil, false
+		o.spans, o.data, o.split, o.read = nil, nil, nil, false
 	}
 	return nil
 }
@@ -283,15 +285,15 @@ func (b *blamer) findRename(parent *node, o *origin) (*origin, error) {
 }
 
 func (b *blamer) passToParent(o, older *origin) error {
-	newer, err := b.dataOf(o)
+	newer, err := b.linesOf(o)
 	if err != nil {
 		return err
 	}
-	previous, err := b.dataOf(older)
+	previous, err := b.linesOf(older)
 	if err != nil {
 		return err
 	}
-	passed, kept := splitSpans(o.spans, unchangedSegments(diff.Changes(previous, newer, b.opts.Diff), lineCount(newer)))
+	passed, kept := splitSpans(o.spans, unchangedSegments(diff.ChangesOfLines(previous, newer, b.opts.Diff), len(newer)))
 	if len(passed) > 0 {
 		b.queue(older, passed)
 	}
@@ -418,6 +420,18 @@ func (b *blamer) dataOf(o *origin) ([]byte, error) {
 	}
 	o.data, o.read = data, true
 	return data, nil
+}
+
+func (b *blamer) linesOf(o *origin) ([]string, error) {
+	if o.split != nil {
+		return o.split, nil
+	}
+	data, err := b.dataOf(o)
+	if err != nil {
+		return nil, err
+	}
+	o.split = splitLines(data)
+	return o.split, nil
 }
 
 func lineCount(data []byte) int {

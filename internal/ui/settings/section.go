@@ -90,4 +90,5 @@ func (v *View) wireModifiedTracking() {
 			v.OnCredentialSource(credentialSourceAt(index))
 		}
 	}
+	v.wireColorPickers(onAny)
 }

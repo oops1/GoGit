@@ -9,7 +9,7 @@ import (
 
 func TestShortSectionFillsTheViewportWithoutScrolling(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.SetSection("general")
+	v.SetSection("credentials")
 
 	view := v.scroll.Bounds()
 	if v.scroll.ContentHeight > view.Dy() {

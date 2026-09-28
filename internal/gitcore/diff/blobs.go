@@ -47,10 +47,14 @@ type Change struct {
 }
 
 func Changes(oldData, newData []byte, opts Options) []Change {
+	oldData, newData = trimCommonTail(oldData, newData)
+	return ChangesOfLines(splitLines(oldData), splitLines(newData), opts)
+}
+
+func ChangesOfLines(oldLines, newLines []string, opts Options) []Change {
 	opts = opts.normalized()
 	opts.Context = 0
-	oldData, newData = trimCommonTail(oldData, newData)
-	_, changes := computeChanges(splitLines(oldData), splitLines(newData), opts)
+	_, changes := computeChanges(oldLines, newLines, opts)
 	out := make([]Change, len(changes))
 	for at, c := range changes {
 		out[at] = Change{OldIndex: c.i1, OldCount: c.chg1, NewIndex: c.i2, NewCount: c.chg2}

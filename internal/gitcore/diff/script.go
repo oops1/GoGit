@@ -15,7 +15,7 @@ type change struct {
 }
 
 func (e *env) script() []change {
-	var changes []change
+	changes := e.newScript()
 	a, b := e.a, e.b
 	i1, i2 := a.count(), b.count()
 	for i1 >= 0 || i2 >= 0 {
@@ -33,6 +33,7 @@ func (e *env) script() []change {
 		i2--
 	}
 	slices.Reverse(changes)
+	e.keepScript(changes)
 	return changes
 }
 

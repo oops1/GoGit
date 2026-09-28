@@ -195,18 +195,25 @@ func (f *File) GetInt(key string) (int64, error)   { return getInt(f, key) }
 func (f *File) GetPath(key string) (string, error) { return getPath(f, key) }
 
 func (f *File) Set(key, value string) error {
+	return f.SetAll(key, []string{value})
+}
+
+func (f *File) SetAll(key string, values []string) error {
 	n, err := parseName(key)
 	if err != nil {
 		return err
 	}
 	idx := f.find(n)
-	if len(idx) == 0 {
-		f.insert(n, value)
-		return nil
+	if len(idx) > 0 && len(values) > 0 {
+		f.items[idx[0]].setValue(values[0])
+		values = values[1:]
+		idx = idx[1:]
 	}
-	f.items[idx[0]].setValue(value)
-	for i := len(idx) - 1; i > 0; i-- {
+	for i := len(idx) - 1; i >= 0; i-- {
 		f.deleteEntry(idx[i])
+	}
+	for _, value := range values {
+		f.insert(n, value)
 	}
 	return nil
 }

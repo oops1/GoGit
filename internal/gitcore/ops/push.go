@@ -42,11 +42,11 @@ func PushWithHooks(ctx context.Context, r *repo.Repository, remoteName string, o
 	return result, nil
 }
 
-func prePushCheck(runner hookRunner, rem remote.Remote) func(context.Context, []remote.PushUpdate) error {
-	return func(ctx context.Context, updates []remote.PushUpdate) error {
+func prePushCheck(runner hookRunner, rem remote.Remote) func(context.Context, string, []remote.PushUpdate) error {
+	return func(ctx context.Context, url string, updates []remote.PushUpdate) error {
 		return runner.verify(ctx, hooks.Invocation{
 			Name:  hookPrePush,
-			Args:  []string{rem.Name, rem.PushURL()},
+			Args:  []string{rem.Name, url},
 			Stdin: runner.prePushInput(updates),
 		})
 	}

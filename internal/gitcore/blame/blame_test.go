@@ -582,3 +582,18 @@ func TestABlameReportsABlobItCannotRead(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestABlameWalksPastAnEmptyRevisionOfTheFile(t *testing.T) {
+	s := newStore()
+	empty := s.commit("empty", s.tree(map[string]hash.ObjectID{"f": s.blob("")}), 1000)
+	filled := s.commit("filled", s.tree(map[string]hash.ObjectID{"f": s.blob("one\ntwo\n")}), 2000, empty)
+
+	result, err := File(t.Context(), s, filled, "f", Options{})
+
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	if got := blamedOn(t, result); strings.Join(got, " ") != "filled:1 filled:2" {
+		t.Fatalf("blame = %v, want both lines on the commit that filled the file", got)
+	}
+}

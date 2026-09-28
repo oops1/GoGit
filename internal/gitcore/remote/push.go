@@ -35,7 +35,7 @@ type PushOptions struct {
 	Options        []string
 	Progress       progress.Func
 	Transport      transport.Options
-	BeforeSend     func(context.Context, []PushUpdate) error
+	BeforeSend     func(context.Context, string, []PushUpdate) error
 }
 
 type PushUpdate struct {
@@ -50,6 +50,16 @@ type PushResult struct {
 	Changes  []Change
 	Tags     []refs.Name
 	Rejected []transport.RefStatus
+	Sent     []PushUpdate
+	Targets  []TargetResult
+}
+
+type TargetResult struct {
+	URL      string
+	Sent     []PushUpdate
+	Tags     []refs.Name
+	Rejected []transport.RefStatus
+	Err      error
 }
 
 type pendingUpdate struct {
@@ -69,11 +79,44 @@ func pushRefspecs(rem Remote, opts PushOptions) []refspec.RefSpec {
 	return rem.Push
 }
 
+func pushURLs(rem Remote) []string {
+	return slices.DeleteFunc(slices.Clone(rem.PushTargets()), func(url string) bool { return url == "" })
+}
+
 func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions) (PushResult, error) {
-	url := rem.PushURL()
-	if url == "" {
+	targets := pushURLs(rem)
+	if len(targets) == 0 {
 		return PushResult{}, ErrNoURL
 	}
+	var result PushResult
+	var errs []error
+	for at, url := range targets {
+		one, err := pushTo(ctx, r, rem, opts, url)
+		result.Targets = append(result.Targets, TargetResult{
+			URL:      url,
+			Sent:     one.Sent,
+			Tags:     one.Tags,
+			Rejected: one.Rejected,
+			Err:      err,
+		})
+		if at == 0 {
+			result.Changes, result.Tags, result.Rejected, result.Sent = one.Changes, one.Tags, one.Rejected, one.Sent
+		}
+		if err != nil {
+			errs = append(errs, pushTargetError(targets, url, err))
+		}
+	}
+	return result, errors.Join(errs...)
+}
+
+func pushTargetError(targets []string, url string, err error) error {
+	if len(targets) == 1 {
+		return err
+	}
+	return fmt.Errorf("%s: %w", transport.SafeURL(url), err)
+}
+
+func pushTo(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions, url string) (PushResult, error) {
 	specs := pushRefspecs(rem, opts)
 	prog := opts.Progress
 	if len(specs) == 0 {
@@ -122,7 +165,7 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 		}
 	}
 	if opts.BeforeSend != nil {
-		if err := opts.BeforeSend(ctx, planner.updates()); err != nil {
+		if err := opts.BeforeSend(ctx, url, planner.updates()); err != nil {
 			return PushResult{Rejected: planner.rejected}, err
 		}
 	}
@@ -185,6 +228,7 @@ func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions)
 	}
 	result.Changes = changes
 	result.Tags = pushedTags(planner.pending, presp)
+	result.Sent = acceptedUpdates(planner.pending, presp)
 	result.Rejected = append(result.Rejected, rejected...)
 	return result, errors.Join(planErr, errors.Join(applyErrs...))
 }
@@ -437,6 +481,22 @@ func reachableAmong(db *odb.DB, tips []hash.ObjectID, wanted map[hash.ObjectID][
 		queue = append(queue, commit.Parents...)
 	}
 	return found, nil
+}
+
+func acceptedUpdates(pending []pendingUpdate, resp *transport.PushResult) []PushUpdate {
+	accepted := map[string]bool{}
+	for _, status := range resp.Refs {
+		if status.OK {
+			accepted[status.Name] = true
+		}
+	}
+	var sent []PushUpdate
+	for _, u := range pending {
+		if accepted[u.name.String()] {
+			sent = append(sent, PushUpdate{Source: u.src, New: u.new, Target: u.name, Old: u.old, Deleted: u.deleted})
+		}
+	}
+	return sent
 }
 
 func pushedTags(pending []pendingUpdate, resp *transport.PushResult) []refs.Name {

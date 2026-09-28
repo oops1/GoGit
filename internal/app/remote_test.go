@@ -568,10 +568,25 @@ func TestManageRemotesAddEditAndRemove(t *testing.T) {
 		t.Fatal("adding a remote must be reflected immediately")
 	}
 
-	view.OnEdit("origin", "https://example.invalid/other.git")
+	view.OnEdit("origin", "https://example.invalid/other.git", nil)
 	entries := a.remoteEntries(a.opened())
 	if len(entries) != 1 || entries[0].FetchURL != "https://example.invalid/other.git" {
 		t.Fatalf("entries = %+v", entries)
+	}
+
+	view.OnEdit("origin", "https://example.invalid/other.git", []string{"https://example.invalid/other.git", "http://mirror.invalid/repo.git"})
+	entries = a.remoteEntries(a.opened())
+	if len(entries) != 1 || !slices.Equal(entries[0].PushURLs, []string{"https://example.invalid/other.git", "http://mirror.invalid/repo.git"}) {
+		t.Fatalf("push addresses = %+v", entries)
+	}
+	if entries[0].PushURL != "https://example.invalid/other.git, http://mirror.invalid/repo.git" {
+		t.Fatalf("push column = %q", entries[0].PushURL)
+	}
+
+	view.OnEdit("origin", "https://example.invalid/other.git", nil)
+	entries = a.remoteEntries(a.opened())
+	if len(entries) != 1 || len(entries[0].PushURLs) != 0 || entries[0].PushURL != "https://example.invalid/other.git" {
+		t.Fatalf("clearing the push addresses gave %+v", entries)
 	}
 
 	view.OnRemove("origin")

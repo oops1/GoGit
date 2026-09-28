@@ -116,6 +116,18 @@ linters:
         linters:
           - gosec
         text: "G101"
+      - path: internal/gitcore/remote/pushtargets_test\.go
+        linters:
+          - gosec
+        text: "G101"
+      - path: internal/ui/console/remote_test\.go
+        linters:
+          - gosec
+        text: "G101"
+      - path: internal/app/pushtargetslog_test\.go
+        linters:
+          - gosec
+        text: "G101"
       - path: internal/gitcore/(linelog|revision)/graph_test\.go
         linters:
           - gosec

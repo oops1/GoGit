@@ -225,7 +225,14 @@ func removeTrackingRefs(r *repo.Repository, fetch []string) error {
 	return tx.Commit()
 }
 
-func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
+func remoteURLKey(name string, push bool) string {
+	if push {
+		return "remote." + name + ".pushurl"
+	}
+	return "remote." + name + ".url"
+}
+
+func editRemoteURLs(r *repo.Repository, name string, push bool, edit func(file *config.File, key string) error) error {
 	file, err := localConfigFile(r)
 	if err != nil {
 		return err
@@ -233,12 +240,40 @@ func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
 	if !hasConfigSubsection(file, "remote", name) {
 		return fmt.Errorf("%w: %s", remote.ErrNoRemote, name)
 	}
-	key := "remote." + name + ".url"
-	if push {
-		key = "remote." + name + ".pushurl"
-	}
-	if err := file.Set(key, url); err != nil {
+	if err := edit(file, remoteURLKey(name, push)); err != nil {
 		return err
 	}
 	return file.Save(file.Path())
+}
+
+func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
+	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
+		return file.Set(key, url)
+	})
+}
+
+func SetRemotePushURLs(r *repo.Repository, name string, urls []string) error {
+	return editRemoteURLs(r, name, true, func(file *config.File, key string) error {
+		return file.SetAll(key, urls)
+	})
+}
+
+func AddRemoteURL(r *repo.Repository, name, url string, push bool) error {
+	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
+		return file.Add(key, url)
+	})
+}
+
+func DeleteRemoteURL(r *repo.Repository, name, url string, push bool) error {
+	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
+		existing := file.GetAll(key)
+		kept := slices.DeleteFunc(slices.Clone(existing), func(candidate string) bool { return candidate == url })
+		if len(kept) == len(existing) {
+			return fmt.Errorf("%w: %s", ErrNoSuchRemoteURL, url)
+		}
+		if len(kept) == 0 && !push {
+			return ErrLastRemoteURL
+		}
+		return file.SetAll(key, kept)
+	})
 }

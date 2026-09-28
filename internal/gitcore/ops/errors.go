@@ -28,6 +28,8 @@ var (
 	ErrRemoteExists       = errors.New("ops: remote already exists")
 	ErrInvalidRemoteName  = errors.New("ops: invalid remote name")
 	ErrNoLocalConfig      = errors.New("ops: repository has no local config")
+	ErrNoSuchRemoteURL    = errors.New("ops: the remote has no such url")
+	ErrLastRemoteURL      = errors.New("ops: refusing to delete the last url of a remote")
 	ErrMergeInProgress    = errors.New("ops: a merge, cherry-pick, revert or rebase is in progress")
 	ErrNoMergeInProgress  = errors.New("ops: there is no merge, cherry-pick, revert or rebase to abort")
 	ErrUnmergedPaths      = errors.New("ops: the index has unmerged paths")

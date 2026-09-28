@@ -35,7 +35,36 @@ func goldenSampleKeys() []KeyEntry {
 	}
 }
 
+func goldenBaseModel() Model {
+	return Model{
+		Language:      "en",
+		Theme:         config.ThemeSystem,
+		ShowToolbar:   true,
+		ShowStatusBar: true,
+		LogMaxCount:   500,
+		AutoFetch:     true,
+		FetchInterval: 300,
+		DefaultRemote: "origin",
+		PullStrategy:  config.PullStrategyFF,
+	}
+}
+
+func goldenCustomColors() config.Colors {
+	return config.Colors{
+		Accent:    "#4C9AFF",
+		Surface:   "#EEF3FB",
+		Field:     "#FFFFFF",
+		Text:      "#1B2733",
+		Secondary: "#6B7A8F",
+	}
+}
+
 func renderSettingsFrame(t *testing.T, theme *widget.Theme, section string) *image.RGBA {
+	t.Helper()
+	return renderSettingsFrameWithModel(t, theme, section, goldenBaseModel(), 0)
+}
+
+func renderSettingsFrameWithModel(t *testing.T, theme *widget.Theme, section string, model Model, resizeHeight int) *image.RGBA {
 	t.Helper()
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)
@@ -48,17 +77,7 @@ func renderSettingsFrame(t *testing.T, theme *widget.Theme, section string) *ima
 	t.Cleanup(eng.Stop)
 	eng.SetTheme(theme)
 
-	view, err := NewView(eng, []string{"en", "ru"}, Model{
-		Language:      "en",
-		Theme:         config.ThemeSystem,
-		ShowToolbar:   true,
-		ShowStatusBar: true,
-		LogMaxCount:   500,
-		AutoFetch:     true,
-		FetchInterval: 300,
-		DefaultRemote: "origin",
-		PullStrategy:  config.PullStrategyFF,
-	})
+	view, err := NewView(eng, []string{"en", "ru"}, model)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +90,9 @@ func renderSettingsFrame(t *testing.T, theme *widget.Theme, section string) *ima
 	)
 	view.SetSecretsStatus(i18n.T("Dialog.Settings.Secrets.Status.Saved"), widget.CurrentTheme().SecondaryText)
 	view.SetSection(section)
+	if resizeHeight > 0 {
+		view.Dialog().Resize(dialogDefaultWidth, resizeHeight)
+	}
 
 	dlg := view.Dialog()
 	widget.ApplyThemeTree(dlg, theme)
@@ -109,6 +131,30 @@ func TestSettingsGolden(t *testing.T) {
 				assertGolden(t, section+"-"+th.name, got)
 			})
 		}
+	}
+}
+
+func TestSettingsColorsGolden(t *testing.T) {
+	if runtime.GOOS != goldenFrameOS && !*updateGolden {
+		t.Skipf("golden frames are recorded on %s: text and window chrome rasterise differently elsewhere", goldenFrameOS)
+	}
+	themes := []struct {
+		name  string
+		theme *widget.Theme
+	}{
+		{"light", widget.Win11LightTheme()},
+		{"dark", widget.Win11DarkTheme()},
+	}
+	model := goldenBaseModel()
+	model.Colors = goldenCustomColors()
+
+	const tallEnoughToShowTheWholeGroup = 1000
+
+	for _, th := range themes {
+		t.Run(th.name, func(t *testing.T) {
+			got := renderSettingsFrameWithModel(t, th.theme, "general", model, tallEnoughToShowTheWholeGroup)
+			assertGolden(t, "general-colors-"+th.name, got)
+		})
 	}
 }
 

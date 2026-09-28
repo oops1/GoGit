@@ -1,6 +1,10 @@
 package settings
 
-import "github.com/oops1/gogit/internal/config"
+import (
+	"strings"
+
+	"github.com/oops1/gogit/internal/config"
+)
 
 const (
 	MinLogMaxCount = 50
@@ -35,6 +39,7 @@ type Model struct {
 	ShallowDepth          int
 	CredentialSource      string
 	SwitchChanges         string
+	Colors                config.Colors
 }
 
 func FromConfig(cfg *config.Config) Model {
@@ -57,6 +62,7 @@ func FromConfig(cfg *config.Config) Model {
 		ShallowDepth:          cfg.Git.ShallowDepth,
 		CredentialSource:      cfg.Git.CredentialSource,
 		SwitchChanges:         cfg.Git.SwitchChanges,
+		Colors:                cfg.UI.Colors,
 	}
 	return m.Normalized()
 }
@@ -95,6 +101,11 @@ func (m Model) Normalized() Model {
 	default:
 		m.SwitchChanges = config.SwitchChangesAsk
 	}
+	m.Colors.Accent = strings.TrimSpace(m.Colors.Accent)
+	m.Colors.Surface = strings.TrimSpace(m.Colors.Surface)
+	m.Colors.Field = strings.TrimSpace(m.Colors.Field)
+	m.Colors.Text = strings.TrimSpace(m.Colors.Text)
+	m.Colors.Secondary = strings.TrimSpace(m.Colors.Secondary)
 	return m
 }
 
@@ -118,6 +129,7 @@ func (m Model) ApplyTo(cfg *config.Config) {
 	cfg.Git.ShallowDepth = n.ShallowDepth
 	cfg.Git.CredentialSource = n.CredentialSource
 	cfg.Git.SwitchChanges = n.SwitchChanges
+	cfg.UI.Colors = n.Colors
 }
 
 func clamp(v, min, max int) int {

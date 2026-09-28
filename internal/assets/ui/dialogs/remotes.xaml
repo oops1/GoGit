@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      Width="560" Height="360">
+      Width="560" Height="400">
 
     <Grid.RowDefinitions>
         <RowDefinition Height="200"/>
         <RowDefinition Height="20"/>
+        <RowDefinition Height="30"/>
         <RowDefinition Height="30"/>
         <RowDefinition Height="30"/>
         <RowDefinition Height="40"/>
@@ -33,12 +34,17 @@
                Text="{Loc Dialog.Remotes.URL}"/>
     <TextBox x:Name="url" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3"/>
 
-    <Button x:Name="add" Grid.Row="4" Grid.Column="0" Margin="0,0,6,0"
+    <TextBlock x:Name="pushLabel" Grid.Row="4" Grid.Column="0"
+               Text="{Loc Dialog.Remotes.PushURLs}"/>
+    <TextBox x:Name="pushurl" Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="3"
+             Placeholder="{Loc Dialog.Remotes.PushURLs.Empty}"/>
+
+    <Button x:Name="add" Grid.Row="5" Grid.Column="0" Margin="0,0,6,0"
             Content="{Loc Dialog.Remotes.Add}"/>
-    <Button x:Name="edit" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+    <Button x:Name="edit" Grid.Row="5" Grid.Column="1" Margin="0,0,6,0"
             Content="{Loc Dialog.Remotes.Edit}"/>
-    <Button x:Name="remove" Grid.Row="4" Grid.Column="2" Margin="0,0,6,0"
+    <Button x:Name="remove" Grid.Row="5" Grid.Column="2" Margin="0,0,6,0"
             Content="{Loc Dialog.Remotes.Remove}"/>
-    <Button x:Name="close" Grid.Row="4" Grid.Column="3"
+    <Button x:Name="close" Grid.Row="5" Grid.Column="3"
             Content="{Loc Dialog.Remotes.Close}"/>
 </Grid>

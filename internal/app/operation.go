@@ -136,7 +136,7 @@ func (s *operationProgressState) reportPhase(r progress.Report, keys phaseKeys) 
 }
 
 func (a *App) RunOperation(title string, body func(context.Context, OperationReporter) error) {
-	ctx, cancel, ok := a.beginNetOperation()
+	ctx, cancel, ok := a.beginNetOperation(title)
 	if !ok {
 		a.reportBusy()
 		return
@@ -160,11 +160,14 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 	reporter := OperationReporter{app: a, view: view, after: after}
 	go func() {
 		defer a.netWG.Done()
-		resume := a.holdWatch()
-		err := body(ctx, reporter)
-		resume()
-		cancel()
-		a.releaseNetOperation()
+		var err error
+		func() {
+			defer a.releaseNetOperation()
+			defer cancel()
+			resume := a.holdWatch()
+			defer resume()
+			err = body(ctx, reporter)
+		}()
 		followUps := after.actions
 		a.Post(func() {
 			view.Finish(redactError(localizeOperationError(err)))
@@ -175,7 +178,7 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 	}()
 }
 
-func (a *App) beginNetOperation() (context.Context, context.CancelFunc, bool) {
+func (a *App) beginNetOperation(title string) (context.Context, context.CancelFunc, bool) {
 	a.writeMu.Lock()
 	defer a.writeMu.Unlock()
 	a.netMu.Lock()
@@ -185,6 +188,7 @@ func (a *App) beginNetOperation() (context.Context, context.CancelFunc, bool) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.netCancel = cancel
+	a.netTitle = title
 	a.netWG.Add(1)
 	return ctx, cancel, true
 }
@@ -192,7 +196,27 @@ func (a *App) beginNetOperation() (context.Context, context.CancelFunc, bool) {
 func (a *App) releaseNetOperation() {
 	a.netMu.Lock()
 	a.netCancel = nil
+	a.netTitle = ""
 	a.netMu.Unlock()
+}
+
+func (a *App) runningOperation() (string, bool) {
+	a.writeMu.Lock()
+	writing := a.writeCancel != nil
+	a.writeMu.Unlock()
+	a.netMu.Lock()
+	title := a.netTitle
+	networking := a.netCancel != nil
+	a.netMu.Unlock()
+	switch {
+	case networking && title != "":
+		return title, true
+	case networking:
+		return i18n.T("Status.Busy.Unnamed"), true
+	case writing:
+		return i18n.T("Status.Busy.Write"), false
+	}
+	return "", false
 }
 
 func (a *App) busy() bool {
@@ -204,7 +228,23 @@ func (a *App) busy() bool {
 }
 
 func (a *App) reportBusy() {
-	a.Post(func() { a.statusLabel.SetText(i18n.T("Status.Busy")) })
+	running, cancellable := a.runningOperation()
+	if running == "" {
+		a.Post(func() { a.statusLabel.SetText(i18n.T("Status.Busy")) })
+		return
+	}
+	a.log.Warn("another operation is already running", "running", running, "cancellable", cancellable)
+	a.Post(func() {
+		a.statusLabel.SetText(i18n.Tf("Status.BusyWith", running))
+		if !cancellable {
+			return
+		}
+		a.askConfirm(i18n.T("Dialog.Busy.Title"), i18n.Tf("Dialog.Busy.Message", running), func(ok bool) {
+			if ok {
+				a.cancelNetOperation()
+			}
+		})
+	})
 }
 
 func (a *App) cancelNetOperation() {

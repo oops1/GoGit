@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/oops1/headless-gui/v3/widget"
 	"github.com/oops1/headless-gui/v3/widget/datagrid"
@@ -24,6 +25,7 @@ type Entry struct {
 	Name     string
 	FetchURL string
 	PushURL  string
+	PushURLs []string
 }
 
 type View struct {
@@ -31,6 +33,7 @@ type View struct {
 	table      *widget.DataGridWidget
 	nameInput  *widget.TextInput
 	urlInput   *widget.TextInput
+	pushInput  *widget.TextInput
 	addBtn     *widget.Button
 	editBtn    *widget.Button
 	removeBtn  *widget.Button
@@ -43,7 +46,7 @@ type View struct {
 	hasSelection bool
 
 	OnAdd    func(name, url string)
-	OnEdit   func(name, url string)
+	OnEdit   func(name, url string, pushURLs []string)
 	OnRemove func(name string)
 	OnClose  func()
 }
@@ -67,7 +70,7 @@ func (v *View) Dialog() *widget.Dialog { return v.dlg }
 
 func (v *View) Restyle(t *widget.Theme) {
 	p := style.Of(t)
-	p.Fields(v.nameInput, v.urlInput)
+	p.Fields(v.nameInput, v.urlInput, v.pushInput)
 	p.Quiet(v.addBtn, v.editBtn, v.removeBtn, v.closeBtn)
 }
 
@@ -81,6 +84,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.urlInput, ok = named["url"].(*widget.TextInput); !ok {
 		return fmt.Errorf("%w: url", ErrWidgetMissing)
+	}
+	if v.pushInput, ok = named["pushurl"].(*widget.TextInput); !ok {
+		return fmt.Errorf("%w: pushurl", ErrWidgetMissing)
 	}
 	if v.addBtn, ok = named["add"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: add", ErrWidgetMissing)
@@ -152,6 +158,7 @@ func (v *View) onSelectionChanged(ev datagrid.SelectionChangedEvent) {
 	}
 	v.nameInput.SetText(entry.Name)
 	v.urlInput.SetText(entry.FetchURL)
+	v.pushInput.SetText(strings.Join(entry.PushURLs, ", "))
 	v.updateSelection(entry.Name, true)
 }
 
@@ -185,8 +192,13 @@ func (v *View) onEditClicked() {
 	}
 	v.SetError("")
 	if v.OnEdit != nil {
-		v.OnEdit(name, url)
+		v.OnEdit(name, url, splitURLs(v.pushInput.GetText()))
 	}
+}
+
+func splitURLs(text string) []string {
+	separator := func(r rune) bool { return r == ',' || r == ';' || unicode.IsSpace(r) }
+	return strings.FieldsFunc(text, separator)
 }
 
 func (v *View) validate(name, url, ignoreName string) bool {

@@ -64,7 +64,7 @@ func TestAWriteIsRefusedWhileAnOperationRuns(t *testing.T) {
 	if !refused {
 		t.Fatal("startWrite must refuse while an operation runs")
 	}
-	waitForStatusText(t, a, i18n.T("Status.Busy"))
+	waitForStatusText(t, a, i18n.Tf("Status.BusyWith", "Pull"))
 	close(release)
 	waitForFinishedOperation(t, a, lastOperationView(t, views))
 	done := make(chan struct{})
@@ -91,7 +91,7 @@ func TestAnOperationIsRefusedWhileAWriteRuns(t *testing.T) {
 	if len(*views) != 0 {
 		t.Fatal("a refused operation must not open its window")
 	}
-	waitForStatusText(t, a, i18n.T("Status.Busy"))
+	waitForStatusText(t, a, i18n.Tf("Status.BusyWith", i18n.T("Status.Busy.Write")))
 	close(release)
 	waitForChannel(t, done, "the write end")
 }
@@ -183,5 +183,36 @@ func TestAutoFetchSkipsWhileAWriteRuns(t *testing.T) {
 	waitForChannel(t, done, "the write end")
 	if got := fetches.Load(); got != 0 {
 		t.Fatalf("fetches = %d, want none while a write runs", got)
+	}
+}
+
+func TestARefusedOperationNamesWhatIsRunningAndOffersToStopIt(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+	started := make(chan struct{})
+	var asked []string
+	a.askConfirm = func(_, message string, cb func(bool)) {
+		asked = append(asked, message)
+		cb(true)
+	}
+	a.RunOperation("Fetch", func(ctx context.Context, _ OperationReporter) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	waitForChannel(t, started, "the first operation start")
+
+	a.RunOperation("Push", func(context.Context, OperationReporter) error {
+		t.Error("a second operation must not run next to the first")
+		return nil
+	})
+
+	waitForStatusText(t, a, i18n.Tf("Status.BusyWith", "Fetch"))
+	if want := i18n.Tf("Dialog.Busy.Message", "Fetch"); len(asked) != 1 || asked[0] != want {
+		t.Fatalf("asked = %q, want %q", asked, want)
+	}
+	waitForFinishedOperation(t, a, lastOperationView(t, views))
+	if a.busy() {
+		t.Fatal("the app stayed busy after the running operation was stopped")
 	}
 }

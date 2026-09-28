@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"image"
+	"image/color"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -126,6 +127,36 @@ func TestApplySettingsUpdatesConfigThemeLanguageAndUISettingsAndSaves(t *testing
 	if saved.Git.PullStrategy != config.PullStrategyMerge || saved.Git.DefaultRemote != "upstream" ||
 		!saved.Git.PruneOnFetch || saved.Git.ShallowDepth != 25 {
 		t.Fatalf("saved git network settings = %+v", saved.Git)
+	}
+}
+
+func TestApplySettingsAppliesConfiguredColorsToTheLiveTheme(t *testing.T) {
+	a, paths := newTestAppWithPaths(t)
+	stubShowSettings(a, settings.Model{
+		Language: "en", Theme: config.ThemeDark, LogMaxCount: 500, FetchInterval: 300,
+		DefaultRemote: "origin", PullStrategy: config.PullStrategyFF,
+		Colors: config.Colors{Surface: "#101010", Text: "#EEEEEE"},
+	}, true)
+
+	a.Dispatch(CmdSettings)
+
+	if a.Config().UI.Colors.Surface != "#101010" || a.Config().UI.Colors.Text != "#EEEEEE" {
+		t.Fatalf("colors not saved to config: %+v", a.Config().UI.Colors)
+	}
+	theme := a.theme()
+	if theme.WindowBG != (color.RGBA{R: 0x10, G: 0x10, B: 0x10, A: 0xFF}) {
+		t.Fatalf("window background = %v, want the configured surface colour", theme.WindowBG)
+	}
+	if theme.LabelText != (color.RGBA{R: 0xEE, G: 0xEE, B: 0xEE, A: 0xFF}) {
+		t.Fatalf("label text = %v, want the configured text colour", theme.LabelText)
+	}
+
+	saved, err := config.Load(paths.ConfigFile())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.UI.Colors.Surface != "#101010" || saved.UI.Colors.Text != "#EEEEEE" {
+		t.Fatalf("saved colors = %+v", saved.UI.Colors)
 	}
 }
 
