@@ -21,6 +21,61 @@ func newClassifier(hint int) *classifier {
 	return &classifier{ids: make(map[string]int, hint)}
 }
 
+type LineTable struct {
+	cf      classifier
+	scratch [2]scratch
+	kvalues []int
+	changes []change
+}
+
+type scratch struct {
+	ids    []int
+	rchg   []bool
+	rindex []int
+	ha     []int
+}
+
+func NewLineTable() *LineTable {
+	return &LineTable{cf: classifier{ids: map[string]int{}}}
+}
+
+func (t *LineTable) reuse() *classifier {
+	clear(t.cf.len1)
+	clear(t.cf.len2)
+	return &t.cf
+}
+
+func (s *scratch) ints(kept *[]int, n int) []int {
+	if cap(*kept) < n {
+		*kept = make([]int, n)
+	}
+	out := (*kept)[:n]
+	clear(out)
+	return out
+}
+
+func (t *LineTable) vector(n int) []int {
+	if cap(t.kvalues) < n {
+		t.kvalues = make([]int, n)
+	}
+	out := t.kvalues[:n]
+	clear(out)
+	return out
+}
+
+func (t *LineTable) script() []change {
+	return t.changes[:0]
+}
+
+func (s *scratch) flags(n int) []bool {
+	if cap(s.rchg) < n {
+		s.rchg = make([]bool, n)
+	}
+	out := s.rchg[:n]
+	clear(out)
+	return out
+}
+
 func (c *classifier) classify(pass int, key string) int {
 	id, seen := c.ids[key]
 	if !seen {
@@ -64,11 +119,11 @@ type env struct {
 	hist *histSpace
 }
 
-func prepareSource(pass int, lines []string, cf *classifier, opts Options) *source {
+func prepareSource(pass int, lines []string, cf *classifier, opts Options, reuse *scratch) *source {
 	s := &source{
 		recs:   lines,
-		ids:    make([]int, len(lines)),
-		rchg:   make([]bool, len(lines)+2),
+		ids:    newInts(reuse, func(r *scratch) *[]int { return &r.ids }, len(lines)),
+		rchg:   newFlags(reuse, len(lines)+2),
 		dstart: 0,
 		dend:   len(lines) - 1,
 	}
@@ -76,17 +131,40 @@ func prepareSource(pass int, lines []string, cf *classifier, opts Options) *sour
 		s.ids[at] = cf.classify(pass, lineKey(record, opts.IgnoreWhitespace))
 	}
 	if opts.Algorithm.classic() {
-		s.rindex = make([]int, len(lines))
-		s.ha = make([]int, len(lines))
+		s.rindex = newInts(reuse, func(r *scratch) *[]int { return &r.rindex }, len(lines))
+		s.ha = newInts(reuse, func(r *scratch) *[]int { return &r.ha }, len(lines))
 	}
 	return s
 }
 
+func newInts(reuse *scratch, pick func(*scratch) *[]int, n int) []int {
+	if reuse == nil {
+		return make([]int, n)
+	}
+	return reuse.ints(pick(reuse), n)
+}
+
+func newFlags(reuse *scratch, n int) []bool {
+	if reuse == nil {
+		return make([]bool, n)
+	}
+	return reuse.flags(n)
+}
+
 func prepareEnv(linesA, linesB []string, opts Options) *env {
-	cf := newClassifier(len(linesA) + len(linesB))
+	var (
+		cf             *classifier
+		reuseA, reuseB *scratch
+	)
+	if opts.Lines != nil {
+		cf = opts.Lines.reuse()
+		reuseA, reuseB = &opts.Lines.scratch[0], &opts.Lines.scratch[1]
+	} else {
+		cf = newClassifier(len(linesA) + len(linesB))
+	}
 	e := &env{
-		a:    prepareSource(1, linesA, cf, opts),
-		b:    prepareSource(2, linesB, cf, opts),
+		a:    prepareSource(1, linesA, cf, opts, reuseA),
+		b:    prepareSource(2, linesB, cf, opts, reuseB),
 		cf:   cf,
 		opts: opts,
 	}
@@ -95,6 +173,26 @@ func prepareEnv(linesA, linesB []string, opts Options) *env {
 		e.cleanupRecords()
 	}
 	return e
+}
+
+func (e *env) vectorFor(n int) []int {
+	if e.opts.Lines == nil {
+		return make([]int, n)
+	}
+	return e.opts.Lines.vector(n)
+}
+
+func (e *env) newScript() []change {
+	if e.opts.Lines == nil {
+		return nil
+	}
+	return e.opts.Lines.script()
+}
+
+func (e *env) keepScript(changes []change) {
+	if e.opts.Lines != nil {
+		e.opts.Lines.changes = changes
+	}
 }
 
 func (e *env) trimEnds() {

@@ -81,6 +81,7 @@ type Options struct {
 	BinaryHint       BinaryHint
 	FuncNames        FuncNames
 	FuncMatcher      *userdiff.Matcher
+	Lines            *LineTable
 }
 
 func Defaults() Options {
