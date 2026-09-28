@@ -50,6 +50,10 @@ func newOracle(t *testing.T) *oracle {
 			"GIT_CONFIG_KEY_1=maintenance.auto",
 			"GIT_CONFIG_VALUE_1=false",
 			"GIT_TERMINAL_PROMPT=0",
+			"GIT_AUTHOR_NAME=oracle",
+			"GIT_AUTHOR_EMAIL=oracle@example.com",
+			"GIT_COMMITTER_NAME=oracle",
+			"GIT_COMMITTER_EMAIL=oracle@example.com",
 		},
 	}
 }

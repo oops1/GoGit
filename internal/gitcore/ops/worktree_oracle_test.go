@@ -70,6 +70,7 @@ func TestOurWorktreeIsTheOneGitReports(t *testing.T) {
 }
 
 func TestGitPrunesAndLocksTheWorktreesWeWrite(t *testing.T) {
+	requireGitAtLeast(t, 2, 31, "the lock in the porcelain output of git worktree list")
 	o := newOracle(t)
 	dir := o.repoDir("main")
 	o.run(dir, "init", "--initial-branch=main")
