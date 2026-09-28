@@ -119,6 +119,15 @@ type UI struct {
 	CollapsedGroups       []string     `toml:"collapsed_groups"`
 	Layout                string       `toml:"layout"`
 	Branches              BranchesPane `toml:"branches"`
+	Colors                Colors       `toml:"colors"`
+}
+
+type Colors struct {
+	Accent    string `toml:"accent"`
+	Surface   string `toml:"surface"`
+	Field     string `toml:"field"`
+	Text      string `toml:"text"`
+	Secondary string `toml:"secondary"`
 }
 
 type BranchesPane struct {
@@ -233,6 +242,11 @@ func (c *Config) Normalize() {
 		c.UI.Layout = LayoutDocks
 	}
 	c.UI.ToolbarItems = trimmedList(c.UI.ToolbarItems)
+	c.UI.Colors.Accent = strings.TrimSpace(c.UI.Colors.Accent)
+	c.UI.Colors.Surface = strings.TrimSpace(c.UI.Colors.Surface)
+	c.UI.Colors.Field = strings.TrimSpace(c.UI.Colors.Field)
+	c.UI.Colors.Text = strings.TrimSpace(c.UI.Colors.Text)
+	c.UI.Colors.Secondary = strings.TrimSpace(c.UI.Colors.Secondary)
 	switch c.UI.Branches.Sort {
 	case BranchSortNameReverseNumbers, BranchSortCommitTime:
 	default:
