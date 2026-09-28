@@ -3,6 +3,7 @@ package blame
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -595,5 +596,24 @@ func TestABlameWalksPastAnEmptyRevisionOfTheFile(t *testing.T) {
 	}
 	if got := blamedOn(t, result); strings.Join(got, " ") != "filled:1 filled:2" {
 		t.Fatalf("blame = %v, want both lines on the commit that filled the file", got)
+	}
+}
+
+func TestABlameOfADiamondTakesLinesFromBothSides(t *testing.T) {
+	s := newStore()
+	file := func(text string) hash.ObjectID {
+		return s.tree(map[string]hash.ObjectID{"f.txt": s.blob(text)})
+	}
+	root := s.commit("root", file("a\nb\nc\n"), 1000)
+	left := s.commit("left", file("A\nB\nc\n"), 2000, root)
+	right := s.commit("right", file("a\nb\nC\n"), 2001, root)
+	head := s.commit("merge", file("A\nb\nc\n"), 3000, left, right)
+	result, err := File(t.Context(), s, head, "f.txt", Options{})
+	if err != nil {
+		t.Fatalf("File returned error %v", err)
+	}
+	want := []string{"left:1", "root:2", "root:3"}
+	if got := blamedOn(t, result); !slices.Equal(got, want) {
+		t.Fatalf("blame gave %v instead of %v", got, want)
 	}
 }

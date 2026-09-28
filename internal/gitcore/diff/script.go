@@ -42,10 +42,10 @@ func (e *env) markIgnorable(changes []change) {
 	for at := range changes {
 		ignore := true
 		for step := 0; step < changes[at].chg1 && ignore; step++ {
-			ignore = isBlankLine(e.a.recs[changes[at].i1+step], ws)
+			ignore = isBlankLine(e.a.recs.at(changes[at].i1+step), ws)
 		}
 		for step := 0; step < changes[at].chg2 && ignore; step++ {
-			ignore = isBlankLine(e.b.recs[changes[at].i2+step], ws)
+			ignore = isBlankLine(e.b.recs.at(changes[at].i2+step), ws)
 		}
 		changes[at].ignore = ignore
 	}
@@ -92,7 +92,7 @@ func getHunk(changes []change, from int, opts Options) (start, last int, ok bool
 }
 
 func (e *env) line(s *source, at int, kind Kind) Line {
-	text, newline := lineText(s.recs[at])
+	text, newline := s.record(at)
 	return Line{Kind: kind, Text: text, NoNewline: !newline}
 }
 
@@ -121,7 +121,7 @@ func (e *env) functionName(start, limit int, previous string) string {
 		step = -1
 	}
 	for at := start; at != limit && 0 <= at && at < e.a.count(); at += step {
-		if name, ok := e.opts.FuncMatcher.Header([]byte(e.a.recs[at]), userdiff.HeaderLimit); ok {
+		if name, ok := e.opts.FuncMatcher.Header(e.a.recs.at(at), userdiff.HeaderLimit); ok {
 			return name
 		}
 	}

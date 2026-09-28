@@ -61,7 +61,7 @@ type origin struct {
 	entry object.TreeEntry
 	data  []byte
 	read  bool
-	split []string
+	split diff.Text
 	spans []span
 }
 
@@ -104,15 +104,17 @@ type entryResult struct {
 }
 
 type blamer struct {
-	ctx     context.Context
-	src     Objects
-	opts    Options
-	lines   []string
-	out     []Line
-	pending queue
-	seq     int
-	nodes   map[hash.ObjectID]*node
-	entries map[entryKey]entryResult
+	ctx      context.Context
+	src      Objects
+	opts     Options
+	lines    []string
+	out      []Line
+	pending  queue
+	seq      int
+	nodes    map[hash.ObjectID]*node
+	entries  map[entryKey]entryResult
+	segments []segment
+	texts    diff.TextPool
 }
 
 func File(ctx context.Context, src Objects, start hash.ObjectID, path string, opts Options) (Result, error) {
@@ -171,6 +173,8 @@ func (b *blamer) queue(o *origin, spans []span) {
 	if len(o.spans) == 0 {
 		heap.Push(&b.pending, queued{node: o.node, when: o.node.commit.Committer.When.Unix(), seq: b.seq})
 		b.seq++
+		o.spans = spans
+		return
 	}
 	o.spans = append(o.spans, spans...)
 }
@@ -184,7 +188,8 @@ func (b *blamer) process(n *node) error {
 			return err
 		}
 		b.assign(o)
-		o.spans, o.data, o.split, o.read = nil, nil, nil, false
+		b.texts.Release(o.split)
+		o.spans, o.data, o.split, o.read = nil, nil, diff.Text{}, false
 	}
 	return nil
 }
@@ -293,7 +298,8 @@ func (b *blamer) passToParent(o, older *origin) error {
 	if err != nil {
 		return err
 	}
-	passed, kept := splitSpans(o.spans, unchangedSegments(diff.ChangesOfLines(previous, newer, b.opts.Diff), len(newer)))
+	b.segments = unchangedSegments(b.segments, diff.ChangesOfText(previous, newer, b.opts.Diff), newer.Count())
+	passed, kept := splitSpans(o.spans, b.segments)
 	if len(passed) > 0 {
 		b.queue(older, passed)
 	}
@@ -307,8 +313,8 @@ type segment struct {
 	count int
 }
 
-func unchangedSegments(changes []diff.Change, total int) []segment {
-	var segments []segment
+func unchangedSegments(kept []segment, changes []diff.Change, total int) []segment {
+	segments := kept[:0]
 	newer, older := 0, 0
 	for _, c := range changes {
 		if c.NewIndex > newer {
@@ -422,15 +428,15 @@ func (b *blamer) dataOf(o *origin) ([]byte, error) {
 	return data, nil
 }
 
-func (b *blamer) linesOf(o *origin) ([]string, error) {
-	if o.split != nil {
+func (b *blamer) linesOf(o *origin) (diff.Text, error) {
+	if o.split.Ready() {
 		return o.split, nil
 	}
 	data, err := b.dataOf(o)
 	if err != nil {
-		return nil, err
+		return diff.Text{}, err
 	}
-	o.split = splitLines(data)
+	o.split = b.texts.Text(data)
 	return o.split, nil
 }
 

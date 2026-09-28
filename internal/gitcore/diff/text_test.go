@@ -6,6 +6,14 @@ import (
 	"testing"
 )
 
+func textLines(text Text) []string {
+	var out []string
+	for at := range text.Count() {
+		out = append(out, string(text.at(at)))
+	}
+	return out
+}
+
 func TestSplitLinesKeepsTheTerminators(t *testing.T) {
 	cases := []struct {
 		name string
@@ -21,21 +29,58 @@ func TestSplitLinesKeepsTheTerminators(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := splitLines([]byte(c.in)); !slices.Equal(got, c.want) {
+			if got := textLines(NewText([]byte(c.in))); !slices.Equal(got, c.want) {
 				t.Errorf("splitLines(%q) returned %q instead of %q", c.in, got, c.want)
 			}
 		})
 	}
 }
 
-func TestLineTextStripsOnlyTheTrailingNewline(t *testing.T) {
-	text, newline := lineText("a\n")
-	if text != "a" || !newline {
-		t.Errorf("lineText(\"a\\n\") returned (%q, %v)", text, newline)
+func TestEmptyTextIsNotReadyAndHasNoLines(t *testing.T) {
+	var text Text
+	if text.Ready() {
+		t.Error("the zero Text reports itself as ready")
 	}
-	text, newline = lineText("a")
+	if text.Count() != 0 {
+		t.Errorf("the zero Text counts %d lines", text.Count())
+	}
+	if NewText([]byte("a\n")).Ready() != true {
+		t.Error("a split Text does not report itself as ready")
+	}
+}
+
+func TestSliceTakesTheLinesOfTheRange(t *testing.T) {
+	text := NewText([]byte("a\nb\nc\nd\n"))
+	if got := textLines(text.slice(1, 2)); !slices.Equal(got, []string{"b\n", "c\n"}) {
+		t.Errorf("slice(1, 2) returned %q", got)
+	}
+	if got := text.slice(2, 0); got.Count() != 0 {
+		t.Errorf("slice of no lines returned %q", textLines(got))
+	}
+}
+
+func TestSpanJoinsTheLinesWithoutCopying(t *testing.T) {
+	text := NewText([]byte("a\nb\nc\n"))
+	if got := string(text.span(0, 2)); got != "a\nb\n" {
+		t.Errorf("span(0, 2) returned %q", got)
+	}
+	if got := text.span(1, 1); got != nil {
+		t.Errorf("span of no lines returned %q", got)
+	}
+}
+
+func TestLineTextStripsOnlyTheTrailingNewline(t *testing.T) {
+	text, newline := lineTextOf("a\n")
+	if text != "a" || !newline {
+		t.Errorf("lineTextOf(\"a\\n\") returned (%q, %v)", text, newline)
+	}
+	text, newline = lineTextOf("a")
 	if text != "a" || newline {
-		t.Errorf("lineText(\"a\") returned (%q, %v)", text, newline)
+		t.Errorf("lineTextOf(\"a\") returned (%q, %v)", text, newline)
+	}
+	text, newline = lineTextOf("")
+	if text != "" || newline {
+		t.Errorf("lineTextOf(\"\") returned (%q, %v)", text, newline)
 	}
 }
 
@@ -58,18 +103,15 @@ func TestLineKeyAppliesTheWhitespaceOption(t *testing.T) {
 		{"an incomplete line keeps its carriage return", "a\r", IgnoreCRAtEOL, "a\r"},
 		{"space at the end wins over the carriage return flag", "a \r\n", IgnoreSpaceAtEOL | IgnoreCRAtEOL, "a"},
 	}
+	var scratch []byte
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := lineKey(c.record, c.option); got != c.want {
+			var key []byte
+			key, scratch = lineKey([]byte(c.record), scratch, c.option)
+			if got := string(key); got != c.want {
 				t.Errorf("lineKey(%q, %d) returned %q instead of %q", c.record, c.option, got, c.want)
 			}
 		})
-	}
-}
-
-func TestStripSpaceLeavesRecordsWithoutSpaceUntouched(t *testing.T) {
-	if got := stripSpace("abc"); got != "abc" {
-		t.Errorf("stripSpace returned %q instead of %q", got, "abc")
 	}
 }
 
@@ -88,7 +130,7 @@ func TestIsBlankLineFollowsTheWhitespaceOption(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := isBlankLine(c.record, c.option); got != c.want {
+			if got := isBlankLine([]byte(c.record), c.option); got != c.want {
 				t.Errorf("isBlankLine(%q, %d) returned %v instead of %v", c.record, c.option, got, c.want)
 			}
 		})
@@ -111,7 +153,7 @@ func TestLineIndentCountsTabsToTheNextStop(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := lineIndent(c.record); got != c.want {
+			if got := lineIndent([]byte(c.record)); got != c.want {
 				t.Errorf("lineIndent(%q) returned %d instead of %d", c.record, got, c.want)
 			}
 		})
@@ -129,20 +171,38 @@ func TestIsSpaceByteAcceptsTheWhitespaceSet(t *testing.T) {
 	}
 }
 
-func TestBogosqrtGrowsWithTheInput(t *testing.T) {
-	cases := []struct {
-		in   int
-		want int
-	}{
-		{0, 1},
-		{1, 2},
-		{4, 4},
-		{16, 8},
-		{4003, 64},
+func TestATextPoolReusesTheLineOffsetsItGetsBack(t *testing.T) {
+	var pool TextPool
+	first := pool.Text([]byte("a\nb\nc\n"))
+	if got := textLines(first); !slices.Equal(got, []string{"a\n", "b\n", "c\n"}) {
+		t.Fatalf("the pool split the first text into %q", got)
 	}
-	for _, c := range cases {
-		if got := bogosqrt(c.in); got != c.want {
-			t.Errorf("bogosqrt(%d) returned %d instead of %d", c.in, got, c.want)
-		}
+	pool.Release(Text{})
+	if len(pool.free) != 0 {
+		t.Fatal("the pool kept a text that has no line offsets")
+	}
+	pool.Release(first)
+	second := pool.Text([]byte("x\ny\n"))
+	if got := textLines(second); !slices.Equal(got, []string{"x\n", "y\n"}) {
+		t.Fatalf("the pool split the second text into %q", got)
+	}
+	if &second.offs[0] != &first.offs[0] {
+		t.Fatal("the pool made new line offsets instead of reusing the ones it got back")
+	}
+	if len(pool.free) != 0 {
+		t.Fatalf("the pool still holds %d buffers while one is in use", len(pool.free))
+	}
+	if got := pool.Text(nil); got.Ready() {
+		t.Fatal("the pool split an empty file into lines")
+	}
+}
+
+func TestATextPoolStopsCollectingBuffersAtItsLimit(t *testing.T) {
+	var pool TextPool
+	for range maxPooledTexts + 3 {
+		pool.Release(NewText([]byte("a\nb\n")))
+	}
+	if len(pool.free) != maxPooledTexts {
+		t.Fatalf("the pool holds %d buffers instead of %d", len(pool.free), maxPooledTexts)
 	}
 }

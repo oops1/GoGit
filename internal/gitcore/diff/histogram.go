@@ -204,7 +204,7 @@ func (x *histIndex) tryLCS(e *env, lcs *region, bPtr, line1, count1, line2, coun
 func (e *env) fallBack(line1, count1, line2, count2 int) {
 	opts := e.opts
 	opts.Algorithm = AlgorithmMyers
-	sub := prepareEnv(e.a.recs[line1-1:line1-1+count1], e.b.recs[line2-1:line2-1+count2], opts)
+	sub := prepareEnv(e.a.recs.slice(line1-1, count1), e.b.recs.slice(line2-1, count2), opts)
 	sub.myers()
 	for at := range count1 {
 		if sub.a.changed(at) {

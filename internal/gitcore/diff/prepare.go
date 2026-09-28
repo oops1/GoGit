@@ -12,9 +12,10 @@ const (
 )
 
 type classifier struct {
-	ids  map[string]int
-	len1 []int
-	len2 []int
+	ids    map[string]int
+	len1   []int
+	len2   []int
+	keybuf []byte
 }
 
 func newClassifier(hint int) *classifier {
@@ -33,6 +34,7 @@ type scratch struct {
 	rchg   []bool
 	rindex []int
 	ha     []int
+	dis    []int8
 }
 
 func NewLineTable() *LineTable {
@@ -45,20 +47,30 @@ func (t *LineTable) reuse() *classifier {
 	return &t.cf
 }
 
-func (s *scratch) ints(kept *[]int, n int) []int {
-	if cap(*kept) < n {
-		*kept = make([]int, n)
+func grown[T any](kept []T, n int) []T {
+	if cap(kept) >= n {
+		return kept[:n]
 	}
-	out := (*kept)[:n]
+	return make([]T, n, max(n, 2*cap(kept)))
+}
+
+func (s *scratch) ints(kept *[]int, n int) []int {
+	*kept = grown(*kept, n)
+	out := *kept
+	clear(out)
+	return out
+}
+
+func (s *scratch) int8s(n int) []int8 {
+	s.dis = grown(s.dis, n)
+	out := s.dis
 	clear(out)
 	return out
 }
 
 func (t *LineTable) vector(n int) []int {
-	if cap(t.kvalues) < n {
-		t.kvalues = make([]int, n)
-	}
-	out := t.kvalues[:n]
+	t.kvalues = grown(t.kvalues, n)
+	out := t.kvalues
 	clear(out)
 	return out
 }
@@ -68,22 +80,37 @@ func (t *LineTable) script() []change {
 }
 
 func (s *scratch) flags(n int) []bool {
-	if cap(s.rchg) < n {
-		s.rchg = make([]bool, n)
-	}
-	out := s.rchg[:n]
+	s.rchg = grown(s.rchg, n)
+	out := s.rchg
 	clear(out)
 	return out
 }
 
-func (c *classifier) classify(pass int, key string) int {
+func (c *classifier) classify(pass int, key []byte) int {
+	id, seen := c.ids[string(key)]
+	if !seen {
+		return c.count(pass, c.add(string(key)))
+	}
+	return c.count(pass, id)
+}
+
+func (c *classifier) classifyShared(pass int, key string) int {
 	id, seen := c.ids[key]
 	if !seen {
-		id = len(c.len1)
-		c.ids[key] = id
-		c.len1 = append(c.len1, 0)
-		c.len2 = append(c.len2, 0)
+		return c.count(pass, c.add(key))
 	}
+	return c.count(pass, id)
+}
+
+func (c *classifier) add(key string) int {
+	id := len(c.len1)
+	c.ids[key] = id
+	c.len1 = append(c.len1, 0)
+	c.len2 = append(c.len2, 0)
+	return id
+}
+
+func (c *classifier) count(pass, id int) int {
 	if pass == 1 {
 		c.len1[id]++
 	} else {
@@ -93,7 +120,8 @@ func (c *classifier) classify(pass int, key string) int {
 }
 
 type source struct {
-	recs   []string
+	reuse  *scratch
+	recs   Text
 	ids    []int
 	rchg   []bool
 	rindex []int
@@ -103,7 +131,12 @@ type source struct {
 	dend   int
 }
 
-func (s *source) count() int { return len(s.recs) }
+func (s *source) count() int { return s.recs.Count() }
+
+func (s *source) record(at int) (text string, newline bool) {
+	s.recs = s.recs.shared()
+	return lineTextOf(s.recs.line(at))
+}
 
 func (s *source) changed(at int) bool { return s.rchg[at+1] }
 
@@ -119,22 +152,36 @@ type env struct {
 	hist *histSpace
 }
 
-func prepareSource(pass int, lines []string, cf *classifier, opts Options, reuse *scratch) *source {
+func prepareSource(pass int, text Text, cf *classifier, opts Options, reuse *scratch) *source {
+	count := text.Count()
 	s := &source{
-		recs:   lines,
-		ids:    newInts(reuse, func(r *scratch) *[]int { return &r.ids }, len(lines)),
-		rchg:   newFlags(reuse, len(lines)+2),
+		reuse:  reuse,
+		recs:   text,
+		ids:    newInts(reuse, func(r *scratch) *[]int { return &r.ids }, count),
+		rchg:   newFlags(reuse, count+2),
 		dstart: 0,
-		dend:   len(lines) - 1,
+		dend:   count - 1,
 	}
-	for at, record := range lines {
-		s.ids[at] = cf.classify(pass, lineKey(record, opts.IgnoreWhitespace))
-	}
+	s.classifyLines(pass, cf, opts)
 	if opts.Algorithm.classic() {
-		s.rindex = newInts(reuse, func(r *scratch) *[]int { return &r.rindex }, len(lines))
-		s.ha = newInts(reuse, func(r *scratch) *[]int { return &r.ha }, len(lines))
+		s.rindex = newInts(reuse, func(r *scratch) *[]int { return &r.rindex }, count)
+		s.ha = newInts(reuse, func(r *scratch) *[]int { return &r.ha }, count)
 	}
 	return s
+}
+
+func (s *source) classifyLines(pass int, cf *classifier, opts Options) {
+	if s.recs.whole != "" && opts.IgnoreWhitespace == 0 {
+		for at := range s.count() {
+			s.ids[at] = cf.classifyShared(pass, s.recs.line(at))
+		}
+		return
+	}
+	for at := range s.count() {
+		var key []byte
+		key, cf.keybuf = lineKey(s.recs.at(at), cf.keybuf, opts.IgnoreWhitespace)
+		s.ids[at] = cf.classify(pass, key)
+	}
 }
 
 func newInts(reuse *scratch, pick func(*scratch) *[]int, n int) []int {
@@ -151,7 +198,7 @@ func newFlags(reuse *scratch, n int) []bool {
 	return reuse.flags(n)
 }
 
-func prepareEnv(linesA, linesB []string, opts Options) *env {
+func prepareEnv(textA, textB Text, opts Options) *env {
 	var (
 		cf             *classifier
 		reuseA, reuseB *scratch
@@ -160,11 +207,14 @@ func prepareEnv(linesA, linesB []string, opts Options) *env {
 		cf = opts.Lines.reuse()
 		reuseA, reuseB = &opts.Lines.scratch[0], &opts.Lines.scratch[1]
 	} else {
-		cf = newClassifier(len(linesA) + len(linesB))
+		cf = newClassifier(textA.Count() + textB.Count())
+	}
+	if opts.Lines == nil {
+		textA, textB = textA.shared(), textB.shared()
 	}
 	e := &env{
-		a:    prepareSource(1, linesA, cf, opts, reuseA),
-		b:    prepareSource(2, linesB, cf, opts, reuseB),
+		a:    prepareSource(1, textA, cf, opts, reuseA),
+		b:    prepareSource(2, textB, cf, opts, reuseB),
 		cf:   cf,
 		opts: opts,
 	}
@@ -232,8 +282,15 @@ func (e *env) cleanupRecords() {
 	e.b.nreff = reduce(e.b, dis2)
 }
 
+func newInt8s(reuse *scratch, n int) []int8 {
+	if reuse == nil {
+		return make([]int8, n)
+	}
+	return reuse.int8s(n)
+}
+
 func (e *env) discardMap(s *source, other []int) []int8 {
-	dis := make([]int8, s.count()+1)
+	dis := newInt8s(s.reuse, s.count()+1)
 	limit := min(bogosqrt(s.count()), maxEqLimit)
 	for at := s.dstart; at <= s.dend; at++ {
 		matches := other[s.ids[at]]

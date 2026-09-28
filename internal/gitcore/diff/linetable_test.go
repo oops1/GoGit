@@ -34,8 +34,8 @@ func TestALineTableGivesTheSameChangesAsAFreshOne(t *testing.T) {
 				shared.Lines = NewLineTable()
 				for at := 1; at < len(revisions); at++ {
 					older, newer := splitLines(revisions[at-1]), splitLines(revisions[at])
-					want := ChangesOfLines(older, newer, opts)
-					got := ChangesOfLines(older, newer, shared)
+					want := ChangesOfText(older, newer, opts)
+					got := ChangesOfText(older, newer, shared)
 					if !slices.Equal(got, want) {
 						t.Fatalf("revision %d: %+v with a shared table, %+v without", at, got, want)
 					}
@@ -51,7 +51,7 @@ func TestALineTableKeepsItsBuffersBetweenCalls(t *testing.T) {
 	opts.Lines = NewLineTable()
 
 	for at := 1; at < len(revisions); at++ {
-		ChangesOfLines(splitLines(revisions[at-1]), splitLines(revisions[at]), opts)
+		ChangesOfText(splitLines(revisions[at-1]), splitLines(revisions[at]), opts)
 	}
 
 	table := opts.Lines
@@ -72,22 +72,22 @@ func TestALineTableCountsTheLinesOfEachPairOnItsOwn(t *testing.T) {
 	first := []byte("a\na\na\nb\n")
 	second := []byte("a\nb\n")
 
-	ChangesOfLines(splitLines(first), splitLines(first), opts)
-	got := ChangesOfLines(splitLines(second), splitLines(first), opts)
+	ChangesOfText(splitLines(first), splitLines(first), opts)
+	got := ChangesOfText(splitLines(second), splitLines(first), opts)
 
-	fresh := ChangesOfLines(splitLines(second), splitLines(first), Defaults())
+	fresh := ChangesOfText(splitLines(second), splitLines(first), Defaults())
 	if !slices.Equal(got, fresh) {
 		t.Fatalf("counts leaked between calls: %+v, want %+v", got, fresh)
 	}
 }
 
-func TestChangesOfLinesAgreesWithChanges(t *testing.T) {
+func TestChangesOfTextAgreesWithChanges(t *testing.T) {
 	revisions := revisionsOfAFile(8, 25)
 	opts := Defaults()
 	for at := 1; at < len(revisions); at++ {
 		older, newer := revisions[at-1], revisions[at]
 		want := Changes(older, newer, opts)
-		got := ChangesOfLines(splitLines(older), splitLines(newer), opts)
+		got := ChangesOfText(splitLines(older), splitLines(newer), opts)
 		if !slices.Equal(got, want) {
 			t.Fatalf("revision %d: lines gave %+v, bytes gave %+v", at, got, want)
 		}
