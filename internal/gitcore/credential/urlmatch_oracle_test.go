@@ -9,10 +9,27 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/config"
+	"github.com/oops1/gogit/internal/gitcore/gitversion"
 )
+
+var installedGitVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("git", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+})
+
+func requireGitAtLeast(t *testing.T, major, minor int, what string) {
+	t.Helper()
+	if !gitversion.AtLeast(installedGitVersion(), major, minor) {
+		t.Skipf("the installed git predates %d.%d and has no %s", major, minor, what)
+	}
+}
 
 type urlmatchOracleCase struct {
 	name   string
@@ -22,6 +39,7 @@ type urlmatchOracleCase struct {
 }
 
 func TestOracleCredentialSettingsFollowGitURLMatching(t *testing.T) {
+	requireGitAtLeast(t, 2, 32, "GIT_CONFIG_GLOBAL")
 	const host = "example.invalid"
 	bobHost := []string{"https://bob:host@" + host, "https://bob:path@" + host + "/org/repo.git"}
 	bobOrganization := []string{"https://bob:host@" + host, "https://bob:path@" + host + "/organization/repo.git"}
