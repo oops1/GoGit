@@ -16,7 +16,7 @@ const (
 	indexSuffix = ".idx"
 
 	maxInflateRatio = 1032
-	maxPrealloc     = 1 << 20
+	maxPrealloc     = 16 << 20
 )
 
 var packMagic = []byte{'P', 'A', 'C', 'K'}
