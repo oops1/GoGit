@@ -10,106 +10,50 @@ import (
 	"github.com/oops1/gogit/internal/ui/style"
 )
 
-func TestValidHexInputPaintsTheSampleAndThePreview(t *testing.T) {
+func TestPickingAColourPaintsThePreviewAndIsKept(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
+	picked := color.RGBA{R: 0x33, G: 0x77, B: 0xCC, A: 0xFF}
 
-	v.colorField.SetText("#334455")
-	v.colorField.OnChange("#334455")
+	v.colorField.SetValue(picked)
+	v.colorField.OnChanged(picked)
 
-	want := color.RGBA{R: 0x33, G: 0x44, B: 0x55, A: 0xFF}
-	if v.colorFieldSample.Background != want {
-		t.Fatalf("sample = %v, want %v", v.colorFieldSample.Background, want)
+	if v.colorsPreviewField.Color != picked {
+		t.Fatalf("preview field = %+v, want %+v", v.colorsPreviewField.Color, picked)
 	}
-	if v.colorsPreviewField.Background != want {
-		t.Fatalf("preview field = %v, want %v", v.colorsPreviewField.Background, want)
-	}
-	if v.colorField.ValidationError() != "" {
-		t.Fatalf("validation error = %q, want none", v.colorField.ValidationError())
+	if got := v.request().Colors.Field; got != "#3377CC" {
+		t.Fatalf("field colour = %q, want the picked one", got)
 	}
 }
 
-func TestInvalidInputLeavesTheSampleUnchangedAndMarksTheField(t *testing.T) {
+func TestAColourNobodyTouchedStaysEmptyAndShowsTheTheme(t *testing.T) {
 	v := newTestView(t, []string{"en"}, Model{})
-	v.colorAccent.SetText("#334455")
-	v.colorAccent.OnChange("#334455")
-	before := v.colorAccentSample.Background
+	palette := style.Of(widget.CurrentTheme())
 
-	v.colorAccent.SetText("not-a-colour")
-	v.colorAccent.OnChange("not-a-colour")
-
-	if v.colorAccentSample.Background != before {
-		t.Fatalf("sample = %v, want it unchanged at %v", v.colorAccentSample.Background, before)
+	if got := v.colorAccent.Value(); got != palette.Accent {
+		t.Fatalf("accent picker = %+v, want the theme accent %+v", got, palette.Accent)
 	}
-	if v.colorAccent.ValidationError() == "" {
-		t.Fatal("want a validation error for junk input")
+	if got := v.request().Colors; got != (config.Colors{}) {
+		t.Fatalf("colors = %+v, want all of them empty", got)
 	}
 }
 
-func TestEmptyInputIsNotAnErrorAndShowsTheThemeColour(t *testing.T) {
-	v := newTestView(t, []string{"en"}, Model{})
-	v.Restyle(widget.Win11DarkTheme())
-	v.colorSecondary.SetText("#334455")
-	v.colorSecondary.OnChange("#334455")
-
-	v.colorSecondary.SetText("")
-	v.colorSecondary.OnChange("")
-
-	if v.colorSecondary.ValidationError() != "" {
-		t.Fatalf("validation error = %q, want none for an empty field", v.colorSecondary.ValidationError())
-	}
-	want := style.Of(widget.Win11DarkTheme()).Secondary
-	if v.colorSecondarySample.Background != want {
-		t.Fatalf("sample = %v, want the theme's secondary colour %v", v.colorSecondarySample.Background, want)
-	}
-}
-
-func TestColorsResetClearsAllFiveFieldsAndSamples(t *testing.T) {
-	v := newTestView(t, []string{"en"}, Model{})
-	for _, input := range v.colorInputs() {
-		input.SetText("#112233")
-		input.OnChange("#112233")
+func TestResetGivesEveryColourBackToTheThemeAndMarksTheDialog(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{Colors: config.Colors{Accent: "#112233", Surface: "#445566"}})
+	if got := v.request().Colors.Accent; got != "#112233" {
+		t.Fatalf("accent = %q before the reset", got)
 	}
 
 	v.colorsReset.OnClick()
 
-	for _, input := range v.colorInputs() {
-		if input.GetText() != "" {
-			t.Fatalf("input left at %q, want empty after reset", input.GetText())
-		}
+	if got := v.request().Colors; got != (config.Colors{}) {
+		t.Fatalf("colors = %+v after the reset, want all of them empty", got)
 	}
-	pal := style.Of(widget.CurrentTheme())
-	if v.colorAccentSample.Background != pal.Accent {
-		t.Fatalf("accent sample = %v, want the theme accent %v", v.colorAccentSample.Background, pal.Accent)
+	palette := style.Of(widget.CurrentTheme())
+	if v.colorAccent.Value() != palette.Accent || v.colorSurface.Value() != palette.Surface {
+		t.Fatal("the pickers kept the colours instead of taking them from the theme")
 	}
-}
-
-func TestColorsResetMarksTheDialogModified(t *testing.T) {
-	v := newTestView(t, []string{"en"}, Model{})
-	v.colorAccent.SetText("#112233")
-	v.colorAccent.OnChange("#112233")
-	v.initial = v.request()
-	if v.Modified() {
-		t.Fatal("must start unmodified once the initial snapshot is taken")
-	}
-
-	v.colorsReset.OnClick()
-
 	if !v.Modified() {
-		t.Fatal("clearing a configured colour must mark the dialog modified")
-	}
-}
-
-func TestRestyleGivesColorInputsTheDeletedTextErrorBorder(t *testing.T) {
-	v := newTestView(t, []string{"en"}, Model{})
-	theme := widget.Win11DarkTheme()
-
-	v.Restyle(theme)
-
-	want := style.Of(theme).DeletedText
-	for _, input := range v.colorInputs() {
-		if input.ErrorBorder != want {
-			t.Fatalf("error border = %v, want %v", input.ErrorBorder, want)
-		}
+		t.Fatal("the reset must mark the dialog modified")
 	}
 }
 
@@ -127,6 +71,25 @@ func TestApplyAndRequestRoundTripColors(t *testing.T) {
 
 	if got.Colors != m.Colors {
 		t.Fatalf("colors = %+v, want %+v", got.Colors, m.Colors)
+	}
+}
+
+func TestRestyleKeepsTheChosenColoursAndRefreshesTheRest(t *testing.T) {
+	v := newTestView(t, []string{"en"}, Model{Colors: config.Colors{Accent: "#112233"}})
+	chosen := color.RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xFF}
+
+	for _, theme := range []*widget.Theme{widget.Win11LightTheme(), widget.Win11DarkTheme()} {
+		v.Restyle(theme)
+		palette := style.Of(theme)
+		if v.colorAccent.Value() != chosen {
+			t.Fatalf("accent = %+v, want the chosen colour kept", v.colorAccent.Value())
+		}
+		if v.colorSurface.Value() != palette.Surface {
+			t.Fatalf("surface = %+v, want the colour of the new theme %+v", v.colorSurface.Value(), palette.Surface)
+		}
+		if v.colorsPreview.Color != palette.Surface {
+			t.Fatalf("preview = %+v, want it repainted with the theme", v.colorsPreview.Color)
+		}
 	}
 }
 

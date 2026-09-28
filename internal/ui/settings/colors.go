@@ -5,6 +5,7 @@ import (
 
 	"github.com/oops1/headless-gui/v3/widget"
 
+	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/style"
 )
@@ -17,8 +18,7 @@ const (
 	colorSecondaryRow = 39
 	colorsPreviewRow  = 41
 
-	colorSampleSize         = 18
-	colorSampleHintGap      = 4
+	colorPickerHintGap      = 8
 	colorPreviewFieldWidth  = 160
 	colorPreviewFieldHeight = 40
 	colorPreviewAccentWidth = 56
@@ -27,18 +27,28 @@ const (
 	colorPreviewCaptionGap  = 6
 )
 
-func (v *View) buildColorSamples() {
-	v.colorAccentSample = v.addColorSample(colorAccentRow)
-	v.colorSurfaceSample = v.addColorSample(colorSurfaceRow)
-	v.colorFieldSample = v.addColorSample(colorFieldRow)
-	v.colorTextSample = v.addColorSample(colorTextRow)
-	v.colorSecondarySample = v.addColorSample(colorSecondaryRow)
+type colorRow struct {
+	picker *widget.ColorPicker
+	chosen bool
+	from   func(style.Palette) color.RGBA
+}
 
-	v.colorsPreview = newSwatchPanel()
+func (v *View) colorRows() []*colorRow {
+	return []*colorRow{
+		{picker: v.colorAccent, chosen: v.colorChosen[0], from: func(p style.Palette) color.RGBA { return p.Accent }},
+		{picker: v.colorSurface, chosen: v.colorChosen[1], from: func(p style.Palette) color.RGBA { return p.Surface }},
+		{picker: v.colorField, chosen: v.colorChosen[2], from: func(p style.Palette) color.RGBA { return p.Field }},
+		{picker: v.colorText, chosen: v.colorChosen[3], from: func(p style.Palette) color.RGBA { return p.Text }},
+		{picker: v.colorSecondary, chosen: v.colorChosen[4], from: func(p style.Palette) color.RGBA { return p.Secondary }},
+	}
+}
+
+func (v *View) buildColorPreview() {
+	v.colorsPreview = widget.NewSwatch(color.RGBA{})
 	v.colorsPreview.SetGridProps(colorsPreviewRow, 0, 1, 3)
 	v.sectionGeneral.AddChild(v.colorsPreview)
 
-	v.colorsPreviewField = newSwatchPanel()
+	v.colorsPreviewField = widget.NewSwatch(color.RGBA{})
 	v.colorsPreviewField.CornerRadius = 4
 	v.colorsPreviewField.SetGridProps(colorsPreviewRow, 0, 1, 3)
 	v.colorsPreviewField.SetHAlign(widget.HAlignLeft)
@@ -70,7 +80,7 @@ func (v *View) buildColorSamples() {
 	})
 	v.sectionGeneral.AddChild(v.colorsPreviewSecond)
 
-	v.colorsPreviewAccent = newSwatchPanel()
+	v.colorsPreviewAccent = widget.NewSwatch(color.RGBA{})
 	v.colorsPreviewAccent.CornerRadius = 4
 	v.colorsPreviewAccent.SetGridProps(colorsPreviewRow, 0, 1, 3)
 	v.colorsPreviewAccent.SetHAlign(widget.HAlignRight)
@@ -78,29 +88,6 @@ func (v *View) buildColorSamples() {
 	v.colorsPreviewAccent.SetXAMLSize(colorPreviewAccentWidth, colorPreviewFieldHeight)
 	v.colorsPreviewAccent.SetMargin(widget.Margin{Right: colorPreviewPad, Top: colorPreviewPad})
 	v.sectionGeneral.AddChild(v.colorsPreviewAccent)
-
-	v.sectionGeneral.SetBounds(v.sectionGeneral.Bounds())
-}
-
-func newSwatchPanel() *widget.Panel {
-	p := widget.NewPanel(color.RGBA{})
-	p.ShowHeader = false
-	p.ShowBorder = true
-	p.CornerRadius = 6
-	return p
-}
-
-func (v *View) addColorSample(row int) *widget.Panel {
-	p := widget.NewPanel(color.RGBA{})
-	p.ShowHeader = false
-	p.ShowBorder = true
-	p.CornerRadius = 3
-	p.SetGridProps(row, 2, 1, 1)
-	p.SetHAlign(widget.HAlignLeft)
-	p.SetVAlign(widget.VAlignCenter)
-	p.SetXAMLSize(colorSampleSize, colorSampleSize)
-	v.sectionGeneral.AddChild(p)
-	return p
 }
 
 func addColorHint(grid *widget.Grid, key string, row, maxLines int) *hintLabel {
@@ -108,84 +95,95 @@ func addColorHint(grid *widget.Grid, key string, row, maxLines int) *hintLabel {
 	h.WrapText = true
 	h.SetXAMLSize(0, maxLines*hintLineHeight)
 	h.SetVAlign(widget.VAlignCenter)
-	h.SetMargin(widget.Margin{Left: colorSampleSize + hintLeftGapFromControl + colorSampleHintGap})
+	h.SetMargin(widget.Margin{Left: colorPickerHintGap})
 	return h
 }
 
-func (v *View) colorInputs() []*widget.TextInput {
-	return []*widget.TextInput{v.colorAccent, v.colorSurface, v.colorField, v.colorText, v.colorSecondary}
+func (v *View) colorPickers() []*widget.ColorPicker {
+	return []*widget.ColorPicker{v.colorAccent, v.colorSurface, v.colorField, v.colorText, v.colorSecondary}
 }
 
-func (v *View) colorSamples() []*widget.Panel {
-	return []*widget.Panel{v.colorAccentSample, v.colorSurfaceSample, v.colorFieldSample, v.colorTextSample, v.colorSecondarySample}
-}
-
-func (v *View) wireColorInputs(onAny func()) {
-	for _, input := range v.colorInputs() {
-		input.OnChange = func(string) {
+func (v *View) wireColorPickers(onAny func()) {
+	for at, picker := range v.colorPickers() {
+		picker.OnChanged = func(color.RGBA) {
+			if v.settingColors {
+				return
+			}
+			v.colorChosen[at] = true
+			v.refreshColorsPreview()
 			onAny()
-			v.refreshColorSamples()
 		}
 	}
 	v.colorsReset.OnClick = func() {
-		for _, input := range v.colorInputs() {
-			input.SetText("")
+		for at := range v.colorChosen {
+			v.colorChosen[at] = false
 		}
-		v.refreshColorSamples()
+		v.showThemeColors()
 		onAny()
 	}
 }
 
-func (v *View) restyleColors(p style.Palette) {
-	for _, input := range v.colorInputs() {
-		input.ErrorBorder = p.DeletedText
+func (v *View) applyColors(colors config.Colors) {
+	v.settingColors = true
+	for at, text := range []string{colors.Accent, colors.Surface, colors.Field, colors.Text, colors.Secondary} {
+		chosen, ok := style.ParseColor(text)
+		v.colorChosen[at] = ok
+		if ok {
+			v.colorPickers()[at].SetValue(chosen)
+		}
 	}
-	for _, sample := range v.colorSamples() {
-		sample.BorderColor = p.Border
-	}
-	v.colorsPreview.BorderColor = p.Border
-	v.colorsPreviewField.BorderColor = p.Border
-	v.colorsPreviewAccent.BorderColor = p.Border
-	v.refreshColorSamples()
+	v.settingColors = false
+	v.showThemeColors()
 }
 
-func (v *View) refreshColorSamples() {
-	theme := v.currentTheme
-	if theme == nil {
-		theme = widget.CurrentTheme()
+func (v *View) chosenColors() config.Colors {
+	values := make([]string, len(v.colorChosen))
+	for at, picker := range v.colorPickers() {
+		if v.colorChosen[at] {
+			values[at] = style.HexColor(picker.Value())
+		}
 	}
-	pal := style.Of(theme)
-	syncColorSample(v.colorAccent, v.colorAccentSample, pal.Accent)
-	syncColorSample(v.colorSurface, v.colorSurfaceSample, pal.Surface)
-	syncColorSample(v.colorField, v.colorFieldSample, pal.Field)
-	syncColorSample(v.colorText, v.colorTextSample, pal.Text)
-	syncColorSample(v.colorSecondary, v.colorSecondarySample, pal.Secondary)
+	return config.Colors{
+		Accent:    values[0],
+		Surface:   values[1],
+		Field:     values[2],
+		Text:      values[3],
+		Secondary: values[4],
+	}
+}
+
+func (v *View) restyleColors(p style.Palette) {
+	v.colorsPreview.Border = p.Border
+	v.colorsPreviewField.Border = p.Border
+	v.colorsPreviewAccent.Border = p.Border
+	v.showThemeColors()
+}
+
+func (v *View) showThemeColors() {
+	palette := style.Of(v.themeOrCurrent())
+	v.settingColors = true
+	for _, row := range v.colorRows() {
+		if !row.chosen {
+			row.picker.SetValue(row.from(palette))
+		}
+	}
+	v.settingColors = false
 	v.refreshColorsPreview()
 }
 
-func syncColorSample(input *widget.TextInput, sample *widget.Panel, fallback color.RGBA) {
-	text := input.GetText()
-	if text == "" {
-		input.SetValidationError("")
-		sample.Background = fallback
-		sample.Invalidate()
-		return
+func (v *View) themeOrCurrent() *widget.Theme {
+	if v.currentTheme != nil {
+		return v.currentTheme
 	}
-	if c, ok := style.ParseColor(text); ok {
-		input.SetValidationError("")
-		sample.Background = c
-		sample.Invalidate()
-		return
-	}
-	input.SetValidationError(i18n.T("Dialog.Settings.Colors.Invalid"))
+	return widget.CurrentTheme()
 }
 
 func (v *View) refreshColorsPreview() {
-	v.colorsPreview.Background = v.colorSurfaceSample.Background
-	v.colorsPreviewField.Background = v.colorFieldSample.Background
-	v.colorsPreviewText.TextColor = v.colorTextSample.Background
-	v.colorsPreviewSecond.TextColor = v.colorSecondarySample.Background
-	v.colorsPreviewAccent.Background = v.colorAccentSample.Background
+	v.colorsPreview.Color = v.colorSurface.Value()
+	v.colorsPreviewField.Color = v.colorField.Value()
+	v.colorsPreviewText.TextColor = v.colorText.Value()
+	v.colorsPreviewSecond.TextColor = v.colorSecondary.Value()
+	v.colorsPreviewAccent.Color = v.colorAccent.Value()
 	v.colorsPreview.Invalidate()
 	v.colorsPreviewField.Invalidate()
 	v.colorsPreviewText.Invalidate()

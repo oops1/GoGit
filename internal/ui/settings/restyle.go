@@ -18,7 +18,7 @@ func (v *View) Restyle(t *widget.Theme) {
 }
 
 func (v *View) fields() []*widget.TextInput {
-	return append([]*widget.TextInput{
+	return []*widget.TextInput{
 		v.search,
 		v.pullStrategy,
 		v.defaultRemote,
@@ -28,7 +28,7 @@ func (v *View) fields() []*widget.TextInput {
 		v.sshHostInput,
 		v.sshPathInput,
 		v.sshPassphraseInput,
-	}, v.colorInputs()...)
+	}
 }
 
 func (v *View) lists() []*widget.Dropdown {

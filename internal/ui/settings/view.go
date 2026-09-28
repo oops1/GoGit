@@ -74,20 +74,17 @@ type View struct {
 	banAttribution        *widget.CheckBox
 	shallowDepth          *widget.NumericUpDown
 	switchChanges         *widget.Dropdown
-	colorAccent           *widget.TextInput
-	colorSurface          *widget.TextInput
-	colorField            *widget.TextInput
-	colorText             *widget.TextInput
-	colorSecondary        *widget.TextInput
+	colorAccent           *widget.ColorPicker
+	colorSurface          *widget.ColorPicker
+	colorField            *widget.ColorPicker
+	colorText             *widget.ColorPicker
+	colorSecondary        *widget.ColorPicker
 	colorsReset           *widget.Button
-	colorAccentSample     *widget.Panel
-	colorSurfaceSample    *widget.Panel
-	colorFieldSample      *widget.Panel
-	colorTextSample       *widget.Panel
-	colorSecondarySample  *widget.Panel
-	colorsPreview         *widget.Panel
-	colorsPreviewField    *widget.Panel
-	colorsPreviewAccent   *widget.Panel
+	colorChosen           [5]bool
+	settingColors         bool
+	colorsPreview         *widget.Swatch
+	colorsPreviewField    *widget.Swatch
+	colorsPreviewAccent   *widget.Swatch
 	colorsPreviewText     *widget.Label
 	colorsPreviewSecond   *widget.Label
 	currentTheme          *widget.Theme
@@ -195,7 +192,7 @@ func NewView(eng widget.ModalShower, languages []string, initial Model) (*View, 
 		return nil, err
 	}
 	v.attachContent()
-	v.buildColorSamples()
+	v.buildColorPreview()
 	v.populateLanguages()
 	v.apply(initial.Normalized())
 	v.initial = v.request()
@@ -300,19 +297,19 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	if v.shallowDepth, ok = named["shallowDepth"].(*widget.NumericUpDown); !ok {
 		return fmt.Errorf("%w: shallowDepth", ErrWidgetMissing)
 	}
-	if v.colorAccent, ok = named["colorAccent"].(*widget.TextInput); !ok {
+	if v.colorAccent, ok = named["colorAccent"].(*widget.ColorPicker); !ok {
 		return fmt.Errorf("%w: colorAccent", ErrWidgetMissing)
 	}
-	if v.colorSurface, ok = named["colorSurface"].(*widget.TextInput); !ok {
+	if v.colorSurface, ok = named["colorSurface"].(*widget.ColorPicker); !ok {
 		return fmt.Errorf("%w: colorSurface", ErrWidgetMissing)
 	}
-	if v.colorField, ok = named["colorField"].(*widget.TextInput); !ok {
+	if v.colorField, ok = named["colorField"].(*widget.ColorPicker); !ok {
 		return fmt.Errorf("%w: colorField", ErrWidgetMissing)
 	}
-	if v.colorText, ok = named["colorText"].(*widget.TextInput); !ok {
+	if v.colorText, ok = named["colorText"].(*widget.ColorPicker); !ok {
 		return fmt.Errorf("%w: colorText", ErrWidgetMissing)
 	}
-	if v.colorSecondary, ok = named["colorSecondary"].(*widget.TextInput); !ok {
+	if v.colorSecondary, ok = named["colorSecondary"].(*widget.ColorPicker); !ok {
 		return fmt.Errorf("%w: colorSecondary", ErrWidgetMissing)
 	}
 	if v.colorsReset, ok = named["colorsReset"].(*widget.Button); !ok {
@@ -394,12 +391,7 @@ func (v *View) apply(m Model) {
 	v.shallowDepth.SetValue(float64(m.ShallowDepth))
 	v.switchChanges.SetSelected(orderIndex(switchChangesOrder, m.SwitchChanges))
 	v.credentialSource.SetSelected(credentialSourceIndex(m.CredentialSource))
-	v.colorAccent.SetText(m.Colors.Accent)
-	v.colorSurface.SetText(m.Colors.Surface)
-	v.colorField.SetText(m.Colors.Field)
-	v.colorText.SetText(m.Colors.Text)
-	v.colorSecondary.SetText(m.Colors.Secondary)
-	v.refreshColorSamples()
+	v.applyColors(m.Colors)
 }
 
 func (v *View) setLanguageSelection(code string) {
@@ -492,13 +484,7 @@ func (v *View) request() Model {
 		ShallowDepth:          int(v.shallowDepth.Value()),
 		SwitchChanges:         orderAt(switchChangesOrder, v.switchChanges.Selected()),
 		CredentialSource:      credentialSourceAt(v.credentialSource.Selected()),
-		Colors: config.Colors{
-			Accent:    v.colorAccent.GetText(),
-			Surface:   v.colorSurface.GetText(),
-			Field:     v.colorField.GetText(),
-			Text:      v.colorText.GetText(),
-			Secondary: v.colorSecondary.GetText(),
-		},
+		Colors:                v.chosenColors(),
 	}.Normalized()
 }
 
