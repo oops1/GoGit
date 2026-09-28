@@ -112,6 +112,10 @@ linters:
         linters:
           - gosec
         text: "G703"
+      - path: internal/config/migrate_test\.go
+        linters:
+          - gosec
+        text: "G703"
       - path: internal/ui/settings/editors\.go
         linters:
           - gosec
