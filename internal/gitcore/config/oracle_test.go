@@ -8,8 +8,26 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/gitversion"
 )
+
+var installedGitVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("git", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+})
+
+func requireGitAtLeast(t *testing.T, major, minor int, what string) {
+	t.Helper()
+	if !gitversion.AtLeast(installedGitVersion(), major, minor) {
+		t.Skipf("the installed git predates %d.%d and has no %s", major, minor, what)
+	}
+}
 
 type oracle struct {
 	t    *testing.T
@@ -281,6 +299,7 @@ func TestOracleAgreesOnGeneratedFixtures(t *testing.T) {
 
 func TestOracleWorktreeConfigMatchesGitConfigWorktree(t *testing.T) {
 	o := newOracle(t)
+	requireGitAtLeast(t, 2, 31, "rev-parse --path-format")
 	o.run(o.dir, "init", "-q", "main")
 	main := filepath.Join(o.dir, "main")
 	writeFile(t, filepath.Join(main, "a.txt"), "hello\n")
@@ -321,6 +340,7 @@ func TestOracleWorktreeConfigMatchesGitConfigWorktree(t *testing.T) {
 
 func TestOracleAgreesOnConditionalIncludes(t *testing.T) {
 	o := newOracle(t)
+	requireGitAtLeast(t, 2, 32, "GIT_CONFIG_GLOBAL")
 	o.run(o.dir, "init", "-q", "work")
 	repo := filepath.Join(o.dir, "work")
 	global := writeFile(t, filepath.Join(o.dir, "gitconfig"),
@@ -357,6 +377,7 @@ func TestOracleAgreesOnConditionalIncludes(t *testing.T) {
 
 func TestOracleAgreesOnConditionalIncludesInLinkedWorktree(t *testing.T) {
 	o := newOracle(t)
+	requireGitAtLeast(t, 2, 32, "GIT_CONFIG_GLOBAL")
 	o.run(o.dir, "init", "-q", "-b", "main", "work")
 	main := filepath.Join(o.dir, "work")
 	o.run(main, "commit", "-q", "--allow-empty", "-m", "base")

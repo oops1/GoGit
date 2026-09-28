@@ -10,8 +10,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/oops1/gogit/internal/gitcore/gitversion"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -21,6 +23,21 @@ type oracle struct {
 	t    *testing.T
 	repo string
 	env  []string
+}
+
+var installedGitVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("git", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+})
+
+func requireGitAtLeast(t *testing.T, major, minor int, what string) {
+	t.Helper()
+	if !gitversion.AtLeast(installedGitVersion(), major, minor) {
+		t.Skipf("the installed git predates %d.%d and writes %s another way", major, minor, what)
+	}
 }
 
 func newOracle(t *testing.T) *oracle {

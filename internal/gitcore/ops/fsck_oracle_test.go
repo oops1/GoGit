@@ -29,6 +29,7 @@ func gitUnreachable(out string) []string {
 
 func TestOracleFsckAgreesWithGitAboutAHealthyRepository(t *testing.T) {
 	o := newOracle(t)
+	requireGitAtLeast(t, 2, 34, "the set of objects today's fsck calls unreachable")
 	dir, _ := buildOracleMaintenanceRepo(o)
 	r := o.openRepo(dir)
 
