@@ -17,6 +17,15 @@ and a pane can be torn off into a window of its own.
 - The Remotes window shows every push address and lets you edit them as a
   comma-separated list; an empty field means the push goes to the fetch URL.
 
+## Long lines and colours: engine 3.25
+
+- The engine moved to 3.25. The comparison and conflict windows gained a
+  horizontal scrollbar, so a long line can be read to its end; Shift+wheel and
+  the caret move the code sideways too. This was the last task left in the
+  release, and no workaround existed on our side.
+- The theme colour editor in Settings now uses a real colour picker: a field
+  with a swatch, a palette and the `#RRGGBB` code.
+
 ## What keeps the window busy
 
 - When another operation is already running, the app no longer answers with a
@@ -25,6 +34,11 @@ and a pane can be torn off into a window of its own.
   program simply ignoring the click.
 - The busy flag and the repository watcher's pause are released on every exit
   from an operation, not only on a normal return.
+- When the process passes a memory threshold (512 MiB, then each doubling),
+  `gogit.log` records the heap size, the object count, the open repository and
+  the running operation, so growth is visible in the log.
+- `GOGIT_PPROF=127.0.0.1:6060` turns on Go's profiler on the loopback
+  interface. It is off by default and refuses an address outside the loopback.
 
 ## Appearance
 
