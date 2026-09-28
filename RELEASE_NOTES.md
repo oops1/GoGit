@@ -17,6 +17,17 @@ and a pane can be torn off into a window of its own.
 - The Remotes window shows every push address and lets you edit them as a
   comma-separated list; an empty field means the push goes to the fetch URL.
 
+## Blame of a large file no longer freezes the window
+
+- Blame used to push gigabytes through memory, and the garbage collector
+  stopped the whole window while it did: every step of the history split the
+  file into lines again and built the line table for both sides again. Each
+  revision is now split once, the line table and the working buffers live for
+  the whole pass, and a delta target gets its room up front. On a 30 000 line
+  file (`swagger.json`, 1 MB) a single blame allocated 2.4 GB and now allocates
+  1.0 GB; the internal benchmarks went from 3.0 GB to 0.72 GB and from 1.5 GB
+  to 0.61 GB. The blame result is checked against git and did not change.
+
 ## Long lines and colours: engine 3.25
 
 - The engine moved to 3.25. The comparison and conflict windows gained a
