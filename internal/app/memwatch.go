@@ -5,6 +5,7 @@ import (
 	"runtime/debug"
 	"runtime/metrics"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,11 +14,13 @@ const (
 	memoryStepFactor  = 2
 	memorySampleEvery = 30 * time.Second
 	memoryKeptUnused  = 256 << 20
+	memoryIdleHeap    = 512 << 20
 
 	heapInUseMetric = "/memory/classes/heap/objects:bytes"
 )
 
 type memoryWatch struct {
+	freeing atomic.Bool
 	mu      sync.Mutex
 	next    uint64
 	sample  []metrics.Sample
@@ -63,9 +66,10 @@ func heapInUseOf(sample []metrics.Sample) uint64 {
 }
 
 var (
-	readHeapInUse = heapInUseOf
-	readMemStats  = runtime.ReadMemStats
-	freeOSMemory  = debug.FreeOSMemory
+	readHeapInUse     = heapInUseOf
+	readMemStats      = runtime.ReadMemStats
+	freeOSMemory      = debug.FreeOSMemory
+	startFreeOSMemory = func(free func()) { go free() }
 )
 
 func (a *App) reportMemoryGrowth(now time.Time) {
@@ -92,12 +96,24 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 
 func (a *App) returnUnusedMemory(stats runtime.MemStats) {
 	unused := stats.HeapIdle - stats.HeapReleased
-	if unused < memoryKeptUnused {
+	idle := stats.HeapAlloc >= memoryIdleHeap && !a.operationRunning()
+	if unused < memoryKeptUnused && !idle {
 		return
 	}
-	freeOSMemory()
-	a.log.Info("unused memory was given back to the system",
-		"unused_mib", unused>>20, "heap_mib", stats.HeapAlloc>>20)
+	if !a.memory.freeing.CompareAndSwap(false, true) {
+		return
+	}
+	startFreeOSMemory(func() {
+		defer a.memory.freeing.Store(false)
+		freeOSMemory()
+		a.log.Info("unused memory was given back to the system",
+			"unused_mib", unused>>20, "heap_mib", stats.HeapAlloc>>20, "idle", idle)
+	})
+}
+
+func (a *App) operationRunning() bool {
+	title, _ := a.runningOperation()
+	return title != ""
 }
 
 func (a *App) openedPath() string {

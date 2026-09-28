@@ -140,6 +140,9 @@ func TestTheAppGivesUnusedMemoryBackOnlyWhenThereIsEnoughOfIt(t *testing.T) {
 	freed := 0
 	unused := uint64(memoryKeptUnused - 1)
 	prevFree, prevStats, prevHeap := freeOSMemory, readMemStats, readHeapInUse
+	prevStart := startFreeOSMemory
+	startFreeOSMemory = func(free func()) { free() }
+	t.Cleanup(func() { startFreeOSMemory = prevStart })
 	freeOSMemory = func() { freed++ }
 	readMemStats = func(stats *runtime.MemStats) { stats.HeapIdle, stats.HeapReleased = unused, 0 }
 	readHeapInUse = func([]metrics.Sample) uint64 { return 1 }
@@ -155,5 +158,25 @@ func TestTheAppGivesUnusedMemoryBackOnlyWhenThereIsEnoughOfIt(t *testing.T) {
 	a.reportMemoryGrowth(at.Add(memorySampleEvery))
 	if freed != 1 {
 		t.Fatalf("the system got its memory back %d times, want once", freed)
+	}
+}
+
+func TestTheAppCollectsTheGarbageOfAFinishedOperationWhileItIdles(t *testing.T) {
+	a := newTestApp(t)
+	freed := 0
+	prevFree, prevStats, prevHeap := freeOSMemory, readMemStats, readHeapInUse
+	prevStart := startFreeOSMemory
+	startFreeOSMemory = func(free func()) { free() }
+	t.Cleanup(func() { startFreeOSMemory = prevStart })
+	freeOSMemory = func() { freed++ }
+	readMemStats = func(stats *runtime.MemStats) {
+		stats.HeapAlloc, stats.HeapIdle, stats.HeapReleased = memoryIdleHeap, 0, 0
+	}
+	readHeapInUse = func([]metrics.Sample) uint64 { return 1 }
+	t.Cleanup(func() { freeOSMemory, readMemStats, readHeapInUse = prevFree, prevStats, prevHeap })
+
+	a.reportMemoryGrowth(time.Now())
+	if freed != 1 {
+		t.Fatalf("an idle app with a large heap collected %d times, want once", freed)
 	}
 }
