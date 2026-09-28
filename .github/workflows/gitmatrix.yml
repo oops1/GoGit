@@ -10,6 +10,8 @@ on:
       - .github/workflows/gitmatrix.yml
       - .github/ci/install-git.sh
       - .github/ci/suite.sh
+      - internal/**/*_oracle_test.go
+      - internal/gitcore/gitversion/**
 
 concurrency:
   group: gitmatrix-${{ github.ref }}
