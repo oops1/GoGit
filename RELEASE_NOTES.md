@@ -34,5 +34,8 @@ and a pane can be torn off into a window of its own.
   system theme, and one button clears all five. The colours live in
   `config.toml`.
 - Drop-down lists draw a chevron instead of a triangle behind a divider.
+- The icon of a remote's default branch (`origin/master`) no longer repeats the
+  icon of the current branch, which read as if the app stood on `master` while
+  the current branch was another one.
 - A pane can be torn off into a separate operating-system window: engine 3.23
   carries it and our markup switches it on.
