@@ -17,6 +17,15 @@ and a pane can be torn off into a window of its own.
 - The Remotes window shows every push address and lets you edit them as a
   comma-separated list; an empty field means the push goes to the fetch URL.
 
+## What keeps the window busy
+
+- When another operation is already running, the app no longer answers with a
+  quiet "Busy": it names the operation ("Busy: Push") and offers to stop it.
+  Until now, pressing "Switch branch" while an operation hung looked like the
+  program simply ignoring the click.
+- The busy flag and the repository watcher's pause are released on every exit
+  from an operation, not only on a normal return.
+
 ## Appearance
 
 - Settings gained a theme colour editor: accent, window background, fields,
