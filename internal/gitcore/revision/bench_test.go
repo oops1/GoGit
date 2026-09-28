@@ -8,9 +8,9 @@ import (
 
 const benchmarkCommits = 10000
 
-func benchmarkHistory(b *testing.B) (*builder, string) {
-	b.Helper()
-	built := newBuilder(b)
+func benchmarkHistory(tb testing.TB) (*builder, string) {
+	tb.Helper()
+	built := newBuilder(tb)
 	previous := ""
 	for index := range benchmarkCommits {
 		name := "c" + strconv.Itoa(index)
