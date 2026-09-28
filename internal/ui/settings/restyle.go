@@ -7,16 +7,18 @@ import (
 )
 
 func (v *View) Restyle(t *widget.Theme) {
+	v.currentTheme = t
 	p := style.Of(t)
 	p.Fields(v.fields()...)
 	p.Lists(v.lists()...)
 	p.Quiet(v.quietButtons()...)
 	p.Primary(v.okBtn, v.credentialEditOK, v.keyEditOK)
 	p.Hints(v.credentialsStatus, v.sshStatus, v.credentialEditStatus, v.sshEditStatus)
+	v.restyleColors(p)
 }
 
 func (v *View) fields() []*widget.TextInput {
-	return []*widget.TextInput{
+	return append([]*widget.TextInput{
 		v.search,
 		v.pullStrategy,
 		v.defaultRemote,
@@ -26,7 +28,7 @@ func (v *View) fields() []*widget.TextInput {
 		v.sshHostInput,
 		v.sshPathInput,
 		v.sshPassphraseInput,
-	}
+	}, v.colorInputs()...)
 }
 
 func (v *View) lists() []*widget.Dropdown {
@@ -50,5 +52,6 @@ func (v *View) quietButtons() []*widget.Button {
 		v.sshRemoveBtn,
 		v.sshTestBtn,
 		v.sshUnlockBtn,
+		v.colorsReset,
 	}
 }

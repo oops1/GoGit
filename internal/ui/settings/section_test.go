@@ -195,6 +195,11 @@ func TestModifiedTrackingCoversEveryWiredWidget(t *testing.T) {
 		{"shallowDepth", func(v *View) { v.shallowDepth.SetValue(v.shallowDepth.Value() + 1) }},
 		{"switchChanges", func(v *View) { v.switchChanges.SetSelected(2); v.switchChanges.OnChange(2, "") }},
 		{"credentialSource", func(v *View) { v.credentialSource.SetSelected(1); v.credentialSource.OnChange(1, "") }},
+		{"colorAccent", func(v *View) { v.colorAccent.SetText("#112233"); v.colorAccent.OnChange("#112233") }},
+		{"colorSurface", func(v *View) { v.colorSurface.SetText("#112233"); v.colorSurface.OnChange("#112233") }},
+		{"colorField", func(v *View) { v.colorField.SetText("#112233"); v.colorField.OnChange("#112233") }},
+		{"colorText", func(v *View) { v.colorText.SetText("#112233"); v.colorText.OnChange("#112233") }},
+		{"colorSecondary", func(v *View) { v.colorSecondary.SetText("#112233"); v.colorSecondary.OnChange("#112233") }},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

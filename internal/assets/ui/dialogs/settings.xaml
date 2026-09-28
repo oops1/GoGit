@@ -50,6 +50,25 @@
                         <RowDefinition Height="14"/>
                         <RowDefinition Height="26"/>
                         <RowDefinition Height="17"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="2"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="22"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="30"/>
+                        <RowDefinition Height="16"/>
+                        <RowDefinition Height="84"/>
+                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="30"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
@@ -98,6 +117,40 @@
                               FontSize="10" Content="{Loc Dialog.Settings.ToolbarCaptions}"/>
                     <CheckBox x:Name="journalFullAuthorName" Grid.Row="23" Grid.Column="0" Grid.ColumnSpan="3"
                               FontSize="10" Content="{Loc Dialog.Settings.JournalFullAuthorName}"/>
+
+                    <Separator Grid.Row="26" Grid.Column="0" Grid.ColumnSpan="3"/>
+
+                    <TextBlock Grid.Row="28" Grid.Column="0" Grid.ColumnSpan="3"
+                               Text="{Loc Dialog.Settings.Group.Colors}"
+                               FontSize="13" FontWeight="Bold"/>
+
+                    <TextBlock Grid.Row="31" Grid.Column="0" Text="{Loc Dialog.Settings.Color.Accent}"
+                               Height="18" VerticalAlignment="Center"/>
+                    <TextBox x:Name="colorAccent" Grid.Row="31" Grid.Column="1"
+                             Height="30" VerticalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="33" Grid.Column="0" Text="{Loc Dialog.Settings.Color.Surface}"
+                               Height="18" VerticalAlignment="Center"/>
+                    <TextBox x:Name="colorSurface" Grid.Row="33" Grid.Column="1"
+                             Height="30" VerticalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="35" Grid.Column="0" Text="{Loc Dialog.Settings.Color.Field}"
+                               Height="18" VerticalAlignment="Center"/>
+                    <TextBox x:Name="colorField" Grid.Row="35" Grid.Column="1"
+                             Height="30" VerticalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="37" Grid.Column="0" Text="{Loc Dialog.Settings.Color.Text}"
+                               Height="18" VerticalAlignment="Center"/>
+                    <TextBox x:Name="colorText" Grid.Row="37" Grid.Column="1"
+                             Height="30" VerticalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="39" Grid.Column="0" Text="{Loc Dialog.Settings.Color.Secondary}"
+                               Height="18" VerticalAlignment="Center"/>
+                    <TextBox x:Name="colorSecondary" Grid.Row="39" Grid.Column="1"
+                             Height="30" VerticalAlignment="Center"/>
+
+                    <Button x:Name="colorsReset" Grid.Row="43" Grid.Column="1"
+                            Height="30" Content="{Loc Dialog.Settings.Colors.Reset}"/>
                 </Grid>
 
                 <Grid x:Name="sectionGit">

@@ -79,6 +79,21 @@ func (v *View) buildSearchIndex() {
 		{section: "general", grid: v.sectionGeneral, rows: []int{23, 24},
 			labelKey: "Dialog.Settings.JournalFullAuthorName", hintKey: "Dialog.Settings.JournalFullAuthorName.Hint",
 			groupKey: "Dialog.Settings.Group.Interface"},
+		{section: "general", grid: v.sectionGeneral, rows: []int{colorAccentRow, colorAccentRow + 1},
+			labelKey: "Dialog.Settings.Color.Accent", hintKey: "Dialog.Settings.Color.Accent.Hint",
+			groupKey: "Dialog.Settings.Group.Colors", value: v.colorAccent.GetText},
+		{section: "general", grid: v.sectionGeneral, rows: []int{colorSurfaceRow, colorSurfaceRow + 1},
+			labelKey: "Dialog.Settings.Color.Surface", hintKey: "Dialog.Settings.Color.Surface.Hint",
+			groupKey: "Dialog.Settings.Group.Colors", value: v.colorSurface.GetText},
+		{section: "general", grid: v.sectionGeneral, rows: []int{colorFieldRow, colorFieldRow + 1},
+			labelKey: "Dialog.Settings.Color.Field", hintKey: "Dialog.Settings.Color.Field.Hint",
+			groupKey: "Dialog.Settings.Group.Colors", value: v.colorField.GetText},
+		{section: "general", grid: v.sectionGeneral, rows: []int{colorTextRow, colorTextRow + 1},
+			labelKey: "Dialog.Settings.Color.Text", hintKey: "Dialog.Settings.Color.Text.Hint",
+			groupKey: "Dialog.Settings.Group.Colors", value: v.colorText.GetText},
+		{section: "general", grid: v.sectionGeneral, rows: []int{colorSecondaryRow, colorSecondaryRow + 1},
+			labelKey: "Dialog.Settings.Color.Secondary", hintKey: "Dialog.Settings.Color.Secondary.Hint",
+			groupKey: "Dialog.Settings.Group.Colors", value: v.colorSecondary.GetText},
 
 		{section: "git", grid: v.sectionGit, rows: []int{3, 4},
 			labelKey: "Dialog.Settings.LogMaxCount", hintKey: "Dialog.Settings.LogMaxCount.Hint",
@@ -122,7 +137,8 @@ func (v *View) buildSearchIndex() {
 	}{
 		{v.sectionGeneral, map[string][]int{
 			"Dialog.Settings.Group.LanguageAppearance": {0, 1, 2, 8, 9, 10},
-			"Dialog.Settings.Group.Interface":          {11, 12, 13},
+			"Dialog.Settings.Group.Interface":          {11, 12, 13, 25, 26, 27},
+			"Dialog.Settings.Group.Colors":             {28, 29, 30, 40, 41, 42, 43},
 		}},
 		{v.sectionGit, map[string][]int{
 			"Dialog.Settings.Group.FetchSync": {0, 1, 2},

@@ -348,6 +348,56 @@ func TestApplyToRoundTripsWithFromConfig(t *testing.T) {
 	}
 }
 
+func TestFromConfigCopiesColors(t *testing.T) {
+	cfg := config.Default()
+	cfg.UI.Colors = config.Colors{Accent: "#4C9AFF", Surface: "#1E1E1E"}
+
+	m := FromConfig(cfg)
+
+	if m.Colors != cfg.UI.Colors {
+		t.Fatalf("colors = %+v, want %+v", m.Colors, cfg.UI.Colors)
+	}
+}
+
+func TestNormalizedTrimsColorFields(t *testing.T) {
+	m := Model{Colors: config.Colors{
+		Accent:    "  #4C9AFF  ",
+		Surface:   " #1E1E1E",
+		Field:     "#2D2D30 ",
+		Text:      "\t#F1F1F1",
+		Secondary: "   ",
+	}}.Normalized()
+
+	want := config.Colors{Accent: "#4C9AFF", Surface: "#1E1E1E", Field: "#2D2D30", Text: "#F1F1F1", Secondary: ""}
+	if m.Colors != want {
+		t.Fatalf("colors = %+v, want %+v", m.Colors, want)
+	}
+}
+
+func TestApplyToWritesColorsIntoConfig(t *testing.T) {
+	cfg := config.Default()
+	m := Model{Colors: config.Colors{Accent: " #112233 "}}
+
+	m.ApplyTo(cfg)
+
+	if cfg.UI.Colors.Accent != "#112233" {
+		t.Fatalf("accent = %q, want #112233", cfg.UI.Colors.Accent)
+	}
+}
+
+func TestApplyToRoundTripsColorsWithFromConfig(t *testing.T) {
+	src := config.Default()
+	src.UI.Colors = config.Colors{Accent: "#4C9AFF", Surface: "#1E1E1E", Field: "#2D2D30", Text: "#F1F1F1", Secondary: "#A0A0A0"}
+
+	m := FromConfig(src)
+	dst := config.Default()
+	m.ApplyTo(dst)
+
+	if dst.UI.Colors != src.UI.Colors {
+		t.Fatalf("colors = %+v, want %+v", dst.UI.Colors, src.UI.Colors)
+	}
+}
+
 func TestNormalizedClampsWorkTreeDepth(t *testing.T) {
 	cases := map[string]struct {
 		in   int
