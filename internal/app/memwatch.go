@@ -2,6 +2,7 @@ package app
 
 import (
 	"runtime"
+	"runtime/debug"
 	"runtime/metrics"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ const (
 	memoryFirstReport = 512 << 20
 	memoryStepFactor  = 2
 	memorySampleEvery = 30 * time.Second
+	memoryKeptUnused  = 256 << 20
 
 	heapInUseMetric = "/memory/classes/heap/objects:bytes"
 )
@@ -63,6 +65,7 @@ func heapInUseOf(sample []metrics.Sample) uint64 {
 var (
 	readHeapInUse = heapInUseOf
 	readMemStats  = runtime.ReadMemStats
+	freeOSMemory  = debug.FreeOSMemory
 )
 
 func (a *App) reportMemoryGrowth(now time.Time) {
@@ -70,12 +73,13 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 	if !sampled {
 		return
 	}
+	var stats runtime.MemStats
+	readMemStats(&stats)
+	a.returnUnusedMemory(stats)
 	threshold, crossed := a.memory.crossed(inUse)
 	if !crossed {
 		return
 	}
-	var stats runtime.MemStats
-	readMemStats(&stats)
 	a.log.Warn("memory in use passed a threshold",
 		"threshold_mib", threshold>>20,
 		"heap_mib", stats.HeapAlloc>>20,
@@ -84,6 +88,16 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 		"collections", stats.NumGC,
 		"repository", a.openedPath(),
 		"running", a.runningTitleForLog())
+}
+
+func (a *App) returnUnusedMemory(stats runtime.MemStats) {
+	unused := stats.HeapIdle - stats.HeapReleased
+	if unused < memoryKeptUnused {
+		return
+	}
+	freeOSMemory()
+	a.log.Info("unused memory was given back to the system",
+		"unused_mib", unused>>20, "heap_mib", stats.HeapAlloc>>20)
 }
 
 func (a *App) openedPath() string {
