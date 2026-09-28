@@ -100,6 +100,11 @@ go run ./cmd/gogit
 
 Windows-бинарь без консоли: `make build-windows`.
 
+Установщики (MSI, `.deb`, `.rpm`, AppImage) собирает отдельный workflow
+«packaging» (`.github/workflows/packaging.yml`, запускается по тегу `vX.Y.Z`
+или вручную); локально то же самое делают `make package-windows`,
+`make package-linux` и `make package-appimage`, см. `packaging/`.
+
 ## Разработка
 
 ```bash

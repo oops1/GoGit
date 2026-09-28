@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Go.Git
+Name[ru]=Go.Git
+Comment=Free desktop git client
+Comment[ru]=Бесплатный настольный git-клиент
+Exec=gogit %u
+TryExec=gogit
+Icon=gogit
+Terminal=false
+StartupWMClass=gogit
+Categories=Development;RevisionControl;
+MimeType=x-scheme-handler/git;

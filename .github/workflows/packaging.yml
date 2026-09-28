@@ -1,0 +1,115 @@
+name: packaging
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (without a leading v)
+        required: false
+        default: 0.0.0-dev
+  push:
+    tags:
+      - v*
+
+env:
+  CGO_ENABLED: "0"
+  WIX_VERSION: "5.0.2"
+  NFPM_VERSION: "v2.41.1"
+  APPIMAGETOOL_URL: "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+    steps:
+      - id: compute
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            raw="${{ inputs.version }}"
+          else
+            raw="${{ github.ref_name }}"
+          fi
+          version="${raw#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows-msi:
+    needs: version
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: install wix
+        run: |
+          dotnet tool install --global wix --version "$WIX_VERSION"
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: build msi
+        run: make package-windows VERSION=${{ needs.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gogit-windows-msi
+          path: dist/gogit-*-windows-amd64.msi
+          if-no-files-found: error
+
+  linux-deb-rpm:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: install nfpm
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@$NFPM_VERSION
+
+      - name: build deb and rpm
+        run: make package-linux VERSION=${{ needs.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gogit-linux-deb-rpm
+          path: |
+            dist/*.deb
+            dist/*.rpm
+          if-no-files-found: error
+
+  linux-appimage:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: install rsvg-convert
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+
+      - name: install appimagetool
+        run: |
+          curl -fsSL -o appimagetool.AppImage "$APPIMAGETOOL_URL"
+          chmod +x appimagetool.AppImage
+          ./appimagetool.AppImage --appimage-extract
+          echo "APPIMAGETOOL=$PWD/squashfs-root/AppRun" >> "$GITHUB_ENV"
+
+      - name: build appimage
+        run: make package-appimage VERSION=${{ needs.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gogit-linux-appimage
+          path: dist/*.AppImage
+          if-no-files-found: error

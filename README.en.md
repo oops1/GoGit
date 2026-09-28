@@ -101,6 +101,12 @@ go run ./cmd/gogit
 
 Console-free Windows binary: `make build-windows`.
 
+Installers (MSI, `.deb`, `.rpm`, AppImage) are built by a separate
+"packaging" workflow (`.github/workflows/packaging.yml`, triggered by a
+`vX.Y.Z` tag or manually); the same build is available locally through
+`make package-windows`, `make package-linux` and `make package-appimage`,
+see `packaging/`.
+
 ## Development
 
 ```bash
