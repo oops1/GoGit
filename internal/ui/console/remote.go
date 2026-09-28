@@ -6,6 +6,7 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/remote"
+	"github.com/oops1/gogit/internal/gitcore/transport"
 )
 
 var remoteListOptions = []option{
@@ -14,6 +15,8 @@ var remoteListOptions = []option{
 
 var remoteURLOptions = []option{
 	plain("push", ""),
+	plain("add", ""),
+	plain("delete", ""),
 }
 
 func runRemote(_ context.Context, env Env, args []string) (string, error) {
@@ -48,7 +51,10 @@ func listRemotes(env Env, args []string) (string, error) {
 			lines = append(lines, rem.Name)
 			continue
 		}
-		lines = append(lines, rem.Name+"\t"+rem.FetchURL()+" (fetch)", rem.Name+"\t"+rem.PushURL()+" (push)")
+		lines = append(lines, rem.Name+"\t"+transport.SafeURL(rem.FetchURL())+" (fetch)")
+		for _, url := range rem.PushTargets() {
+			lines = append(lines, rem.Name+"\t"+transport.SafeURL(url)+" (push)")
+		}
 	}
 	return strings.Join(lines, "\n"), nil
 }
@@ -79,11 +85,24 @@ func setRemoteURL(env Env, args []string) (string, error) {
 		return "", err
 	}
 	rest := opts.args()
-	if len(rest) != 2 {
+	if len(rest) != 2 || (opts.has("add") && opts.has("delete")) {
 		return "", detail(ErrUsage, "remote set-url")
 	}
-	if err := ops.SetRemoteURL(env.Repo, rest[0], rest[1], opts.has("push")); err != nil {
+	name, url, push := rest[0], rest[1], opts.has("push")
+	switch {
+	case opts.has("add"):
+		if err := ops.AddRemoteURL(env.Repo, name, url, push); err != nil {
+			return "", err
+		}
+		return "Added a URL to " + name, nil
+	case opts.has("delete"):
+		if err := ops.DeleteRemoteURL(env.Repo, name, url, push); err != nil {
+			return "", err
+		}
+		return "Removed a URL of " + name, nil
+	}
+	if err := ops.SetRemoteURL(env.Repo, name, url, push); err != nil {
 		return "", err
 	}
-	return "Set the URL of " + rest[0], nil
+	return "Set the URL of " + name, nil
 }
