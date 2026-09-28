@@ -225,7 +225,14 @@ func removeTrackingRefs(r *repo.Repository, fetch []string) error {
 	return tx.Commit()
 }
 
-func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
+func remoteURLKey(name string, push bool) string {
+	if push {
+		return "remote." + name + ".pushurl"
+	}
+	return "remote." + name + ".url"
+}
+
+func editRemoteURLs(r *repo.Repository, name string, push bool, edit func(file *config.File, key string) error) error {
 	file, err := localConfigFile(r)
 	if err != nil {
 		return err
@@ -233,12 +240,41 @@ func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
 	if !hasConfigSubsection(file, "remote", name) {
 		return fmt.Errorf("%w: %s", remote.ErrNoRemote, name)
 	}
-	key := "remote." + name + ".url"
-	if push {
-		key = "remote." + name + ".pushurl"
-	}
-	if err := file.Set(key, url); err != nil {
+	if err := edit(file, remoteURLKey(name, push)); err != nil {
 		return err
 	}
 	return file.Save(file.Path())
+}
+
+func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
+	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
+		return file.Set(key, url)
+	})
+}
+
+func AddRemoteURL(r *repo.Repository, name, url string, push bool) error {
+	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
+		return file.Add(key, url)
+	})
+}
+
+func DeleteRemoteURL(r *repo.Repository, name, url string, push bool) error {
+	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
+		kept := slices.DeleteFunc(file.GetAll(key), func(existing string) bool { return existing == url })
+		if len(kept) == len(file.GetAll(key)) {
+			return fmt.Errorf("%w: %s", ErrNoSuchRemoteURL, url)
+		}
+		if len(kept) == 0 && !push {
+			return ErrLastRemoteURL
+		}
+		if err := file.UnsetAll(key); err != nil {
+			return err
+		}
+		for _, keep := range kept {
+			if err := file.Add(key, keep); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
