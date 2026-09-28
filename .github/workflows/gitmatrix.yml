@@ -54,9 +54,10 @@ jobs:
         with:
           path: ~/gits/${{ matrix.git }}
           key: git-${{ runner.os }}-${{ matrix.git }}
-      - run: bash .github/ci/install-git.sh ${{ matrix.git }}
-      - name: the tests must see the version under test
+      - name: the suite runs against the version under test
         run: |
+          dir=$(bash .github/ci/install-git.sh ${{ matrix.git }})
+          export PATH="$dir:$PATH"
           found=$(git --version | awk '{print $3}')
           echo "git in PATH: $found"
           case "$found" in
@@ -66,7 +67,7 @@ jobs:
               exit 1
               ;;
           esac
-      - run: bash .github/ci/suite.sh ${{ matrix.suite }}
+          bash .github/ci/suite.sh ${{ matrix.suite }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
