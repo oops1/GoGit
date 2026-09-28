@@ -32,6 +32,8 @@ github.com/jcmturner/rpc/v2 v2.0.3 h1:7FXXj8Ti1IaVFpSAziCZWNzbNuZmnvw/i6CqLNdWfZ
 github.com/jcmturner/rpc/v2 v2.0.3/go.mod h1:VUJYCIDm3PVOEHw8sgt091/20OJjskO/YJki3ELg/Hc=
 github.com/oops1/headless-gui/v3 v3.23.0 h1:4GEXBzab3jIsvXf8xJsWdDzIc3L5wkFW89uQxkjbLls=
 github.com/oops1/headless-gui/v3 v3.23.0/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
+github.com/oops1/headless-gui/v3 v3.25.0 h1:eWyw/UHozczW62RJbr3UGVAFmKGpgMypwyw4cLbQ2X8=
+github.com/oops1/headless-gui/v3 v3.25.0/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
