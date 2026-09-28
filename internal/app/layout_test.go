@@ -185,3 +185,11 @@ func TestResetLayoutDocksAFloatingPaneThroughItsStateChange(t *testing.T) {
 		t.Fatalf("state changes = %v, final %v", seen, pane.State())
 	}
 }
+
+func TestTheDockDeclaresNativeFloatingSoPanesTearOffIntoTheirOwnWindow(t *testing.T) {
+	a := newTestApp(t)
+
+	if !a.Dock().NativeFloating {
+		t.Fatal("the dock manager must declare NativeFloating: without it a torn-off pane floats inside the canvas")
+	}
+}
