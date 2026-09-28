@@ -215,6 +215,7 @@ type App struct {
 
 	netMu     sync.Mutex
 	netCancel context.CancelFunc
+	netTitle  string
 	netWG     sync.WaitGroup
 
 	vaultMu   sync.Mutex

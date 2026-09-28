@@ -85,13 +85,14 @@ func (a *App) reserveWrite() (context.Context, context.CancelFunc, bool) {
 }
 
 func (a *App) runWrite(ctx context.Context, cancel context.CancelFunc, r *gitrepo.Repository, fn writeFunc, onDone func(error)) {
-	resume := a.holdWatch()
-	err := fn(ctx, r)
-	resume()
-	a.writeMu.Lock()
-	a.writeCancel = nil
-	a.writeMu.Unlock()
-	cancel()
+	var err error
+	func() {
+		defer a.releaseWrite()
+		defer cancel()
+		resume := a.holdWatch()
+		defer resume()
+		err = fn(ctx, r)
+	}()
 	a.Post(func() {
 		if err == nil {
 			a.reloadWorktree()
@@ -115,6 +116,12 @@ func (a *App) reloadWorktree() {
 	if err := closeWorktree(stale); err != nil {
 		a.log.Warn("close previous working tree failed", "error", err)
 	}
+}
+
+func (a *App) releaseWrite() {
+	a.writeMu.Lock()
+	a.writeCancel = nil
+	a.writeMu.Unlock()
 }
 
 func (a *App) stopWrite() {
