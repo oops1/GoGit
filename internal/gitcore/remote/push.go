@@ -80,13 +80,7 @@ func pushRefspecs(rem Remote, opts PushOptions) []refspec.RefSpec {
 }
 
 func pushURLs(rem Remote) []string {
-	targets := make([]string, 0, len(rem.PushTargets()))
-	for _, url := range rem.PushTargets() {
-		if url != "" {
-			targets = append(targets, url)
-		}
-	}
-	return targets
+	return slices.DeleteFunc(slices.Clone(rem.PushTargets()), func(url string) bool { return url == "" })
 }
 
 func Push(ctx context.Context, r *repo.Repository, rem Remote, opts PushOptions) (PushResult, error) {
