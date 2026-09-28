@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/oops1/gogit/internal/gitcore/odb"
 )
 
 func buildOracleMaintenanceRepo(o *oracle) (string, string) {
