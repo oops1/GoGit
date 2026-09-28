@@ -297,8 +297,8 @@ func typeChangeParts(file File, p pair, opts Options) []File {
 		NewSize: file.NewSize,
 	}
 	if !file.Binary {
-		removal.Hunks = diffLines(splitLines(p.oldData), nil, opts)
-		creation.Hunks = diffLines(nil, splitLines(p.newData), opts)
+		removal.Hunks = diffText(splitLines(p.oldData), Text{}, opts)
+		creation.Hunks = diffText(Text{}, splitLines(p.newData), opts)
 	}
 	return []File{removal, creation}
 }

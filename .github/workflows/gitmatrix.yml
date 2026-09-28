@@ -1,0 +1,78 @@
+name: git matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+  push:
+    branches: [develop]
+    paths:
+      - .github/workflows/gitmatrix.yml
+      - .github/ci/install-git.sh
+      - .github/ci/suite.sh
+      - internal/**/*_oracle_test.go
+      - internal/gitcore/gitversion/**
+
+concurrency:
+  group: gitmatrix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: "0"
+  SKIP_COVERAGE_GATE: "1"
+
+jobs:
+  oracle:
+    name: git ${{ matrix.git }} ${{ matrix.suite }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        git: ["2.30.2", "2.39.2", "2.47.1"]
+        suite: [oracle-ops-git, oracle-rest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: false
+      - id: goenv
+        run: |
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ${{ steps.goenv.outputs.build }}
+            ${{ steps.goenv.outputs.modules }}
+          key: go-${{ runner.os }}-gitmatrix-${{ matrix.suite }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-gitmatrix-${{ matrix.suite }}-
+      - uses: actions/cache@v6
+        with:
+          path: ~/gits/${{ matrix.git }}
+          key: git-${{ runner.os }}-${{ matrix.git }}
+      - name: the suite runs against the version under test
+        run: |
+          dir=$(bash .github/ci/install-git.sh ${{ matrix.git }})
+          export PATH="$dir:$PATH"
+          found=$(git --version | awk '{print $3}')
+          echo "git in PATH: $found"
+          case "$found" in
+            ${{ matrix.git }}*) ;;
+            *)
+              echo "::error::PATH holds git $found instead of ${{ matrix.git }}"
+              exit 1
+              ;;
+          esac
+          bash .github/ci/suite.sh ${{ matrix.suite }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitmatrix-${{ matrix.git }}-${{ matrix.suite }}-${{ runner.os }}-logs
+          path: oracle.log
+          if-no-files-found: ignore

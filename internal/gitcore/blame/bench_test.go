@@ -10,8 +10,8 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
-func benchmarkHistory(b *testing.B, commits, lines int) (*store, hash.ObjectID) {
-	b.Helper()
+func benchmarkHistory(tb testing.TB, commits, lines int) (*store, hash.ObjectID) {
+	tb.Helper()
 	s := newStore()
 	text := make([]string, lines)
 	for at := range text {
@@ -47,8 +47,8 @@ func benchmarkHistory(b *testing.B, commits, lines int) (*store, hash.ObjectID) 
 	return s, head
 }
 
-func benchmarkWideHistory(b *testing.B, branches, lines int) (*store, hash.ObjectID) {
-	b.Helper()
+func benchmarkWideHistory(tb testing.TB, branches, lines int) (*store, hash.ObjectID) {
+	tb.Helper()
 	s := newStore()
 	text := make([]string, lines)
 	for at := range text {

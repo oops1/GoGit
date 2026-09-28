@@ -9,6 +9,7 @@ import (
 )
 
 func TestOracleARebaseRemembersResolutionsLikeGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 31, "the AUTO_MERGE ref")
 	for _, action := range []string{"continue", "skip", "abort"} {
 		t.Run(action, func(t *testing.T) {
 			o := newOracle(t)

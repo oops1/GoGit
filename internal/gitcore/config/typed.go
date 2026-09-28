@@ -37,6 +37,7 @@ type Core struct {
 	IgnoreCase              bool
 	ExcludesFile            string
 	HooksPath               string
+	DeltaBaseCacheLimit     int64
 }
 
 type Extensions struct {
@@ -44,6 +45,8 @@ type Extensions struct {
 	WorktreeConfig  bool
 	PreciousObjects bool
 }
+
+const DefaultDeltaBaseCacheLimit = 96 << 20
 
 const (
 	AutoCRLFInput = "input"
@@ -163,6 +166,9 @@ func (c *Config) Core() (Core, error) {
 		return Core{}, err
 	}
 	if core.HooksPath, err = c.pathOr("core.hookspath", ""); err != nil {
+		return Core{}, err
+	}
+	if core.DeltaBaseCacheLimit, err = c.intOr("core.deltabasecachelimit", DefaultDeltaBaseCacheLimit); err != nil {
 		return Core{}, err
 	}
 	if core.AutoCRLF, err = parseAutoCRLF(c.stringOr("core.autocrlf", AutoCRLFFalse)); err != nil {

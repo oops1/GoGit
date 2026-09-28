@@ -157,7 +157,7 @@ func directoryRenamesSetting(settings []string) string {
 func gitMergeTree(t *testing.T, dir string, renames bool, directoryRenames ...string) (string, []string) {
 	t.Helper()
 	setting := "merge.directoryRenames=" + directoryRenamesSetting(directoryRenames)
-	args := []string{"-c", setting, "merge-tree", "--write-tree", "-X", "no-renames", "ours", "theirs"}
+	args := []string{"-c", setting, "-c", "merge.renames=false", "merge-tree", "--write-tree", "ours", "theirs"}
 	if renames {
 		args = []string{"-c", setting, "merge-tree", "--write-tree", "ours", "theirs"}
 	}
@@ -314,6 +314,7 @@ func edited(content string, line int, replacement string) string {
 }
 
 func TestOurTreeMergeIsTheOneGitWrites(t *testing.T) {
+	requireGitAtLeast(t, 2, 38, "merge-tree --write-tree")
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}

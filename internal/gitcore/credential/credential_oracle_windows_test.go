@@ -73,6 +73,7 @@ func TestOracleCredentialManagerSharesWindowsCredentialsWithGit(t *testing.T) {
 	requireCredentialManagerInstalled(t)
 	config := []string{"credential.helper=manager", "credential.provider=generic", "credential.credentialStore=wincredman"}
 	h := &managerHelper{name: "manager", store: &gcmWindowsStore{manager: windowsCredentials, namespace: gcmDefaultNamespace}}
+	requireTheStoreGitActuallyUses(t, config, h)
 	ctx := context.Background()
 	q := Query{Protocol: "https", Host: oracleWindowsHost(t)}
 

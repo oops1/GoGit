@@ -9,7 +9,7 @@ import (
 )
 
 func Blobs(oldData, newData []byte, opts Options) []Hunk {
-	return diffLines(splitLines(oldData), splitLines(newData), opts.normalized())
+	return diffText(splitLines(oldData), splitLines(newData), opts.normalized())
 }
 
 const tailBlock = 1024
@@ -18,7 +18,7 @@ func patchHunks(oldData, newData []byte, opts Options) []Hunk {
 	if opts.Context == 0 {
 		oldData, newData = trimCommonTail(oldData, newData)
 	}
-	return diffLines(splitLines(oldData), splitLines(newData), opts)
+	return diffText(splitLines(oldData), splitLines(newData), opts)
 }
 
 func trimCommonTail(a, b []byte) ([]byte, []byte) {
@@ -48,13 +48,13 @@ type Change struct {
 
 func Changes(oldData, newData []byte, opts Options) []Change {
 	oldData, newData = trimCommonTail(oldData, newData)
-	return ChangesOfLines(splitLines(oldData), splitLines(newData), opts)
+	return ChangesOfText(splitLines(oldData), splitLines(newData), opts)
 }
 
-func ChangesOfLines(oldLines, newLines []string, opts Options) []Change {
+func ChangesOfText(oldText, newText Text, opts Options) []Change {
 	opts = opts.normalized()
 	opts.Context = 0
-	_, changes := computeChanges(oldLines, newLines, opts)
+	_, changes := computeChanges(oldText, newText, opts)
 	out := make([]Change, len(changes))
 	for at, c := range changes {
 		out[at] = Change{OldIndex: c.i1, OldCount: c.chg1, NewIndex: c.i2, NewCount: c.chg2}
@@ -62,8 +62,8 @@ func ChangesOfLines(oldLines, newLines []string, opts Options) []Change {
 	return out
 }
 
-func computeChanges(oldLines, newLines []string, opts Options) (*env, []change) {
-	e := prepareEnv(oldLines, newLines, opts)
+func computeChanges(oldText, newText Text, opts Options) (*env, []change) {
+	e := prepareEnv(oldText, newText, opts)
 	switch opts.Algorithm {
 	case AlgorithmHistogram:
 		e.histogram(e.a.dstart+1, e.a.dend-e.a.dstart+1, e.b.dstart+1, e.b.dend-e.b.dstart+1)
@@ -77,8 +77,8 @@ func computeChanges(oldLines, newLines []string, opts Options) (*env, []change) 
 	return e, e.script()
 }
 
-func diffLines(oldLines, newLines []string, opts Options) []Hunk {
-	e, changes := computeChanges(oldLines, newLines, opts)
+func diffText(oldText, newText Text, opts Options) []Hunk {
+	e, changes := computeChanges(oldText, newText, opts)
 	if opts.IgnoreWhitespace&IgnoreBlankLines != 0 {
 		e.markIgnorable(changes)
 	}
@@ -120,16 +120,17 @@ func lineRecord(line Line) string {
 
 func Apply(old []byte, hunks []Hunk) ([]byte, error) {
 	lines := splitLines(old)
+	count := lines.Count()
 	var out strings.Builder
 	out.Grow(len(old))
 	pos := 0
 	for index, hunk := range hunks {
 		start := hunk.OldStart - 1
-		if start < pos || start > len(lines) {
+		if start < pos || start > count {
 			return nil, fmt.Errorf("%w: hunk %d starts at line %d", ErrApply, index+1, hunk.OldStart)
 		}
 		for ; pos < start; pos++ {
-			out.WriteString(lines[pos])
+			out.Write(lines.at(pos))
 		}
 		for _, line := range hunk.Lines {
 			record := lineRecord(line)
@@ -137,7 +138,7 @@ func Apply(old []byte, hunks []Hunk) ([]byte, error) {
 				out.WriteString(record)
 				continue
 			}
-			if pos >= len(lines) || lines[pos] != record {
+			if pos >= count || string(lines.at(pos)) != record {
 				return nil, fmt.Errorf("%w: hunk %d does not match line %d", ErrApply, index+1, pos+1)
 			}
 			pos++
@@ -149,8 +150,8 @@ func Apply(old []byte, hunks []Hunk) ([]byte, error) {
 			return nil, fmt.Errorf("%w: hunk %d covers %d lines instead of %d", ErrApply, index+1, pos-start, hunk.OldLines)
 		}
 	}
-	for ; pos < len(lines); pos++ {
-		out.WriteString(lines[pos])
+	for ; pos < count; pos++ {
+		out.Write(lines.at(pos))
 	}
 	return []byte(out.String()), nil
 }

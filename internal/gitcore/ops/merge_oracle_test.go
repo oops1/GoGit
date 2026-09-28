@@ -7,13 +7,16 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/gitversion"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
@@ -725,8 +728,35 @@ func asGitVersionsAgree(label, text string) string {
 		return withoutTodoSubjectComments(text)
 	case rebasePath(rebaseMessage):
 		return strings.TrimRight(withoutCommentLines(text), "\n")
+	case "reflog":
+		if !installedGitAtLeast(2, 34) {
+			return strings.ReplaceAll(text, "'recursive' strategy", "'ort' strategy")
+		}
+	case autoMergeFile:
+		if !installedGitAtLeast(2, 31) {
+			return "<none>"
+		}
 	}
 	return text
+}
+
+var installedGitVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("git", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+})
+
+func installedGitAtLeast(major, minor int) bool {
+	return gitversion.AtLeast(installedGitVersion(), major, minor)
+}
+
+func requireGitAtLeast(t *testing.T, major, minor int, what string) {
+	t.Helper()
+	if !installedGitAtLeast(major, minor) {
+		t.Skipf("the installed git predates %d.%d and does not share %s", major, minor, what)
+	}
 }
 
 func withoutTodoSubjectComments(text string) string {
@@ -830,6 +860,7 @@ func stashedSplitHistory(b *mergeBuilder) {
 }
 
 func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "the ort merge engine and the zdiff3 conflict style")
 	for _, s := range append(mergeScenarios(), gitlinkMergeScenarios()...) {
 		t.Run(s.name, func(t *testing.T) {
 			o := newOracle(t)

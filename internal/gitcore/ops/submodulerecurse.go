@@ -112,7 +112,7 @@ func treeModules(r *repo.Repository, tree map[string]treeEntry) (*submodule.Modu
 	if !ok || !entry.mode.IsRegular() {
 		return submodule.Parse(nil)
 	}
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return nil, err
 	}

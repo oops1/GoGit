@@ -56,7 +56,7 @@ type repackPlan struct {
 }
 
 func Repack(ctx context.Context, r *repo.Repository, opts RepackOptions) (RepackResult, error) {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return RepackResult{}, err
 	}

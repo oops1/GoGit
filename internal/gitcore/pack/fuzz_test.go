@@ -129,3 +129,46 @@ func readFixtureFile(f *testing.F, path string) []byte {
 	}
 	return data
 }
+
+func FuzzIndex(f *testing.F) {
+	for _, seed := range fuzzCorpus(f, filepath.Join(packsDir, "*"+indexSuffix)) {
+		f.Add(seed)
+	}
+	f.Add([]byte{})
+	f.Add(append([]byte{0xFF, 0x74, 0x4F, 0x63}, bytes.Repeat([]byte{0}, 8)...))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		index, err := NewIndex(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			if index != nil {
+				t.Fatalf("NewIndex returned an index together with %v", err)
+			}
+			return
+		}
+		count := index.Count()
+		if count < 0 {
+			t.Fatalf("Count returned %d", count)
+		}
+		for position := range min(count, 64) {
+			entry, err := index.EntryAt(position)
+			if err != nil {
+				break
+			}
+			if _, _, err := index.Lookup(entry.ID); err != nil {
+				break
+			}
+			if at, found, err := index.Position(entry.ID); err == nil && found && at != position {
+				t.Fatalf("Position(%s) = %d, EntryAt gave it at %d", entry.ID, at, position)
+			}
+		}
+		seen := 0
+		for range index.Objects() {
+			if seen++; seen > 64 {
+				break
+			}
+		}
+		for range index.Prefix([]byte{0x00}, 4) {
+			break
+		}
+		_ = index.Verify()
+	})
+}

@@ -1,0 +1,20 @@
+version = 0
+language = "ru"
+theme = "dark"
+
+[window]
+width = 1440
+height = 900
+
+[git]
+default_remote = "upstream"
+
+[[groups]]
+id = "g1"
+name = "Archive"
+
+[[repositories]]
+id = "r1"
+name = "legacy-repo"
+path = "/src/legacy-repo"
+group = "g1"

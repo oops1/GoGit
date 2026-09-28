@@ -7,7 +7,8 @@ import (
 )
 
 func sourceOf(lines ...string) *source {
-	return &source{recs: lines, rchg: make([]bool, len(lines)+2)}
+	text := NewText([]byte(strings.Join(lines, "")))
+	return &source{recs: text, rchg: make([]bool, text.Count()+2)}
 }
 
 func TestMeasureSplitLooksAroundTheSplitPoint(t *testing.T) {

@@ -142,7 +142,7 @@ func fetchModeOf(value submodule.FetchRecurse) (SubmoduleFetchMode, error) {
 }
 
 func refTipsOf(r *repo.Repository) []hash.ObjectID {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return nil
 	}

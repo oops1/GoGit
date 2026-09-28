@@ -121,6 +121,7 @@ func (o *oracle) openDB() *odb.DB {
 
 func TestOracleOurGraphWithCorrectedDatesAndChangedPathsIsTheOneGitWrites(t *testing.T) {
 	o := newOracle(t)
+	requireGitAtLeast(t, 2, 32, "corrected commit dates")
 	buildPathHistory(o)
 	o.git(0, "commit-graph", "write", "--reachable", "--changed-paths")
 	gitGraph, err := os.ReadFile(filepath.Join(o.objectsDir(), "info", FileName))

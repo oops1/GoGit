@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/remote"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/transport"
@@ -53,7 +52,7 @@ func TestCloneWithAFilterRecordsThePromisorRemote(t *testing.T) {
 	if marks := promisorPackMarks(t, r); len(marks) != 1 {
 		t.Fatalf("the clone left %d promisor marks, want one", len(marks))
 	}
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		t.Fatalf("odb.Open returned error %v", err)
 	}
@@ -119,7 +118,7 @@ func TestFetchMissingObjectsBringsTheFilteredBlobs(t *testing.T) {
 	if err := FetchMissingObjects(t.Context(), r, []hash.ObjectID{wanted}); err != nil {
 		t.Fatalf("FetchMissingObjects returned error %v", err)
 	}
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		t.Fatalf("odb.Open returned error %v", err)
 	}

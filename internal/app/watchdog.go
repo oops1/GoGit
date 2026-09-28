@@ -100,7 +100,7 @@ func (a *App) runWatchdog(ctx context.Context, watches []*stallWatch) {
 	defer ticker.Stop()
 	for {
 		now := time.Now()
-		a.reportMemoryGrowth()
+		a.reportMemoryGrowth(now)
 		if id, running, late := a.commands.overdue(now, a.watchdogStall); late {
 			a.log.Error("command stalled", "command", string(id), "for", running, "stacks", goroutineStacks())
 		}

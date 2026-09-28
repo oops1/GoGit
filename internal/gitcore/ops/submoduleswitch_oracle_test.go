@@ -62,6 +62,7 @@ func TestOracleSwitchRecursionAddsRemovesAndMovesSubmodulesLikeGitCheckout(t *te
 			f.o.write(dir, "libs/lib/new.txt", "new\n")
 		}},
 		{"removed with a modified file", "main", "plain", false, func(f *submoduleForge, _ forgedProject, dir string) {
+			requireGitAtLeast(f.o.t, 2, 39, "the refusal to drop a submodule whose file was changed")
 			f.o.write(dir, "libs/lib/lib.txt", "changed\n")
 		}},
 		{"removed with a modified file forced", "main", "plain", true, func(f *submoduleForge, _ forgedProject, dir string) {

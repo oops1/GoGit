@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/oops1/gogit/internal/gitcore/odb"
 )
 
 func buildOracleMaintenanceRepo(o *oracle) (string, string) {
@@ -60,7 +58,7 @@ func TestOracleOurReachableObjectsAreTheOnesGitKeeps(t *testing.T) {
 	o := newOracle(t)
 	dir, _ := buildOracleMaintenanceRepo(o)
 	r := o.openRepo(dir)
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		t.Fatal(err)
 	}

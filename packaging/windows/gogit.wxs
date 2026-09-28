@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Go.Git"
+           Manufacturer="oops1"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="b68f2a6a-8850-4054-a30b-e5395bfb4dfa"
+           Scope="perMachine"
+           Compressed="yes">
+
+    <SummaryInformation Description="Go.Git installer" Manufacturer="oops1" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Go.Git is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.exe" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/oops1/gogit" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/oops1/gogit" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <Icon Id="AppIcon.exe" SourceFile="$(var.GogitExePath)" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Go.Git">
+        <Component Id="GogitExecutable">
+          <File Id="GogitExe"
+                Name="gogit.exe"
+                Source="$(var.GogitExePath)"
+                KeyPath="yes">
+            <Shortcut Id="StartMenuShortcut"
+                      Directory="ProgramMenuFolder"
+                      Name="Go.Git"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="AppIcon.exe"
+                      IconIndex="0"
+                      Advertise="no" />
+          </File>
+        </Component>
+
+        <Component Id="ProtocolHandler">
+          <RegistryKey Root="HKCR" Key="git">
+            <RegistryValue Type="string" Value="URL:Git Protocol" KeyPath="yes" />
+            <RegistryValue Name="URL Protocol" Type="string" Value="" />
+            <RegistryKey Key="DefaultIcon">
+              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]gogit.exe&quot;,0" />
+            </RegistryKey>
+            <RegistryKey Key="shell\open\command">
+              <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]gogit.exe&quot; &quot;%1&quot;" />
+            </RegistryKey>
+          </RegistryKey>
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="MainFeature" Title="Go.Git" Level="1">
+      <ComponentRef Id="GogitExecutable" />
+      <ComponentRef Id="ProtocolHandler" />
+    </Feature>
+  </Package>
+</Wix>

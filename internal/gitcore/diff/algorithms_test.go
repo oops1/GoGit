@@ -53,12 +53,12 @@ func anchoredLines(seed uint64, blocks, noise, anchor, vocabulary int) string {
 }
 
 func reversedLines(text string) string {
-	lines := splitLines([]byte(text))
+	lines := NewText([]byte(text))
 	var out strings.Builder
-	for at := len(lines) - 1; at >= 0; at-- {
-		record, newline := lineText(lines[at])
+	for at := lines.Count() - 1; at >= 0; at-- {
+		record, newline := lineTextOf(string(lines.at(at)))
 		out.WriteString(record)
-		if newline || at != len(lines)-1 {
+		if newline || at != lines.Count()-1 {
 			out.WriteString("\n")
 		}
 	}

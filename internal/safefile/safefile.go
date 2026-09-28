@@ -11,6 +11,8 @@ import (
 
 var ErrLockTimeout = errors.New("safefile: another process keeps the file locked")
 
+const secretFileMode = fs.FileMode(0o600)
+
 var (
 	lockTimeout  = 10 * time.Second
 	lockInterval = 20 * time.Millisecond
@@ -81,7 +83,7 @@ func WriteFile(path string, data []byte) error {
 	}
 	tmp := file.Name()
 	_, err = file.Write(data)
-	err = errors.Join(err, file.Sync(), file.Close())
+	err = errors.Join(err, file.Chmod(secretFileMode), file.Sync(), file.Close())
 	if err == nil {
 		err = os.Rename(tmp, path)
 	}

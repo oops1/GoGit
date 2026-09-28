@@ -18,7 +18,7 @@ import (
 func (o *oracle) putTreeAt(dir, rel string) string {
 	o.t.Helper()
 	r := o.openRepo(dir)
-	db, err := odb.Open(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odb.Open(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		o.t.Fatalf("odb.Open returned error %v", err)
 	}

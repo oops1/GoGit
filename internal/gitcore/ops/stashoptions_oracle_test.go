@@ -302,6 +302,7 @@ func relink(o *oracle, dir, target string) {
 }
 
 func TestOracleStashPushOptionsMatchGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "git stash push --staged")
 	binaryStaged := gitStashesStagedBinaryContent(newStashOracle(t))
 	for _, tc := range stashPushCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -506,6 +507,7 @@ func stageText(o *oracle, dir, rel, text string) {
 }
 
 func TestOracleStashApplyOptionsMatchGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 32, "today's handling of untracked files when a stash is applied")
 	for _, tc := range stashApplyCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			o := newStashOracle(t)
@@ -545,6 +547,7 @@ func TestOracleStashApplyOptionsMatchGit(t *testing.T) {
 }
 
 func TestOracleGitAppliesOurStashesWithEveryOption(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "git stash push --staged")
 	for _, tc := range []struct {
 		name string
 		args []string
@@ -575,6 +578,7 @@ func TestOracleGitAppliesOurStashesWithEveryOption(t *testing.T) {
 }
 
 func TestOracleStashShowMatchesGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 32, "git stash show --only-untracked")
 	o := newStashOracle(t)
 	dir := stashRichSide(o, "show")
 	o.run(dir, "stash", "push", "-q", "-u")

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/oops1/gogit/internal/gitcore/index"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
@@ -36,7 +35,7 @@ func ResolveConflicts(ctx context.Context, r *repo.Repository, paths []string, s
 		return err
 	}
 	defer func() { _ = wt.close() }()
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return err
 	}

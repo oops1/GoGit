@@ -1,7 +1,6 @@
 package diff
 
 import (
-	"strings"
 	"unicode"
 	"unicode/utf8"
 )
@@ -25,25 +24,29 @@ func classOf(r rune) tokenClass {
 	}
 }
 
-func tokenize(line string) []string {
-	var tokens []string
-	for at := 0; at < len(line); {
-		r, size := utf8.DecodeRuneInString(line[at:])
+func tokenize(line string) Text {
+	if line == "" {
+		return Text{}
+	}
+	data := []byte(line)
+	offs := make([]int, 1, len(data)/2+2)
+	for at := 0; at < len(data); {
+		r, size := utf8.DecodeRune(data[at:])
 		kind := classOf(r)
 		end := at + size
 		if kind != classOther {
-			for end < len(line) {
-				next, nextSize := utf8.DecodeRuneInString(line[end:])
+			for end < len(data) {
+				next, nextSize := utf8.DecodeRune(data[end:])
 				if classOf(next) != kind {
 					break
 				}
 				end += nextSize
 			}
 		}
-		tokens = append(tokens, line[at:end])
+		offs = append(offs, end)
 		at = end
 	}
-	return tokens
+	return Text{data: data, offs: offs}
 }
 
 func InlineDiff(oldLine, newLine string) []Span {
@@ -56,17 +59,17 @@ func InlineDiff(oldLine, newLine string) []Span {
 	var spans []Span
 	at := 0
 	for _, c := range e.script() {
-		spans = appendSpan(spans, KindContext, oldTokens[at:c.i1])
-		spans = appendSpan(spans, KindDel, oldTokens[c.i1:c.i1+c.chg1])
-		spans = appendSpan(spans, KindAdd, newTokens[c.i2:c.i2+c.chg2])
+		spans = appendSpan(spans, KindContext, oldTokens.span(at, c.i1))
+		spans = appendSpan(spans, KindDel, oldTokens.span(c.i1, c.i1+c.chg1))
+		spans = appendSpan(spans, KindAdd, newTokens.span(c.i2, c.i2+c.chg2))
 		at = c.i1 + c.chg1
 	}
-	return appendSpan(spans, KindContext, oldTokens[at:])
+	return appendSpan(spans, KindContext, oldTokens.span(at, oldTokens.Count()))
 }
 
-func appendSpan(spans []Span, kind Kind, tokens []string) []Span {
-	if len(tokens) == 0 {
+func appendSpan(spans []Span, kind Kind, text []byte) []Span {
+	if len(text) == 0 {
 		return spans
 	}
-	return append(spans, Span{Kind: kind, Text: strings.Join(tokens, "")})
+	return append(spans, Span{Kind: kind, Text: string(text)})
 }

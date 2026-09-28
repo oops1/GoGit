@@ -30,12 +30,13 @@ const (
 )
 
 type pathEntry struct {
-	path    string
-	ref     refs.Name
-	label   string
-	current bool
-	icon    string
-	when    time.Time
+	path          string
+	ref           refs.Name
+	label         string
+	current       bool
+	icon          string
+	when          time.Time
+	trackedRemote string
 }
 
 type View struct {
@@ -57,6 +58,8 @@ type View struct {
 	submoduleByItem map[*treeview.TreeViewItem]ops.Submodule
 	divergence      map[refs.Name]repo.Divergence
 	secondary       color.RGBA
+	pairedRemote    map[refs.Name]string
+	consumedRemote  map[refs.Name]bool
 
 	OnSubmoduleActivate func(ops.Submodule)
 	OnSubmoduleMenu     func(ops.Submodule) []widget.MenuItem
@@ -131,6 +134,7 @@ func (v *View) Render(s Snapshot) {
 
 func (v *View) render(s Snapshot) {
 	v.last = s
+	v.pairedRemote, v.consumedRemote = remotePairs(s.Local, s.Remotes)
 	v.captureExpanded()
 	selectedRefs, currentRef := v.captureSelection()
 	scroll := v.tree.Tree.ScrollY()
@@ -288,11 +292,12 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 			icon = "branch_current"
 		}
 		entries = append(entries, pathEntry{
-			path:    short,
-			ref:     b.Name,
-			current: current,
-			icon:    icon,
-			when:    b.When,
+			path:          short,
+			ref:           b.Name,
+			current:       current,
+			icon:          icon,
+			when:          b.When,
+			trackedRemote: v.pairedRemote[b.Name],
 		})
 	}
 	v.buildPathTree(root, localGroupKey, entries)
@@ -393,6 +398,9 @@ func (v *View) leafItem(e pathEntry, segment string) *treeview.TreeViewItem {
 	label := e.label
 	if label == "" {
 		label = segment
+	}
+	if e.trackedRemote != "" {
+		label = i18n.Tf("Pane.Branches.TracksRemote", label, e.trackedRemote)
 	}
 	diverged := false
 	if d, ok := v.divergence[e.ref]; ok {

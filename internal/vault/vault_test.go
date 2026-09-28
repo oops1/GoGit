@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -32,6 +33,20 @@ func createTestVault(t *testing.T, password string) (*Vault, string) {
 		t.Fatal(err)
 	}
 	return v, path
+}
+
+func TestCreateWritesVaultFileWithOwnerOnlyPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows does not support POSIX group/other permission bits")
+	}
+	_, path := createTestVault(t, "p")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %o, want 0600", got)
+	}
 }
 
 func TestCredentialWipe(t *testing.T) {

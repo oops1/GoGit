@@ -12,7 +12,6 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/config"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
@@ -211,7 +210,7 @@ func updateSparseWorkingTree(ctx context.Context, r *repo.Repository, state spar
 	}
 	defer func() { _ = wt.close() }()
 
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return err
 	}

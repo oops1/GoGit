@@ -97,10 +97,10 @@ func measureSplit(s *source, split int) splitMeasurement {
 		m.endOfFile = true
 		m.indent = -1
 	} else {
-		m.indent = lineIndent(s.recs[split])
+		m.indent = lineIndent(s.recs.at(split))
 	}
 	for at := split - 1; at >= 0; at-- {
-		m.preIndent = lineIndent(s.recs[at])
+		m.preIndent = lineIndent(s.recs.at(at))
 		if m.preIndent != -1 {
 			break
 		}
@@ -111,7 +111,7 @@ func measureSplit(s *source, split int) splitMeasurement {
 		}
 	}
 	for at := split + 1; at < s.count(); at++ {
-		m.postIndent = lineIndent(s.recs[at])
+		m.postIndent = lineIndent(s.recs.at(at))
 		if m.postIndent != -1 {
 			break
 		}

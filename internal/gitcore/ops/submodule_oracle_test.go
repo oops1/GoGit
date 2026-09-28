@@ -18,11 +18,10 @@ type submoduleForge struct {
 func newSubmoduleForge(t *testing.T) *submoduleForge {
 	t.Helper()
 	o := newOracle(t)
-	global := "[user]\n\tname = oracle\n\temail = oracle@example.com\n" +
+	global := oracleGlobalConfig +
 		"[protocol \"file\"]\n\tallow = always\n" +
-		"[init]\n\tdefaultBranch = main\n" +
 		"[core]\n\tautocrlf = false\n"
-	if err := os.WriteFile(filepath.Join(o.home, "gitconfig"), []byte(global), 0o666); err != nil {
+	if err := os.WriteFile(filepath.Join(o.home, ".gitconfig"), []byte(global), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	return &submoduleForge{o: o, root: o.repoDir("forge")}
@@ -45,7 +44,7 @@ func (f *submoduleForge) publish(name string, build func(work string)) string {
 	if err := os.MkdirAll(work, 0o777); err != nil {
 		f.o.t.Fatal(err)
 	}
-	f.o.run(work, "init", "-q", ".")
+	f.o.run(work, "init", "-q", "-b", "main", ".")
 	build(work)
 	bare := f.path(name + ".git")
 	f.o.run(f.root, "clone", "-q", "--bare", work, bare)

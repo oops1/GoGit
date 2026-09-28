@@ -81,11 +81,12 @@ func (v *View) flowEntries(s Snapshot, kind string) []pathEntry {
 			icon = "branch_current"
 		}
 		entries = append(entries, pathEntry{
-			path:    v.flowBranchName(short),
-			ref:     b.Name,
-			current: current,
-			icon:    icon,
-			when:    b.When,
+			path:          v.flowBranchName(short),
+			ref:           b.Name,
+			current:       current,
+			icon:          icon,
+			when:          b.When,
+			trackedRemote: v.pairedRemote[b.Name],
 		})
 	}
 	if !v.options.FlowSections {
@@ -94,6 +95,9 @@ func (v *View) flowEntries(s Snapshot, kind string) []pathEntry {
 	for _, remote := range s.Remotes {
 		for _, b := range remote.Branches {
 			if isRemoteHead(b.Name) {
+				continue
+			}
+			if v.consumedRemote[b.Name] {
 				continue
 			}
 			relative := strings.TrimPrefix(b.Name.Short(), remote.Name+"/")
@@ -141,7 +145,14 @@ func (v *View) buildFlowBase(s Snapshot) *treeview.TreeViewItem {
 		if current {
 			icon = "branch_current"
 		}
-		return v.leafItem(pathEntry{path: base, ref: b.Name, current: current, icon: icon, when: b.When}, base)
+		return v.leafItem(pathEntry{
+			path:          base,
+			ref:           b.Name,
+			current:       current,
+			icon:          icon,
+			when:          b.When,
+			trackedRemote: v.pairedRemote[b.Name],
+		}, base)
 	}
 	return nil
 }

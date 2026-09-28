@@ -90,6 +90,7 @@ func gitSparseDisableKeepsThePatternFile(o *oracle) bool {
 }
 
 func TestOracleSparseCheckoutCommandsMatchGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 32, "today's sparse-checkout commands")
 	o := newOracle(t)
 	gitSide := sparseCommandSide(o, "git")
 	ourSide := sparseCommandSide(o, "ours")
@@ -135,6 +136,7 @@ func TestOracleSparseCheckoutCommandsMatchGit(t *testing.T) {
 }
 
 func TestOracleSparseCheckoutListMatchesGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 32, "today's sparse-checkout commands")
 	tests := []struct {
 		name     string
 		patterns []string

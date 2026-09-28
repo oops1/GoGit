@@ -121,6 +121,31 @@ func withOraclePassword(fields map[string]string, username, password string) map
 	return out
 }
 
+func requireTheStoreGitActuallyUses(t *testing.T, config []string, h Helper) {
+	t.Helper()
+	ctx := context.Background()
+	q := Query{Protocol: "https", Host: oracleHost()}
+	fields := oracleQueryFields(q)
+	mustGitCredential(t, config, "approve", withOraclePassword(fields, "probe", "from-git"))
+	ans, ok, err := h.Get(ctx, q)
+	shared := err == nil && ok && ans.Username == "probe" && string(ans.Password) == "from-git"
+	if shared {
+		if err := h.Store(ctx, q, Answer{Username: "probe", Password: []byte("from-gogit")}); err != nil {
+			t.Fatal(err)
+		}
+		back := mustGitCredential(t, config, "fill", oracleQueryFields(Query{Protocol: q.Protocol, Host: q.Host, Username: "probe"}))
+		shared = back["password"] == "from-gogit"
+	}
+	mustGitCredential(t, config, "reject", withOraclePassword(fields, "probe", "from-gogit"))
+	mustGitCredential(t, config, "reject", withOraclePassword(fields, "probe", "from-git"))
+	if err := h.Erase(ctx, q, Answer{Username: "probe", Password: []byte("from-gogit")}); err != nil {
+		t.Fatal(err)
+	}
+	if !shared {
+		t.Skipf("the credential manager of the installed git does not share its store with %s", h.Name())
+	}
+}
+
 func requireNativeAnswer(t *testing.T, h Helper, q Query, username, password string) {
 	t.Helper()
 	ans, ok, err := h.Get(context.Background(), q)
@@ -146,6 +171,7 @@ func TestOracleCredentialManagerPlaintextStoreIsSharedWithGit(t *testing.T) {
 		"credential.plaintextStorePath=" + filepath.ToSlash(root),
 	}
 	h := &managerHelper{name: "manager", store: &gcmFileStore{root: root, namespace: gcmDefaultNamespace}}
+	requireTheStoreGitActuallyUses(t, config, h)
 	ctx := context.Background()
 
 	q := Query{Protocol: "https", Host: oracleHost()}

@@ -9,8 +9,26 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/gitversion"
 )
+
+var installedGitVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("git", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+})
+
+func requireGitAtLeast(t *testing.T, major, minor int, what string) {
+	t.Helper()
+	if !gitversion.AtLeast(installedGitVersion(), major, minor) {
+		t.Skipf("the installed git predates %d.%d and has no %s", major, minor, what)
+	}
+}
 
 type mergeCase struct {
 	name   string
@@ -117,6 +135,7 @@ func checkAgainstMergeFile(t *testing.T, c mergeCase, style Style, markerSize in
 }
 
 func TestOurMergeIsTheOneGitWrites(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "the zdiff3 conflict style")
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}
@@ -182,6 +201,7 @@ func randomMergeCases(seed uint64, count int) []mergeCase {
 }
 
 func TestRandomMergesMatchGitMergeFile(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "the zdiff3 conflict style")
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}

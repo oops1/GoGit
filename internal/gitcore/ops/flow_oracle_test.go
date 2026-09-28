@@ -21,6 +21,7 @@ func flowOracleSide(t *testing.T, o *oracle, tracked bool) *mergeBuilder {
 	origin := filepath.ToSlash(root) + "/origin.git"
 	o.run(root, "init", "-q", "--bare", "-b", "master", origin)
 	o.run(root, "clone", "-q", origin, "work")
+	o.run(filepath.Join(root, "work"), "symbolic-ref", "HEAD", "refs/heads/master")
 	b := &mergeBuilder{o: o, dir: filepath.Join(root, "work"), clock: mergeClockStart}
 	for _, kv := range [][2]string{
 		{"core.autocrlf", "false"},

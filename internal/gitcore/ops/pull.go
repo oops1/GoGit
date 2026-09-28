@@ -9,7 +9,6 @@ import (
 
 	"github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/remote"
@@ -56,7 +55,7 @@ func pullTrackingRef(r *repo.Repository, name refs.Name) (hash.ObjectID, bool, e
 }
 
 func isFastForwardCommit(r *repo.Repository, old, newCommit hash.ObjectID) (bool, error) {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return false, err
 	}

@@ -87,6 +87,7 @@ func TestOracleWeAbortWhatGitAmAndRebaseApplyLeftStopped(t *testing.T) {
 }
 
 func TestOracleWeAbortAnInteractiveRebaseWhoseTodoWeCannotRun(t *testing.T) {
+	requireGitAtLeast(t, 2, 32, "the fixup -C command in a rebase todo")
 	o := newOracle(t)
 	sides := [2]*mergeBuilder{}
 	for i, side := range []string{"git", "ours"} {

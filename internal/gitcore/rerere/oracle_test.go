@@ -8,8 +8,26 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/oops1/gogit/internal/gitcore/gitversion"
 )
+
+var installedGitVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("git", "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+})
+
+func requireGitAtLeast(t *testing.T, major, minor int, what string) {
+	t.Helper()
+	if !gitversion.AtLeast(installedGitVersion(), major, minor) {
+		t.Skipf("the installed git predates %d.%d and has no %s", major, minor, what)
+	}
+}
 
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -159,6 +177,7 @@ func recordedIDs(t *testing.T, dir string) []string {
 }
 
 func TestOracleConflictIDsMatchTheOnesGitRecords(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "the zdiff3 conflict style")
 	for _, c := range conflictCases() {
 		t.Run(c.name, func(t *testing.T) {
 			dir, paths := buildConflict(t, c)
@@ -190,6 +209,7 @@ func TestOracleConflictIDsMatchTheOnesGitRecords(t *testing.T) {
 }
 
 func TestOracleTheSameResolutionIsRecognisedFromEitherSide(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "the zdiff3 conflict style")
 	f := tenLines("f")
 	straight := oracleCase{ours: map[string]string{"f": changeLine(f, 4, "OURS")}, theirs: map[string]string{"f": changeLine(f, 4, "THEIRS")}}
 	reversed := straight

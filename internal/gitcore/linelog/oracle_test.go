@@ -339,7 +339,24 @@ func oracleCases() []oracleCase {
 	}
 }
 
+func gitNumbersAnInsertionFromTheLineBefore(t *testing.T) bool {
+	t.Helper()
+	r := newRepo(t)
+	base := numbered("probe", 4)
+	r.commit("base", map[string]string{"f": joined(base)})
+	r.commit("insert", map[string]string{"f": joined(inserted(base, 1, "added 2", "added 3"))})
+	return strings.Contains(gitLineLog(r, []string{"2,3:f"}), "@@ -1,0 ")
+}
+
+func requireTodaysInsertionNumbering(t *testing.T) {
+	t.Helper()
+	if !gitNumbersAnInsertionFromTheLineBefore(t) {
+		t.Skip("the installed git numbers a pure insertion in the line log from zero, today's git numbers it from the line before")
+	}
+}
+
 func TestOracleLineLogMatchesGit(t *testing.T) {
+	requireTodaysInsertionNumbering(t)
 	for _, c := range oracleCases() {
 		t.Run(c.name, func(t *testing.T) {
 			r := newRepo(t)
@@ -352,6 +369,7 @@ func TestOracleLineLogMatchesGit(t *testing.T) {
 }
 
 func TestOracleLineLogThroughAGitCommitGraphMatchesGit(t *testing.T) {
+	requireTodaysInsertionNumbering(t)
 	for _, c := range oracleCases() {
 		t.Run(c.name, func(t *testing.T) {
 			r := newRepo(t)
@@ -398,6 +416,7 @@ func TestOracleLineLogWithoutRenamesMatchesGit(t *testing.T) {
 }
 
 func TestOracleLineLogMatchesGitAcrossRenamedFilesAndMerges(t *testing.T) {
+	requireTodaysInsertionNumbering(t)
 	r := newRepo(t)
 	base := numbered("f", 20)
 	other := numbered("g", 20)
@@ -417,6 +436,7 @@ func TestOracleLineLogMatchesGitAcrossRenamedFilesAndMerges(t *testing.T) {
 }
 
 func TestOracleLineLogMatchesGitOnRandomHistories(t *testing.T) {
+	requireTodaysInsertionNumbering(t)
 	for seed := range uint64(6) {
 		t.Run(fmt.Sprintf("seed %d", seed), func(t *testing.T) {
 			rng := rand.New(rand.NewPCG(seed, 99))

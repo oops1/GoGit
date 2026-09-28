@@ -62,6 +62,7 @@ func (o *oracle) branchAtTree(dir, name, tree string) {
 
 func TestOracleFsckReportsTheGitmodulesProblemsGitReports(t *testing.T) {
 	o := datedOracle(newOracle(t))
+	requireGitAtLeast(t, 2, 34, "today's checks of .gitmodules")
 	dir := o.repoDir("work")
 	newOracleRepo(o, dir)
 	texts := []string{

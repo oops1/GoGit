@@ -1,11 +1,12 @@
-BINARY   := gogit
-MODULE   := github.com/oops1/gogit
-VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS  := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
-GOFLAGS  := -trimpath
+BINARY     := gogit
+MODULE     := github.com/oops1/gogit
+VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+PACKAGE_VERSION := $(shell echo $(VERSION) | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/; t; s/.*/0.0.0/')
+LDFLAGS    := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
+GOFLAGS    := -trimpath
 export CGO_ENABLED := 0
 
-.PHONY: all build build-windows build-linux winres release-local run test test-race test-oracle cover cover-html vet lint fmt check clean
+.PHONY: all build build-windows build-linux winres release-local run test test-race test-oracle cover cover-html vet lint fmt check clean package-windows package-linux package-appimage
 
 all: check build
 
@@ -42,6 +43,7 @@ cover-html: cover
 
 vet:
 	go vet -unsafeptr=false ./...
+	go vet -unsafeptr=false -tags oracle ./...
 
 lint:
 	golangci-lint run ./...
@@ -61,6 +63,20 @@ release-local: build-windows build-linux
 	cd dist/linux-amd64 && tar czf ../gogit-$(VERSION)-linux-amd64.tar.gz gogit LICENSE NOTICE && cd ../..
 	cd dist/linux-arm64 && tar czf ../gogit-$(VERSION)-linux-arm64.tar.gz gogit LICENSE NOTICE && cd ../..
 	cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS && cd ..
+
+package-windows: build-windows
+	wix build packaging/windows/gogit.wxs -arch x64 \
+		-d ProductVersion=$(PACKAGE_VERSION) \
+		-d GogitExePath=dist/windows-amd64/$(BINARY).exe \
+		-o dist/gogit-$(VERSION)-windows-amd64.msi
+
+package-linux: build-linux
+	mkdir -p dist
+	ARCH=amd64 VERSION=$(PACKAGE_VERSION) nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
+	ARCH=amd64 VERSION=$(PACKAGE_VERSION) nfpm package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
+
+package-appimage: build-linux
+	packaging/linux/appimage.sh $(VERSION)
 
 clean:
 	rm -rf bin dist cover.out coverage.html

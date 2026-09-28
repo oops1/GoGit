@@ -43,7 +43,7 @@ func TestInlineDiffMarksTheChangedTokens(t *testing.T) {
 }
 
 func TestTokenizeSplitsByCharacterClass(t *testing.T) {
-	got := tokenize("go_1 += x\t;")
+	got := textLines(tokenize("go_1 += x\t;"))
 	want := []string{"go_1", " ", "+", "=", " ", "x", "\t", ";"}
 	if len(got) != len(want) {
 		t.Fatalf("tokenize produced %q instead of %q", got, want)
