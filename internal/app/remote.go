@@ -251,12 +251,19 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		Progress:   prog,
 		Transport:  a.transportOptions(prog),
 	}, ops.HookOptions{NoVerify: noVerify, Events: hookEvents(reporter)})
+	several := len(result.Targets) > 1
+	if several {
+		logPushTargets(reporter, result.Targets)
+	}
 	if err != nil {
 		reportHookRejection(reporter, err)
 		if errors.Is(err, remote.ErrNonFastForward) || errors.Is(err, remote.ErrRejected) {
 			reporter.Log(i18n.T("Operation.Log.Rejected"))
 		}
 		return err
+	}
+	if several {
+		return nil
 	}
 	if len(result.Changes) == 0 && len(result.Tags) == 0 {
 		reporter.Log(i18n.T("Operation.Log.UpToDate"))
@@ -269,6 +276,28 @@ func (a *App) runPushBody(ctx context.Context, o *openedRepository, prog progres
 		reporter.Log(i18n.Tf("Operation.Log.PushedTags", tagSummary(result.Tags)))
 	}
 	return nil
+}
+
+func logPushTargets(reporter OperationReporter, targets []remote.TargetResult) {
+	for _, target := range targets {
+		url := transport.SafeURL(target.URL)
+		switch {
+		case target.Err != nil:
+			reporter.Log(i18n.Tf("Operation.Log.PushTargetFailed", url, redactError(target.Err).Error()))
+		case len(target.Sent) == 0:
+			reporter.Log(i18n.Tf("Operation.Log.PushTargetUpToDate", url))
+		default:
+			reporter.Log(i18n.Tf("Operation.Log.PushTargetDone", url, sentSummary(target.Sent)))
+		}
+	}
+}
+
+func sentSummary(sent []remote.PushUpdate) string {
+	names := make([]string, 0, len(sent))
+	for _, update := range sent {
+		names = append(names, update.Target.Short())
+	}
+	return strings.Join(names, ", ")
 }
 
 func tagSummary(tags []refs.Name) string {
@@ -437,7 +466,7 @@ func (a *App) remoteEntries(o *openedRepository) []remotes.Entry {
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	entries := make([]remotes.Entry, len(list))
 	for i, entry := range list {
-		entries[i] = remotes.Entry{Name: entry.Name, FetchURL: entry.FetchURL(), PushURL: entry.PushURL()}
+		entries[i] = remotes.Entry{Name: entry.Name, FetchURL: entry.FetchURL(), PushURL: strings.Join(entry.PushTargets(), ", ")}
 	}
 	return entries
 }
