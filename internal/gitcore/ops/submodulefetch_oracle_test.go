@@ -67,6 +67,7 @@ func TestOracleFetchRecursesIntoSubmodulesLikeGit(t *testing.T) {
 			f.o.run(dir, "submodule", "deinit", "-q", "--all")
 		}, false},
 		{"removed submodule that stays registered", func(f *submoduleForge, dir string) {
+			requireGitAtLeast(f.o.t, 2, 39, "a recursive fetch into a submodule whose gitlink is gone")
 			f.o.run(dir, "rm", "-q", "libs/lib")
 			f.o.write(dir, ".gitmodules", "[submodule \"other\"]\n\tpath = other\n\turl = ../lib.git\n")
 		}, false},
