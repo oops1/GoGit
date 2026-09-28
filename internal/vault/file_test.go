@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -21,6 +22,24 @@ func TestFileUnlockerCreatesKeyFile(t *testing.T) {
 	}
 	if len(data) != 32 {
 		t.Fatalf("key file length = %d, want 32", len(data))
+	}
+}
+
+func TestFileUnlockerCreatesKeyFileWithOwnerOnlyPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows does not support POSIX group/other permission bits")
+	}
+	keyPath := filepath.Join(t.TempDir(), "vault.key")
+	u := NewFileUnlocker(keyPath)
+	if _, err := u.Wrap(context.Background(), make([]byte, 32)); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %o, want 0600", got)
 	}
 }
 

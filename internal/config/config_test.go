@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -191,6 +192,23 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 	if !slices.Equal(loaded.UI.FilesStatusFilter, []string{"ignored", "untracked"}) {
 		t.Fatalf("files status filter: %+v", loaded.UI.FilesStatusFilter)
+	}
+}
+
+func TestSaveWritesFileWithOwnerOnlyPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows does not support POSIX group/other permission bits")
+	}
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := Default().Save(path); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %o, want 0600", got)
 	}
 }
 
