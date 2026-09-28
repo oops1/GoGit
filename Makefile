@@ -65,12 +65,9 @@ release-local: build-windows build-linux
 	cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS && cd ..
 
 package-windows: build-windows
-	mkdir -p dist/windows-amd64
-	magick cmd/gogit/winres/icon.png -define icon:auto-resize=256,128,64,48,32,16 dist/windows-amd64/gogit.ico
 	wix build packaging/windows/gogit.wxs -arch x64 \
 		-d ProductVersion=$(PACKAGE_VERSION) \
 		-d GogitExePath=dist/windows-amd64/$(BINARY).exe \
-		-d IconPath=dist/windows-amd64/gogit.ico \
 		-o dist/gogit-$(VERSION)-windows-amd64.msi
 
 package-linux: build-linux

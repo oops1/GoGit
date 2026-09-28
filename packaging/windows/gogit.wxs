@@ -12,17 +12,16 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version of Go.Git is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <Property Id="ALLUSERS" Value="1" />
-    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.exe" />
     <Property Id="ARPHELPLINK" Value="https://github.com/oops1/gogit" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/oops1/gogit" />
     <Property Id="ARPNOREPAIR" Value="1" />
 
-    <Icon Id="AppIcon.ico" SourceFile="$(var.IconPath)" />
+    <Icon Id="AppIcon.exe" SourceFile="$(var.GogitExePath)" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Go.Git">
-        <Component Id="GogitExecutable" Guid="*">
+        <Component Id="GogitExecutable">
           <File Id="GogitExe"
                 Name="gogit.exe"
                 Source="$(var.GogitExePath)"
@@ -31,13 +30,13 @@
                       Directory="ProgramMenuFolder"
                       Name="Go.Git"
                       WorkingDirectory="INSTALLFOLDER"
-                      Icon="AppIcon.ico"
+                      Icon="AppIcon.exe"
                       IconIndex="0"
                       Advertise="no" />
           </File>
         </Component>
 
-        <Component Id="ProtocolHandler" Guid="*">
+        <Component Id="ProtocolHandler">
           <RegistryKey Root="HKCR" Key="git">
             <RegistryValue Type="string" Value="URL:Git Protocol" KeyPath="yes" />
             <RegistryValue Name="URL Protocol" Type="string" Value="" />

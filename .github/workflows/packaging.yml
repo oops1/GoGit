@@ -14,14 +14,15 @@ on:
 env:
   CGO_ENABLED: "0"
   WIX_VERSION: "5.0.2"
-  NFPM_VERSION: "v2.41.1"
-  APPIMAGETOOL_URL: "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+  NFPM_VERSION: "v2.47.0"
+  APPIMAGETOOL_URL: "https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage"
 
 jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.compute.outputs.version }}
+      numeric: ${{ steps.compute.outputs.numeric }}
     steps:
       - id: compute
         shell: bash
@@ -32,7 +33,9 @@ jobs:
             raw="${{ github.ref_name }}"
           fi
           version="${raw#v}"
+          numeric=$(printf '%s' "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/; t; s/.*/0.0.0/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "numeric=$numeric" >> "$GITHUB_OUTPUT"
 
   windows-msi:
     needs: version
@@ -52,8 +55,27 @@ jobs:
           dotnet tool install --global wix --version "$WIX_VERSION"
           echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
 
+      - name: build the executable
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cd cmd/gogit
+          go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64 \
+            --file-version "$VERSION" --product-version "$VERSION"
+          cd ../..
+          go build -trimpath \
+            -ldflags "-s -w -H windowsgui -X github.com/oops1/gogit/internal/version.Version=$VERSION" \
+            -o dist/windows-amd64/gogit.exe ./cmd/gogit
+
       - name: build msi
-        run: make package-windows VERSION=${{ needs.version.outputs.version }}
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NUMERIC: ${{ needs.version.outputs.numeric }}
+        run: |
+          wix build packaging/windows/gogit.wxs -arch x64 \
+            -d ProductVersion="$NUMERIC" \
+            -d GogitExePath=dist/windows-amd64/gogit.exe \
+            -o "dist/gogit-$VERSION-windows-amd64.msi"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -95,8 +117,8 @@ jobs:
           go-version: "1.26"
           cache: true
 
-      - name: install rsvg-convert
-        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin
+      - name: install the tools appimagetool needs
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin desktop-file-utils
 
       - name: install appimagetool
         run: |
