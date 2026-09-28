@@ -448,7 +448,7 @@ func (a *App) openManageRemotes() {
 		return
 	}
 	view.OnAdd = func(name, url string) { a.addRemoteEntry(view, o, name, url) }
-	view.OnEdit = func(name, url string) { a.editRemoteEntry(view, o, name, url) }
+	view.OnEdit = func(name, url string, pushURLs []string) { a.editRemoteEntry(view, o, name, url, pushURLs) }
 	view.OnRemove = func(name string) { a.removeRemoteEntry(view, o, name) }
 	view.OnClose = func() {
 		a.eng.CloseModal(view.Dialog())
@@ -466,7 +466,12 @@ func (a *App) remoteEntries(o *openedRepository) []remotes.Entry {
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	entries := make([]remotes.Entry, len(list))
 	for i, entry := range list {
-		entries[i] = remotes.Entry{Name: entry.Name, FetchURL: entry.FetchURL(), PushURL: strings.Join(entry.PushTargets(), ", ")}
+		entries[i] = remotes.Entry{
+			Name:     entry.Name,
+			FetchURL: entry.FetchURL(),
+			PushURL:  strings.Join(entry.PushTargets(), ", "),
+			PushURLs: entry.PushURLs,
+		}
 	}
 	return entries
 }
@@ -504,8 +509,13 @@ func (a *App) addRemoteEntry(view *remotes.View, o *openedRepository, name, url 
 	a.mutateRemote(view, o, func(r *gitrepo.Repository) error { return ops.AddRemote(r, name, url) })
 }
 
-func (a *App) editRemoteEntry(view *remotes.View, o *openedRepository, name, url string) {
-	a.mutateRemote(view, o, func(r *gitrepo.Repository) error { return ops.SetRemoteURL(r, name, url, false) })
+func (a *App) editRemoteEntry(view *remotes.View, o *openedRepository, name, url string, pushURLs []string) {
+	a.mutateRemote(view, o, func(r *gitrepo.Repository) error {
+		if err := ops.SetRemoteURL(r, name, url, false); err != nil {
+			return err
+		}
+		return ops.SetRemotePushURLs(r, name, pushURLs)
+	})
 }
 
 func (a *App) removeRemoteEntry(view *remotes.View, o *openedRepository, name string) {

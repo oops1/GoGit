@@ -519,6 +519,8 @@
   "Dialog.Remotes.Error.URL": "Введите адрес репозитория",
   "Dialog.Remotes.Name": "Имя",
   "Dialog.Remotes.PushURL": "Адрес отправки",
+  "Dialog.Remotes.PushURLs": "Push-адреса",
+  "Dialog.Remotes.PushURLs.Empty": "пусто — push уходит на адрес получения",
   "Dialog.Remotes.Remove": "Удалить",
   "Dialog.Remotes.Title": "Управление внешними репозиториями",
   "Dialog.Remotes.URL": "URL",

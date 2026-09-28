@@ -519,6 +519,8 @@
   "Dialog.Remotes.Error.URL": "Enter a repository address",
   "Dialog.Remotes.Name": "Name",
   "Dialog.Remotes.PushURL": "Push URL",
+  "Dialog.Remotes.PushURLs": "Push URLs",
+  "Dialog.Remotes.PushURLs.Empty": "empty — push goes to the fetch URL",
   "Dialog.Remotes.Remove": "Remove",
   "Dialog.Remotes.Title": "Manage Remotes",
   "Dialog.Remotes.URL": "URL",
