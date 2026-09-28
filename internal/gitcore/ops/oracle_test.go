@@ -21,6 +21,11 @@ type oracle struct {
 	env  []string
 }
 
+const oracleGlobalConfig = "[user]\n\tname = oracle\n\temail = oracle@example.com\n" +
+	"[init]\n\tdefaultBranch = main\n" +
+	"[gc]\n\tauto = 0\n" +
+	"[maintenance]\n\tauto = false\n"
+
 func newOracle(t *testing.T) *oracle {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -30,8 +35,8 @@ func newOracle(t *testing.T) *oracle {
 	if err := os.MkdirAll(home, 0o777); err != nil {
 		t.Fatalf("MkdirAll returned error %v", err)
 	}
-	globalConfig := filepath.Join(home, "gitconfig")
-	if err := os.WriteFile(globalConfig, nil, 0o666); err != nil {
+	globalConfig := filepath.Join(home, ".gitconfig")
+	if err := os.WriteFile(globalConfig, []byte(oracleGlobalConfig), 0o666); err != nil {
 		t.Fatalf("WriteFile returned error %v", err)
 	}
 	return &oracle{
@@ -44,11 +49,6 @@ func newOracle(t *testing.T) *oracle {
 			"USERPROFILE=" + home,
 			"GIT_CONFIG_GLOBAL=" + globalConfig,
 			"GIT_CONFIG_NOSYSTEM=1",
-			"GIT_CONFIG_COUNT=2",
-			"GIT_CONFIG_KEY_0=gc.auto",
-			"GIT_CONFIG_VALUE_0=0",
-			"GIT_CONFIG_KEY_1=maintenance.auto",
-			"GIT_CONFIG_VALUE_1=false",
 			"GIT_TERMINAL_PROMPT=0",
 			"GIT_AUTHOR_NAME=oracle",
 			"GIT_AUTHOR_EMAIL=oracle@example.com",
@@ -91,7 +91,7 @@ func (o *oracle) repoDir(name string) string {
 }
 
 func (o *oracle) options() repo.OpenOptions {
-	return repo.OpenOptions{NoSystem: true, GlobalFile: filepath.Join(o.home, "gitconfig")}
+	return repo.OpenOptions{NoSystem: true, GlobalFile: filepath.Join(o.home, ".gitconfig")}
 }
 
 func (o *oracle) write(dir, rel, text string) {

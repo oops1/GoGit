@@ -157,7 +157,7 @@ func directoryRenamesSetting(settings []string) string {
 func gitMergeTree(t *testing.T, dir string, renames bool, directoryRenames ...string) (string, []string) {
 	t.Helper()
 	setting := "merge.directoryRenames=" + directoryRenamesSetting(directoryRenames)
-	args := []string{"-c", setting, "merge-tree", "--write-tree", "-X", "no-renames", "ours", "theirs"}
+	args := []string{"-c", setting, "-c", "merge.renames=false", "merge-tree", "--write-tree", "ours", "theirs"}
 	if renames {
 		args = []string{"-c", setting, "merge-tree", "--write-tree", "ours", "theirs"}
 	}
