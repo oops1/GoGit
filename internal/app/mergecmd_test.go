@@ -140,7 +140,10 @@ func waitForBannerText(t *testing.T, a *App, want string) {
 	deadline := time.Now().Add(testTimeout)
 	for readOnDispatcher(t, a, a.banner.text.Text) != want {
 		if time.Now().After(deadline) {
-			t.Fatalf("banner = %q, want %q", readOnDispatcher(t, a, a.banner.text.Text), want)
+			t.Fatalf("banner = %q with status %q, want banner %q",
+				readOnDispatcher(t, a, a.banner.text.Text),
+				readOnDispatcher(t, a, a.statusLabel.Text),
+				want)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

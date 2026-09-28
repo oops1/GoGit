@@ -17,7 +17,7 @@ interface. An alternative to the paid SmartGit.
   window; the layout is remembered.
 - Localization: Russian and English out of the box, any other language is a single JSON file.
 
-## What 1.5.3 can already do
+## What 1.6.0 can already do
 
 **Interface.** The menu and toolbar mirror SmartGit; the toolbar is configured
 in a separate window and stored in `config.toml`. Dock panels:
@@ -84,7 +84,7 @@ what to look at when something goes wrong: [USER_GUIDE.md](USER_GUIDE.md)
 ## What is still missing
 
 Horizontal scrolling in the compare and conflict-resolution windows (waiting
-on the engine), a compatibility matrix with different versions of git, and installers.
+on the engine), the GitHub and Jira integrations, `core.sharedRepository`.
 The order of work is in docs/RELEASE_PLAN.md.
 
 ## Building
