@@ -7,6 +7,7 @@ import (
 
 	"github.com/oops1/gogit/internal/app"
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/diagnostics"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/logx"
 	"github.com/oops1/gogit/internal/winconsole"
@@ -40,6 +41,7 @@ func run() error {
 		logger = logx.Discard()
 	}
 	defer logger.Close()
+	diagnostics.StartProfiler(logger.Slog())
 	if backup != "" {
 		logger.Slog().Warn("config file could not be read and was moved aside", "backup", backup)
 		localizeStartup(paths.UserI18NDir(), cfg.Language)
