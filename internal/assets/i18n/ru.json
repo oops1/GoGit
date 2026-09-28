@@ -1280,6 +1280,7 @@
   "Pane.Branches.Submodule.UpToDate": "актуален",
   "Pane.Branches.Submodules": "Подмодули",
   "Pane.Branches.Tags": "Теги",
+  "Pane.Branches.TracksRemote": "%s = %s",
   "Pane.Branches.ViewMenu": "Как разложено дерево ветвей",
   "Pane.Details": "Коммит",
   "Pane.Files": "Файлы",

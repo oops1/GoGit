@@ -1280,6 +1280,7 @@
   "Pane.Branches.Submodule.UpToDate": "up to date",
   "Pane.Branches.Submodules": "Submodules",
   "Pane.Branches.Tags": "Tags",
+  "Pane.Branches.TracksRemote": "%s = %s",
   "Pane.Branches.ViewMenu": "How the branch tree is laid out",
   "Pane.Details": "Commit",
   "Pane.Files": "Files",

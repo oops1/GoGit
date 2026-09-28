@@ -103,7 +103,7 @@ func TestRenderBuildsLocalGroupWithNestedBranches(t *testing.T) {
 	if len(feature.Children) != 2 {
 		t.Fatalf("feature children = %v", childTexts(feature))
 	}
-	if feature.Children[0].DisplayText() != "x" {
+	if feature.Children[0].DisplayText() != "x = origin" {
 		t.Fatalf("feature/x text = %q", feature.Children[0].DisplayText())
 	}
 	if feature.Children[0].Icon == feature.Children[1].Icon {
@@ -112,8 +112,8 @@ func TestRenderBuildsLocalGroupWithNestedBranches(t *testing.T) {
 	if feature.Children[1].DisplayText() != "y" {
 		t.Fatalf("feature/y text = %q", feature.Children[1].DisplayText())
 	}
-	main := findChild(t, local, "main")
-	if main.DisplayText() != "main" {
+	main := findChild(t, local, "main = origin")
+	if main.DisplayText() != "main = origin" {
 		t.Fatalf("main text = %q", main.DisplayText())
 	}
 }
@@ -450,7 +450,7 @@ func TestRenderUsesDistinctIconsForRemoteBranchesAndTags(t *testing.T) {
 	v.Render(fullSnapshot(t))
 	local, remotesRoot, tagsRoot := roots(t, tw)
 
-	main := findChild(t, local, "main")
+	main := findChild(t, local, "main = origin")
 	origin := remotesRoot.Children[0]
 	originMain := findChild(t, origin, "main")
 	v1 := findChild(t, tagsRoot, "v1.0")
@@ -475,7 +475,7 @@ func TestRenderUsesTheStashIcon(t *testing.T) {
 		t.Fatal("stash node must have an icon")
 	}
 	local, _, _ := roots(t, tw)
-	main := findChild(t, local, "main")
+	main := findChild(t, local, "main = origin")
 	if stash.Icon == main.Icon {
 		t.Fatal("stash must use a different icon than a branch")
 	}

@@ -44,7 +44,7 @@ func TestFlowSectionsStandAboveLocalBranchesAndTakeTheirBranches(t *testing.T) {
 	if got := v.keyByItem[tw.Tree.Roots()[0]]; got != flowKey(ops.FlowKindFeature) {
 		t.Fatalf("first root key = %q, want the feature section", got)
 	}
-	want := []string{"Features (2)", "  x", "  y"}
+	want := []string{"Features (2)", "  x = origin", "  y"}
 	if got := sectionOutline(t, v, tw.Tree, flowKey(ops.FlowKindFeature)); !slices.Equal(got, want) {
 		t.Fatalf("features section = %v, want %v", got, want)
 	}
@@ -52,7 +52,7 @@ func TestFlowSectionsStandAboveLocalBranchesAndTakeTheirBranches(t *testing.T) {
 	if got := sectionOutline(t, v, tw.Tree, flowKey(ops.FlowKindRelease)); !slices.Equal(got, want) {
 		t.Fatalf("releases section = %v, want %v", got, want)
 	}
-	if got := localOutline(t, v, tw.Tree); !slices.Equal(got, []string{"develop"}) {
+	if got := localOutline(t, v, tw.Tree); !slices.Equal(got, []string{"develop = origin"}) {
 		t.Fatalf("local branches = %v, want only develop", got)
 	}
 }
@@ -67,7 +67,7 @@ func TestFlowSectionsKeepRemoteBranchesOutUnlessAskedFor(t *testing.T) {
 	}
 
 	v.SetOptions(Options{FlowSections: true, Grouping: Grouping{ByPath: true}})
-	want = []string{"Features (3)", "  origin", "    x", "  x", "  y"}
+	want = []string{"Features (2)", "  x = origin", "  y"}
 	if got := sectionOutline(t, v, tw.Tree, flowKey(ops.FlowKindFeature)); !slices.Equal(got, want) {
 		t.Fatalf("features section = %v, want %v", got, want)
 	}
@@ -83,7 +83,7 @@ func TestFlowSectionsAreAbsentWithoutAConfiguredFlow(t *testing.T) {
 	if cfg, configured := v.Flow(); configured || cfg.Develop != "" {
 		t.Fatalf("flow = %+v, configured = %v", cfg, configured)
 	}
-	want := []string{"develop", "feature", "  x", "  y", "release", "  1.0"}
+	want := []string{"develop = origin", "feature", "  x = origin", "  y", "release", "  1.0"}
 	if got := localOutline(t, v, tw.Tree); !slices.Equal(got, want) {
 		t.Fatalf("local branches = %v, want %v", got, want)
 	}
@@ -93,11 +93,11 @@ func TestLightFlowOnlyKeepsTheFeatureSection(t *testing.T) {
 	v, tw := bound(t)
 	v.SetFlow(ops.DefaultLightFlowConfig(), true)
 	v.Render(flowFixture(t))
-	want := []string{"Features (2)", "  x", "  y"}
+	want := []string{"Features (2)", "  x = origin", "  y"}
 	if got := sectionOutline(t, v, tw.Tree, flowKey(ops.FlowKindFeature)); !slices.Equal(got, want) {
 		t.Fatalf("features section = %v, want %v", got, want)
 	}
-	want = []string{"develop", "release", "  1.0"}
+	want = []string{"develop = origin", "release", "  1.0"}
 	if got := localOutline(t, v, tw.Tree); !slices.Equal(got, want) {
 		t.Fatalf("local branches = %v, want %v", got, want)
 	}
@@ -135,7 +135,7 @@ func TestLightFlowPutsTheBaseBranchAboveTheSections(t *testing.T) {
 	if ref, ok := v.idByItem[root]; !ok || ref != refs.BranchName("master") {
 		t.Fatalf("first root tracks %v, %v", ref, ok)
 	}
-	want := []string{"develop", "release", "  1.0"}
+	want := []string{"develop = origin", "release", "  1.0"}
 	if got := localOutline(t, v, tw.Tree); !slices.Equal(got, want) {
 		t.Fatalf("local branches = %v, want the base branch taken out", got)
 	}

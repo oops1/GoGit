@@ -47,7 +47,7 @@ func cloneForDivergence(t *testing.T) (a *App, server, local string) {
 func TestBranchesPaneShowsNoSuffixRightAfterCloneMatchesUpstream(t *testing.T) {
 	a, _, _ := cloneForDivergence(t)
 
-	waitForBranchLabel(t, a, refs.BranchName("main"), "main")
+	waitForBranchLabel(t, a, refs.BranchName("main"), "main = origin")
 }
 
 func TestBranchesPaneShowsAheadCountForUnpushedLocalCommits(t *testing.T) {
@@ -56,7 +56,7 @@ func TestBranchesPaneShowsAheadCountForUnpushedLocalCommits(t *testing.T) {
 	commitTestFiles(t, local, map[string]string{"extra.txt": "extra\n"}, nil)
 	a.RefreshRepository()
 
-	waitForBranchLabel(t, a, refs.BranchName("main"), "main ↑1")
+	waitForBranchLabel(t, a, refs.BranchName("main"), "main = origin ↑1")
 }
 
 func TestBranchesPaneShowsBehindCountAfterFetchingNewServerCommits(t *testing.T) {
@@ -69,7 +69,7 @@ func TestBranchesPaneShowsBehindCountAfterFetchingNewServerCommits(t *testing.T)
 	}
 	waitForFinishedOperation(t, a, lastOperationView(t, views))
 
-	waitForBranchLabel(t, a, refs.BranchName("main"), "main ↓1")
+	waitForBranchLabel(t, a, refs.BranchName("main"), "main = origin ↓1")
 }
 
 func TestBranchesPaneShowsBothCountsWhenHistoriesDiverge(t *testing.T) {
@@ -84,7 +84,7 @@ func TestBranchesPaneShowsBothCountsWhenHistoriesDiverge(t *testing.T) {
 	commitTestFiles(t, local, map[string]string{"extra.txt": "extra\n"}, nil)
 	a.RefreshRepository()
 
-	waitForBranchLabel(t, a, refs.BranchName("main"), "main ↑1 ↓1")
+	waitForBranchLabel(t, a, refs.BranchName("main"), "main = origin ↑1 ↓1")
 }
 
 func TestBranchesPaneShowsNoSuffixForABranchWithoutUpstream(t *testing.T) {
