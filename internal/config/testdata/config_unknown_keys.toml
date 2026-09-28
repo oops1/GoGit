@@ -1,0 +1,17 @@
+version = 1
+language = "ru"
+future_top_level = "keep me"
+
+[ui]
+layout = "sidebar"
+future_ui_flag = true
+
+[future_section]
+answer = 42
+nested = { deep = "x" }
+
+[[repositories]]
+id = "r1"
+name = "repo-one"
+path = "/src/repo-one"
+future_color = "teal"

@@ -295,8 +295,8 @@ func TestLoadOrRecoverFailsWhenTheBackupCannotBeMade(t *testing.T) {
 }
 
 func TestLoadOrRecoverPassesOtherResultsThrough(t *testing.T) {
-	path := writeConfigFile(t, "version = 99")
-	if _, backup, err := LoadOrRecover(path, time.Now()); !errors.Is(err, ErrUnsupportedVersion) || backup != "" {
+	dir := t.TempDir()
+	if _, backup, err := LoadOrRecover(dir, time.Now()); err == nil || errors.Is(err, ErrInvalid) || errors.Is(err, ErrUnsupportedVersion) || backup != "" {
 		t.Fatalf("backup = %q, err = %v", backup, err)
 	}
 	valid := writeConfigFile(t, `language = "ru"`)

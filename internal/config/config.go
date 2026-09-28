@@ -195,7 +195,7 @@ func Load(path string) (*Config, error) {
 
 func LoadOrRecover(path string, now time.Time) (*Config, string, error) {
 	cfg, err := Load(path)
-	if !errors.Is(err, ErrInvalid) {
+	if !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrUnsupportedVersion) {
 		return cfg, "", err
 	}
 	backup := path + ".bad-" + now.Format("20060102-150405")
@@ -214,7 +214,7 @@ func Parse(data []byte) (*Config, error) {
 	if cfg.Version > CurrentVersion {
 		return nil, fmt.Errorf("%w: %d", ErrUnsupportedVersion, cfg.Version)
 	}
-	cfg.Version = CurrentVersion
+	migrateToCurrent(cfg, cfg.Version)
 	cfg.Normalize()
 	var raw map[string]any
 	_, _ = toml.Decode(string(data), &raw)
