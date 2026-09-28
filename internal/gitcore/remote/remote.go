@@ -24,11 +24,19 @@ func (r Remote) FetchURL() string {
 	return r.URLs[0]
 }
 
-func (r Remote) PushURL() string {
+func (r Remote) PushTargets() []string {
 	if len(r.PushURLs) > 0 {
-		return r.PushURLs[0]
+		return r.PushURLs
 	}
-	return r.FetchURL()
+	return r.URLs
+}
+
+func (r Remote) PushURL() string {
+	targets := r.PushTargets()
+	if len(targets) == 0 {
+		return ""
+	}
+	return targets[0]
 }
 
 type TagMode uint8

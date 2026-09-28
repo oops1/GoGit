@@ -29,10 +29,12 @@ func TestBeforeSendSeesThePlannedUpdatesAndCanStopThePush(t *testing.T) {
 		withDial(t, fake, nil)
 
 		var seen []PushUpdate
+		var seenURL string
 		opts := PushOptions{
 			Refspecs: mustParseSpecs(t, "refs/heads/main:refs/heads/main"),
-			BeforeSend: func(_ context.Context, updates []PushUpdate) error {
+			BeforeSend: func(_ context.Context, url string, updates []PushUpdate) error {
 				seen = updates
+				seenURL = url
 				if refuse {
 					return boom
 				}
@@ -44,6 +46,9 @@ func TestBeforeSendSeesThePlannedUpdatesAndCanStopThePush(t *testing.T) {
 		want := []PushUpdate{{Source: refs.BranchName("main"), New: commit, Target: refs.BranchName("main")}}
 		if !slices.Equal(seen, want) {
 			t.Fatalf("updates = %+v, want %+v", seen, want)
+		}
+		if seenURL != "fake://x" {
+			t.Fatalf("url = %q, want the address the push goes to", seenURL)
 		}
 		if refuse != errors.Is(err, boom) || refuse == pushed {
 			t.Fatalf("refuse %v: err = %v, pushed = %v", refuse, err, pushed)
