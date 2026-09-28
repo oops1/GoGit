@@ -860,6 +860,7 @@ func stashedSplitHistory(b *mergeBuilder) {
 }
 
 func TestOracleMergeLeavesTheRepositoryAsGitMergeDoes(t *testing.T) {
+	requireGitAtLeast(t, 2, 35, "the ort merge engine and the zdiff3 conflict style")
 	for _, s := range append(mergeScenarios(), gitlinkMergeScenarios()...) {
 		t.Run(s.name, func(t *testing.T) {
 			o := newOracle(t)

@@ -87,6 +87,7 @@ func ourRandomTreeMerge(t *testing.T, dir string, style Style) (string, []string
 }
 
 func TestRandomTreeMergesMatchGitMergeTree(t *testing.T) {
+	requireGitAtLeast(t, 2, 38, "merge-tree --write-tree")
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}
