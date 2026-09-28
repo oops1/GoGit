@@ -1,0 +1,59 @@
+name: fuzz
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: время на каждую цель, минут
+        default: "10"
+  schedule:
+    - cron: "0 2 * * 0"
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.collect.outputs.list }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: collect
+        shell: bash
+        run: |
+          list=$(grep -rl "func Fuzz" --include=fuzz_test.go internal/ | while read -r file; do
+            package="./$(dirname "$file")"
+            grep -o "func Fuzz[A-Za-z0-9_]*" "$file" | sed "s|func |$package |"
+          done | jq -R '[splits(" ")] | {package: .[0], target: .[1]}' | jq -s -c .)
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    needs: targets
+    name: ${{ matrix.case.target }} (${{ matrix.case.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.targets.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: fuzz
+        shell: bash
+        run: |
+          minutes="${{ github.event.inputs.minutes || '10' }}"
+          go test -run XXX -fuzz "^${{ matrix.case.target }}\$" -fuzztime="${minutes}m" ${{ matrix.case.package }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ matrix.case.target }}-${{ strategy.job-index }}
+          path: internal/**/testdata/fuzz/**
+          if-no-files-found: ignore
