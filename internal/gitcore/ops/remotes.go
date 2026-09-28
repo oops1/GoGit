@@ -252,6 +252,12 @@ func SetRemoteURL(r *repo.Repository, name, url string, push bool) error {
 	})
 }
 
+func SetRemotePushURLs(r *repo.Repository, name string, urls []string) error {
+	return editRemoteURLs(r, name, true, func(file *config.File, key string) error {
+		return file.SetAll(key, urls)
+	})
+}
+
 func AddRemoteURL(r *repo.Repository, name, url string, push bool) error {
 	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
 		return file.Add(key, url)
@@ -260,21 +266,14 @@ func AddRemoteURL(r *repo.Repository, name, url string, push bool) error {
 
 func DeleteRemoteURL(r *repo.Repository, name, url string, push bool) error {
 	return editRemoteURLs(r, name, push, func(file *config.File, key string) error {
-		kept := slices.DeleteFunc(file.GetAll(key), func(existing string) bool { return existing == url })
-		if len(kept) == len(file.GetAll(key)) {
+		existing := file.GetAll(key)
+		kept := slices.DeleteFunc(slices.Clone(existing), func(candidate string) bool { return candidate == url })
+		if len(kept) == len(existing) {
 			return fmt.Errorf("%w: %s", ErrNoSuchRemoteURL, url)
 		}
 		if len(kept) == 0 && !push {
 			return ErrLastRemoteURL
 		}
-		if err := file.UnsetAll(key); err != nil {
-			return err
-		}
-		for _, keep := range kept {
-			if err := file.Add(key, keep); err != nil {
-				return err
-			}
-		}
-		return nil
+		return file.SetAll(key, kept)
 	})
 }

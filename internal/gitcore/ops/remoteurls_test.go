@@ -131,3 +131,43 @@ func TestRemoteURLEditsFailForAnUnknownRemoteAndWithoutLocalConfig(t *testing.T)
 		})
 	}
 }
+
+func TestSetRemotePushURLsReplacesTheWholeList(t *testing.T) {
+	r := remoteWithTwoPushURLs(t)
+
+	if err := SetRemotePushURLs(r.repo, "origin", []string{"http://one.example/hub.git", "http://two.example/hub.git"}); err != nil {
+		t.Fatalf("SetRemotePushURLs returned error %v", err)
+	}
+
+	want := []string{"http://one.example/hub.git", "http://two.example/hub.git"}
+	if got := pushURLsOf(t, r); !slices.Equal(got, want) {
+		t.Fatalf("pushurl = %v, want %v", got, want)
+	}
+}
+
+func TestSetRemotePushURLsWithAnEmptyListLeavesTheRemoteWithTheFetchAddress(t *testing.T) {
+	r := remoteWithTwoPushURLs(t)
+
+	if err := SetRemotePushURLs(r.repo, "origin", nil); err != nil {
+		t.Fatalf("SetRemotePushURLs returned error %v", err)
+	}
+
+	loaded, err := remote.Load(r.reopen().Config(), "origin")
+	if err != nil {
+		t.Fatalf("remote.Load returned error %v", err)
+	}
+	if len(loaded.PushURLs) != 0 {
+		t.Fatalf("pushurl = %v, want none", loaded.PushURLs)
+	}
+	if got := loaded.PushTargets(); !slices.Equal(got, []string{"https://example.com/hub.git"}) {
+		t.Fatalf("push targets = %v, want the fetch address", got)
+	}
+}
+
+func TestSetRemotePushURLsFailsForAnUnknownRemote(t *testing.T) {
+	r := newTestRepo(t)
+
+	if err := SetRemotePushURLs(r.repo, "origin", []string{"http://one.example/hub.git"}); !errors.Is(err, remote.ErrNoRemote) {
+		t.Fatalf("err = %v, want %v", err, remote.ErrNoRemote)
+	}
+}
