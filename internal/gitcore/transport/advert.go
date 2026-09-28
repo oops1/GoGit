@@ -19,6 +19,9 @@ func ParseAdvertisement(r io.Reader) (Advertisement, error) {
 		}
 		return Advertisement{}, fmt.Errorf("%w: advertisement stream is empty", ErrAdvertisementMalformed)
 	}
+	if dec.Type() == PktFlush {
+		return Advertisement{}, nil
+	}
 	line := strings.TrimSuffix(string(dec.Bytes()), "\n")
 	switch line {
 	case "version 2":

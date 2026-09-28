@@ -372,3 +372,18 @@ func TestParseAdvertisementEmptyRepositoryWithoutCapabilitiesIsAccepted(t *testi
 		t.Fatalf("Refs = %v, want none for an empty repository", adv.Refs)
 	}
 }
+
+func TestParseAdvertisementTakesAFlushOnlyStreamAsAnEmptyRepository(t *testing.T) {
+	var buf bytes.Buffer
+	enc := NewEncoder(&buf)
+	if err := enc.WriteFlush(); err != nil {
+		t.Fatalf("WriteFlush returned error %v", err)
+	}
+	adv, err := ParseAdvertisement(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("ParseAdvertisement returned error %v, want an empty advertisement", err)
+	}
+	if adv.Version != 0 || len(adv.Refs) != 0 || len(adv.Capabilities.Names()) != 0 {
+		t.Fatalf("ParseAdvertisement returned %+v", adv)
+	}
+}
