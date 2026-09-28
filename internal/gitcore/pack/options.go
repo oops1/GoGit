@@ -7,7 +7,7 @@ import (
 
 const (
 	DefaultMaxDeltaDepth = 4096
-	DefaultCacheBytes    = 16 << 20
+	DefaultCacheBytes    = 96 << 20
 )
 
 type BaseResolver interface {

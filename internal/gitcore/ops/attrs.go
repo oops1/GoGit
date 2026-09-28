@@ -120,7 +120,7 @@ func (w *workingTree) loadIndexObjects() bool {
 		w.idx, w.loadErr = readIndex(w.repo)
 	}
 	if w.db == nil && w.loadErr == nil {
-		w.db, w.loadErr = odbOpen(w.repo.ObjectsDir(), odb.Options{Format: w.repo.ObjectFormat})
+		w.db, w.loadErr = odbOpen(w.repo.ObjectsDir(), odbOptions(w.repo))
 	}
 	return w.loadErr == nil
 }

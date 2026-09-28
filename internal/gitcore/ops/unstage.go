@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/oops1/gogit/internal/gitcore/index"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
@@ -21,7 +20,7 @@ func Unstage(ctx context.Context, r *repo.Repository, paths []string) error {
 	}
 	defer func() { _ = wt.close() }()
 
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return err
 	}

@@ -44,7 +44,7 @@ func (r FsckReport) Healthy() bool {
 }
 
 func Fsck(ctx context.Context, r *repo.Repository) (FsckReport, error) {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return FsckReport{}, err
 	}

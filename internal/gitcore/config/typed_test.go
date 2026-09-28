@@ -93,7 +93,7 @@ func TestUserReadsIdentity(t *testing.T) {
 func TestCoreReadsDefaultsAndValues(t *testing.T) {
 	home := t.TempDir()
 	cfg := loadText(t, "")
-	want := Core{AutoCRLF: AutoCRLFFalse, EOL: EOLNative, FileMode: true, Symlinks: true}
+	want := Core{AutoCRLF: AutoCRLFFalse, EOL: EOLNative, FileMode: true, Symlinks: true, DeltaBaseCacheLimit: DefaultDeltaBaseCacheLimit}
 	got, err := cfg.Core()
 	if err != nil {
 		t.Fatalf("Core returned error %v", err)
@@ -105,7 +105,7 @@ func TestCoreReadsDefaultsAndValues(t *testing.T) {
 	t.Setenv("HOME", home)
 	cfg = loadText(t, "[core]\n\tbare = true\n\trepositoryformatversion = 1\n\tworktree = ../w\n"+
 		"\tautocrlf = INPUT\n\teol = CRLF\n\tfilemode = false\n\tsymlinks = no\n\tignorecase = 1\n"+
-		"\texcludesFile = ~/.gitignore\n\thooksPath = /srv/hooks\n")
+		"\texcludesFile = ~/.gitignore\n\thooksPath = /srv/hooks\n\tdeltaBaseCacheLimit = 8m\n")
 	t.Setenv("HOME", home)
 	got, err = cfg.Core()
 	if err != nil {
@@ -122,6 +122,7 @@ func TestCoreReadsDefaultsAndValues(t *testing.T) {
 		IgnoreCase:              true,
 		ExcludesFile:            filepath.Join(home, ".gitignore"),
 		HooksPath:               "/srv/hooks",
+		DeltaBaseCacheLimit:     8 << 20,
 	}
 	if got != want {
 		t.Fatalf("Core = %+v, want %+v", got, want)
@@ -160,6 +161,7 @@ func TestCoreRejectsBadValues(t *testing.T) {
 		{"hookspath", "[core]\n\thooksPath = ~who/x\n", ErrExpandUser},
 		{"autocrlf", "[core]\n\tautocrlf = perhaps\n", ErrInvalidBool},
 		{"eol", "[core]\n\teol = mac\n", ErrInvalidValue},
+		{"deltabasecachelimit", "[core]\n\tdeltaBaseCacheLimit = plenty\n", ErrInvalidInt},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

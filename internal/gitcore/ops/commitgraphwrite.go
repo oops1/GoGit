@@ -26,7 +26,7 @@ func WriteCommitGraph(ctx context.Context, r *repo.Repository) (int, error) {
 	if err != nil || shallow {
 		return 0, err
 	}
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return 0, err
 	}

@@ -52,7 +52,7 @@ func openRepoContext(r *repo.Repository) (*repoContext, error) {
 	if err != nil {
 		sig = object.Signature{}
 	}
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return nil, err
 	}
@@ -79,4 +79,8 @@ func (rc *repoContext) requireIdentity() error {
 
 func (rc *repoContext) close() error {
 	return errors.Join(rc.refs.Close(), rc.db.Close())
+}
+
+func odbOptions(r *repo.Repository) odb.Options {
+	return odb.Options{Format: r.ObjectFormat, PackBytes: r.Core().DeltaBaseCacheLimit}
 }

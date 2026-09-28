@@ -164,7 +164,7 @@ func SaveIndexContent(ctx context.Context, r *repo.Repository, path string, cont
 		return err
 	}
 	defer func() { _ = wt.close() }()
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return err
 	}

@@ -70,7 +70,7 @@ func openRepositoryAt(id, path string) (*openedRepository, branches.Snapshot, er
 		_ = closeGitRepository(r)
 		return nil, branches.Snapshot{}, err
 	}
-	db, err := openObjectsDB(r.ObjectsDir(), odb.Options{})
+	db, err := openObjectsDB(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat, PackBytes: r.Core().DeltaBaseCacheLimit})
 	if err != nil {
 		_ = closeGitRepository(r)
 		return nil, branches.Snapshot{}, err

@@ -64,7 +64,7 @@ func withPromisorFilter(r *repo.Repository, rem remote.Remote, opts remote.Fetch
 }
 
 func objectOptions(ctx context.Context, r *repo.Repository) odb.Options {
-	opts := odb.Options{Format: r.ObjectFormat}
+	opts := odbOptions(r)
 	found, ok, err := promisorOf(r.Config())
 	if err != nil || !ok {
 		return opts

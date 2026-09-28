@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
-	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/progress"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/repo"
@@ -80,7 +79,7 @@ func checkWorktreeTarget(r *repo.Repository, target string) error {
 }
 
 func resolveWorktreeStart(r *repo.Repository, opts AddWorktreeOptions) (hash.ObjectID, refs.Name, error) {
-	db, err := odbOpen(r.ObjectsDir(), odb.Options{Format: r.ObjectFormat})
+	db, err := odbOpen(r.ObjectsDir(), odbOptions(r))
 	if err != nil {
 		return hash.Zero, "", err
 	}
