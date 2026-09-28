@@ -27,10 +27,25 @@ func gitUnreachable(out string) []string {
 	return ids
 }
 
+func gitFsckReadsTheIndexOfALinkedWorktree(o *oracle) bool {
+	dir := o.repoDir("fsck-worktree-probe")
+	newOracleRepo(o, dir)
+	o.write(dir, "f.txt", "f\n")
+	o.run(dir, "add", "f.txt")
+	o.run(dir, "commit", "-q", "-m", "f")
+	side := filepath.Join(o.t.TempDir(), "probe-side")
+	o.run(dir, "worktree", "add", "-q", "-b", "probe", side)
+	o.write(side, "staged.txt", "staged in the probe worktree\n")
+	o.run(side, "add", "staged.txt")
+	staged := strings.TrimSpace(o.run(side, "rev-parse", ":staged.txt"))
+	return !slices.Contains(gitUnreachable(o.run(dir, "fsck", "--unreachable", "--no-progress")), staged)
+}
+
 func TestOracleFsckAgreesWithGitAboutAHealthyRepository(t *testing.T) {
 	o := newOracle(t)
 	requireGitAtLeast(t, 2, 34, "the set of objects today's fsck calls unreachable")
-	dir, _ := buildOracleMaintenanceRepo(o)
+	readsLinkedIndex := gitFsckReadsTheIndexOfALinkedWorktree(o)
+	dir, worktree := buildOracleMaintenanceRepo(o)
 	r := o.openRepo(dir)
 
 	report, err := Fsck(t.Context(), r)
@@ -46,6 +61,11 @@ func TestOracleFsckAgreesWithGitAboutAHealthyRepository(t *testing.T) {
 		ours = append(ours, id.String())
 	}
 	theirs := gitUnreachable(o.run(dir, "fsck", "--unreachable", "--no-progress"))
+	if !readsLinkedIndex {
+		staged := strings.TrimSpace(o.run(worktree, "rev-parse", ":side-staged.txt"))
+		t.Logf("the installed git does not read the index of a linked worktree and calls %s unreachable, so it is left out of the comparison", staged)
+		theirs = slices.DeleteFunc(theirs, func(id string) bool { return id == staged })
+	}
 	if !slices.Equal(ours, theirs) {
 		t.Fatalf("unreachable objects differ:\nours   %v\ntheirs %v", ours, theirs)
 	}

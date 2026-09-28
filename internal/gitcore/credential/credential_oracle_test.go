@@ -121,6 +121,21 @@ func withOraclePassword(fields map[string]string, username, password string) map
 	return out
 }
 
+func requireTheStoreGitActuallyUses(t *testing.T, config []string, h Helper) {
+	t.Helper()
+	q := Query{Protocol: "https", Host: oracleHost()}
+	mustGitCredential(t, config, "approve", withOraclePassword(oracleQueryFields(q), "probe", "probe-secret"))
+	ans, ok, err := h.Get(context.Background(), q)
+	if err == nil && ok && ans.Username == "probe" && string(ans.Password) == "probe-secret" {
+		if err := h.Erase(context.Background(), q, Answer{Username: "probe", Password: []byte("probe-secret")}); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	mustGitCredential(t, config, "reject", withOraclePassword(oracleQueryFields(q), "probe", "probe-secret"))
+	t.Skipf("the credential manager of the installed git keeps secrets where %s does not look for them: Get = %v, %v", h.Name(), ok, err)
+}
+
 func requireNativeAnswer(t *testing.T, h Helper, q Query, username, password string) {
 	t.Helper()
 	ans, ok, err := h.Get(context.Background(), q)
@@ -146,6 +161,7 @@ func TestOracleCredentialManagerPlaintextStoreIsSharedWithGit(t *testing.T) {
 		"credential.plaintextStorePath=" + filepath.ToSlash(root),
 	}
 	h := &managerHelper{name: "manager", store: &gcmFileStore{root: root, namespace: gcmDefaultNamespace}}
+	requireTheStoreGitActuallyUses(t, config, h)
 	ctx := context.Background()
 
 	q := Query{Protocol: "https", Host: oracleHost()}
