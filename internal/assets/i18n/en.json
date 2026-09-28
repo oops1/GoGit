@@ -1298,7 +1298,7 @@
   "Sidebar.Section.Submodules": "Submodules",
   "Sidebar.Section.Tags": "Tags",
   "Sidebar.Section.WorkingCopy": "Working copy",
-  "Startup.ConfigRecovered": "The settings file could not be read and was moved to %s. Go.Git starts with default settings.",
+  "Startup.ConfigRecovered": "The settings file could not be read — it is damaged or was written by a newer Go.Git. It was moved to %s, and Go.Git starts with default settings.",
   "Startup.Failed": "Go.Git could not start: %s",
   "Startup.Title": "Go.Git",
   "Status.AbortMergeFailed": "Could not abort the merge: %s",

@@ -1298,7 +1298,7 @@
   "Sidebar.Section.Submodules": "Подмодули",
   "Sidebar.Section.Tags": "Теги",
   "Sidebar.Section.WorkingCopy": "Рабочая копия",
-  "Startup.ConfigRecovered": "Файл настроек не читается и перенесён в %s. Go.Git запускается с настройками по умолчанию.",
+  "Startup.ConfigRecovered": "Файл настроек не прочитан — он повреждён или записан более новой версией Go.Git. Файл перенесён в %s, Go.Git запускается с настройками по умолчанию.",
   "Startup.Failed": "Go.Git не удалось запустить: %s",
   "Startup.Title": "Go.Git",
   "Status.AbortMergeFailed": "Не удалось отменить слияние: %s",
