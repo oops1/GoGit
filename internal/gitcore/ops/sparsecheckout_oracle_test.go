@@ -75,6 +75,7 @@ func (o *oracle) switchSparseSides(gitSide, ourSide, target, step string) {
 }
 
 func TestOracleSwitchFollowsSparseCheckoutPatternsLikeGit(t *testing.T) {
+	requireGitAtLeast(t, 2, 34, "today's cone rules for sparse checkout")
 	tests := []struct {
 		name      string
 		setArgs   []string

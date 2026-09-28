@@ -39,6 +39,7 @@ func buildPullSide(t *testing.T, o *oracle, s pullScenario) (*mergeBuilder, stri
 	o.run(root, "init", "-q", "--bare", "-b", "main", up)
 	seed := &mergeBuilder{o: o, dir: filepath.Join(root, "seed"), clock: mergeClockStart}
 	o.run(root, "clone", "-q", up, "seed")
+	o.run(seed.dir, "symbolic-ref", "HEAD", "refs/heads/main")
 	o.run(seed.dir, "config", "core.autocrlf", "false")
 	o.run(seed.dir, "config", "user.name", "oracle")
 	o.run(seed.dir, "config", "user.email", "oracle@example.com")
@@ -46,6 +47,7 @@ func buildPullSide(t *testing.T, o *oracle, s pullScenario) (*mergeBuilder, stri
 	seed.git("push", "-q", "origin", "main")
 	work := &mergeBuilder{o: o, dir: filepath.Join(root, "work"), clock: seed.clock}
 	o.run(root, "clone", "-q", up, "work")
+	o.run(work.dir, "symbolic-ref", "HEAD", "refs/heads/main")
 	o.run(work.dir, "config", "core.autocrlf", "false")
 	o.run(work.dir, "config", "user.name", "oracle")
 	o.run(work.dir, "config", "user.email", "oracle@example.com")

@@ -76,6 +76,7 @@ func ourUncleanTreeMerge(t *testing.T, dir, setting string) (string, []string, T
 }
 
 func TestUncleanDirectoryRenamesMatchGitMergeTree(t *testing.T) {
+	requireGitAtLeast(t, 2, 38, "merge-tree --write-tree")
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}

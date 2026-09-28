@@ -64,8 +64,9 @@ func TestOraclePruneKeepsResolveUndoAndAutostashObjectsLikeGit(t *testing.T) {
 	}
 	theirsSet := gitObjectSet(o.run(dir, "prune", "-n", "--expire=12.hours.ago"))
 	if !keepsAutostash {
-		t.Logf("the installed git predates rebase autostash roots and prunes %s, so it is left out of the comparison", stash)
-		theirsSet = slices.DeleteFunc(theirsSet, func(id string) bool { return id == stash })
+		t.Logf("the installed git predates rebase autostash roots and prunes %s with everything it holds, so they are left out of the comparison", stash)
+		reachable := gitObjectSet(o.run(dir, "rev-list", "--objects", stash))
+		theirsSet = slices.DeleteFunc(theirsSet, func(id string) bool { return slices.Contains(reachable, id) })
 	}
 	if len(ours) == 0 || !slices.Equal(ours, theirsSet) {
 		t.Fatalf("pruned objects differ:\nours   %v\ntheirs %v", ours, theirsSet)

@@ -314,6 +314,7 @@ func edited(content string, line int, replacement string) string {
 }
 
 func TestOurTreeMergeIsTheOneGitWrites(t *testing.T) {
+	requireGitAtLeast(t, 2, 38, "merge-tree --write-tree")
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skipf("git is not available: %v", err)
 	}

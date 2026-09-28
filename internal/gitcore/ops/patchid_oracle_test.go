@@ -30,6 +30,7 @@ func gitStablePatchID(t *testing.T, b *mergeBuilder, commit string) string {
 }
 
 func TestOracleOurPatchIDsAreGitsStablePatchIDs(t *testing.T) {
+	requireGitAtLeast(t, 2, 39, "today's stable patch id of a binary change")
 	o := newOracle(t)
 	b := &mergeBuilder{o: o, dir: o.repoDir("patch-id"), clock: mergeClockStart}
 	newOracleRepo(o, b.dir)

@@ -47,6 +47,7 @@ func typeConflictCases() []treeCase {
 }
 
 func TestOurTypeConflictMergeIsTheOneGitWrites(t *testing.T) {
+	requireGitAtLeast(t, 2, 38, "merge-tree --write-tree")
 	for _, c := range typeConflictCases() {
 		t.Run(c.name, func(t *testing.T) {
 			dir := buildBranches(t, c)
