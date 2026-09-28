@@ -1031,11 +1031,30 @@ func (a *App) theme() *widget.Theme {
 	a.mu.Lock()
 	accentOf := a.accentOf
 	a.mu.Unlock()
-	accent := accentOf()
-	if !accent.Known {
-		return base
+	return style.Custom(base, a.configuredColors(name, accentOf))
+}
+
+func (a *App) configuredColors(name string, accentOf func() systheme.Accent) style.Colors {
+	stored := a.cfg.UI.Colors
+	colors := style.Colors{}
+	if accent, ok := style.ParseColor(stored.Accent); ok {
+		colors.Accent = accent
+	} else if accent := accentOf(); accent.Known {
+		colors.Accent = accent.For(schemeOf(name))
 	}
-	return style.Tinted(base, accent.For(schemeOf(name)))
+	if surface, ok := style.ParseColor(stored.Surface); ok {
+		colors.Surface = surface
+	}
+	if field, ok := style.ParseColor(stored.Field); ok {
+		colors.Field = field
+	}
+	if text, ok := style.ParseColor(stored.Text); ok {
+		colors.Text = text
+	}
+	if secondary, ok := style.ParseColor(stored.Secondary); ok {
+		colors.Secondary = secondary
+	}
+	return colors
 }
 
 func schemeOf(name string) systheme.Scheme {

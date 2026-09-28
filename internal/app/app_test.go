@@ -13,6 +13,7 @@ import (
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/systheme"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 func newTestApp(t *testing.T) *App {
@@ -508,6 +509,63 @@ func TestWithoutASystemAccentThePresetIsLeftAlone(t *testing.T) {
 
 	if got := a.theme(); *got != *themeFor(config.ThemeDark) {
 		t.Fatal("a system that reports no accent must leave the theme of the preset")
+	}
+}
+
+func TestConfiguredAccentOverridesTheSystemAccent(t *testing.T) {
+	a := newTestApp(t)
+	systemAccent := color.RGBA{R: 0xA7, G: 0x3A, B: 0x8E, A: 0xFF}
+	a.SetSystemAccentDetector(func() systheme.Accent {
+		return systheme.Accent{Base: systemAccent, Light: systemAccent, Dark: systemAccent, Known: true}
+	})
+	a.SetTheme(config.ThemeDark)
+	a.cfg.UI.Colors.Accent = "#11AA33"
+
+	if got := a.theme().Accent; got != (color.RGBA{R: 0x11, G: 0xAA, B: 0x33, A: 0xFF}) {
+		t.Fatalf("accent = %v, want the configured colour", got)
+	}
+}
+
+func TestConfiguredSurfaceFieldTextAndSecondaryOverrideTheTheme(t *testing.T) {
+	a := newTestApp(t)
+	a.SetTheme(config.ThemeDark)
+	a.cfg.UI.Colors = config.Colors{
+		Surface:   "#101010",
+		Field:     "#202020",
+		Text:      "#EEEEEE",
+		Secondary: "#AAAAAA",
+	}
+
+	got := a.theme()
+	if got.WindowBG != (color.RGBA{R: 0x10, G: 0x10, B: 0x10, A: 0xFF}) {
+		t.Fatalf("surface = %v", got.WindowBG)
+	}
+	if got.InputBG != (color.RGBA{R: 0x20, G: 0x20, B: 0x20, A: 0xFF}) {
+		t.Fatalf("field = %v", got.InputBG)
+	}
+	if got.LabelText != (color.RGBA{R: 0xEE, G: 0xEE, B: 0xEE, A: 0xFF}) {
+		t.Fatalf("text = %v", got.LabelText)
+	}
+	if got.SecondaryText != (color.RGBA{R: 0xAA, G: 0xAA, B: 0xAA, A: 0xFF}) {
+		t.Fatalf("secondary = %v", got.SecondaryText)
+	}
+}
+
+func TestEmptyConfiguredColorsBehaveLikeBeforeTheColorEditorExisted(t *testing.T) {
+	a := newTestApp(t)
+	a.SetSystemAccentDetector(func() systheme.Accent { return systheme.Accent{} })
+	a.SetTheme(config.ThemeDark)
+
+	if got := a.theme(); *got != *themeFor(config.ThemeDark) {
+		t.Fatalf("theme = %+v, want the unmodified preset", *got)
+	}
+
+	rgb := color.RGBA{R: 0xE5, G: 0x9E, B: 0xDB, A: 0xFF}
+	sysAccent := systheme.Accent{Base: rgb, Light: rgb, Dark: rgb, Known: true}
+	a.SetSystemAccentDetector(func() systheme.Accent { return sysAccent })
+	want := style.Tinted(themeFor(config.ThemeDark), sysAccent.For(schemeOf(config.ThemeDark)))
+	if got := a.theme(); *got != *want {
+		t.Fatalf("theme = %+v, want %+v", *got, *want)
 	}
 }
 
