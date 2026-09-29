@@ -1,6 +1,8 @@
 package diff
 
 import (
+	"strings"
+
 	"slices"
 
 	"github.com/oops1/gogit/internal/gitcore/userdiff"
@@ -93,7 +95,7 @@ func getHunk(changes []change, from int, opts Options) (start, last int, ok bool
 
 func (e *env) line(s *source, at int, kind Kind) Line {
 	text, newline := s.record(at)
-	return Line{Kind: kind, Text: text, NoNewline: !newline}
+	return Line{Kind: kind, Text: strings.Clone(text), NoNewline: !newline}
 }
 
 func (e *env) emit(changes []change) []Hunk {
