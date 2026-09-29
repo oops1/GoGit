@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/metrics"
@@ -179,4 +182,37 @@ func TestTheAppCollectsTheGarbageOfAFinishedOperationWhileItIdles(t *testing.T) 
 	if freed != 1 {
 		t.Fatalf("an idle app with a large heap collected %d times, want once", freed)
 	}
+}
+
+func TestTheAppWritesAHeapProfileWhenTheHeapCrossesAThreshold(t *testing.T) {
+	a := newTestApp(t)
+	prevWrite, prevStats, prevHeap := writeHeapProfile, readMemStats, readHeapInUse
+	written := ""
+	writeHeapProfile = func(w io.Writer) error {
+		written = w.(*os.File).Name()
+		return nil
+	}
+	readMemStats = func(*runtime.MemStats) {}
+	readHeapInUse = func([]metrics.Sample) uint64 { return memoryFirstReport }
+	t.Cleanup(func() { writeHeapProfile, readMemStats, readHeapInUse = prevWrite, prevStats, prevHeap })
+
+	a.reportMemoryGrowth(time.Now())
+
+	if filepath.Dir(written) != filepath.Dir(a.paths.LogFile()) {
+		t.Fatalf("the profile went to %q, want it beside %q", written, a.paths.LogFile())
+	}
+	if _, err := os.Stat(written); err != nil {
+		t.Fatalf("the profile file is missing: %v", err)
+	}
+}
+
+func TestTheAppSurvivesAHeapProfileItCannotWrite(t *testing.T) {
+	a := newTestApp(t)
+	prevWrite, prevStats, prevHeap := writeHeapProfile, readMemStats, readHeapInUse
+	writeHeapProfile = func(io.Writer) error { return errors.New("no room") }
+	readMemStats = func(*runtime.MemStats) {}
+	readHeapInUse = func([]metrics.Sample) uint64 { return memoryFirstReport }
+	t.Cleanup(func() { writeHeapProfile, readMemStats, readHeapInUse = prevWrite, prevStats, prevHeap })
+
+	a.reportMemoryGrowth(time.Now())
 }

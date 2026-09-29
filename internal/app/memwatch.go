@@ -1,9 +1,13 @@
 package app
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"runtime/metrics"
+	"runtime/pprof"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -70,6 +74,7 @@ var (
 	readMemStats      = runtime.ReadMemStats
 	freeOSMemory      = debug.FreeOSMemory
 	startFreeOSMemory = func(free func()) { go free() }
+	writeHeapProfile  = pprof.WriteHeapProfile
 )
 
 func (a *App) reportMemoryGrowth(now time.Time) {
@@ -84,6 +89,7 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 	if !crossed {
 		return
 	}
+	a.dumpHeapProfile(now)
 	a.log.Warn("memory in use passed a threshold",
 		"threshold_mib", threshold>>20,
 		"heap_mib", stats.HeapAlloc>>20,
@@ -92,6 +98,21 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 		"collections", stats.NumGC,
 		"repository", a.openedPath(),
 		"running", a.runningTitleForLog())
+}
+
+func (a *App) dumpHeapProfile(now time.Time) {
+	path := filepath.Join(filepath.Dir(a.paths.LogFile()), "heap-"+now.Format("20060102-150405")+".pprof")
+	file, err := os.Create(path)
+	if err != nil {
+		a.log.Warn("heap profile could not be created", "path", path, "error", err)
+		return
+	}
+	err = errors.Join(writeHeapProfile(file), file.Close())
+	if err != nil {
+		a.log.Warn("heap profile could not be written", "path", path, "error", err)
+		return
+	}
+	a.log.Warn("heap profile written", "path", path)
 }
 
 func (a *App) returnUnusedMemory(stats runtime.MemStats) {
