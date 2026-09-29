@@ -65,7 +65,7 @@ release-local: build-windows build-linux
 	cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS && cd ..
 
 package-windows: build-windows
-	wix build packaging/windows/gogit.wxs -arch x64 \
+	wix build packaging/windows/gogit.wxs -arch x64 -ext WixToolset.UI.wixext \
 		-d ProductVersion=$(PACKAGE_VERSION) \
 		-d GogitExePath=dist/windows-amd64/$(BINARY).exe \
 		-o dist/gogit-$(VERSION)-windows-amd64.msi

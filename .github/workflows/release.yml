@@ -9,7 +9,41 @@ env:
   CGO_ENABLED: "0"
 
 jobs:
+  msi:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: install wix
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+          "$USERPROFILE/.dotnet/tools/wix" extension add -g WixToolset.UI.wixext/5.0.2
+      - name: build the executable
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cd cmd/gogit
+          go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64 --file-version "$version" --product-version "$version"
+          cd ../..
+          go build -trimpath -ldflags "-s -w -H windowsgui -X github.com/oops1/gogit/internal/version.Version=$GITHUB_REF_NAME" -o dist/windows-amd64/gogit.exe ./cmd/gogit
+      - name: build msi
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          wix build packaging/windows/gogit.wxs -arch x64 -ext WixToolset.UI.wixext             -d ProductVersion="$version"             -d GogitExePath=dist/windows-amd64/gogit.exe             -o "dist/gogit-$GITHUB_REF_NAME-windows-amd64.msi"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: dist/*.msi
+          if-no-files-found: error
+
   build:
+    needs: msi
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -56,13 +90,19 @@ jobs:
           tar czf ../gogit-${{ github.ref_name }}-linux-arm64.tar.gz gogit LICENSE NOTICE
           cd ../..
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-msi
+          path: dist
+
       - name: compute checksums
-        run: cd dist && sha256sum gogit-*.zip gogit-*.tar.gz > SHA256SUMS && cat SHA256SUMS
+        run: cd dist && sha256sum gogit-*.zip gogit-*.tar.gz gogit-*.msi > SHA256SUMS && cat SHA256SUMS
 
       - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/gogit-*.zip
             dist/gogit-*.tar.gz
+            dist/gogit-*.msi
             dist/SHA256SUMS
           body_path: RELEASE_NOTES.md

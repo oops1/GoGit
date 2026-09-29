@@ -1,62 +1,41 @@
-# Go.Git 1.6.0 — Stability
+# Go.Git 1.6.1 — The diff of a large file
 
-Compatibility with git from 2.30 to the current release is checked in CI on two
-systems, blame of a large file fits in memory, and the program now comes with
-installers.
+Comparing a large file no longer freezes the window, memory goes back to the
+system, and Windows gets an installer.
 
-## Compatibility with different versions of git
+## The diff of a large file
 
-- The oracle tests run against git 2.30.2, 2.39.2 and 2.47.1 on Windows and
-  Linux in a workflow of their own. Working through some sixty differences
-  found two real incompatibilities in our transport: the first line of a
-  reference advertisement may arrive without a capability list, and git before
-  2.31 sends nothing but a flush for an empty repository. Both used to be
-  treated as a protocol error, so cloning an empty repository from an older
-  server did not work.
-- The rest of the differences belong to git itself. The tests now either ask it
-  how it behaves or skip the comparison with an explanation instead of failing.
+- Opening the diff of `swagger.json` (30 000 lines) froze the window and pushed
+  the process past 2.7 GB. A heap profile taken from the running program named
+  the cause: **a single 1.275 GB buffer** inside the engine. The compare pane
+  draws a card under a block of lines and asks for a soft shadow under it, and
+  the engine allocated a bitmap the size of the whole card — for a 30 000 line
+  file that is a canvas 540 000 pixels tall, on every repaint. Fixed in the
+  engine (headless-gui v3.26.0, GG-92): the shadow is built from the visible
+  part only, the same card costs 1 MiB instead of 1.275 GB, and the picture is
+  unchanged.
+- A hunk line no longer holds the whole file: until now a single changed line
+  kept both versions of the file in memory, because it was a substring of the
+  file's text. On a commit with 810 files this frees tens of megabytes.
 
-## Blame and diff
+## Memory
 
-- Lines in the diff engine are no longer copies of the text: a file is held as
-  one buffer and a line is a range inside it. Blame of a large file takes
-  160 MiB in the internal benchmarks instead of 717 and 614 MiB, and a single
-  diff became lighter as well (4.1 MiB instead of 4.3, with fewer allocations).
-- The cache of restored pack objects grew from 16 MiB to 96 MiB, the default
-  git uses for `core.deltaBaseCacheLimit`, and that key is now read from the
-  repository configuration. On a 1.4 MB file with three hundred revisions blame
-  allocates 680 MiB instead of 1473 MiB.
-- The memory budgets are now ordinary tests: blame, diff and a long history
-  walk fail if their allocations grow.
+- The program gives unused memory back to the system and collects the garbage
+  of a finished operation while it idles, instead of keeping it until the next
+  heavy one. The collector has a 2 GiB limit, which the standard `GOMEMLIMIT`
+  overrides.
+- When memory crosses a threshold, a heap profile is written beside the log
+  (`heap-<date>-<time>.pprof`) — that is how the freeze was found.
 
-## File permissions
+## Windows installer
 
-- `.git/config` is written the way git writes it: a new file takes the
-  permissions of the process mask, an existing one keeps its own. We used to
-  force `0600` and took the access away from everyone else on a shared
-  repository.
-- The `0600` permissions of `config.toml`, `vault.bin` and the vault key file
-  are set explicitly and held by tests instead of depending on how temporary
-  files happen to be created.
+- The release now ships an MSI next to the archive: a wizard with a welcome
+  page, the licence and a folder of your choice, a Start menu shortcut, removal
+  through "Programs and Features" and a handler for `git://` links. Its
+  checksum is in the same `SHA256SUMS`.
 
-## Interface and settings
+## Settings
 
-- Branches pane: a local branch and its remote are one row with the divergence
-  counter, as in SmartGit, instead of two rows.
-- Settings and the vault survive a version upgrade: both have a migration point
-  and golden checks against files of earlier versions.
-- Heap growth is written to the log at thresholds, and `GOGIT_PPROF` opens a
-  profile on a loopback address, so a freeze can be studied from facts.
-
-## Installers and documentation
-
-- The packages are built by a workflow of their own: an MSI (WiX) with a
-  shortcut, an icon and a `git://` handler, `.deb` and `.rpm` through nfpm, and
-  an AppImage. On Linux the protocol association goes through a `.desktop` file
-  with `x-scheme-handler/git`.
-- `README.en.md` and the user guide `USER_GUIDE.md` are now in the repository.
-
-## Fuzzing
-
-- Twenty-four fuzz targets run on a schedule as separate jobs; a short round
-  over all of them finds nothing.
+- The colour fields no longer turn "the colour of the theme" into a chosen one
+  when the window opens: the engine learned a quiet setter (GG-91) and the
+  workaround is gone.

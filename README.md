@@ -17,7 +17,7 @@
   раскладка запоминается.
 - Локализация: русский и английский из коробки, любой другой язык — один JSON-файл.
 
-## Что уже умеет 1.6.0
+## Что уже умеет 1.6.1
 
 **Интерфейс.** Меню и панель инструментов повторяют SmartGit; панель
 настраивается в отдельном окне и хранится в `config.toml`. Док-панели:
@@ -100,10 +100,13 @@ go run ./cmd/gogit
 
 Windows-бинарь без консоли: `make build-windows`.
 
-Установщики (MSI, `.deb`, `.rpm`, AppImage) собирает отдельный workflow
-«packaging» (`.github/workflows/packaging.yml`, запускается по тегу `vX.Y.Z`
-или вручную); локально то же самое делают `make package-windows`,
-`make package-linux` и `make package-appimage`, см. `packaging/`.
+Релиз для Windows выходит и архивом, и установщиком MSI: мастер с выбором
+папки, ярлык в меню «Пуск», удаление через «Программы и компоненты» и
+обработчик ссылок `git://`. Пакеты для Linux (`.deb`, `.rpm`, AppImage)
+собирает отдельный workflow «packaging» (`.github/workflows/packaging.yml`,
+по тегу `vX.Y.Z` или вручную); локально то же самое делают
+`make package-windows`, `make package-linux` и `make package-appimage`,
+см. `packaging/`.
 
 ## Разработка
 

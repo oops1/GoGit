@@ -2,7 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
+	"io"
+	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/metrics"
 	"testing"
 	"time"
@@ -112,7 +116,7 @@ func TestTheMemoryWatchSamplesNoMoreOftenThanItsInterval(t *testing.T) {
 	}
 	t.Cleanup(func() { readHeapInUse = prev })
 
-	at := time.Now()
+	at := time.Now().Add(memorySampleEvery)
 	for range 100 {
 		watch.inUse(at)
 		at = at.Add(time.Millisecond)
@@ -132,4 +136,83 @@ func TestTheHeapReadingComesFromTheRuntimeAndSurvivesAnUnknownMetric(t *testing.
 	if got := heapInUseOf([]metrics.Sample{{Name: "/does/not/exist:bytes"}}); got != 0 {
 		t.Fatalf("an unknown metric gave %d, want 0", got)
 	}
+}
+
+func TestTheAppGivesUnusedMemoryBackOnlyWhenThereIsEnoughOfIt(t *testing.T) {
+	a := newTestApp(t)
+	freed := 0
+	unused := uint64(memoryKeptUnused - 1)
+	prevFree, prevStats, prevHeap := freeOSMemory, readMemStats, readHeapInUse
+	prevStart := startFreeOSMemory
+	startFreeOSMemory = func(free func()) { free() }
+	t.Cleanup(func() { startFreeOSMemory = prevStart })
+	freeOSMemory = func() { freed++ }
+	readMemStats = func(stats *runtime.MemStats) { stats.HeapIdle, stats.HeapReleased = unused, 0 }
+	readHeapInUse = func([]metrics.Sample) uint64 { return 1 }
+	t.Cleanup(func() { freeOSMemory, readMemStats, readHeapInUse = prevFree, prevStats, prevHeap })
+
+	at := time.Now()
+	a.reportMemoryGrowth(at)
+	if freed != 0 {
+		t.Fatalf("memory was given back while only %d bytes lay unused", unused)
+	}
+
+	unused = memoryKeptUnused
+	a.reportMemoryGrowth(at.Add(memorySampleEvery))
+	if freed != 1 {
+		t.Fatalf("the system got its memory back %d times, want once", freed)
+	}
+}
+
+func TestTheAppCollectsTheGarbageOfAFinishedOperationWhileItIdles(t *testing.T) {
+	a := newTestApp(t)
+	freed := 0
+	prevFree, prevStats, prevHeap := freeOSMemory, readMemStats, readHeapInUse
+	prevStart := startFreeOSMemory
+	startFreeOSMemory = func(free func()) { free() }
+	t.Cleanup(func() { startFreeOSMemory = prevStart })
+	freeOSMemory = func() { freed++ }
+	readMemStats = func(stats *runtime.MemStats) {
+		stats.HeapAlloc, stats.HeapIdle, stats.HeapReleased = memoryIdleHeap, 0, 0
+	}
+	readHeapInUse = func([]metrics.Sample) uint64 { return 1 }
+	t.Cleanup(func() { freeOSMemory, readMemStats, readHeapInUse = prevFree, prevStats, prevHeap })
+
+	a.reportMemoryGrowth(time.Now().Add(memorySampleEvery))
+	if freed != 1 {
+		t.Fatalf("an idle app with a large heap collected %d times, want once", freed)
+	}
+}
+
+func TestTheAppWritesAHeapProfileWhenTheHeapCrossesAThreshold(t *testing.T) {
+	a := newTestApp(t)
+	prevWrite, prevStats, prevHeap := writeHeapProfile, readMemStats, readHeapInUse
+	written := ""
+	writeHeapProfile = func(w io.Writer) error {
+		written = w.(*os.File).Name()
+		return nil
+	}
+	readMemStats = func(*runtime.MemStats) {}
+	readHeapInUse = func([]metrics.Sample) uint64 { return memoryFirstReport }
+	t.Cleanup(func() { writeHeapProfile, readMemStats, readHeapInUse = prevWrite, prevStats, prevHeap })
+
+	a.reportMemoryGrowth(time.Now().Add(memorySampleEvery))
+
+	if filepath.Dir(written) != filepath.Dir(a.paths.LogFile()) {
+		t.Fatalf("the profile went to %q, want it beside %q", written, a.paths.LogFile())
+	}
+	if _, err := os.Stat(written); err != nil {
+		t.Fatalf("the profile file is missing: %v", err)
+	}
+}
+
+func TestTheAppSurvivesAHeapProfileItCannotWrite(t *testing.T) {
+	a := newTestApp(t)
+	prevWrite, prevStats, prevHeap := writeHeapProfile, readMemStats, readHeapInUse
+	writeHeapProfile = func(io.Writer) error { return errors.New("no room") }
+	readMemStats = func(*runtime.MemStats) {}
+	readHeapInUse = func([]metrics.Sample) uint64 { return memoryFirstReport }
+	t.Cleanup(func() { writeHeapProfile, readMemStats, readHeapInUse = prevWrite, prevStats, prevHeap })
+
+	a.reportMemoryGrowth(time.Now().Add(memorySampleEvery))
 }

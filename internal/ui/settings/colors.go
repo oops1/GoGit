@@ -106,9 +106,6 @@ func (v *View) colorPickers() []*widget.ColorPicker {
 func (v *View) wireColorPickers(onAny func()) {
 	for at, picker := range v.colorPickers() {
 		picker.OnChanged = func(color.RGBA) {
-			if v.settingColors {
-				return
-			}
 			v.colorChosen[at] = true
 			v.refreshColorsPreview()
 			onAny()
@@ -124,15 +121,13 @@ func (v *View) wireColorPickers(onAny func()) {
 }
 
 func (v *View) applyColors(colors config.Colors) {
-	v.settingColors = true
 	for at, text := range []string{colors.Accent, colors.Surface, colors.Field, colors.Text, colors.Secondary} {
 		chosen, ok := style.ParseColor(text)
 		v.colorChosen[at] = ok
 		if ok {
-			v.colorPickers()[at].SetValue(chosen)
+			v.colorPickers()[at].SetValueQuiet(chosen)
 		}
 	}
-	v.settingColors = false
 	v.showThemeColors()
 }
 
@@ -161,13 +156,11 @@ func (v *View) restyleColors(p style.Palette) {
 
 func (v *View) showThemeColors() {
 	palette := style.Of(v.themeOrCurrent())
-	v.settingColors = true
 	for _, row := range v.colorRows() {
 		if !row.chosen {
-			row.picker.SetValue(row.from(palette))
+			row.picker.SetValueQuiet(row.from(palette))
 		}
 	}
-	v.settingColors = false
 	v.refreshColorsPreview()
 }
 

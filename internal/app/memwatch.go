@@ -1,9 +1,15 @@
 package app
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"runtime/metrics"
+	"runtime/pprof"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -11,11 +17,14 @@ const (
 	memoryFirstReport = 512 << 20
 	memoryStepFactor  = 2
 	memorySampleEvery = 30 * time.Second
+	memoryKeptUnused  = 256 << 20
+	memoryIdleHeap    = 512 << 20
 
 	heapInUseMetric = "/memory/classes/heap/objects:bytes"
 )
 
 type memoryWatch struct {
+	freeing atomic.Bool
 	mu      sync.Mutex
 	next    uint64
 	sample  []metrics.Sample
@@ -24,15 +33,16 @@ type memoryWatch struct {
 
 func newMemoryWatch() *memoryWatch {
 	return &memoryWatch{
-		next:   memoryFirstReport,
-		sample: []metrics.Sample{{Name: heapInUseMetric}},
+		next:    memoryFirstReport,
+		sample:  []metrics.Sample{{Name: heapInUseMetric}},
+		sampled: time.Now(),
 	}
 }
 
 func (m *memoryWatch) inUse(now time.Time) (uint64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.sampled.IsZero() && now.Sub(m.sampled) < memorySampleEvery {
+	if now.Sub(m.sampled) < memorySampleEvery {
 		return 0, false
 	}
 	m.sampled = now
@@ -61,8 +71,11 @@ func heapInUseOf(sample []metrics.Sample) uint64 {
 }
 
 var (
-	readHeapInUse = heapInUseOf
-	readMemStats  = runtime.ReadMemStats
+	readHeapInUse     = heapInUseOf
+	readMemStats      = runtime.ReadMemStats
+	freeOSMemory      = debug.FreeOSMemory
+	startFreeOSMemory = func(free func()) { go free() }
+	writeHeapProfile  = pprof.WriteHeapProfile
 )
 
 func (a *App) reportMemoryGrowth(now time.Time) {
@@ -70,12 +83,14 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 	if !sampled {
 		return
 	}
+	var stats runtime.MemStats
+	readMemStats(&stats)
+	a.returnUnusedMemory(stats)
 	threshold, crossed := a.memory.crossed(inUse)
 	if !crossed {
 		return
 	}
-	var stats runtime.MemStats
-	readMemStats(&stats)
+	a.dumpHeapProfile(now)
 	a.log.Warn("memory in use passed a threshold",
 		"threshold_mib", threshold>>20,
 		"heap_mib", stats.HeapAlloc>>20,
@@ -84,6 +99,44 @@ func (a *App) reportMemoryGrowth(now time.Time) {
 		"collections", stats.NumGC,
 		"repository", a.openedPath(),
 		"running", a.runningTitleForLog())
+}
+
+func (a *App) dumpHeapProfile(now time.Time) {
+	path := filepath.Join(filepath.Dir(a.paths.LogFile()), "heap-"+now.Format("20060102-150405")+".pprof")
+	file, err := os.Create(path)
+	if err != nil {
+		a.log.Warn("heap profile could not be created", "path", path, "error", err)
+		return
+	}
+	err = errors.Join(writeHeapProfile(file), file.Close())
+	if err != nil {
+		a.log.Warn("heap profile could not be written", "path", path, "error", err)
+		return
+	}
+	a.log.Warn("heap profile written", "path", path)
+}
+
+func (a *App) returnUnusedMemory(stats runtime.MemStats) {
+	unused := stats.HeapIdle - stats.HeapReleased
+	idle := stats.HeapAlloc >= memoryIdleHeap && !a.operationRunning()
+	if unused < memoryKeptUnused && !idle {
+		return
+	}
+	if !a.memory.freeing.CompareAndSwap(false, true) {
+		return
+	}
+	free := freeOSMemory
+	startFreeOSMemory(func() {
+		defer a.memory.freeing.Store(false)
+		free()
+		a.log.Info("unused memory was given back to the system",
+			"unused_mib", unused>>20, "heap_mib", stats.HeapAlloc>>20, "idle", idle)
+	})
+}
+
+func (a *App) operationRunning() bool {
+	title, _ := a.runningOperation()
+	return title != ""
 }
 
 func (a *App) openedPath() string {

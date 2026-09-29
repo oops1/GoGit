@@ -42,6 +42,7 @@ func run() error {
 	}
 	defer logger.Close()
 	diagnostics.StartProfiler(logger.Slog())
+	diagnostics.LimitMemory(logger.Slog())
 	if backup != "" {
 		logger.Slog().Warn("config file could not be read and was moved aside", "backup", backup)
 		localizeStartup(paths.UserI18NDir(), cfg.Language)
