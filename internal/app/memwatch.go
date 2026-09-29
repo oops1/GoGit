@@ -125,9 +125,10 @@ func (a *App) returnUnusedMemory(stats runtime.MemStats) {
 	if !a.memory.freeing.CompareAndSwap(false, true) {
 		return
 	}
+	free := freeOSMemory
 	startFreeOSMemory(func() {
 		defer a.memory.freeing.Store(false)
-		freeOSMemory()
+		free()
 		a.log.Info("unused memory was given back to the system",
 			"unused_mib", unused>>20, "heap_mib", stats.HeapAlloc>>20, "idle", idle)
 	})
