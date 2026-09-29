@@ -54,6 +54,7 @@ jobs:
         run: |
           dotnet tool install --global wix --version "$WIX_VERSION"
           echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+          "$USERPROFILE/.dotnet/tools/wix" extension add -g WixToolset.UI.wixext/5.0.2
 
       - name: build the executable
         env:
@@ -72,7 +73,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           NUMERIC: ${{ needs.version.outputs.numeric }}
         run: |
-          wix build packaging/windows/gogit.wxs -arch x64 \
+          wix build packaging/windows/gogit.wxs -arch x64 -ext WixToolset.UI.wixext \
             -d ProductVersion="$NUMERIC" \
             -d GogitExePath=dist/windows-amd64/gogit.exe \
             -o "dist/gogit-$VERSION-windows-amd64.msi"

@@ -34,6 +34,8 @@ github.com/oops1/headless-gui/v3 v3.23.0 h1:4GEXBzab3jIsvXf8xJsWdDzIc3L5wkFW89uQ
 github.com/oops1/headless-gui/v3 v3.23.0/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
 github.com/oops1/headless-gui/v3 v3.25.0 h1:eWyw/UHozczW62RJbr3UGVAFmKGpgMypwyw4cLbQ2X8=
 github.com/oops1/headless-gui/v3 v3.25.0/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
+github.com/oops1/headless-gui/v3 v3.26.0 h1:G4/I3vOhmImyzctsnvG2qTrDwEbMCwiCtcndPosSNnQ=
+github.com/oops1/headless-gui/v3 v3.26.0/go.mod h1:KfrQeckxm94JygZq21eM6fpaQCYhUkL1vrb71WY5to8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

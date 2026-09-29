@@ -81,7 +81,6 @@ type View struct {
 	colorSecondary        *widget.ColorPicker
 	colorsReset           *widget.Button
 	colorChosen           [5]bool
-	settingColors         bool
 	colorsPreview         *widget.Swatch
 	colorsPreviewField    *widget.Swatch
 	colorsPreviewAccent   *widget.Swatch

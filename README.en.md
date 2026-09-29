@@ -17,7 +17,7 @@ interface. An alternative to the paid SmartGit.
   window; the layout is remembered.
 - Localization: Russian and English out of the box, any other language is a single JSON file.
 
-## What 1.6.0 can already do
+## What 1.6.1 can already do
 
 **Interface.** The menu and toolbar mirror SmartGit; the toolbar is configured
 in a separate window and stored in `config.toml`. Dock panels:
@@ -101,11 +101,13 @@ go run ./cmd/gogit
 
 Console-free Windows binary: `make build-windows`.
 
-Installers (MSI, `.deb`, `.rpm`, AppImage) are built by a separate
-"packaging" workflow (`.github/workflows/packaging.yml`, triggered by a
-`vX.Y.Z` tag or manually); the same build is available locally through
-`make package-windows`, `make package-linux` and `make package-appimage`,
-see `packaging/`.
+The Windows release comes both as an archive and as an MSI installer: a
+wizard with a folder of your choice, a Start menu shortcut, removal through
+"Programs and Features" and a handler for `git://` links. The Linux packages
+(`.deb`, `.rpm`, AppImage) are built by a separate "packaging" workflow
+(`.github/workflows/packaging.yml`, triggered by a `vX.Y.Z` tag or manually);
+the same build is available locally through `make package-windows`,
+`make package-linux` and `make package-appimage`, see `packaging/`.
 
 ## Development
 

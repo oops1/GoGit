@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="Go.Git"
            Manufacturer="oops1"
            Version="$(var.ProductVersion)"
@@ -52,6 +53,11 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder" />
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUIBannerBmp" Value="packaging/windows/banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="packaging/windows/dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="packaging/windows/license.rtf" />
 
     <Feature Id="MainFeature" Title="Go.Git" Level="1">
       <ComponentRef Id="GogitExecutable" />
