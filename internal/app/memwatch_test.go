@@ -116,7 +116,7 @@ func TestTheMemoryWatchSamplesNoMoreOftenThanItsInterval(t *testing.T) {
 	}
 	t.Cleanup(func() { readHeapInUse = prev })
 
-	at := time.Now()
+	at := time.Now().Add(memorySampleEvery)
 	for range 100 {
 		watch.inUse(at)
 		at = at.Add(time.Millisecond)
@@ -178,7 +178,7 @@ func TestTheAppCollectsTheGarbageOfAFinishedOperationWhileItIdles(t *testing.T) 
 	readHeapInUse = func([]metrics.Sample) uint64 { return 1 }
 	t.Cleanup(func() { freeOSMemory, readMemStats, readHeapInUse = prevFree, prevStats, prevHeap })
 
-	a.reportMemoryGrowth(time.Now())
+	a.reportMemoryGrowth(time.Now().Add(memorySampleEvery))
 	if freed != 1 {
 		t.Fatalf("an idle app with a large heap collected %d times, want once", freed)
 	}
@@ -196,7 +196,7 @@ func TestTheAppWritesAHeapProfileWhenTheHeapCrossesAThreshold(t *testing.T) {
 	readHeapInUse = func([]metrics.Sample) uint64 { return memoryFirstReport }
 	t.Cleanup(func() { writeHeapProfile, readMemStats, readHeapInUse = prevWrite, prevStats, prevHeap })
 
-	a.reportMemoryGrowth(time.Now())
+	a.reportMemoryGrowth(time.Now().Add(memorySampleEvery))
 
 	if filepath.Dir(written) != filepath.Dir(a.paths.LogFile()) {
 		t.Fatalf("the profile went to %q, want it beside %q", written, a.paths.LogFile())
@@ -214,5 +214,5 @@ func TestTheAppSurvivesAHeapProfileItCannotWrite(t *testing.T) {
 	readHeapInUse = func([]metrics.Sample) uint64 { return memoryFirstReport }
 	t.Cleanup(func() { writeHeapProfile, readMemStats, readHeapInUse = prevWrite, prevStats, prevHeap })
 
-	a.reportMemoryGrowth(time.Now())
+	a.reportMemoryGrowth(time.Now().Add(memorySampleEvery))
 }

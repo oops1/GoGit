@@ -33,15 +33,16 @@ type memoryWatch struct {
 
 func newMemoryWatch() *memoryWatch {
 	return &memoryWatch{
-		next:   memoryFirstReport,
-		sample: []metrics.Sample{{Name: heapInUseMetric}},
+		next:    memoryFirstReport,
+		sample:  []metrics.Sample{{Name: heapInUseMetric}},
+		sampled: time.Now(),
 	}
 }
 
 func (m *memoryWatch) inUse(now time.Time) (uint64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.sampled.IsZero() && now.Sub(m.sampled) < memorySampleEvery {
+	if now.Sub(m.sampled) < memorySampleEvery {
 		return 0, false
 	}
 	m.sampled = now
