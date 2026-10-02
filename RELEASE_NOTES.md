@@ -1,41 +1,21 @@
-# Go.Git 1.6.1 — The diff of a large file
+# Go.Git 1.6.2 — Errors that stay
 
-Comparing a large file no longer freezes the window, memory goes back to the
-system, and Windows gets an installer.
+A failed operation is no longer lost, and a network failure while finishing a
+Git-Flow branch is named and comes with a way out.
 
-## The diff of a large file
+## Failed operations are written to the log
 
-- Opening the diff of `swagger.json` (30 000 lines) froze the window and pushed
-  the process past 2.7 GB. A heap profile taken from the running program named
-  the cause: **a single 1.275 GB buffer** inside the engine. The compare pane
-  draws a card under a block of lines and asks for a soft shadow under it, and
-  the engine allocated a bitmap the size of the whole card — for a 30 000 line
-  file that is a canvas 540 000 pixels tall, on every repaint. Fixed in the
-  engine (headless-gui v3.26.0, GG-92): the shadow is built from the visible
-  part only, the same card costs 1 MiB instead of 1.275 GB, and the picture is
-  unchanged.
-- A hunk line no longer holds the whole file: until now a single changed line
-  kept both versions of the file in memory, because it was a substring of the
-  file's text. On a commit with 810 files this frees tens of megabytes.
+- The error of any operation — fetch, push, Git-Flow, merge and the rest — used
+  to be visible only in the operation window and disappeared with it. It is now
+  written to `gogit.log` as `operation failed` with the operation's name and the
+  error text (passwords in addresses are cut out). A cancelled operation is not
+  counted as a failure.
 
-## Memory
+## A network failure while finishing Git-Flow
 
-- The program gives unused memory back to the system and collects the garbage
-  of a finished operation while it idles, instead of keeping it until the next
-  heavy one. The collector has a 2 GiB limit, which the standard `GOMEMLIMIT`
-  overrides.
-- When memory crosses a threshold, a heap profile is written beside the log
-  (`heap-<date>-<time>.pprof`) — that is how the freeze was found.
-
-## Windows installer
-
-- The release now ships an MSI next to the archive: a wizard with a welcome
-  page, the licence and a folder of your choice, a Start menu shortcut, removal
-  through "Programs and Features" and a handler for `git://` links. Its
-  checksum is in the same `SHA256SUMS`.
-
-## Settings
-
-- The colour fields no longer turn "the colour of the theme" into a chosen one
-  when the window opens: the engine learned a quiet setter (GG-91) and the
-  workaround is gone.
+- Finishing a feature, release or hotfix starts by fetching from the server. If
+  that fetch failed, the operation used to just end with an error, and it was
+  not clear that nothing in the repository had changed. The operation window
+  now says exactly that and then offers to finish without fetching — with a
+  warning that the push after finishing may be rejected if the server has newer
+  commits. The other settings of the finish dialog are kept for the retry.
