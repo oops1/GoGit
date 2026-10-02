@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/oops1/gogit/internal/gitcore/progress"
@@ -168,6 +169,9 @@ func (a *App) RunOperation(title string, body func(context.Context, OperationRep
 			defer resume()
 			err = body(ctx, reporter)
 		}()
+		if err != nil && !errors.Is(err, context.Canceled) {
+			a.log.Warn("operation failed", "operation", title, "error", redactError(err))
+		}
 		followUps := after.actions
 		a.Post(func() {
 			view.Finish(redactError(localizeOperationError(err)))

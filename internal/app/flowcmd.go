@@ -270,12 +270,25 @@ func (a *App) finishFlow(kind, name string, model flow.FinishModel) {
 		}
 		result, err := runFinishFlow(ctx, r, kind, name, opts)
 		reportFinishFlow(reporter, kind, name, result, err)
+		if errors.Is(err, ops.ErrFlowFetch) {
+			retry := model
+			retry.Fetch = false
+			reporter.Then(func() { a.offerFlowFinishWithoutFetch(kind, name, retry) })
+		}
 		opts.SkipTag = opts.SkipTag || result.KeptTag != ""
 		if err == nil && result.Finished() && !result.Pushed && opts.Network.Remote != "" {
 			reporter.Log(i18n.Tf("Operation.Log.FlowNotPushed", name))
 			reporter.Then(func() { a.offerFlowPush(kind, name, opts) })
 		}
 		return err
+	})
+}
+
+func (a *App) offerFlowFinishWithoutFetch(kind, name string, model flow.FinishModel) {
+	a.askConfirm(i18n.T("Dialog.FlowNoFetch.Title"), i18n.Tf("Dialog.FlowNoFetch.Message", name), func(ok bool) {
+		if ok {
+			a.finishFlow(kind, name, model)
+		}
 	})
 }
 
@@ -303,6 +316,8 @@ func reportFinishFlow(reporter OperationReporter, kind, name string, result ops.
 	switch {
 	case errors.Is(err, ops.ErrFlowBehind):
 		reporter.Log(i18n.T("Operation.Log.FlowBehind"))
+	case errors.Is(err, ops.ErrFlowFetch):
+		reporter.Log(i18n.T("Operation.Log.FlowFetchFailed"))
 	case err != nil:
 	case result.Finished():
 		reporter.Log(i18n.Tf(keys.finished, name))
