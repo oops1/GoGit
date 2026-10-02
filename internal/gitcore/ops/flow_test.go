@@ -651,8 +651,11 @@ func TestFinishReleaseReportsAFailedFetch(t *testing.T) {
 	startFlowRelease(t, r, "1.0", originFlow)
 	breakFlowRemote(t, r)
 
-	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Fetch: true, Network: originFlow}); err == nil {
-		t.Fatal("FinishFlow fetched from a remote that does not exist")
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Fetch: true, Network: originFlow}); !errors.Is(err, ErrFlowFetch) {
+		t.Fatalf("FinishFlow returned %v, want a failed fetch named as such", err)
+	}
+	if _, err := FinishFlow(t.Context(), r.repo, FlowKindRelease, "1.0", FinishFlowOptions{Network: originFlow}); err != nil {
+		t.Fatalf("finishing without the fetch returned %v", err)
 	}
 }
 

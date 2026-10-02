@@ -25,6 +25,7 @@ var (
 	ErrFlowNotConfigured = errors.New("ops: git-flow is not configured")
 	ErrFlowEmptyName     = errors.New("ops: git-flow name is empty")
 	ErrFlowBehind        = errors.New("ops: branch is behind its remote")
+	ErrFlowFetch         = errors.New("ops: the remote could not be fetched before finishing")
 	ErrFlowPending       = errors.New("ops: another git-flow finish is waiting")
 	ErrFlowState         = errors.New("ops: git-flow state is damaged")
 	ErrFlowKind          = errors.New("ops: git-flow has no such branch kind here")
@@ -476,7 +477,7 @@ func (f *flowFinisher) pushTexts() []string {
 
 func (f *flowFinisher) fetchTargets(targets []string) error {
 	if err := flowFetchTracked(f.ctx, f.r, f.net, targets...); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrFlowFetch, err)
 	}
 	for _, target := range targets {
 		if err := flowNotBehind(f.r, f.net, target); err != nil {

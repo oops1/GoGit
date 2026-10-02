@@ -3,9 +3,12 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -686,5 +689,76 @@ func TestBranchNamesAreEmptyWhenTheBranchesCannotBeRead(t *testing.T) {
 
 	if names := readOnDispatcher(t, a, func() []string { return a.localBranchNames(a.opened()) }); names != nil {
 		t.Fatalf("branch names = %v", names)
+	}
+}
+
+func TestAFailedFetchBeforeFinishingOffersToFinishWithoutIt(t *testing.T) {
+	a, _ := flowReadyApp(t, true)
+	views := captureOperationViews(t)
+	var mu sync.Mutex
+	var fetches []bool
+	prev := runFinishFlow
+	t.Cleanup(func() { runFinishFlow = prev })
+	runFinishFlow = func(_ context.Context, _ *gitrepo.Repository, _, _ string, opts ops.FinishFlowOptions) (ops.FinishFlowResult, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		fetches = append(fetches, opts.Fetch)
+		if opts.Fetch {
+			return ops.FinishFlowResult{}, fmt.Errorf("%w: connection reset", ops.ErrFlowFetch)
+		}
+		return ops.FinishFlowResult{}, nil
+	}
+	asked := make(chan string, 1)
+	a.askConfirm = func(title, _ string, cb func(bool)) {
+		asked <- title
+		cb(true)
+	}
+
+	runOnDispatcher(t, a, func() { a.finishFlow(ops.FlowKindRelease, "1.0", flow.FinishModel{Fetch: true}) })
+	lines := operationLines(t, a, views)
+	if !slices.Contains(lines, i18n.T("Operation.Log.FlowFetchFailed")) {
+		t.Fatalf("log = %v, want the failed fetch explained", lines)
+	}
+	select {
+	case title := <-asked:
+		if title != i18n.T("Dialog.FlowNoFetch.Title") {
+			t.Fatalf("asked %q", title)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("finishing without the fetch was never offered")
+	}
+	operationLines(t, a, views)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(fetches, []bool{true, false}) {
+		t.Fatalf("finish runs fetched %v, want the retry without fetching", fetches)
+	}
+}
+
+func TestAFailedOperationIsWrittenToTheLog(t *testing.T) {
+	a := newTestApp(t)
+	views := captureOperationViews(t)
+	logged := captureLog(a)
+
+	runOnDispatcher(t, a, func() {
+		a.RunOperation("Finish release 1.0", func(context.Context, OperationReporter) error {
+			return errors.New("network is down")
+		})
+	})
+	operationLines(t, a, views)
+	runOnDispatcher(t, a, func() {
+		a.RunOperation("Cancelled", func(context.Context, OperationReporter) error {
+			return context.Canceled
+		})
+	})
+	operationLines(t, a, views)
+
+	text := readOnDispatcher(t, a, logged.String)
+	if !strings.Contains(text, "operation failed") || !strings.Contains(text, "Finish release 1.0") || !strings.Contains(text, "network is down") {
+		t.Fatalf("log = %q, want the failed operation and its error", text)
+	}
+	if strings.Contains(text, "Cancelled") {
+		t.Fatalf("log = %q, a cancelled operation is not a failure", text)
 	}
 }
