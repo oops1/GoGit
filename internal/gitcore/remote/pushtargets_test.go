@@ -191,3 +191,54 @@ func TestPushTargetsPrefersPushURLsOverPlainOnes(t *testing.T) {
 		t.Fatalf("an empty remote has targets %v", empty.PushTargets())
 	}
 }
+
+func objectsInPack(t *testing.T, data []byte) int {
+	t.Helper()
+	if len(data) < 12 || string(data[:4]) != "PACK" {
+		t.Fatalf("pack = %q, want a pack header", data)
+	}
+	return int(data[8])<<24 | int(data[9])<<16 | int(data[10])<<8 | int(data[11])
+}
+
+func TestPushToAnAddressSendsWhatThatServerLacksNotWhatTheTrackingRefsClaim(t *testing.T) {
+	r, commit := repoWithMainBranch(t)
+	db := openTestODB(t, r)
+	store := openTestRefs(t, r, db)
+	setLocalBranch(t, store, refs.RemoteBranchName("origin", "main"), commit)
+
+	empty := &fakeSession{}
+	var sent []byte
+	empty.pushFunc = func(_ context.Context, req transport.PushRequest) (*transport.PushResult, error) {
+		sent = drainPack(t, req)
+		return &transport.PushResult{UnpackOK: true, Refs: []transport.RefStatus{{Name: "refs/heads/main", OK: true}}}, nil
+	}
+	withDialPerURL(t, func(string) (transport.Session, error) { return empty, nil })
+
+	rem := Remote{Name: "origin", PushURLs: []string{"fake://mirror"}}
+	if _, err := Push(t.Context(), r, rem, mainBranchPush(t)); err != nil {
+		t.Fatalf("Push returned error %v", err)
+	}
+	if got := objectsInPack(t, sent); got < 2 {
+		t.Fatalf("the pack carries %d objects, want the commit and its tree: the server advertised nothing, so a remote-tracking ref of another address says nothing about it", got)
+	}
+}
+
+func TestPushToAnAddressLeavesOutWhatThatServerAdvertises(t *testing.T) {
+	r, commit := repoWithMainBranch(t)
+
+	server := &fakeSession{adv: transport.Advertisement{Refs: []transport.Ref{{Name: "refs/heads/main", ID: commit}}}}
+	var sent []byte
+	server.pushFunc = func(_ context.Context, req transport.PushRequest) (*transport.PushResult, error) {
+		sent = drainPack(t, req)
+		return &transport.PushResult{UnpackOK: true, Refs: []transport.RefStatus{{Name: "refs/heads/other", OK: true}}}, nil
+	}
+	withDialPerURL(t, func(string) (transport.Session, error) { return server, nil })
+
+	opts := PushOptions{Refspecs: mustParseSpecs(t, "refs/heads/main:refs/heads/other")}
+	if _, err := Push(t.Context(), r, Remote{Name: "origin", PushURLs: []string{"fake://mirror"}}, opts); err != nil {
+		t.Fatalf("Push returned error %v", err)
+	}
+	if got := objectsInPack(t, sent); got != 0 {
+		t.Fatalf("the pack carries %d objects, want none: the server already has that commit", got)
+	}
+}

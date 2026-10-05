@@ -290,17 +290,10 @@ func TestIncludeTreeStopsOnACancelledContext(t *testing.T) {
 }
 
 func TestGatherHaveIDsIncludesPeeledTags(t *testing.T) {
-	r := newTestRepo(t, "")
-	db := openTestODB(t, r)
-	store := openTestRefs(t, r, db)
-	rem := Remote{Name: "origin"}
 	tagID := hash.SumSHA1("tag", []byte("tag"))
 	commitID := hash.SumSHA1("commit", []byte("commit"))
 	adv := transport.Advertisement{Refs: []transport.Ref{{Name: "refs/tags/v1", ID: tagID, Peeled: commitID}}}
-	ids, err := gatherHaveIDs(adv, store, rem)
-	if err != nil {
-		t.Fatalf("gatherHaveIDs returned error %v", err)
-	}
+	ids := gatherHaveIDs(adv)
 	if !containsID(ids, tagID) || !containsID(ids, commitID) {
 		t.Fatalf("gatherHaveIDs returned %v, want both the tag and its peeled commit", ids)
 	}
