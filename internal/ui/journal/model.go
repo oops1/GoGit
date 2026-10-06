@@ -27,12 +27,12 @@ func WalkOptions(maxCount int, hasRemotes bool) Options {
 
 func Load(ctx context.Context, source revision.Context, opts Options) iter.Seq2[Row, error] {
 	return func(yield func(Row, error) bool) {
-		head, err := startTip(source, opts)
+		tips, err := startTips(source, opts)
 		if err != nil {
 			yield(Row{}, err)
 			return
 		}
-		if head.IsZero() {
+		if len(tips) == 0 {
 			return
 		}
 		decorations, err := loadDecorations(source)
@@ -40,14 +40,14 @@ func Load(ctx context.Context, source revision.Context, opts Options) iter.Seq2[
 			yield(Row{}, err)
 			return
 		}
-		unpushed, err := loadUnpushed(ctx, source, head, opts)
+		unpushed, err := loadUnpushed(ctx, source, tips, opts)
 		if err != nil {
 			yield(Row{}, err)
 			return
 		}
 		walkOpts := opts.Walk
 		walkOpts.Context = source
-		walkOpts.Include = []hash.ObjectID{head}
+		walkOpts.Include = tips
 		for commit, err := range revision.Walk(ctx, walkOpts) {
 			if err != nil {
 				yield(Row{}, err)
@@ -101,14 +101,32 @@ func loadDecorations(source revision.Context) (map[hash.ObjectID][]Ref, error) {
 	return decorations, nil
 }
 
-func startTip(source revision.Context, opts Options) (hash.ObjectID, error) {
+func startTips(source revision.Context, opts Options) ([]hash.ObjectID, error) {
 	if !opts.Tip.IsZero() {
-		return opts.Tip, nil
+		return []hash.ObjectID{opts.Tip}, nil
 	}
-	return resolveHead(source)
+	var tips []hash.ObjectID
+	head, err := resolveHead(source)
+	if err != nil {
+		return nil, err
+	}
+	if !head.IsZero() {
+		tips = append(tips, head)
+	}
+	for _, prefix := range []string{refs.HeadsPrefix, refs.RemotesPrefix} {
+		for ref, err := range source.Refs.Prefix(prefix) {
+			if err != nil {
+				return nil, err
+			}
+			if !ref.Target.IsZero() {
+				tips = append(tips, ref.Target)
+			}
+		}
+	}
+	return tips, nil
 }
 
-func loadUnpushed(ctx context.Context, source revision.Context, head hash.ObjectID, opts Options) (map[hash.ObjectID]struct{}, error) {
+func loadUnpushed(ctx context.Context, source revision.Context, tips []hash.ObjectID, opts Options) (map[hash.ObjectID]struct{}, error) {
 	local := make(map[hash.ObjectID]struct{})
 	if !opts.HasRemotes {
 		return local, nil
@@ -119,7 +137,7 @@ func loadUnpushed(ctx context.Context, source revision.Context, head hash.Object
 	}
 	walk := opts.Walk
 	walk.Context = source
-	walk.Include = []hash.ObjectID{head}
+	walk.Include = tips
 	walk.Exclude = remotes
 	for commit, err := range revision.Walk(ctx, walk) {
 		if err != nil {

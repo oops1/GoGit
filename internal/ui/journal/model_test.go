@@ -539,10 +539,14 @@ func TestARemoteListThatCannotBeReadStopsTheJournal(t *testing.T) {
 	failure := errors.New("no remotes for you")
 
 	source := revision.Context{Objects: db, Refs: prefixErrorRefs{inner: store, prefix: refs.RemotesPrefix, err: failure}}
-	_, err := collectRows(t, Load(t.Context(), source, WalkOptions(10, true)))
-
-	if !errors.Is(err, failure) {
-		t.Fatalf("err = %v, want %v", err, failure)
+	for name, opts := range map[string]Options{
+		"all branches": WalkOptions(10, true),
+		"a chosen tip": {Walk: WalkOptions(10, true).Walk, HasRemotes: true, Tip: id},
+	} {
+		_, err := collectRows(t, Load(t.Context(), source, opts))
+		if !errors.Is(err, failure) {
+			t.Fatalf("%s: err = %v, want %v", name, err, failure)
+		}
 	}
 }
 
@@ -626,5 +630,111 @@ func TestAHistoryThatCannotBeReadWhileLookingForLocalCommitsIsReported(t *testin
 
 	if !errors.Is(err, failure) {
 		t.Fatalf("err = %v, want %v", err, failure)
+	}
+}
+
+func rowIDs(rows []Row) []hash.ObjectID {
+	ids := make([]hash.ObjectID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
+}
+
+func TestWithoutAChosenBranchTheJournalShowsEveryLocalAndRemoteBranch(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	base := putCommit(t, db, tree, timeAt(1700000000), "ann", "base")
+	checkedOut := putCommit(t, db, tree, timeAt(1700000060), "ann", "on the checked out branch", base)
+	elsewhere := putCommit(t, db, tree, timeAt(1700000120), "ann", "on another local branch", base)
+	incoming := putCommit(t, db, tree, timeAt(1700000180), "ann", "only on the server", base)
+	setRef(t, store, refs.BranchName("main"), checkedOut)
+	setRef(t, store, refs.HEAD, checkedOut)
+	setRef(t, store, refs.BranchName("topic"), elsewhere)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), incoming)
+	source := revision.Context{Objects: db, Refs: store}
+
+	rows, err := collectRows(t, Load(t.Context(), source, WalkOptions(50, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := rowIDs(rows)
+	for name, id := range map[string]hash.ObjectID{"checked out": checkedOut, "other local": elsewhere, "server only": incoming, "shared base": base} {
+		if !slices.Contains(got, id) {
+			t.Fatalf("the journal of all branches lacks the %s commit: %v", name, got)
+		}
+	}
+	if len(got) != 4 {
+		t.Fatalf("rows = %d, want each commit once: %v", len(got), got)
+	}
+}
+
+func TestAChosenBranchStillNarrowsTheJournalToItsOwnHistory(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	base := putCommit(t, db, tree, timeAt(1700000000), "ann", "base")
+	mine := putCommit(t, db, tree, timeAt(1700000060), "ann", "mine", base)
+	theirs := putCommit(t, db, tree, timeAt(1700000120), "ann", "theirs", base)
+	setRef(t, store, refs.BranchName("main"), mine)
+	setRef(t, store, refs.HEAD, mine)
+	setRef(t, store, refs.BranchName("topic"), theirs)
+	source := revision.Context{Objects: db, Refs: store}
+
+	rows, err := collectRows(t, Load(t.Context(), source, Options{Tip: theirs}))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := rowIDs(rows); !slices.Equal(got, []hash.ObjectID{theirs, base}) {
+		t.Fatalf("the journal of one branch visited %v, want only its own history", got)
+	}
+}
+
+func TestACommitOfAnotherLocalBranchTheServerLacksIsMarkedAsLocal(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	pushed := putCommit(t, db, tree, timeAt(1700000000), "ann", "pushed")
+	unpushed := putCommit(t, db, tree, timeAt(1700000060), "ann", "on a branch nobody pushed", pushed)
+	setRef(t, store, refs.BranchName("main"), pushed)
+	setRef(t, store, refs.HEAD, pushed)
+	setRef(t, store, refs.BranchName("topic"), unpushed)
+	setRef(t, store, refs.RemoteBranchName("origin", "main"), pushed)
+
+	rows, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, WalkOptions(10, true)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	marked := map[hash.ObjectID]bool{}
+	for _, row := range rows {
+		marked[row.ID] = row.Unpushed
+	}
+	if !marked[unpushed] || marked[pushed] {
+		t.Fatalf("unpushed marks = %v, want only the commit of the unpushed branch", marked)
+	}
+}
+
+func TestAnUnreadableBranchRefStopsTheJournalWithItsError(t *testing.T) {
+	r := initTestRepo(t, "main")
+	db := openTestDB(t, r)
+	store := openTestStore(t, r, db)
+	tree := putTree(t, db)
+	id := putCommit(t, db, tree, timeAt(1700000000), "ann", "root")
+	setRef(t, store, refs.BranchName("main"), id)
+	corrupt := filepath.Join(r.CommonDir(), "refs", "heads", "broken")
+	if err := os.WriteFile(corrupt, []byte("not-a-hash\n"), 0o666); err != nil {
+		t.Fatalf("WriteFile returned error %v", err)
+	}
+
+	_, err := collectRows(t, Load(t.Context(), revision.Context{Objects: db, Refs: store}, Options{}))
+	if !errors.Is(err, refs.ErrMalformedRef) {
+		t.Fatalf("Load returned %v, want ErrMalformedRef", err)
 	}
 }
