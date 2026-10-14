@@ -140,8 +140,8 @@ func TestHeaderClickWithoutMovementOpensTheColumnMenu(t *testing.T) {
 	if !g.HasOverlay() {
 		t.Fatal("clicking a header without moving must open the column menu")
 	}
-	if g.Bounds() == g.BaseBounds() {
-		t.Fatal("Bounds must expand to include the open menu")
+	if open := g.menu.OverlayBounds(); open.Empty() || !open.In(g.Bounds()) {
+		t.Fatalf("Bounds %v must include the open menu %v", g.Bounds(), open)
 	}
 }
 
