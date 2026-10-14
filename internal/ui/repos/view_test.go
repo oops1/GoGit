@@ -540,9 +540,9 @@ func TestRenderShowsAheadBadgeOnlyForTheActiveRepository(t *testing.T) {
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	want := "Main " + i18n.Tf("Status.Ahead", 2)
-	if item.DisplayText() != want {
-		t.Fatalf("text = %q, want %q", item.DisplayText(), want)
+	want := i18n.Tf("Status.Ahead", 2)
+	if item.DisplayText() != "Main" || item.Detail != want {
+		t.Fatalf("text = %q, detail = %q, want %q and %q", item.DisplayText(), item.Detail, "Main", want)
 	}
 }
 
@@ -559,9 +559,9 @@ func TestRenderShowsBehindBadgeForTheActiveRepository(t *testing.T) {
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	want := "Main " + i18n.Tf("Status.Behind", 3)
-	if item.DisplayText() != want {
-		t.Fatalf("text = %q, want %q", item.DisplayText(), want)
+	want := i18n.Tf("Status.Behind", 3)
+	if item.DisplayText() != "Main" || item.Detail != want {
+		t.Fatalf("text = %q, detail = %q, want %q and %q", item.DisplayText(), item.Detail, "Main", want)
 	}
 }
 
@@ -578,9 +578,9 @@ func TestRenderShowsDivergedBadgeForTheActiveRepository(t *testing.T) {
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	want := "Main " + i18n.Tf("Status.Diverged", 1, 2)
-	if item.DisplayText() != want {
-		t.Fatalf("text = %q, want %q", item.DisplayText(), want)
+	want := i18n.Tf("Status.Diverged", 1, 2)
+	if item.DisplayText() != "Main" || item.Detail != want {
+		t.Fatalf("text = %q, detail = %q, want %q and %q", item.DisplayText(), item.Detail, "Main", want)
 	}
 }
 
@@ -597,8 +597,8 @@ func TestRenderOmitsTheBadgeWithoutAnUpstream(t *testing.T) {
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	if item.DisplayText() != "Main" {
-		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	if item.DisplayText() != "Main" || item.Detail != "" {
+		t.Fatalf("text = %q, detail = %q, want a bare %q", item.DisplayText(), item.Detail, "Main")
 	}
 }
 
@@ -615,8 +615,8 @@ func TestRenderOmitsTheBadgeWhenUpToDate(t *testing.T) {
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	if item.DisplayText() != "Main" {
-		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	if item.DisplayText() != "Main" || item.Detail != "" {
+		t.Fatalf("text = %q, detail = %q, want a bare %q", item.DisplayText(), item.Detail, "Main")
 	}
 }
 
@@ -630,8 +630,8 @@ func TestRenderOmitsTheBadgeForAnInactiveRepositoryEvenWithDivergence(t *testing
 	if !ok {
 		t.Fatal("item not tracked")
 	}
-	if item.DisplayText() != "Main" {
-		t.Fatalf("text = %q, want %q", item.DisplayText(), "Main")
+	if item.DisplayText() != "Main" || item.Detail != "" {
+		t.Fatalf("text = %q, detail = %q, want a bare %q", item.DisplayText(), item.Detail, "Main")
 	}
 }
 

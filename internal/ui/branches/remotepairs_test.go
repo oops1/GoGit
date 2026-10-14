@@ -150,7 +150,10 @@ func TestViewShowsDivergenceOnAMergedLocalRemoteRow(t *testing.T) {
 	v.SetDivergence(map[refs.Name]repo.Divergence{refs.BranchName("develop"): {Ahead: 3, Behind: 1}})
 
 	local, _, _ := roots(t, tw)
-	findChild(t, local, "develop = origin ↑3 ↓1")
+	item := findChild(t, local, "develop = origin")
+	if item.Detail != "↑3 ↓1" {
+		t.Fatalf("detail = %q, want the counter of the merged row", item.Detail)
+	}
 }
 
 func TestViewLeavesAnUnmatchedRemoteBranchAsItsOwnRowInFlowSection(t *testing.T) {
