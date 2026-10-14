@@ -21,7 +21,10 @@ func waitForBranchLabel(t *testing.T, a *App, ref refs.Name, want string) {
 			if !ok {
 				return ""
 			}
-			return item.DisplayText()
+			if item.Detail == "" {
+				return item.DisplayText()
+			}
+			return item.DisplayText() + " " + item.Detail
 		})
 		if last == want {
 			return

@@ -30,7 +30,8 @@ func (a *App) openConsole() {
 
 func (a *App) runConsoleCommand(view *console.View, line string) {
 	if a.opened() == nil {
-		view.Finish("", console.ErrNoRepository)
+		out, err := runConsoleLine(context.Background(), console.Env{}, line)
+		view.Finish(out, err)
 		return
 	}
 	var out string

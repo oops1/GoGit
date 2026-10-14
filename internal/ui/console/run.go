@@ -3,7 +3,6 @@ package console
 import (
 	"context"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -117,8 +116,8 @@ func Run(ctx context.Context, env Env, line string) (string, error) {
 	if cmd.Empty() {
 		return "", nil
 	}
-	if cmd.Name == "help" {
-		return strings.Join(Names(), "\n"), nil
+	if cmd.Name == helpCommand {
+		return runHelp(cmd.Args)
 	}
 	fn, ok := commands[cmd.Name]
 	if !ok {

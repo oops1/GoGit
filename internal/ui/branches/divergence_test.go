@@ -64,20 +64,20 @@ func TestDivergenceSuffixFormatsAheadBehindAndBoth(t *testing.T) {
 		want string
 	}{
 		{"none", repo.Divergence{}, ""},
-		{"ahead", repo.Divergence{Ahead: 3}, " ↑3"},
-		{"behind", repo.Divergence{Behind: 1}, " ↓1"},
-		{"both", repo.Divergence{Ahead: 3, Behind: 1}, " ↑3 ↓1"},
+		{"ahead", repo.Divergence{Ahead: 3}, "↑3"},
+		{"behind", repo.Divergence{Behind: 1}, "↓1"},
+		{"both", repo.Divergence{Ahead: 3, Behind: 1}, "↑3 ↓1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := divergenceSuffix(c.in); got != c.want {
-				t.Fatalf("divergenceSuffix(%+v) = %q, want %q", c.in, got, c.want)
+			if got := divergenceDetail(c.in); got != c.want {
+				t.Fatalf("divergenceDetail(%+v) = %q, want %q", c.in, got, c.want)
 			}
 		})
 	}
 }
 
-func TestViewAppendsDivergenceSuffixToADivergedLocalBranch(t *testing.T) {
+func TestViewDrawsTheDivergenceAsTheDetailOfADivergedLocalBranch(t *testing.T) {
 	v, tw := bound(t)
 	snap := Snapshot{
 		Current: "main",
@@ -93,17 +93,20 @@ func TestViewAppendsDivergenceSuffixToADivergedLocalBranch(t *testing.T) {
 	})
 
 	local, _, _ := roots(t, tw)
-	item := findChild(t, local, "develop ↑3 ↓1")
-	if item.Foreground != v.secondary {
-		t.Fatalf("Foreground = %v, want the muted secondary colour %v", item.Foreground, v.secondary)
+	item := findChild(t, local, "develop")
+	if item.Detail != "↑3 ↓1" || item.DetailColor != v.secondary {
+		t.Fatalf("detail = %q in %v, want the counter in the muted secondary colour %v", item.Detail, item.DetailColor, v.secondary)
+	}
+	if item.Foreground.A != 0 {
+		t.Fatalf("the branch name must keep the theme colour, got %v", item.Foreground)
 	}
 	main := findChild(t, local, "main")
-	if main.Foreground.A != 0 {
-		t.Fatalf("a branch without divergence must keep the theme colour, got %v", main.Foreground)
+	if main.Detail != "" {
+		t.Fatalf("a branch without divergence must have no detail, got %q", main.Detail)
 	}
 }
 
-func TestViewClearsDivergenceSuffixWhenBranchesMatchAgain(t *testing.T) {
+func TestViewClearsTheDivergenceDetailWhenBranchesMatchAgain(t *testing.T) {
 	v, tw := bound(t)
 	snap := Snapshot{Local: []Branch{{Name: refs.BranchName("develop"), Target: oid(t, "11")}}}
 	v.Render(snap)
@@ -113,8 +116,8 @@ func TestViewClearsDivergenceSuffixWhenBranchesMatchAgain(t *testing.T) {
 
 	local, _, _ := roots(t, tw)
 	item := findChild(t, local, "develop")
-	if item.Foreground.A != 0 {
-		t.Fatalf("Foreground = %v, want the theme colour once divergence clears", item.Foreground)
+	if item.Detail != "" {
+		t.Fatalf("detail = %q, want none once divergence clears", item.Detail)
 	}
 }
 
@@ -128,8 +131,8 @@ func TestRestyleChangesTheMutedColourAndRerendersExistingDivergence(t *testing.T
 	v.Restyle(theme)
 
 	local, _, _ := roots(t, tw)
-	item := findChild(t, local, "develop ↑1")
-	if item.Foreground != theme.SecondaryText {
-		t.Fatalf("Foreground = %v, want the restyled secondary colour %v", item.Foreground, theme.SecondaryText)
+	item := findChild(t, local, "develop")
+	if item.Detail != "↑1" || item.DetailColor != theme.SecondaryText {
+		t.Fatalf("detail = %q in %v, want the counter in the restyled secondary colour %v", item.Detail, item.DetailColor, theme.SecondaryText)
 	}
 }

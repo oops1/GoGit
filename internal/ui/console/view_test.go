@@ -29,6 +29,7 @@ func fullNamedWidgets() map[string]widget.Widget {
 		"output": widget.NewDataGridWidget(),
 		"input":  NewInput(),
 		"hint":   widget.NewLabel("", widget.CurrentTheme().LabelText),
+		"help":   widget.NewButton(""),
 		"clear":  widget.NewButton(""),
 		"close":  widget.NewButton(""),
 	}
@@ -387,5 +388,62 @@ func TestADrawnRowThatIsNotALineIsSkipped(t *testing.T) {
 
 	if len(dc.texts) != 0 {
 		t.Fatalf("texts = %#v", dc.texts)
+	}
+}
+
+func TestTheHelpButtonAsksForTheReference(t *testing.T) {
+	v := newTestView(t)
+	var asked []string
+	v.OnSubmit = func(line string) { asked = append(asked, line) }
+
+	v.helpBtn.OnClick()
+
+	if len(asked) != 1 || asked[0] != helpCommand {
+		t.Fatalf("asked = %q", asked)
+	}
+	if got := v.Lines(); len(got) != 1 || got[0] != (Line{Text: promptPrefix + helpCommand, Kind: LineCommand}) {
+		t.Fatalf("lines = %#v", got)
+	}
+	if !v.Busy() || v.helpBtn.IsEnabled() {
+		t.Fatal("the help button must wait for the answer")
+	}
+	if got := v.History(); len(got) != 1 || got[0] != helpCommand {
+		t.Fatalf("history = %q", got)
+	}
+}
+
+func TestTheHelpButtonDoesNothingWhileACommandRuns(t *testing.T) {
+	v := newTestView(t)
+	var asked []string
+	v.OnSubmit = func(line string) { asked = append(asked, line) }
+	v.SetText("status")
+	v.input.OnEnter()
+
+	v.ShowHelp()
+
+	if len(asked) != 1 {
+		t.Fatalf("asked = %q", asked)
+	}
+}
+
+func TestTheHelpButtonDoesNothingWithoutAListener(t *testing.T) {
+	v := newTestView(t)
+
+	v.ShowHelp()
+
+	if v.Busy() || len(v.Lines()) != 0 {
+		t.Fatalf("busy = %v, lines = %#v", v.Busy(), v.Lines())
+	}
+}
+
+func TestTheHelpButtonComesBackWhenTheAnswerArrives(t *testing.T) {
+	v := newTestView(t)
+	v.OnSubmit = func(string) {}
+	v.ShowHelp()
+
+	v.Finish("log — history", nil)
+
+	if !v.helpBtn.IsEnabled() || v.Busy() {
+		t.Fatal("the help button must be usable again")
 	}
 }

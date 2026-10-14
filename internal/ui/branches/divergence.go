@@ -31,14 +31,14 @@ func DivergencePairs(s Snapshot) []repo.BranchPair {
 	return pairs
 }
 
-func divergenceSuffix(d repo.Divergence) string {
+func divergenceDetail(d repo.Divergence) string {
 	switch {
 	case d.Ahead > 0 && d.Behind > 0:
-		return " " + i18n.Tf("Status.Diverged", d.Ahead, d.Behind)
+		return i18n.Tf("Status.Diverged", d.Ahead, d.Behind)
 	case d.Ahead > 0:
-		return " " + i18n.Tf("Status.Ahead", d.Ahead)
+		return i18n.Tf("Status.Ahead", d.Ahead)
 	case d.Behind > 0:
-		return " " + i18n.Tf("Status.Behind", d.Behind)
+		return i18n.Tf("Status.Behind", d.Behind)
 	default:
 		return ""
 	}

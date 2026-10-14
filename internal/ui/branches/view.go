@@ -402,15 +402,11 @@ func (v *View) leafItem(e pathEntry, segment string) *treeview.TreeViewItem {
 	if e.trackedRemote != "" {
 		label = i18n.Tf("Pane.Branches.TracksRemote", label, e.trackedRemote)
 	}
-	diverged := false
-	if d, ok := v.divergence[e.ref]; ok {
-		label += divergenceSuffix(d)
-		diverged = true
-	}
 	item := treeview.NewItem(label)
 	item.Icon = icons.Tree(e.icon, treeIconSize)
-	if diverged {
-		item.Foreground = v.secondary
+	if d, ok := v.divergence[e.ref]; ok {
+		item.Detail = divergenceDetail(d)
+		item.DetailColor = v.secondary
 	}
 	v.track(item, e.ref)
 	return item

@@ -311,7 +311,10 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 	items := make([]*treeview.TreeViewItem, 0, len(nodes))
 	for _, n := range nodes {
 		st := state[n.ID]
-		item := treeview.NewItem(displayName(n, st, n.ID == activeID))
+		item := treeview.NewItem(displayName(n, st))
+		if n.ID == activeID {
+			item.Detail = divergenceDetail(st)
+		}
 		v.idByItem[item] = n.ID
 		v.itemByID[n.ID] = item
 		v.kindByID[n.ID] = n.Kind
@@ -334,27 +337,24 @@ func (v *View) buildItemsLocked(nodes []*repo.Node, state map[string]State, acti
 	return items
 }
 
-func displayName(n *repo.Node, st State, active bool) string {
+func displayName(n *repo.Node, st State) string {
 	name := n.Name
 	if st.Branch != "" && n.Kind != repo.KindGroup {
 		name += " (" + st.Branch + ")"
 	}
-	if active {
-		name += divergenceBadge(st)
-	}
 	return name
 }
 
-func divergenceBadge(st State) string {
+func divergenceDetail(st State) string {
 	switch {
 	case !st.HasUpstream:
 		return ""
 	case st.Ahead > 0 && st.Behind > 0:
-		return " " + i18n.Tf("Status.Diverged", st.Ahead, st.Behind)
+		return i18n.Tf("Status.Diverged", st.Ahead, st.Behind)
 	case st.Ahead > 0:
-		return " " + i18n.Tf("Status.Ahead", st.Ahead)
+		return i18n.Tf("Status.Ahead", st.Ahead)
 	case st.Behind > 0:
-		return " " + i18n.Tf("Status.Behind", st.Behind)
+		return i18n.Tf("Status.Behind", st.Behind)
 	default:
 		return ""
 	}

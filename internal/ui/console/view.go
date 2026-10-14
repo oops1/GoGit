@@ -47,6 +47,7 @@ type View struct {
 	output   *widget.DataGridWidget
 	input    *Input
 	hint     *widget.Label
+	helpBtn  *widget.Button
 	clearBtn *widget.Button
 	closeBtn *widget.Button
 
@@ -84,7 +85,7 @@ func (v *View) Dialog() *widget.Dialog { return v.dlg }
 
 func (v *View) Restyle(t *widget.Theme) {
 	p := style.Of(t)
-	p.Quiet(v.clearBtn, v.closeBtn)
+	p.Quiet(v.helpBtn, v.clearBtn, v.closeBtn)
 	p.Hints(v.hint)
 	p.Fields(v.input.TextInput)
 	v.applyColors(t)
@@ -107,6 +108,9 @@ func (v *View) bind(named map[string]widget.Widget) error {
 	}
 	if v.hint, ok = named["hint"].(*widget.Label); !ok {
 		return fmt.Errorf("%w: hint", ErrWidgetMissing)
+	}
+	if v.helpBtn, ok = named["help"].(*widget.Button); !ok {
+		return fmt.Errorf("%w: help", ErrWidgetMissing)
 	}
 	if v.clearBtn, ok = named["clear"].(*widget.Button); !ok {
 		return fmt.Errorf("%w: clear", ErrWidgetMissing)
@@ -131,6 +135,7 @@ func (v *View) wire() {
 	v.input.OnEnter = v.Submit
 	v.input.OnPrevious = v.showPrevious
 	v.input.OnNext = v.showNext
+	v.helpBtn.OnClick = v.ShowHelp
 	v.clearBtn.OnClick = v.Clear
 	v.closeBtn.OnClick = v.close
 	v.dlg.CancelAction = v.close
@@ -167,8 +172,19 @@ func (v *View) Submit() {
 	if line == "" {
 		return
 	}
-	v.history.Add(line)
 	v.input.SetText("")
+	v.run(line)
+}
+
+func (v *View) ShowHelp() {
+	if v.busy || v.OnSubmit == nil {
+		return
+	}
+	v.run(helpCommand)
+}
+
+func (v *View) run(line string) {
+	v.history.Add(line)
 	v.append(Line{Text: promptPrefix + line, Kind: LineCommand})
 	v.setBusy(true)
 	v.OnSubmit(line)
@@ -240,6 +256,7 @@ func (v *View) setBusy(busy bool) {
 }
 
 func (v *View) refresh() {
+	v.helpBtn.SetEnabled(!v.busy)
 	v.clearBtn.SetEnabled(!v.busy && len(v.lines) > 0)
 	key := "Dialog.Console.Hint.Ready"
 	if v.busy {
