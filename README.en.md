@@ -17,14 +17,14 @@ interface. An alternative to the paid SmartGit.
   window; the layout is remembered.
 - Localization: Russian and English out of the box, any other language is a single JSON file.
 
-## What 1.6.3 can already do
+## What 1.6.4 can already do
 
 **Interface.** The menu and toolbar mirror SmartGit; the toolbar is configured
 in a separate window and stored in `config.toml`. Dock panels:
 repositories, branches, files, diff, commit log. Theme — light, dark, or
 matching the system, with an accent from the OS settings; custom accent, background, field
 and text colors are set in the settings. The built-in console executes a subset of
-git commands with our own engine, without system git.
+git commands with our own engine, without system git; `help` shows the reference and examples.
 
 **Working with history.** Cloning over HTTPS, SSH, `git://` and from a local
 path; fetch, push, pull and sync; remote management. Merge, rebase
