@@ -213,3 +213,32 @@ func TestTheConsoleCarriesTheTransportSettings(t *testing.T) {
 		t.Fatalf("user agent = %q, want %q", used, remoteUserAgent)
 	}
 }
+
+func TestTheConsoleShowsTheReferenceEvenWithoutARepository(t *testing.T) {
+	captured := captureConsoleView(t)
+	a, _ := newConsoleTestApp(t)
+	a.Dispatch(CmdConsole)
+	view := *captured
+	a.CloseRepository()
+
+	a.runConsoleCommand(view, "help log")
+
+	got := view.Texts()
+	if len(got) < 3 || got[0] != "log — "+i18n.T("Console.Help.log.Summary") {
+		t.Fatalf("lines = %#v", got)
+	}
+}
+
+func TestTheConsoleNamesAnUnknownCommandEvenWithoutARepository(t *testing.T) {
+	captured := captureConsoleView(t)
+	a, _ := newConsoleTestApp(t)
+	a.Dispatch(CmdConsole)
+	view := *captured
+	a.CloseRepository()
+
+	a.runConsoleCommand(view, "frobnicate")
+
+	if got := view.Texts(); len(got) != 1 || got[0] != i18n.Tf("Console.Error.UnknownCommand", "frobnicate") {
+		t.Fatalf("lines = %#v", got)
+	}
+}

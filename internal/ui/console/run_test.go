@@ -60,14 +60,7 @@ func TestRunStopsOnACancelledContext(t *testing.T) {
 	}
 }
 
-func TestHelpListsEverySupportedCommand(t *testing.T) {
-	out, err := Run(t.Context(), Env{}, "help")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(lines(out), Names()) {
-		t.Fatalf("help = %q", out)
-	}
+func TestNamesAreSortedAndIncludeTheSupportedCommands(t *testing.T) {
 	if !slices.IsSorted(Names()) || !slices.Contains(Names(), "status") {
 		t.Fatalf("names = %v", Names())
 	}

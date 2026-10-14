@@ -12,23 +12,26 @@
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="100"/>
         <ColumnDefinition Width="120"/>
         <ColumnDefinition Width="120"/>
     </Grid.ColumnDefinitions>
 
-    <DataGrid x:Name="output" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+    <DataGrid x:Name="output" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="4"
               Width="820" Height="416"
               IsReadOnly="True" AutoGenerateColumns="False"
               CanUserSortColumns="False" SelectionMode="Single"/>
 
-    <ConsoleInput x:Name="input" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
+    <ConsoleInput x:Name="input" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
                   Width="820" Height="28"/>
 
     <TextBlock x:Name="hint" Grid.Row="4" Grid.Column="0"
                Text="" FontSize="11" TextTrimming="CharacterEllipsis"/>
 
-    <Button x:Name="clear" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+    <Button x:Name="help" Grid.Row="4" Grid.Column="1" Margin="0,0,6,0"
+            Content="{Loc Dialog.Console.Help}"/>
+    <Button x:Name="clear" Grid.Row="4" Grid.Column="2" Margin="0,0,6,0"
             Content="{Loc Dialog.Console.Clear}"/>
-    <Button x:Name="close" Grid.Row="4" Grid.Column="2"
+    <Button x:Name="close" Grid.Row="4" Grid.Column="3"
             Content="{Loc Dialog.Console.Close}"/>
 </Grid>
