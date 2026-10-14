@@ -160,13 +160,22 @@ func (a *App) runFilesDiff(ctx context.Context, db *odb.DB, load diffFilesLoader
 	})
 }
 
+func (a *App) shallowBoundary(id hash.ObjectID) bool {
+	o := a.opened()
+	if o == nil {
+		return false
+	}
+	_, boundary := o.shallow[id]
+	return boundary
+}
+
 func (a *App) loadDiffFiles(ctx context.Context, db *odb.DB, id hash.ObjectID) ([]diff.File, error) {
 	commit, err := loadCommitObject(db, id)
 	if err != nil {
 		return nil, err
 	}
 	parentTree := hash.Zero
-	if len(commit.Parents) > 0 {
+	if len(commit.Parents) > 0 && !a.shallowBoundary(id) {
 		parent, err := loadCommitObject(db, commit.Parents[0])
 		if err != nil {
 			return nil, err

@@ -184,13 +184,8 @@ func pushTo(ctx context.Context, r *repo.Repository, rem Remote, opts PushOption
 		}
 	}
 
-	haveIDs, err := gatherHaveIDs(adv, store, rem)
-	if err != nil {
-		return PushResult{}, err
-	}
-
 	prog.Phase(progress.PhaseCounting)
-	ids, thin, err := collectPushObjects(ctx, db, haveIDs, newIDs, prog)
+	ids, thin, err := collectPushObjects(ctx, db, gatherHaveIDs(adv), newIDs, prog)
 	if err != nil {
 		return PushResult{}, err
 	}

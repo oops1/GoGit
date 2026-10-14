@@ -8,7 +8,6 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/progress"
-	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/gitcore/transport"
 )
@@ -71,7 +70,7 @@ func knownLocally(db *odb.DB, ids []hash.ObjectID) []hash.ObjectID {
 	return out
 }
 
-func gatherHaveIDs(adv transport.Advertisement, store *refs.Store, rem Remote) ([]hash.ObjectID, error) {
+func gatherHaveIDs(adv transport.Advertisement) []hash.ObjectID {
 	var ids []hash.ObjectID
 	for _, ref := range adv.Refs {
 		if !ref.ID.IsZero() {
@@ -81,16 +80,7 @@ func gatherHaveIDs(adv transport.Advertisement, store *refs.Store, rem Remote) (
 			ids = append(ids, ref.Peeled)
 		}
 	}
-	prefix := refs.RemotesPrefix + rem.Name + "/"
-	for ref, err := range store.Prefix(prefix) {
-		if err != nil {
-			return nil, err
-		}
-		if !ref.Target.IsZero() {
-			ids = append(ids, ref.Target)
-		}
-	}
-	return ids, nil
+	return ids
 }
 
 type pushCollector struct {

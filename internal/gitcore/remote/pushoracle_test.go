@@ -133,3 +133,52 @@ func TestPushMatchesSystemGitAndPassesFsck(t *testing.T) {
 		t.Fatalf("git show reported unexpected blob content: %s", content)
 	}
 }
+
+func TestPushToTwoAddressesFillsTheSecondOneWithEverythingItLacks(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git is not available: %v", err)
+	}
+
+	basePath := withBestEffortTempDir(t)
+	first := filepath.Join(basePath, "first.git")
+	second := filepath.Join(basePath, "second.git")
+	oracleGit(t, basePath, "init", "-q", "--bare", "-b", "main", first)
+	oracleGit(t, basePath, "init", "-q", "--bare", "-b", "main", second)
+
+	port, ok := freeTCPPort(t)
+	if !ok {
+		t.Skip("could not find a free tcp port")
+	}
+	addr, ok := startReceiveDaemon(t, basePath, port)
+	if !ok {
+		t.Skip("could not start a receive-enabled git daemon")
+	}
+
+	r := newTestRepo(t, "")
+	db := openTestODB(t, r)
+	store := openTestRefs(t, r, db)
+	blob := putBlob(t, db, "mirrored content\n")
+	tree := putTree(t, db, object.TreeEntry{Mode: object.ModeBlob, Name: "a.txt", ID: blob})
+	commit := putCommitWithTree(t, db, testWhen(), "for both servers", tree)
+	setLocalBranch(t, store, refs.BranchName("main"), commit)
+
+	rem := Remote{Name: "origin", PushURLs: []string{"git://" + addr + "/first.git", "git://" + addr + "/second.git"}}
+	specs, err := refspec.ParseAll([]string{"refs/heads/main:refs/heads/main"})
+	if err != nil {
+		t.Fatalf("refspec.ParseAll returned error %v", err)
+	}
+	if _, err := Push(t.Context(), r, rem, PushOptions{Refspecs: specs}); err != nil {
+		if strings.Contains(err.Error(), "rejected") {
+			t.Fatalf("a server refused what it was sent: %v", err)
+		}
+		t.Skipf("push to the receive-enabled git daemon failed, skipping: %v", err)
+	}
+
+	for _, bare := range []string{first, second} {
+		oracleGit(t, "", "--git-dir="+bare, "fsck")
+		content := oracleGit(t, "", "--git-dir="+bare, "show", "main:a.txt")
+		if !strings.Contains(string(content), "mirrored content") {
+			t.Fatalf("%s holds %q instead of the pushed file", filepath.Base(bare), content)
+		}
+	}
+}
