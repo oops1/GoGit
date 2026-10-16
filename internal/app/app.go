@@ -499,7 +499,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdSearch] = a.openSearch
 	a.handlers[CmdCompareFiles] = a.openCompare
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
-	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdRefresh] = a.reloadRepository
 	a.handlers[CmdBlame] = a.blameSelectedFile
 	a.handlers[CmdInvestigate] = a.investigateSelectedFile
 	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
@@ -728,6 +728,7 @@ func (a *App) ActivateRepository(id string) {
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
+	opened.journalKeeper.remember(a.currentJournalKey(snap))
 	a.startWorking()
 	a.startAutoFetch()
 	a.startGraphWrite(opened)
@@ -806,6 +807,14 @@ func (a *App) closeOpenRepository() {
 }
 
 func (a *App) RefreshRepository() {
+	a.refreshRepository(false)
+}
+
+func (a *App) reloadRepository() {
+	a.refreshRepository(true)
+}
+
+func (a *App) refreshRepository(force bool) {
 	o := a.opened()
 	if o == nil {
 		return
@@ -828,7 +837,9 @@ func (a *App) RefreshRepository() {
 	a.refreshRemoteState()
 	a.refreshFlowState(o, snap.Current)
 	a.reposView.Render(a.registry, a.repoTreeState())
-	a.startJournal()
+	if force || o.journalKeeper.changed(a.currentJournalKey(snap)) {
+		a.startJournal()
+	}
 	if a.commitIsSelected() {
 		return
 	}

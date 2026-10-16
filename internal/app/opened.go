@@ -26,7 +26,8 @@ type openedRepository struct {
 	wtMu     sync.RWMutex
 	worktree *worktree.Worktree
 
-	divergence divergenceMemo
+	divergence    divergenceMemo
+	journalKeeper journalKeeper
 
 	graphMu    sync.Mutex
 	graphKey   string
