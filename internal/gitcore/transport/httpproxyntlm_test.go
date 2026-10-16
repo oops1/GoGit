@@ -85,7 +85,7 @@ func TestHTTPAuthenticatesToAnNTLMOrNegotiateProxy(t *testing.T) {
 					t.Fatalf("advertise through the %s proxy returned error %v", scheme, err)
 				}
 				if authority.authenticated == 0 || !authority.sameConnection() {
-					t.Fatalf("authenticated %d times, same connection %v; want a completed handshake on one connection", authority.authenticated, authority.sameConnection())
+					t.Fatalf("authenticated %d times, same connection %v (steps %q); want a completed handshake on one connection", authority.authenticated, authority.sameConnection(), authority.stepsSeen())
 				}
 				if len(source.asked) != 1 || source.asked[0] != proxy.server.URL {
 					t.Fatalf("asked = %q, want one question about %s", source.asked, proxy.server.URL)
