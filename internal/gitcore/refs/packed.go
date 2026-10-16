@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 )
@@ -46,15 +48,76 @@ func (p *packedSnapshot) hasPrefix(prefix string) bool {
 	return false
 }
 
+const packedCacheSettle = 2 * time.Second
+
+var (
+	parsePackedSnapshot = parsePackedRefs
+	packedClock         = time.Now
+)
+
+type packedStamp struct {
+	size    int64
+	modTime time.Time
+}
+
+type packedCache struct {
+	mu       sync.Mutex
+	stamp    packedStamp
+	snapshot *packedSnapshot
+}
+
+func (c *packedCache) lookup(stamp packedStamp) *packedSnapshot {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.snapshot != nil && c.stamp.size == stamp.size && c.stamp.modTime.Equal(stamp.modTime) {
+		return c.snapshot
+	}
+	return nil
+}
+
+func (c *packedCache) remember(stamp packedStamp, snapshot *packedSnapshot) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.stamp, c.snapshot = stamp, snapshot
+}
+
+func (c *packedCache) forget() {
+	c.remember(packedStamp{}, nil)
+}
+
+func (s *Store) packedStamp() (packedStamp, bool) {
+	info, err := fsLstat(s.common.root, packedRefsFile)
+	if err != nil || info.IsDir() {
+		return packedStamp{}, false
+	}
+	return packedStamp{size: info.Size(), modTime: info.ModTime()}, true
+}
+
 func (s *Store) loadPacked() (*packedSnapshot, error) {
+	stamp, present := s.packedStamp()
+	if !present {
+		s.packed.forget()
+		return &packedSnapshot{}, nil
+	}
+	if cached := s.packed.lookup(stamp); cached != nil {
+		return cached, nil
+	}
 	data, err := s.common.read(packedRefsFile)
 	if errors.Is(err, ErrNotFound) {
+		s.packed.forget()
 		return &packedSnapshot{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return parsePackedRefs(data)
+	snapshot, err := parsePackedSnapshot(data)
+	if err != nil {
+		return nil, err
+	}
+	if packedClock().Sub(stamp.modTime) >= packedCacheSettle {
+		s.packed.remember(stamp, snapshot)
+	}
+	return snapshot, nil
 }
 
 func parsePackedRefs(data []byte) (*packedSnapshot, error) {
