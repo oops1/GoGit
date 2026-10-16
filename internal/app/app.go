@@ -149,6 +149,8 @@ type App struct {
 	journalWG       sync.WaitGroup
 	journalPageSize int
 
+	graphWrite graphWriter
+
 	filesItems *datagrid.ObservableCollection
 
 	readMu     sync.Mutex
@@ -728,6 +730,7 @@ func (a *App) ActivateRepository(id string) {
 	a.startJournal()
 	a.startWorking()
 	a.startAutoFetch()
+	a.startGraphWrite(opened)
 }
 
 func (a *App) opened() *openedRepository {
@@ -791,6 +794,7 @@ func (a *App) closeOpenRepository() {
 	a.filesMu.Lock()
 	a.mutedDirs = nil
 	a.filesMu.Unlock()
+	a.stopGraphWrite()
 	o := a.opened()
 	if o == nil {
 		return
