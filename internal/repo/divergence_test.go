@@ -14,6 +14,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
+	"github.com/oops1/gogit/internal/gitcore/revision"
 )
 
 var errDivergenceInjected = errors.New("divergence: injected failure")
@@ -449,5 +450,35 @@ func TestAheadBehindReportsAllRemoteCommitsAsBehindForAnUnbornBranch(t *testing.
 	}
 	if div != (Divergence{Ahead: 0, Behind: 1}) {
 		t.Fatalf("divergence = %+v, want {0 1}", div)
+	}
+}
+
+type unreadableObjects struct{}
+
+func (unreadableObjects) Get(hash.ObjectID) (object.Type, []byte, error) {
+	return 0, nil, errDivergenceInjected
+}
+
+func TestManyAheadBehindInReportsAnUnreadableRemoteCommitOfAnUnbornBranch(t *testing.T) {
+	pair := BranchPair{Name: refs.BranchName("main"), Remote: divergenceFakeObjectID(t, "22")}
+
+	_, err := ManyAheadBehindIn(revision.Context{Objects: unreadableObjects{}}, []BranchPair{pair})
+
+	if !errors.Is(err, errDivergenceInjected) {
+		t.Fatalf("ManyAheadBehindIn returned %v, want the injected failure", err)
+	}
+}
+
+func TestManyAheadBehindInCountsPairsOnTheContextItIsGiven(t *testing.T) {
+	db, _ := openDivergenceWriters(t, newDivergenceRepoDir(t, "main"))
+	base := putDivergenceCommit(t, db, "base")
+	local := putDivergenceCommit(t, db, "local", base)
+	remote := putDivergenceCommit(t, db, "remote", base)
+	pair := BranchPair{Name: refs.BranchName("main"), Local: local, Remote: remote}
+
+	got, err := ManyAheadBehindIn(revision.Context{Objects: db}, []BranchPair{pair})
+
+	if err != nil || got[pair.Name] != (Divergence{Ahead: 1, Behind: 1}) {
+		t.Fatalf("ManyAheadBehindIn returned %v, %v, want one ahead and one behind", got, err)
 	}
 }

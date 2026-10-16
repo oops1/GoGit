@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/oops1/gogit/internal/gitcore/commitgraph"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/refs"
@@ -24,6 +25,13 @@ type openedRepository struct {
 
 	wtMu     sync.RWMutex
 	worktree *worktree.Worktree
+
+	divergence divergenceMemo
+
+	graphMu    sync.Mutex
+	graphKey   string
+	graphReady bool
+	graph      *commitgraph.Graph
 }
 
 func (o *openedRepository) currentWorktree() *worktree.Worktree {

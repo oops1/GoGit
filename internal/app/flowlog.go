@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
-	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/revision"
@@ -60,8 +59,7 @@ func flowLogCommits(ctx context.Context, o *openedRepository, max int) ([]flow.L
 	if err != nil {
 		return nil, err
 	}
-	graph, _ := ops.OpenCommitGraph(o.repo, o.db)
-	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow, Graph: graph}
+	source := o.revisionContext()
 	walk := revision.Options{
 		Context:  source,
 		Include:  []hash.ObjectID{head.Target},
