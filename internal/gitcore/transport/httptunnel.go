@@ -57,6 +57,8 @@ func (s *httpSession) dialTLS(ctx context.Context, network, addr string) (net.Co
 
 var observeTunnelReopen = func(*http.Response) {}
 
+var tapTunnelConn = func(conn net.Conn) net.Conn { return conn }
+
 type proxyTunnel struct {
 	session  *httpSession
 	proxyURL *url.URL
@@ -75,6 +77,7 @@ func (t *proxyTunnel) open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	conn = tapTunnelConn(conn)
 	if t.proxyURL.Scheme == string(SchemeHTTPS) {
 		tc, err := t.session.handshakeTLS(ctx, conn, t.proxyURL.Hostname())
 		if err != nil {
