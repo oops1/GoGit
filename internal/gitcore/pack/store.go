@@ -72,6 +72,7 @@ type Store struct {
 	mu       sync.RWMutex
 	files    []*PackFile
 	scanned  directoryStamp
+	hot      atomic.Pointer[PackFile]
 }
 
 type candidate struct {
@@ -101,8 +102,9 @@ func (s *Store) Acquire() iter.Seq[*PackFile] {
 	return func(yield func(*PackFile) bool) {
 		files := s.acquire()
 		defer release(files)
-		for _, file := range files {
+		for _, file := range s.preferHot(files) {
 			if !yield(file) {
+				s.hot.Store(file)
 				return
 			}
 		}
@@ -246,6 +248,7 @@ func (s *Store) Reload() (bool, error) {
 		changed = true
 	}
 	s.files = files
+	s.hot.Store(nil)
 	return changed, nil
 }
 
@@ -285,6 +288,21 @@ func (s *Store) acquire() []*PackFile {
 		file.acquire()
 	}
 	return s.files
+}
+
+func (s *Store) preferHot(files []*PackFile) []*PackFile {
+	hot := s.hot.Load()
+	if hot == nil || len(files) < 2 || files[0] == hot {
+		return files
+	}
+	at := slices.Index(files, hot)
+	if at < 0 {
+		return files
+	}
+	ordered := make([]*PackFile, 0, len(files))
+	ordered = append(ordered, hot)
+	ordered = append(ordered, files[:at]...)
+	return append(ordered, files[at+1:]...)
 }
 
 func release(files []*PackFile) {
