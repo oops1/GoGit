@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/oops1/gogit/internal/diagnostics"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/i18n"
@@ -64,6 +65,7 @@ func (a *App) runJournal(ctx context.Context, pager journalPager, more chan stru
 					return
 				}
 				a.journalView.Append(rows)
+				diagnostics.StartupStep(diagnostics.StepJournalShown)
 				a.showJournalFilterCount(a.journalView.Count(), filtered)
 				a.reselectJournalCommit(reselect, rows)
 			})

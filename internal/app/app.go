@@ -18,6 +18,7 @@ import (
 
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/diagnostics"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -732,6 +733,7 @@ func (a *App) ActivateRepository(id string) {
 	a.startWorking()
 	a.startAutoFetch()
 	a.startGraphWrite(opened)
+	diagnostics.StartupStep(diagnostics.StepRepositoryOpened)
 }
 
 func (a *App) opened() *openedRepository {
@@ -1174,6 +1176,7 @@ func (a *App) Run() error {
 	if a.OnExit == nil {
 		a.OnExit = win.Close
 	}
+	diagnostics.StartupStep(diagnostics.StepWindowStarted)
 	err := win.Run()
 	if saveErr := a.SaveLayout(); err == nil {
 		err = saveErr

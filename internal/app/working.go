@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/oops1/gogit/internal/diagnostics"
 	"github.com/oops1/gogit/internal/gitcore/attributes"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -133,6 +134,7 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 			return
 		}
 		a.setFilesRows(rows)
+		diagnostics.StartupStep(diagnostics.StepStatusShown)
 		a.showSidebarWorkingCounts(len(rows), staged)
 		a.reposView.Render(a.registry, a.repoTreeState())
 		a.setHasStagedChanges(staged > 0)
