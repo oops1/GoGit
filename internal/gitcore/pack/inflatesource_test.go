@@ -57,6 +57,9 @@ func TestInflatingFromASourceWithoutByteReadingStillWorks(t *testing.T) {
 }
 
 func TestInflatingFromASourceWithoutByteReadingDoesNotAllocateABufferEachTime(t *testing.T) {
+	if raceEnabled {
+		t.Skip("the race detector makes sync.Pool drop values, so allocation counts are not stable")
+	}
 	payload := bytes.Repeat([]byte("small object\n"), 20)
 	compressed := deflated(t, payload)
 	into := make([]byte, len(payload))
