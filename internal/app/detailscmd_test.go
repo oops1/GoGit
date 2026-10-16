@@ -24,6 +24,17 @@ func waitForDetails(t *testing.T, a *App, want hash.ObjectID) {
 	}, "the commit details")
 }
 
+func journalRowIndexOf(t *testing.T, a *App, id hash.ObjectID) int {
+	t.Helper()
+	for at := range journalRowCountOnDispatcher(t, a) {
+		if journalRowOnDispatcher(t, a, at).ID == id {
+			return at
+		}
+	}
+	t.Fatalf("the journal does not list %s", id)
+	return -1
+}
+
 func TestSelectingACommitFillsTheDetailsPanel(t *testing.T) {
 	a, target := forkedApp(t, false)
 	head := branchTip(t, target, "main")
@@ -49,7 +60,7 @@ func TestTheJournalSelectionFillsTheDetailsPanel(t *testing.T) {
 	waitForJournalRows(t, a, 1)
 	head := branchTip(t, target, "main")
 
-	selectJournalRow(t, a, 0)
+	selectJournalRow(t, a, journalRowIndexOf(t, a, head))
 
 	waitForDetails(t, a, head)
 }
