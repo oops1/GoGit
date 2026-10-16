@@ -41,6 +41,21 @@ type Context struct {
 	Head    refs.Name
 	Shallow map[hash.ObjectID]struct{}
 	Graph   *commitgraph.Graph
+	Parsed  *ParsedObjects
+}
+
+type ParsedObjects struct {
+	commits map[hash.ObjectID]*object.Commit
+	trees   map[hash.ObjectID]*object.Tree
+	paths   map[pathKey]pathValue
+}
+
+func NewParsedObjects() *ParsedObjects {
+	return &ParsedObjects{
+		commits: make(map[hash.ObjectID]*object.Commit),
+		trees:   make(map[hash.ObjectID]*object.Tree),
+		paths:   make(map[pathKey]pathValue),
+	}
 }
 
 type Rev struct {
@@ -70,11 +85,15 @@ type store struct {
 }
 
 func newStore(ctx Context) *store {
+	parsed := ctx.Parsed
+	if parsed == nil {
+		parsed = NewParsedObjects()
+	}
 	return &store{
 		objects: ctx.Objects,
-		commits: make(map[hash.ObjectID]*object.Commit),
-		trees:   make(map[hash.ObjectID]*object.Tree),
-		paths:   make(map[pathKey]pathValue),
+		commits: parsed.commits,
+		trees:   parsed.trees,
+		paths:   parsed.paths,
 		shallow: ctx.Shallow,
 		graph:   ctx.Graph,
 	}
