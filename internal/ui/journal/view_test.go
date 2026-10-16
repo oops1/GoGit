@@ -299,3 +299,47 @@ func TestARowOfAnotherKindIsSkippedWhenTheLanesAreCounted(t *testing.T) {
 		t.Fatal("a row that is not a commit must not widen the graph")
 	}
 }
+
+func TestAppendAfterResetShowsOnlyTheNewRows(t *testing.T) {
+	v, grid := bound(t)
+	v.Append(sampleRows(4))
+	v.Reset()
+	fresh := sampleRows(2)
+
+	v.Append(fresh)
+
+	if v.Count() != 2 || grid.Grid.ItemsSource().Count() != 2 {
+		t.Fatalf("Count() = %d, grid holds %d, want only the two new rows", v.Count(), grid.Grid.ItemsSource().Count())
+	}
+	if got, _ := grid.Grid.ItemsSource().Get(0).(Row); got.ID != fresh[0].ID {
+		t.Fatalf("the first row is %s, want %s", got.ID, fresh[0].ID)
+	}
+}
+
+func TestAppendKeepsEveryPageInOrder(t *testing.T) {
+	v, grid := bound(t)
+	var want []Row
+	for range 5 {
+		page := sampleRows(3)
+		want = append(want, page...)
+		v.Append(page)
+	}
+
+	for at, row := range want {
+		if got, _ := grid.Grid.ItemsSource().Get(at).(Row); got.ID != row.ID {
+			t.Fatalf("row %d is %s, want %s", at, got.ID, row.ID)
+		}
+	}
+}
+
+func BenchmarkAppendingTwoHundredPagesToTheJournal(b *testing.B) {
+	page := sampleRows(500)
+	b.ReportAllocs()
+	for b.Loop() {
+		v := NewView()
+		v.Bind(widget.NewDataGridWidget())
+		for range 200 {
+			v.Append(page)
+		}
+	}
+}

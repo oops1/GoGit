@@ -2,6 +2,7 @@ package journal
 
 import (
 	"image/color"
+	"slices"
 	"sync"
 
 	"github.com/oops1/headless-gui/v3/widget"
@@ -15,6 +16,7 @@ const nearEndRows = 5
 type View struct {
 	grid           *widget.DataGridWidget
 	items          *datagrid.ObservableCollection
+	shown          []any
 	columnsMu      sync.Mutex
 	authorHeader   string
 	fullAuthorName bool
@@ -83,6 +85,7 @@ func (v *View) installMessageColumn() {
 }
 
 func (v *View) Reset() {
+	v.shown = nil
 	v.items.Clear()
 	v.lanes.Reset()
 	v.resizeToVisibleRows()
@@ -151,12 +154,12 @@ func (v *View) ClearSelection() {
 }
 
 func (v *View) Append(rows []Row) {
-	items := v.items.Items()
+	v.shown = slices.Grow(v.shown, len(rows))
 	for _, row := range rows {
 		row.Graph = v.lanes.Add(graph.Commit{ID: row.ID, Parents: row.Parents})
-		items = append(items, row)
+		v.shown = append(v.shown, row)
 	}
-	v.items.SetItems(items)
+	v.items.SetItems(v.shown)
 	v.resizeToVisibleRows()
 }
 
