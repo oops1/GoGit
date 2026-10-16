@@ -8,6 +8,7 @@ import (
 	"io"
 	"iter"
 	"os"
+	"sync"
 
 	"github.com/oops1/gogit/internal/gitcore/hash"
 )
@@ -27,6 +28,8 @@ const (
 	largeOffsetFlag  = uint32(1) << 31
 	namesChunk       = 512
 )
+
+var residentNamesLimit = int64(32 << 20)
 
 var indexMagic = []byte{0xff, 0x74, 0x4f, 0x63}
 
@@ -54,6 +57,9 @@ type Index struct {
 	largeCount   int64
 	pack         hash.ObjectID
 	self         hash.ObjectID
+
+	namesOnce sync.Once
+	resident  []byte
 }
 
 func OpenIndex(path string) (*Index, error) {
@@ -379,8 +385,27 @@ func (x *Index) verifyOrder() error {
 	return nil
 }
 
+func (x *Index) residentNames() []byte {
+	x.namesOnce.Do(func() {
+		span := int64(x.count-1)*x.nameStride + hash.Size
+		if x.count == 0 || span > residentNamesLimit {
+			return
+		}
+		table := make([]byte, span)
+		if readFull(x.source, table, x.names) == nil {
+			x.resident = table
+		}
+	})
+	return x.resident
+}
+
 func (x *Index) idAt(position int) (hash.ObjectID, error) {
 	var id hash.ObjectID
+	if table := x.residentNames(); table != nil && position >= 0 && position < x.count {
+		at := int64(position) * x.nameStride
+		copy(id[:], table[at:at+hash.Size])
+		return id, nil
+	}
 	if err := readFull(x.source, id[:], x.names+int64(position)*x.nameStride); err != nil {
 		return hash.Zero, err
 	}

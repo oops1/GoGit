@@ -172,10 +172,7 @@ func TestPutReportsAPackLookupFailureInAnAlternate(t *testing.T) {
 	copyFixturePacks(t, shared)
 	writeAlternates(t, main, shared)
 	db := openDB(t, main, Options{})
-	kind, data, err := db.Get(packFixtureObjects(t)[0].id)
-	if err != nil {
-		t.Fatalf("Get returned error %v", err)
-	}
+	kind, data := packedPayload(t)
 	closePackIndexes(t, db.Alternates()[0])
 
 	if _, err := db.Put(kind, data); err == nil {

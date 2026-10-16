@@ -385,6 +385,7 @@ func TestReuseFindLocatesAStoredDeltaAndItsBase(t *testing.T) {
 }
 
 func TestReuseFindReportsWhatItCannotRead(t *testing.T) {
+	withoutResidentNames(t)
 	fixture := newFindFixture(t)
 	for _, tt := range []struct {
 		name  string
@@ -521,6 +522,7 @@ func TestWritePackCopiesALargeStoredObjectWholesale(t *testing.T) {
 }
 
 func TestWritePackReportsFailuresAroundReusedAndSearchedDeltas(t *testing.T) {
+	withoutResidentNames(t)
 	plain := newFakeSource()
 	big, small := deltaPair(plain)
 	opts := WriteOptions{Window: 10, Depth: 50}

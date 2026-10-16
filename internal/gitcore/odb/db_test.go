@@ -21,6 +21,15 @@ func newFixtureDB(t testing.TB) *DB {
 	return openDB(t, objects, Options{})
 }
 
+func packedPayload(t testing.TB) (object.Type, []byte) {
+	t.Helper()
+	kind, data, err := newFixtureDB(t).Get(packFixtureObjects(t)[0].id)
+	if err != nil {
+		t.Fatalf("Get returned error %v", err)
+	}
+	return kind, data
+}
+
 func TestOpenReadsEveryPackedObject(t *testing.T) {
 	db := newFixtureDB(t)
 	for _, want := range packFixtureObjects(t) {

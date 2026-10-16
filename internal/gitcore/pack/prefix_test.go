@@ -109,6 +109,7 @@ func TestPrefixStopsWhenLowerBoundFails(t *testing.T) {
 }
 
 func TestPrefixStopsWhenIterationFails(t *testing.T) {
+	withoutResidentNames(t)
 	ids := make([]hash.ObjectID, 8)
 	for i := range ids {
 		ids[i] = idBytes(byte((i + 1) * 0x10))
