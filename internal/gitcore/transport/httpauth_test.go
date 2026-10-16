@@ -34,7 +34,6 @@ type ntlmTestServer struct {
 	sawBinding    []byte
 	postBody      []byte
 	trace         []string
-	steps         []string
 }
 
 func (s *ntlmTestServer) record(step string) {
@@ -112,9 +111,6 @@ func (s *ntlmTestServer) authorize(w http.ResponseWriter, r *http.Request) bool 
 	name, rawToken, _ := strings.Cut(auth, " ")
 	token, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rawToken))
 	s.record(r.Method + " " + strings.ToLower(name) + " " + ntlmStepName(token))
-	s.mu.Lock()
-	s.steps = append(s.steps, ntlmStepName(token)+" from "+r.RemoteAddr+" "+r.Method+" "+r.Proto)
-	s.mu.Unlock()
 	if err != nil {
 		s.reject(w)
 		return false
@@ -247,12 +243,6 @@ func utf16Decode(b []byte) string {
 		runes = append(runes, rune(binary.LittleEndian.Uint16(b[i:])))
 	}
 	return string(runes)
-}
-
-func (s *ntlmTestServer) stepsSeen() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.steps...)
 }
 
 func (s *ntlmTestServer) sameConnection() bool {

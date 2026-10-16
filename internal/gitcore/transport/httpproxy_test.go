@@ -50,8 +50,51 @@ func (p *forwardProxy) track(conns ...net.Conn) {
 	p.conns = append(p.conns, conns...)
 }
 
+func (p *forwardProxy) serveHandshake(w http.ResponseWriter, r *http.Request) {
+	client, buffered, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		return
+	}
+	p.track(client)
+	for {
+		recorder := httptest.NewRecorder()
+		if p.authority.authorize(recorder, r) {
+			p.connectThrough(client, buffered, r.Host)
+			return
+		}
+		if err := recorder.Result().Write(client); err != nil {
+			return
+		}
+		next, err := http.ReadRequest(buffered.Reader)
+		if err != nil {
+			_ = client.Close()
+			return
+		}
+		next.RemoteAddr = client.RemoteAddr().String()
+		p.requests.Add(1)
+		r = next
+	}
+}
+
+func (p *forwardProxy) connectThrough(client net.Conn, buffered io.Reader, target string) {
+	upstream, err := net.Dial("tcp", target)
+	if err != nil {
+		_, _ = client.Write([]byte("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n"))
+		_ = client.Close()
+		return
+	}
+	p.track(upstream)
+	_, _ = client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+	go func() { _, _ = io.Copy(upstream, buffered) }()
+	go func() { _, _ = io.Copy(client, upstream) }()
+}
+
 func (p *forwardProxy) serve(w http.ResponseWriter, r *http.Request) {
 	p.requests.Add(1)
+	if p.authority != nil && r.Method == http.MethodConnect {
+		p.serveHandshake(w, r)
+		return
+	}
 	if p.authority != nil && !p.authority.authorize(w, r) {
 		return
 	}
