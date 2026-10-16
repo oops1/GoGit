@@ -3,149 +3,190 @@ package worktree
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"sync"
 	"sync/atomic"
 )
 
+type untrackedScan struct {
+	w            *Worktree
+	ctx          context.Context
+	trackedDirs  map[string]bool
+	trackedFiles map[string]bool
+
+	mu      sync.Mutex
+	out     []Entry
+	wg      sync.WaitGroup
+	once    sync.Once
+	failure error
+	count   atomic.Int64
+	slots   chan struct{}
+}
+
 func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFiles map[string]bool) ([]Entry, error) {
-	entries, err := w.readDir("")
+	scan := &untrackedScan{
+		w:            w,
+		ctx:          ctx,
+		trackedDirs:  trackedDirs,
+		trackedFiles: trackedFiles,
+		slots:        make(chan struct{}, w.workers),
+	}
+	items, err := w.readDirTyped("")
 	if err != nil {
 		return nil, err
 	}
-	var (
-		mu    sync.Mutex
-		out   []Entry
-		wg    sync.WaitGroup
-		once  sync.Once
-		fail  error
-		count atomic.Int64
-	)
-	sem := make(chan struct{}, w.workers)
-	reportFail := func(err error) { once.Do(func() { fail = err }) }
-	if err := w.countBudget(&count, len(entries)); err != nil {
+	if err := scan.budget(len(items)); err != nil {
 		return nil, err
 	}
-
-	var walk func(dir string, items []dirEntry)
-	recurse := func(rel string) {
-		children, err := w.readDirTyped(rel)
-		if err != nil {
-			reportFail(err)
-			return
-		}
-		if err := w.countBudget(&count, len(children)); err != nil {
-			reportFail(err)
-			return
-		}
-		walk(rel, children)
-	}
-	walk = func(dir string, items []dirEntry) {
-		for _, item := range items {
-			if ctx.Err() != nil {
-				return
-			}
-			rel := joinRel(dir, item.name)
-			if !item.isDir {
-				if trackedFiles[rel] {
-					continue
-				}
-				if w.isIgnored(rel, false) {
-					mu.Lock()
-					out = append(out, Entry{Path: rel, Staged: StatusUnmodified, Unstaged: StatusIgnored})
-					mu.Unlock()
-					continue
-				}
-				mu.Lock()
-				out = append(out, Entry{Path: rel, Staged: StatusUnmodified, Unstaged: StatusUntracked})
-				mu.Unlock()
-				continue
-			}
-			if trackedFiles[rel] {
-				continue
-			}
-			if trackedDirs[rel] {
-				recurse(rel)
-				continue
-			}
-			has, err := w.hasVisibleFile(rel)
-			if err != nil {
-				reportFail(err)
-				continue
-			}
-			if has {
-				mu.Lock()
-				out = append(out, Entry{Path: rel + "/", IsDir: true, Staged: StatusUnmodified, Unstaged: StatusUntracked})
-				mu.Unlock()
-				continue
-			}
-			anyFile, err := w.hasAnyFile(rel)
-			if err != nil {
-				reportFail(err)
-				continue
-			}
-			if anyFile {
-				mu.Lock()
-				out = append(out, Entry{Path: rel + "/", IsDir: true, Staged: StatusUnmodified, Unstaged: StatusIgnored})
-				mu.Unlock()
-			}
-		}
-	}
-
-	for _, entry := range entries {
-		if entry.Name() == gitDirName {
-			continue
-		}
-		item := dirEntry{name: entry.Name(), isDir: entry.IsDir()}
-		sem <- struct{}{}
-		wg.Go(func() {
-			defer func() { <-sem }()
-			walk("", []dirEntry{item})
-		})
-	}
-	wg.Wait()
-
-	if fail != nil {
-		return nil, fail
+	scan.visit("", withoutGitDir(items))
+	scan.wg.Wait()
+	if scan.failure != nil {
+		return nil, scan.failure
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return scan.out, nil
 }
 
-func (w *Worktree) countBudget(count *atomic.Int64, added int) error {
-	if w.maxFiles <= 0 {
+func withoutGitDir(items []dirEntry) []dirEntry {
+	kept := make([]dirEntry, 0, len(items))
+	for _, item := range items {
+		if item.name != gitDirName {
+			kept = append(kept, item)
+		}
+	}
+	return kept
+}
+
+func (s *untrackedScan) fail(err error) {
+	s.once.Do(func() { s.failure = err })
+}
+
+func (s *untrackedScan) budget(added int) error {
+	if s.w.maxFiles <= 0 {
 		return nil
 	}
-	if count.Add(int64(added)) > int64(w.maxFiles) {
-		return fmt.Errorf("%w: %d", ErrTooManyFiles, w.maxFiles)
+	if s.count.Add(int64(added)) > int64(s.w.maxFiles) {
+		return fmt.Errorf("%w: %d", ErrTooManyFiles, s.w.maxFiles)
 	}
 	return nil
 }
 
-func (w *Worktree) hasVisibleFile(dir string) (bool, error) {
+func (s *untrackedScan) record(entry Entry) {
+	s.mu.Lock()
+	s.out = append(s.out, entry)
+	s.mu.Unlock()
+}
+
+func (s *untrackedScan) descend(rel string) {
+	select {
+	case s.slots <- struct{}{}:
+		s.wg.Go(func() {
+			defer func() { <-s.slots }()
+			s.enter(rel)
+		})
+	default:
+		s.enter(rel)
+	}
+}
+
+func (s *untrackedScan) enter(rel string) {
+	children, err := s.w.readDirTyped(rel)
+	if err != nil {
+		s.fail(err)
+		return
+	}
+	if err := s.budget(len(children)); err != nil {
+		s.fail(err)
+		return
+	}
+	s.visit(rel, children)
+}
+
+func (s *untrackedScan) visit(dir string, items []dirEntry) {
+	for _, item := range items {
+		if s.ctx.Err() != nil {
+			return
+		}
+		rel := joinRel(dir, item.name)
+		if !item.isDir {
+			s.visitFile(rel, item)
+			continue
+		}
+		s.visitDirectory(rel)
+	}
+}
+
+func (s *untrackedScan) visitFile(rel string, item dirEntry) {
+	if s.trackedFiles[rel] {
+		return
+	}
+	code := StatusUntracked
+	if s.w.isIgnored(rel, false) {
+		code = StatusIgnored
+	}
+	entry := Entry{Path: rel, Staged: StatusUnmodified, Unstaged: code}
+	if info, ok := item.describe(); ok {
+		entry.Size, entry.ModTime = info.Size(), info.ModTime()
+	}
+	s.record(entry)
+}
+
+func (s *untrackedScan) visitDirectory(rel string) {
+	if s.trackedFiles[rel] {
+		return
+	}
+	if s.trackedDirs[rel] {
+		s.descend(rel)
+		return
+	}
+	visible, anyFile, err := s.w.directoryContents(rel)
+	if err != nil {
+		s.fail(err)
+		return
+	}
+	switch {
+	case visible:
+		s.record(Entry{Path: rel + "/", IsDir: true, Staged: StatusUnmodified, Unstaged: StatusUntracked})
+	case anyFile:
+		s.record(Entry{Path: rel + "/", IsDir: true, Staged: StatusUnmodified, Unstaged: StatusIgnored})
+	}
+}
+
+func (w *Worktree) directoryContents(dir string) (visible, anyFile bool, err error) {
 	items, err := w.readDirTyped(dir)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	for _, item := range items {
 		rel := joinRel(dir, item.name)
 		ignored := w.isIgnored(rel, item.isDir)
-		if ignored {
-			continue
-		}
-		if !item.isDir {
-			return true, nil
-		}
-		has, err := w.hasVisibleFile(rel)
-		if err != nil {
-			return false, err
-		}
-		if has {
-			return true, nil
+		switch {
+		case !item.isDir:
+			anyFile = true
+			if !ignored {
+				return true, true, nil
+			}
+		case ignored:
+			if anyFile {
+				continue
+			}
+			if anyFile, err = w.hasAnyFile(rel); err != nil {
+				return false, false, err
+			}
+		default:
+			nestedVisible, nestedAny, err := w.directoryContents(rel)
+			if err != nil {
+				return false, false, err
+			}
+			if nestedVisible {
+				return true, true, nil
+			}
+			anyFile = anyFile || nestedAny
 		}
 	}
-	return false, nil
+	return false, anyFile, nil
 }
 
 func (w *Worktree) hasAnyFile(dir string) (bool, error) {
@@ -171,6 +212,15 @@ func (w *Worktree) hasAnyFile(dir string) (bool, error) {
 type dirEntry struct {
 	name  string
 	isDir bool
+	entry fs.DirEntry
+}
+
+func (e dirEntry) describe() (fs.FileInfo, bool) {
+	if e.entry == nil {
+		return nil, false
+	}
+	info, err := e.entry.Info()
+	return info, err == nil
 }
 
 func (w *Worktree) readDirTyped(rel string) ([]dirEntry, error) {
@@ -180,7 +230,7 @@ func (w *Worktree) readDirTyped(rel string) ([]dirEntry, error) {
 	}
 	out := make([]dirEntry, len(entries))
 	for i, entry := range entries {
-		out[i] = dirEntry{name: entry.Name(), isDir: entry.IsDir()}
+		out[i] = dirEntry{name: entry.Name(), isDir: entry.IsDir(), entry: entry}
 	}
 	return out, nil
 }

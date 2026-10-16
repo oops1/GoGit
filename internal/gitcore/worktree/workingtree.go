@@ -219,7 +219,7 @@ func (w *Worktree) holdsPlainSymlink(wantKind entryKind, fi os.FileInfo) bool {
 }
 
 func (w *Worktree) fillWorkingInfo(e *Entry, known map[string]workingStat) {
-	if e.IsDir {
+	if e.IsDir || !e.ModTime.IsZero() {
 		return
 	}
 	if stat, ok := known[e.Path]; ok {

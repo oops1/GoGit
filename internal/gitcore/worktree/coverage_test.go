@@ -179,7 +179,7 @@ func TestCompareToWorktreeDetectsExecutableBitAfterAFullContentRead(t *testing.T
 	w.fileMode = true
 	original := fsLstatFile
 	fsLstatFile = func(root *os.Root, name string) (os.FileInfo, error) {
-		return fakeFileInfo{mode: 0o755, size: 999, modTime: time.Unix(999, 0)}, nil
+		return fakeFileInfo{mode: 0o755, size: int64(len("echo\n")), modTime: time.Unix(999, 0)}, nil
 	}
 	t.Cleanup(func() { fsLstatFile = original })
 	status, err := w.Status(t.Context())
