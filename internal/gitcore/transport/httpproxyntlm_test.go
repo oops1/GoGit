@@ -332,7 +332,7 @@ func (c listeningConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	if n > 0 {
 		c.mu.Lock()
-		*c.heard = append(*c.heard, fmt.Sprintf("%s: %q", c.Conn.LocalAddr(), p[:min(n, 400)]))
+		*c.heard = append(*c.heard, fmt.Sprintf("%s: %q", c.LocalAddr(), p[:min(n, 400)]))
 		c.mu.Unlock()
 	}
 	return n, err
