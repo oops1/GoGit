@@ -113,7 +113,10 @@ func workingRank(e worktree.Entry) int {
 }
 
 func WorkingRows(s worktree.Status) []Row {
-	sorted := SortEntries(s.Entries)
+	return WorkingRowsOfSorted(SortEntries(s.Entries))
+}
+
+func WorkingRowsOfSorted(sorted []worktree.Entry) []Row {
 	limit := len(sorted)
 	truncated := limit > MaxFiles
 	if truncated {

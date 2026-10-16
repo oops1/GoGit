@@ -116,10 +116,7 @@ func TestPutRejectsUnknownTypes(t *testing.T) {
 
 func TestPutReportsLookupFailures(t *testing.T) {
 	db := newFixtureDB(t)
-	kind, data, err := db.Get(packFixtureObjects(t)[0].id)
-	if err != nil {
-		t.Fatalf("Get returned error %v", err)
-	}
+	kind, data := packedPayload(t)
 	closePackIndexes(t, db)
 	if _, err := db.Put(kind, data); err == nil {
 		t.Fatal("Put ignored a pack index it could not read")
@@ -300,10 +297,7 @@ func TestWriterReportsStreamFailures(t *testing.T) {
 
 func TestWriterReportsLookupFailures(t *testing.T) {
 	db := newFixtureDB(t)
-	kind, data, err := db.Get(packFixtureObjects(t)[0].id)
-	if err != nil {
-		t.Fatalf("Get returned error %v", err)
-	}
+	kind, data := packedPayload(t)
 	writer, err := db.Writer(kind, int64(len(data)))
 	if err != nil {
 		t.Fatalf("Writer returned error %v", err)

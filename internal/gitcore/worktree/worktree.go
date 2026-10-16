@@ -38,9 +38,7 @@ type Worktree struct {
 	indexMu           sync.RWMutex
 	root              *os.Root
 	ignore            *attributes.Matcher
-	ignoreMu          sync.Mutex
 	attrs             *attributes.Attributes
-	attrsMu           sync.Mutex
 	env               func(string) string
 	format            hash.Format
 	fileMode          bool
@@ -233,15 +231,11 @@ func (w *Worktree) Close() error {
 }
 
 func (w *Worktree) isIgnored(path string, isDir bool) bool {
-	w.ignoreMu.Lock()
-	defer w.ignoreMu.Unlock()
 	ignored, _ := w.ignore.Ignored(path, isDir)
 	return ignored
 }
 
 func (w *Worktree) policy(path string) attributes.Policy {
-	w.attrsMu.Lock()
-	defer w.attrsMu.Unlock()
 	return w.attrs.Policy(path)
 }
 

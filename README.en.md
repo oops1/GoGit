@@ -17,7 +17,7 @@ interface. An alternative to the paid SmartGit.
   window; the layout is remembered.
 - Localization: Russian and English out of the box, any other language is a single JSON file.
 
-## What 1.6.4 can already do
+## What 1.7.0 can already do
 
 **Interface.** The menu and toolbar mirror SmartGit; the toolbar is configured
 in a separate window and stored in `config.toml`. Dock panels:

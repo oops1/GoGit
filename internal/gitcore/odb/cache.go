@@ -2,7 +2,6 @@ package odb
 
 import (
 	"container/list"
-	"runtime"
 	"sync"
 	"weak"
 
@@ -16,7 +15,12 @@ type rawEntry struct {
 	data []byte
 }
 
-type rawCache struct {
+const (
+	rawShardBytes = 2 << 20
+	rawShardLimit = 16
+)
+
+type rawShard struct {
 	mu    sync.Mutex
 	limit int64
 	used  int64
@@ -24,15 +28,58 @@ type rawCache struct {
 	items map[hash.ObjectID]*list.Element
 }
 
+type rawCache struct {
+	shards []*rawShard
+}
+
 func newRawCache(limit int64) *rawCache {
-	return &rawCache{
-		limit: limit,
-		order: list.New(),
-		items: make(map[hash.ObjectID]*list.Element),
+	count := int(min(rawShardLimit, max(1, limit/rawShardBytes)))
+	cache := &rawCache{shards: make([]*rawShard, count)}
+	for at := range cache.shards {
+		cache.shards[at] = &rawShard{
+			limit: limit / int64(count),
+			order: list.New(),
+			items: make(map[hash.ObjectID]*list.Element),
+		}
 	}
+	return cache
+}
+
+func (c *rawCache) shardOf(id hash.ObjectID) *rawShard {
+	return c.shards[int(id[0])%len(c.shards)]
 }
 
 func (c *rawCache) get(id hash.ObjectID) (object.Type, []byte, bool) {
+	return c.shardOf(id).get(id)
+}
+
+func (c *rawCache) put(id hash.ObjectID, kind object.Type, data []byte) {
+	c.shardOf(id).put(id, kind, data)
+}
+
+func (c *rawCache) bytes() int64 {
+	var total int64
+	for _, shard := range c.shards {
+		total += shard.bytes()
+	}
+	return total
+}
+
+func (c *rawCache) len() int {
+	total := 0
+	for _, shard := range c.shards {
+		total += shard.len()
+	}
+	return total
+}
+
+func (c *rawCache) purge() {
+	for _, shard := range c.shards {
+		shard.purge()
+	}
+}
+
+func (c *rawShard) get(id hash.ObjectID) (object.Type, []byte, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	element, ok := c.items[id]
@@ -44,7 +91,7 @@ func (c *rawCache) get(id hash.ObjectID) (object.Type, []byte, bool) {
 	return entry.kind, entry.data, true
 }
 
-func (c *rawCache) put(id hash.ObjectID, kind object.Type, data []byte) {
+func (c *rawShard) put(id hash.ObjectID, kind object.Type, data []byte) {
 	size := int64(len(data))
 	if size > c.limit {
 		return
@@ -62,26 +109,26 @@ func (c *rawCache) put(id hash.ObjectID, kind object.Type, data []byte) {
 	}
 }
 
-func (c *rawCache) evict(element *list.Element) {
+func (c *rawShard) evict(element *list.Element) {
 	entry := element.Value.(*rawEntry)
 	c.order.Remove(element)
 	delete(c.items, entry.id)
 	c.used -= int64(len(entry.data))
 }
 
-func (c *rawCache) bytes() int64 {
+func (c *rawShard) bytes() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.used
 }
 
-func (c *rawCache) len() int {
+func (c *rawShard) len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.items)
 }
 
-func (c *rawCache) purge() {
+func (c *rawShard) purge() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.order.Init()
@@ -89,9 +136,12 @@ func (c *rawCache) purge() {
 	c.used = 0
 }
 
+const weakSweepFloor = 1024
+
 type weakCache[T any] struct {
-	mu    sync.Mutex
-	items map[hash.ObjectID]weak.Pointer[T]
+	mu      sync.Mutex
+	items   map[hash.ObjectID]weak.Pointer[T]
+	sweepAt int
 }
 
 func newWeakCache[T any]() *weakCache[T] {
@@ -114,22 +164,26 @@ func (c *weakCache[T]) get(id hash.ObjectID) *T {
 
 func (c *weakCache[T]) put(id hash.ObjectID, value *T) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.items[id] = weak.Make(value)
-	c.mu.Unlock()
-	runtime.AddCleanup(value, c.drop, id)
+	if len(c.items) >= max(c.sweepAt, weakSweepFloor) {
+		c.sweepLocked()
+		c.sweepAt = 2 * len(c.items)
+	}
 }
 
-func (c *weakCache[T]) drop(id hash.ObjectID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if pointer, ok := c.items[id]; ok && pointer.Value() == nil {
-		delete(c.items, id)
+func (c *weakCache[T]) sweepLocked() {
+	for id, pointer := range c.items {
+		if pointer.Value() == nil {
+			delete(c.items, id)
+		}
 	}
 }
 
 func (c *weakCache[T]) len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.sweepLocked()
 	return len(c.items)
 }
 
@@ -137,6 +191,7 @@ func (c *weakCache[T]) purge() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	clear(c.items)
+	c.sweepAt = 0
 }
 
 type objectCache struct {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/diagnostics"
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/odb"
@@ -148,6 +149,8 @@ type App struct {
 	journalMore     chan struct{}
 	journalWG       sync.WaitGroup
 	journalPageSize int
+
+	graphWrite graphWriter
 
 	filesItems *datagrid.ObservableCollection
 
@@ -497,7 +500,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	a.handlers[CmdSearch] = a.openSearch
 	a.handlers[CmdCompareFiles] = a.openCompare
 	a.handlers[CmdResetLayout] = func() { _ = a.ResetLayout() }
-	a.handlers[CmdRefresh] = a.RefreshRepository
+	a.handlers[CmdRefresh] = a.reloadRepository
 	a.handlers[CmdBlame] = a.blameSelectedFile
 	a.handlers[CmdInvestigate] = a.investigateSelectedFile
 	a.handlers[CmdRepoSettings] = a.openActiveRepoSettings
@@ -726,8 +729,11 @@ func (a *App) ActivateRepository(id string) {
 	a.reposView.Render(a.registry, a.repoTreeState())
 	a.startWatcher(opened.repo.Layout())
 	a.startJournal()
+	opened.journalKeeper.remember(a.currentJournalKey(snap))
 	a.startWorking()
 	a.startAutoFetch()
+	a.startGraphWrite(opened)
+	diagnostics.StartupStep(diagnostics.StepRepositoryOpened)
 }
 
 func (a *App) opened() *openedRepository {
@@ -791,6 +797,7 @@ func (a *App) closeOpenRepository() {
 	a.filesMu.Lock()
 	a.mutedDirs = nil
 	a.filesMu.Unlock()
+	a.stopGraphWrite()
 	o := a.opened()
 	if o == nil {
 		return
@@ -802,6 +809,14 @@ func (a *App) closeOpenRepository() {
 }
 
 func (a *App) RefreshRepository() {
+	a.refreshRepository(false)
+}
+
+func (a *App) reloadRepository() {
+	a.refreshRepository(true)
+}
+
+func (a *App) refreshRepository(force bool) {
 	o := a.opened()
 	if o == nil {
 		return
@@ -824,7 +839,9 @@ func (a *App) RefreshRepository() {
 	a.refreshRemoteState()
 	a.refreshFlowState(o, snap.Current)
 	a.reposView.Render(a.registry, a.repoTreeState())
-	a.startJournal()
+	if force || o.journalKeeper.changed(a.currentJournalKey(snap)) {
+		a.startJournal()
+	}
 	if a.commitIsSelected() {
 		return
 	}
@@ -1159,6 +1176,7 @@ func (a *App) Run() error {
 	if a.OnExit == nil {
 		a.OnExit = win.Close
 	}
+	diagnostics.StartupStep(diagnostics.StepWindowStarted)
 	err := win.Run()
 	if saveErr := a.SaveLayout(); err == nil {
 		err = saveErr

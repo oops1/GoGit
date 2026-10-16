@@ -59,6 +59,7 @@ func TestPackInfoAtDescribesDeltasWithoutResolvingThem(t *testing.T) {
 }
 
 func TestPackInfoAtReportsBrokenDeltas(t *testing.T) {
+	withoutResidentNames(t)
 	content := bytes.Repeat([]byte("broken info\n"), 30)
 	builder := newPackBuilder()
 	base := builder.addObject(t, KindBlob, content)
@@ -246,6 +247,7 @@ func TestStoreStreamHoldsThePackUntilTheReaderCloses(t *testing.T) {
 }
 
 func TestStoreStreamReportsBrokenIndexesAndObjects(t *testing.T) {
+	withoutResidentNames(t)
 	raw, offsets, _ := streamFixture(t)
 	ids := []hash.ObjectID{{1}, {2}, {3}, {4}, {5}, {6}, {7}}
 	entries := make([]Entry, len(ids))

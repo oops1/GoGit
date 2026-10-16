@@ -5,8 +5,8 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/oops1/gogit/internal/diagnostics"
 	"github.com/oops1/gogit/internal/gitcore/hash"
-	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/journal"
@@ -33,8 +33,7 @@ func (a *App) startJournal() {
 	if o == nil {
 		return
 	}
-	graph, _ := ops.OpenCommitGraph(o.repo, o.db)
-	source := revision.Context{Objects: o.db, Refs: o.store, Shallow: o.shallow, Graph: graph}
+	source := o.revisionContext()
 	filter := a.journalFilter()
 	opts, err := filter.Apply(journal.WalkOptions(a.cfg.Git.LogMaxCount, a.State().HasRemotes))
 	if err != nil {
@@ -66,6 +65,7 @@ func (a *App) runJournal(ctx context.Context, pager journalPager, more chan stru
 					return
 				}
 				a.journalView.Append(rows)
+				diagnostics.StartupStep(diagnostics.StepJournalShown)
 				a.showJournalFilterCount(a.journalView.Count(), filtered)
 				a.reselectJournalCommit(reselect, rows)
 			})

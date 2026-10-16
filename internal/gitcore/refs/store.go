@@ -60,6 +60,7 @@ type Store struct {
 	git    tree
 	common tree
 	opts   Options
+	packed packedCache
 }
 
 type Ref struct {

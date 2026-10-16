@@ -1,6 +1,7 @@
 package odb
 
 import (
+	"encoding/binary"
 	"runtime"
 	"testing"
 	"weak"
@@ -8,6 +9,12 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
+
+func numberedID(number uint64) hash.ObjectID {
+	var id hash.ObjectID
+	binary.LittleEndian.PutUint64(id[:], number)
+	return id
+}
 
 func idFrom(t testing.TB, prefix byte) hash.ObjectID {
 	t.Helper()
@@ -111,28 +118,38 @@ func TestWeakCacheForgetsCollectedValues(t *testing.T) {
 	}
 }
 
-func TestWeakCacheDropKeepsLiveValues(t *testing.T) {
+func TestWeakCacheSweepsCollectedValuesOnceItGrowsPastItsThreshold(t *testing.T) {
 	cache := newWeakCache[object.Blob]()
-	id := idFrom(t, 12)
-	blob := &object.Blob{Data: []byte("live")}
-	cache.put(id, blob)
-	cache.drop(idFrom(t, 13))
-	cache.drop(id)
-	if cache.len() != 1 {
-		t.Fatalf("cache holds %d entries, want 1", cache.len())
+	for index := range 3 * weakSweepFloor {
+		cache.put(numberedID(uint64(index)), &object.Blob{Data: []byte("garbage")})
+		if index == weakSweepFloor {
+			collect()
+		}
 	}
-	runtime.KeepAlive(blob)
+
+	cache.mu.Lock()
+	held := len(cache.items)
+	cache.mu.Unlock()
+	if held >= 3*weakSweepFloor {
+		t.Fatalf("the cache still holds %d entries, want the collected ones swept", held)
+	}
 }
 
-func TestWeakCacheDropRemovesCollectedValues(t *testing.T) {
+func TestWeakCacheKeepsLiveValuesThroughASweep(t *testing.T) {
 	cache := newWeakCache[object.Blob]()
-	id := idFrom(t, 14)
-	cache.put(id, &object.Blob{Data: []byte("garbage")})
-	collect()
-	cache.drop(id)
-	if cache.len() != 0 {
-		t.Fatalf("cache holds %d entries after drop", cache.len())
+	live := make([]*object.Blob, weakSweepFloor+10)
+	for index := range live {
+		live[index] = &object.Blob{Data: []byte("live")}
+		cache.put(numberedID(uint64(index)), live[index])
 	}
+
+	if got := cache.len(); got != len(live) {
+		t.Fatalf("the cache holds %d entries, want all %d live ones", got, len(live))
+	}
+	if cache.get(numberedID(5)) != live[5] {
+		t.Fatal("a live value was lost in a sweep")
+	}
+	runtime.KeepAlive(live)
 }
 
 func TestWeakCachePurgeEmptiesEverything(t *testing.T) {
@@ -180,5 +197,71 @@ func TestWeakCacheForgetsCollectedValuesOnRead(t *testing.T) {
 	}
 	if cache.len() != 0 {
 		t.Fatalf("cache holds %d entries after a read", cache.len())
+	}
+}
+
+func TestRawCacheUsesOneShardPerTwoMegabytesUpToSixteen(t *testing.T) {
+	tests := []struct {
+		limit int64
+		want  int
+	}{
+		{1, 1}, {rawShardBytes - 1, 1}, {rawShardBytes, 1}, {3 * rawShardBytes, 3},
+		{DefaultCacheBytes, DefaultCacheBytes / rawShardBytes}, {1 << 40, rawShardLimit},
+	}
+	for _, tc := range tests {
+		if got := len(newRawCache(tc.limit).shards); got != tc.want {
+			t.Errorf("a limit of %d gives %d shards, want %d", tc.limit, got, tc.want)
+		}
+	}
+}
+
+func TestRawCacheSpreadsEntriesAcrossShardsAndSumsThem(t *testing.T) {
+	cache := newRawCache(4 * rawShardBytes)
+	for prefix := range byte(40) {
+		cache.put(idFrom(t, prefix), object.TypeBlob, []byte("12345"))
+	}
+
+	used := 0
+	for _, shard := range cache.shards {
+		if shard.len() > 0 {
+			used++
+		}
+	}
+	if used != len(cache.shards) || cache.len() != 40 || cache.bytes() != 200 {
+		t.Fatalf("%d shards hold %d entries and %d bytes, want 40 entries and 200 bytes in every shard", used, cache.len(), cache.bytes())
+	}
+	cache.purge()
+	if cache.len() != 0 || cache.bytes() != 0 {
+		t.Fatalf("cache holds %d entries and %d bytes after purge", cache.len(), cache.bytes())
+	}
+}
+
+func TestRawCacheEvictsOnlyWithinTheShardThatIsFull(t *testing.T) {
+	cache := newRawCache(2 * rawShardBytes)
+	half := make([]byte, rawShardBytes*3/4)
+	first, second := idFrom(t, 2), idFrom(t, 4)
+	other := idFrom(t, 3)
+	cache.put(first, object.TypeBlob, half)
+	cache.put(other, object.TypeBlob, half)
+	cache.put(second, object.TypeBlob, half)
+
+	if _, _, ok := cache.get(first); ok {
+		t.Fatal("the oldest entry of the full shard survived")
+	}
+	if _, _, ok := cache.get(second); !ok {
+		t.Fatal("the newest entry of the full shard was lost")
+	}
+	if _, _, ok := cache.get(other); !ok {
+		t.Fatal("an entry of another shard was evicted")
+	}
+}
+
+func TestRawCacheRefusesAnEntryLargerThanItsShard(t *testing.T) {
+	cache := newRawCache(4 * rawShardBytes)
+
+	cache.put(idFrom(t, 1), object.TypeBlob, make([]byte, rawShardBytes+1))
+
+	if cache.len() != 0 {
+		t.Fatalf("cache holds %d entries, want the oversized one refused", cache.len())
 	}
 }

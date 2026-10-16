@@ -47,7 +47,7 @@ func divergenceStatusSuffix(d divergenceState) string {
 }
 
 func (a *App) computeDivergence(o *openedRepository) (repo.Divergence, bool) {
-	div, hasUpstream, err := repo.AheadBehind(o.repo)
+	div, hasUpstream, err := repo.AheadBehindWith(o.repo, o.store, a.statusDivergenceLoader().counter(o))
 	if err != nil {
 		a.log.Warn("compute ahead/behind failed", "path", o.path, "error", err)
 		return repo.Divergence{}, false

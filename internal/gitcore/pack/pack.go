@@ -40,11 +40,13 @@ func NewPackFile(file *os.File, opts ...Option) (*Pack, error) {
 	if err != nil {
 		return nil, err
 	}
-	packfile, err := NewPack(file, info.Size(), opts...)
+	source, closer := sourceOf(file, info.Size())
+	packfile, err := NewPack(source, info.Size(), opts...)
 	if err != nil {
+		_ = closer.Close()
 		return nil, err
 	}
-	packfile.closer = file
+	packfile.closer = closer
 	packfile.path = file.Name()
 	return packfile, nil
 }

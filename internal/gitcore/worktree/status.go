@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 )
 
@@ -78,18 +79,18 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	headTree := map[string]headEntry{}
+	headTree := hash.Zero
 	if !headCommit.IsZero() {
 		commit, err := w.db.Commit(headCommit)
 		if err != nil {
 			return Status{}, fmt.Errorf("%w: %w", ErrReadHead, err)
 		}
-		headTree, err = w.collectHeadTree(ctx, commit.Tree)
-		if err != nil {
-			return Status{}, err
-		}
+		headTree = commit.Tree
 	}
-	staged := w.stagedStatus(headTree)
+	staged, err := w.stagedStatus(ctx, headTree)
+	if err != nil {
+		return Status{}, err
+	}
 
 	var mergedEntries []*index.Entry
 	trackedFiles := map[string]bool{}
@@ -108,10 +109,11 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	unstaged, err := w.unstagedStatuses(ctx, mergedEntries, rules)
+	scan, err := w.unstagedStatuses(ctx, mergedEntries, rules)
 	if err != nil {
 		return Status{}, err
 	}
+	unstaged := scan.changes
 	var untracked []Entry
 	if !w.hideUntracked {
 		untracked, err = w.untrackedEntries(ctx, trackedDirs, trackedFiles)
@@ -157,7 +159,7 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 
 	result := Status{HeadBranch: branch, Detached: detached, Entries: make([]Entry, 0, len(combined))}
 	for _, entry := range combined {
-		w.fillWorkingInfo(entry)
+		w.fillWorkingInfo(entry, scan.stats)
 		entry.FilterUnsupported = !entry.IsDir && w.policy(entry.Path).FilterUnsupported()
 		result.Entries = append(result.Entries, *entry)
 	}

@@ -16,7 +16,18 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
 
-var statPath = os.Stat
+const directorySettle = 2 * time.Second
+
+var (
+	statPath    = os.Stat
+	readDirPath = os.ReadDir
+	scanClock   = time.Now
+)
+
+type directoryStamp struct {
+	modTime time.Time
+	settled bool
+}
 
 type PackFile struct {
 	Name    string
@@ -60,6 +71,8 @@ type Store struct {
 	settings settings
 	mu       sync.RWMutex
 	files    []*PackFile
+	scanned  directoryStamp
+	hot      atomic.Pointer[PackFile]
 }
 
 type candidate struct {
@@ -89,8 +102,9 @@ func (s *Store) Acquire() iter.Seq[*PackFile] {
 	return func(yield func(*PackFile) bool) {
 		files := s.acquire()
 		defer release(files)
-		for _, file := range files {
+		for _, file := range s.preferHot(files) {
 			if !yield(file) {
+				s.hot.Store(file)
 				return
 			}
 		}
@@ -173,13 +187,38 @@ func (s *Store) Verify() error {
 	return nil
 }
 
+func (s *Store) directoryUnchanged() bool {
+	s.mu.RLock()
+	scanned := s.scanned
+	s.mu.RUnlock()
+	if !scanned.settled {
+		return false
+	}
+	info, err := statPath(s.dir)
+	return err == nil && info.ModTime().Equal(scanned.modTime)
+}
+
+func (s *Store) directoryStamp() directoryStamp {
+	now := scanClock()
+	info, err := statPath(s.dir)
+	if err != nil {
+		return directoryStamp{}
+	}
+	return directoryStamp{modTime: info.ModTime(), settled: now.Sub(info.ModTime()) >= directorySettle}
+}
+
 func (s *Store) Reload() (bool, error) {
+	if s.directoryUnchanged() {
+		return false, nil
+	}
+	before := s.directoryStamp()
 	found, err := s.scan()
 	if err != nil {
 		return false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.scanned = before
 	kept := make(map[string]*PackFile, len(s.files))
 	for _, file := range s.files {
 		kept[file.Name] = file
@@ -209,6 +248,7 @@ func (s *Store) Reload() (bool, error) {
 		changed = true
 	}
 	s.files = files
+	s.hot.Store(nil)
 	return changed, nil
 }
 
@@ -250,6 +290,21 @@ func (s *Store) acquire() []*PackFile {
 	return s.files
 }
 
+func (s *Store) preferHot(files []*PackFile) []*PackFile {
+	hot := s.hot.Load()
+	if hot == nil || len(files) < 2 || files[0] == hot {
+		return files
+	}
+	at := slices.Index(files, hot)
+	if at < 0 {
+		return files
+	}
+	ordered := make([]*PackFile, 0, len(files))
+	ordered = append(ordered, hot)
+	ordered = append(ordered, files[:at]...)
+	return append(ordered, files[at+1:]...)
+}
+
 func release(files []*PackFile) {
 	for _, file := range files {
 		file.release()
@@ -285,7 +340,7 @@ func (s *Store) openPair(wanted candidate) (*PackFile, error) {
 }
 
 func (s *Store) scan() ([]candidate, error) {
-	entries, err := os.ReadDir(s.dir)
+	entries, err := readDirPath(s.dir)
 	if err != nil {
 		return nil, fmt.Errorf("pack: read %s: %w", s.dir, err)
 	}

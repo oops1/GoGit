@@ -26,6 +26,7 @@ func main() {
 }
 
 func run() error {
+	started := startupClock()
 	winconsole.Hide()
 	paths, err := config.DefaultPaths()
 	if err != nil {
@@ -41,6 +42,8 @@ func run() error {
 		logger = logx.Discard()
 	}
 	defer logger.Close()
+	diagnostics.BeginStartupTrace(logger.Slog(), started)
+	diagnostics.StartupStep(diagnostics.StepLoggerOpened)
 	diagnostics.StartProfiler(logger.Slog())
 	diagnostics.LimitMemory(logger.Slog())
 	if backup != "" {
@@ -52,6 +55,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	diagnostics.StartupStep(diagnostics.StepApplicationBuilt)
 	return a.Run()
 }
 

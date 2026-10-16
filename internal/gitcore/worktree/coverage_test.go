@@ -14,15 +14,15 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/repo"
 )
 
-func TestCollectHeadTreeReturnsAnEmptyMapForAZeroID(t *testing.T) {
+func TestStagedStatusAgainstAnUnbornHeadOfAnEmptyIndexIsEmpty(t *testing.T) {
 	tr := newTestRepo(t)
 	w := tr.open()
-	tree, err := w.collectHeadTree(t.Context(), hash.Zero)
+	staged, err := w.stagedStatus(t.Context(), hash.Zero)
 	if err != nil {
-		t.Fatalf("collectHeadTree returned error %v", err)
+		t.Fatalf("stagedStatus returned error %v", err)
 	}
-	if len(tree) != 0 {
-		t.Fatalf("collectHeadTree(zero) = %#v, want empty", tree)
+	if len(staged) != 0 {
+		t.Fatalf("stagedStatus(zero) = %#v, want empty", staged)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestCompareToWorktreeDetectsExecutableBitAfterAFullContentRead(t *testing.T
 	w.fileMode = true
 	original := fsLstatFile
 	fsLstatFile = func(root *os.Root, name string) (os.FileInfo, error) {
-		return fakeFileInfo{mode: 0o755, size: 999, modTime: time.Unix(999, 0)}, nil
+		return fakeFileInfo{mode: 0o755, size: int64(len("echo\n")), modTime: time.Unix(999, 0)}, nil
 	}
 	t.Cleanup(func() { fsLstatFile = original })
 	status, err := w.Status(t.Context())

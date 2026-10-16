@@ -27,13 +27,20 @@ var openDivergenceObjects = odb.Open
 
 var openDivergenceRefs = refs.Open
 
+type Counter func(pairs []BranchPair) (map[refs.Name]Divergence, error)
+
 func AheadBehind(r *gitrepo.Repository) (Divergence, bool, error) {
 	store, err := openDivergenceRefs(refs.Options{GitDir: r.GitDir(), CommonDir: r.CommonDir(), Bare: r.IsBare()})
 	if err != nil {
 		return Divergence{}, false, err
 	}
 	defer func() { _ = store.Close() }()
+	return AheadBehindWith(r, store, func(pairs []BranchPair) (map[refs.Name]Divergence, error) {
+		return ManyAheadBehind(r, pairs)
+	})
+}
 
+func AheadBehindWith(r *gitrepo.Repository, store *refs.Store, count Counter) (Divergence, bool, error) {
 	head, err := store.Lookup(refs.HEAD)
 	if err != nil {
 		return Divergence{}, false, err
@@ -61,7 +68,7 @@ func AheadBehind(r *gitrepo.Repository) (Divergence, bool, error) {
 		return Divergence{}, false, err
 	}
 
-	result, err := ManyAheadBehind(r, []BranchPair{{Name: head.SymbolicTarget, Local: localCommit, Remote: remoteCommit}})
+	result, err := count([]BranchPair{{Name: head.SymbolicTarget, Local: localCommit, Remote: remoteCommit}})
 	if err != nil {
 		return Divergence{}, false, err
 	}
@@ -93,7 +100,14 @@ func ManyAheadBehind(r *gitrepo.Repository, pairs []BranchPair) (map[refs.Name]D
 	if settings.Enabled {
 		revCtx.Graph, _ = commitgraph.Open(db.Dirs(), settings.Open)
 	}
+	return ManyAheadBehindIn(revCtx, pairs)
+}
 
+func ManyAheadBehindIn(revCtx revision.Context, pairs []BranchPair) (map[refs.Name]Divergence, error) {
+	if revCtx.Parsed == nil {
+		revCtx.Parsed = revision.NewParsedObjects()
+	}
+	result := make(map[refs.Name]Divergence, len(pairs))
 	for _, pair := range pairs {
 		ahead, err := countDivergenceCommits(revCtx, pair.Local, pair.Remote)
 		if err != nil {
