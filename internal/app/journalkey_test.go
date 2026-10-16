@@ -112,6 +112,7 @@ func countJournalRestarts(t *testing.T) *int {
 
 func TestARefreshWithUnchangedRefsDoesNotRestartTheJournal(t *testing.T) {
 	a, _, _ := cloneForDivergence(t)
+	a.stopWatcher()
 	restarts := countJournalRestarts(t)
 
 	a.RefreshRepository()
@@ -125,6 +126,7 @@ func TestARefreshWithUnchangedRefsDoesNotRestartTheJournal(t *testing.T) {
 
 func TestARefreshAfterABranchMovedRestartsTheJournalOnce(t *testing.T) {
 	a, _, local := cloneForDivergence(t)
+	a.stopWatcher()
 	restarts := countJournalRestarts(t)
 	addLocalCommitWithMessage(t, local, "main", "second.txt", "second\n", "second")
 
@@ -138,6 +140,7 @@ func TestARefreshAfterABranchMovedRestartsTheJournalOnce(t *testing.T) {
 
 func TestTheRefreshCommandAlwaysReloadsTheJournal(t *testing.T) {
 	a, _, _ := cloneForDivergence(t)
+	a.stopWatcher()
 	restarts := countJournalRestarts(t)
 
 	a.Dispatch(CmdRefresh)

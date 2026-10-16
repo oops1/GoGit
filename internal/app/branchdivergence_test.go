@@ -112,6 +112,7 @@ func TestBranchesPaneShowsNoSuffixForABranchWithoutUpstream(t *testing.T) {
 
 func TestBranchDivergenceComputationRunsInTheBackgroundWithoutBlockingRefresh(t *testing.T) {
 	a, _, local := cloneForDivergence(t)
+	a.stopWatcher()
 	addLocalCommitWithMessage(t, local, "main", "second.txt", "second\n", "second")
 	o := a.opened()
 	o.divergence.keepOnly(nil)

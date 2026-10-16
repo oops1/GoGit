@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
 	"github.com/oops1/gogit/internal/gitcore/revision"
 	"github.com/oops1/gogit/internal/repo"
+	"github.com/oops1/gogit/internal/ui/branches"
 )
 
 func countGraphOpens(t *testing.T) *int {
@@ -132,29 +134,44 @@ func TestRevisionContextCarriesTheOpenRepositoryAndItsCachedGraph(t *testing.T) 
 	}
 }
 
-func TestRefreshDoesNotCountDivergenceAgainWhileBranchTipsAreUnchanged(t *testing.T) {
+func enrichedSnapshot(t *testing.T, a *App, o *openedRepository) branches.Snapshot {
+	t.Helper()
+	snap, err := loadBranchSnapshot(o.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.enrichBranchSnapshot(o, &snap)
+	return snap
+}
+
+func TestBranchDivergenceIsNotCountedAgainWhileBranchTipsAreUnchanged(t *testing.T) {
 	a, _, local := cloneForDivergence(t)
-	calls := 0
+	a.stopWatcher()
+	o := a.opened()
+	var calls atomic.Int32
 	previous := manyAheadBehind
 	manyAheadBehind = func(source revision.Context, pairs []repo.BranchPair) (map[refs.Name]repo.Divergence, error) {
-		calls++
+		calls.Add(1)
 		return previous(source, pairs)
 	}
 	t.Cleanup(func() { manyAheadBehind = previous })
 
-	a.RefreshRepository()
+	a.refreshBranchDivergence(o, enrichedSnapshot(t, a, o))
 	a.branchDivergenceWG.Wait()
-	a.RefreshRepository()
+	a.refreshBranchDivergence(o, enrichedSnapshot(t, a, o))
 	a.branchDivergenceWG.Wait()
-	if calls != 0 {
-		t.Fatalf("divergence was counted %d times while no branch moved, want none", calls)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("divergence was counted %d times while no branch moved, want none", got)
 	}
 
 	addLocalCommitWithMessage(t, local, "main", "second.txt", "second\n", "second")
-	a.RefreshRepository()
+	moved := enrichedSnapshot(t, a, o)
+	a.refreshBranchDivergence(o, moved)
+	a.branchDivergenceWG.Wait()
+	a.refreshBranchDivergence(o, moved)
 	a.branchDivergenceWG.Wait()
 
-	if calls != 1 {
-		t.Fatalf("divergence was counted %d times after one branch moved, want once", calls)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("divergence was counted %d times after one branch moved, want once", got)
 	}
 }
