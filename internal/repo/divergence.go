@@ -104,6 +104,9 @@ func ManyAheadBehind(r *gitrepo.Repository, pairs []BranchPair) (map[refs.Name]D
 }
 
 func ManyAheadBehindIn(revCtx revision.Context, pairs []BranchPair) (map[refs.Name]Divergence, error) {
+	if revCtx.Parsed == nil {
+		revCtx.Parsed = revision.NewParsedObjects()
+	}
 	result := make(map[refs.Name]Divergence, len(pairs))
 	for _, pair := range pairs {
 		ahead, err := countDivergenceCommits(revCtx, pair.Local, pair.Remote)

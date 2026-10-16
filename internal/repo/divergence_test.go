@@ -2,6 +2,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -480,5 +481,46 @@ func TestManyAheadBehindInCountsPairsOnTheContextItIsGiven(t *testing.T) {
 
 	if err != nil || got[pair.Name] != (Divergence{Ahead: 1, Behind: 1}) {
 		t.Fatalf("ManyAheadBehindIn returned %v, %v, want one ahead and one behind", got, err)
+	}
+}
+
+type countingObjects struct {
+	inner revision.Objects
+	reads map[hash.ObjectID]int
+}
+
+func (c *countingObjects) Get(id hash.ObjectID) (object.Type, []byte, error) {
+	c.reads[id]++
+	return c.inner.Get(id)
+}
+
+func TestManyAheadBehindInReadsEachCommitOnceAcrossAllPairs(t *testing.T) {
+	db, _ := openDivergenceWriters(t, newDivergenceRepoDir(t, "main"))
+	tip := putDivergenceCommit(t, db, "root")
+	for step := range 20 {
+		tip = putDivergenceCommit(t, db, fmt.Sprintf("base %d", step), tip)
+	}
+	var pairs []BranchPair
+	for branch := range 30 {
+		first := putDivergenceCommit(t, db, fmt.Sprintf("branch %d first", branch), tip)
+		second := putDivergenceCommit(t, db, fmt.Sprintf("branch %d second", branch), first)
+		pairs = append(pairs, BranchPair{Name: refs.BranchName(fmt.Sprintf("b%02d", branch)), Local: second, Remote: tip})
+	}
+	counting := &countingObjects{inner: db, reads: map[hash.ObjectID]int{}}
+
+	got, err := ManyAheadBehindIn(revision.Context{Objects: counting}, pairs)
+
+	if err != nil {
+		t.Fatalf("ManyAheadBehindIn returned error %v", err)
+	}
+	for _, pair := range pairs {
+		if got[pair.Name] != (Divergence{Ahead: 2}) {
+			t.Fatalf("%s = %+v, want two ahead", pair.Name, got[pair.Name])
+		}
+	}
+	for id, reads := range counting.reads {
+		if reads > 1 {
+			t.Fatalf("commit %s was read %d times, want once for the whole computation", id, reads)
+		}
 	}
 }
