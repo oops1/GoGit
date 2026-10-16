@@ -2,7 +2,6 @@ package odb
 
 import (
 	"container/list"
-	"runtime"
 	"sync"
 	"weak"
 
@@ -89,9 +88,12 @@ func (c *rawCache) purge() {
 	c.used = 0
 }
 
+const weakSweepFloor = 1024
+
 type weakCache[T any] struct {
-	mu    sync.Mutex
-	items map[hash.ObjectID]weak.Pointer[T]
+	mu      sync.Mutex
+	items   map[hash.ObjectID]weak.Pointer[T]
+	sweepAt int
 }
 
 func newWeakCache[T any]() *weakCache[T] {
@@ -114,22 +116,26 @@ func (c *weakCache[T]) get(id hash.ObjectID) *T {
 
 func (c *weakCache[T]) put(id hash.ObjectID, value *T) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.items[id] = weak.Make(value)
-	c.mu.Unlock()
-	runtime.AddCleanup(value, c.drop, id)
+	if len(c.items) >= max(c.sweepAt, weakSweepFloor) {
+		c.sweepLocked()
+		c.sweepAt = 2 * len(c.items)
+	}
 }
 
-func (c *weakCache[T]) drop(id hash.ObjectID) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if pointer, ok := c.items[id]; ok && pointer.Value() == nil {
-		delete(c.items, id)
+func (c *weakCache[T]) sweepLocked() {
+	for id, pointer := range c.items {
+		if pointer.Value() == nil {
+			delete(c.items, id)
+		}
 	}
 }
 
 func (c *weakCache[T]) len() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.sweepLocked()
 	return len(c.items)
 }
 
@@ -137,6 +143,7 @@ func (c *weakCache[T]) purge() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	clear(c.items)
+	c.sweepAt = 0
 }
 
 type objectCache struct {

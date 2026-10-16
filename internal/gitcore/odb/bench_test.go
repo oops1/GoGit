@@ -63,3 +63,18 @@ func BenchmarkPutBlobOfOneMegabyte(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkWeakCacheOfParsedCommits(b *testing.B) {
+	cache := newWeakCache[object.Commit]()
+	var id hash.ObjectID
+	counter := uint64(0)
+	b.ReportAllocs()
+	for b.Loop() {
+		counter++
+		binary.LittleEndian.PutUint64(id[:], counter)
+		cache.put(id, &object.Commit{Message: "m"})
+		if cache.get(id) == nil {
+			b.Fatal("the commit just stored is gone")
+		}
+	}
+}

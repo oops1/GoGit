@@ -1,6 +1,7 @@
 package odb
 
 import (
+	"encoding/binary"
 	"runtime"
 	"testing"
 	"weak"
@@ -8,6 +9,12 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/object"
 )
+
+func numberedID(number uint64) hash.ObjectID {
+	var id hash.ObjectID
+	binary.LittleEndian.PutUint64(id[:], number)
+	return id
+}
 
 func idFrom(t testing.TB, prefix byte) hash.ObjectID {
 	t.Helper()
@@ -111,28 +118,38 @@ func TestWeakCacheForgetsCollectedValues(t *testing.T) {
 	}
 }
 
-func TestWeakCacheDropKeepsLiveValues(t *testing.T) {
+func TestWeakCacheSweepsCollectedValuesOnceItGrowsPastItsThreshold(t *testing.T) {
 	cache := newWeakCache[object.Blob]()
-	id := idFrom(t, 12)
-	blob := &object.Blob{Data: []byte("live")}
-	cache.put(id, blob)
-	cache.drop(idFrom(t, 13))
-	cache.drop(id)
-	if cache.len() != 1 {
-		t.Fatalf("cache holds %d entries, want 1", cache.len())
+	for index := range 3 * weakSweepFloor {
+		cache.put(numberedID(uint64(index)), &object.Blob{Data: []byte("garbage")})
+		if index == weakSweepFloor {
+			collect()
+		}
 	}
-	runtime.KeepAlive(blob)
+
+	cache.mu.Lock()
+	held := len(cache.items)
+	cache.mu.Unlock()
+	if held >= 3*weakSweepFloor {
+		t.Fatalf("the cache still holds %d entries, want the collected ones swept", held)
+	}
 }
 
-func TestWeakCacheDropRemovesCollectedValues(t *testing.T) {
+func TestWeakCacheKeepsLiveValuesThroughASweep(t *testing.T) {
 	cache := newWeakCache[object.Blob]()
-	id := idFrom(t, 14)
-	cache.put(id, &object.Blob{Data: []byte("garbage")})
-	collect()
-	cache.drop(id)
-	if cache.len() != 0 {
-		t.Fatalf("cache holds %d entries after drop", cache.len())
+	live := make([]*object.Blob, weakSweepFloor+10)
+	for index := range live {
+		live[index] = &object.Blob{Data: []byte("live")}
+		cache.put(numberedID(uint64(index)), live[index])
 	}
+
+	if got := cache.len(); got != len(live) {
+		t.Fatalf("the cache holds %d entries, want all %d live ones", got, len(live))
+	}
+	if cache.get(numberedID(5)) != live[5] {
+		t.Fatal("a live value was lost in a sweep")
+	}
+	runtime.KeepAlive(live)
 }
 
 func TestWeakCachePurgeEmptiesEverything(t *testing.T) {
