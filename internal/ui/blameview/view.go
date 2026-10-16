@@ -72,6 +72,7 @@ type View struct {
 	lines     []Line
 	selected  int
 	linkColor color.RGBA
+	commitCol *datagrid.DataGridTemplateColumn
 
 	OnInvestigate func(line Line)
 	OnCommit      func(id hash.ObjectID)
@@ -131,6 +132,8 @@ func (v *View) bind(named map[string]widget.Widget) error {
 func (v *View) buildColumns() {
 	commit := datagrid.NewTemplateColumn(i18n.T("Dialog.Blame.Column.Commit"), v.drawCommitCell)
 	commit.SetWidth(datagrid.PixelWidth(commitWidth))
+	commit.SetCursor(datagrid.CursorHand)
+	v.commitCol = commit
 	when := datagrid.NewTextColumn(i18n.T("Dialog.Blame.Column.When"), "When")
 	when.SetWidth(datagrid.PixelWidth(whenWidth))
 	author := datagrid.NewTemplateColumn(i18n.T("Dialog.Blame.Column.Author"), v.drawAuthorCell)
@@ -183,18 +186,18 @@ func (v *View) commitOf(index int) (hash.ObjectID, bool) {
 	return v.lines[index].Commit, true
 }
 
-func (v *View) onRowActivated(index int, _ interface{}) {
-	if v.OnCommit == nil {
+func (v *View) onCellClicked(e datagrid.CellClickedEvent) {
+	if v.OnCommit == nil || e.Column != datagrid.Column(v.commitCol) || e.Button != 0 || e.DoubleClick {
 		return
 	}
-	if id, ok := v.commitOf(index); ok {
+	if id, ok := v.commitOf(e.RowIndex); ok {
 		v.OnCommit(id)
 	}
 }
 
 func (v *View) wire() {
 	v.table.Grid.OnSelectionChanged = v.onSelected
-	v.table.Grid.OnRowActivated = v.onRowActivated
+	v.table.Grid.OnCellClicked = v.onCellClicked
 	v.lookBtn.OnClick = v.investigate
 	v.closeBtn.OnClick = v.close
 	v.dlg.CancelAction = v.close
