@@ -400,3 +400,39 @@ func TestSizeStringIsEmptyForZeroOrNegativeSizes(t *testing.T) {
 		t.Fatalf("sizeString(5) = %q, want 5", got)
 	}
 }
+
+func TestWorkingRowsOfSortedKeepsTheOrderItIsGiven(t *testing.T) {
+	registerStateStrings(t)
+	entries := []worktree.Entry{
+		{Path: "z.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified},
+		{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified},
+	}
+
+	rows := WorkingRowsOfSorted(entries)
+
+	if len(rows) != 2 || rows[0].RelPath != "z.txt" || rows[1].RelPath != "a.txt" {
+		t.Fatalf("rows = %+v, want the given order z.txt then a.txt", rows)
+	}
+}
+
+func TestWorkingRowsAreTheRowsOfTheSortedEntries(t *testing.T) {
+	registerStateStrings(t)
+	status := worktree.Status{Entries: []worktree.Entry{
+		{Path: "untracked.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusUntracked},
+		{Path: "staged.txt", Staged: worktree.StatusAdded, Unstaged: worktree.StatusUnmodified},
+		{Path: "b.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified},
+		{Path: "a.txt", Staged: worktree.StatusUnmodified, Unstaged: worktree.StatusModified},
+	}}
+
+	got := WorkingRows(status)
+	want := WorkingRowsOfSorted(SortEntries(status.Entries))
+
+	if len(got) != len(want) {
+		t.Fatalf("rows = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("rows[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}

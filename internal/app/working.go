@@ -109,8 +109,8 @@ func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 		}
 		return
 	}
-	rows := changes.WorkingRows(status)
 	entries := changes.SortEntries(status.Entries)
+	rows := changes.WorkingRowsOfSorted(entries)
 	if len(entries) > changes.MaxFiles {
 		entries = entries[:changes.MaxFiles]
 	}
