@@ -20,6 +20,8 @@ var (
 type unstagedChange struct {
 	code      StatusCode
 	submodule SubmoduleChange
+	stat      workingStat
+	statted   bool
 }
 
 type ignoreFlags struct {
@@ -85,25 +87,32 @@ func (r gitlinkRules) flagsFor(path string) (ignoreFlags, error) {
 	return ignoreFlagsOf(mode), nil
 }
 
-func (w *Worktree) unstagedChangeOf(ctx context.Context, entry *index.Entry, rules gitlinkRules) (unstagedChange, error) {
-	code, err := w.compareToWorktree(entry)
+func (w *Worktree) unstagedChangeOf(ctx context.Context, entry *index.Entry, rules gitlinkRules, listing directoryListing) (unstagedChange, error) {
+	code, info, err := w.compareToWorktree(entry, listing)
+	change := unstagedChange{code: code}
+	if info != nil {
+		change.stat, change.statted = workingStat{size: info.Size(), modTime: info.ModTime()}, true
+	}
 	if err != nil || entry.SkipWorktree || !entry.Mode.IsSubmodule() {
-		return unstagedChange{code: code}, err
+		return change, err
 	}
 	flags, err := rules.flagsFor(entry.Path)
 	switch {
 	case err != nil:
 		return unstagedChange{}, fmt.Errorf("%w: %s: %w", ErrReadSubmodule, entry.Path, err)
 	case flags.all:
-		return unstagedChange{code: StatusUnmodified}, nil
+		change.code = StatusUnmodified
+		return change, nil
 	case code != StatusUnmodified:
-		return unstagedChange{code: code}, nil
+		return change, nil
 	}
-	change, err := w.gitlinkChange(ctx, entry, flags)
-	if err != nil || change == (SubmoduleChange{}) {
-		return unstagedChange{code: StatusUnmodified}, err
+	nested, err := w.gitlinkChange(ctx, entry, flags)
+	if err != nil || nested == (SubmoduleChange{}) {
+		change.code = StatusUnmodified
+		return change, err
 	}
-	return unstagedChange{code: StatusModified, submodule: change}, nil
+	change.code, change.submodule = StatusModified, nested
+	return change, nil
 }
 
 func (w *Worktree) gitlinkChange(ctx context.Context, entry *index.Entry, flags ignoreFlags) (SubmoduleChange, error) {
