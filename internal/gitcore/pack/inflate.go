@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"bufio"
 	"bytes"
 	"compress/zlib"
 	"errors"
@@ -16,22 +17,36 @@ type inflater interface {
 
 var emptyStream = []byte{0x78, 0x01, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01}
 
+const inflateBufferSize = 8 << 10
+
+type pooledInflater struct {
+	inflater
+	buffer *bufio.Reader
+}
+
 var inflaters = sync.Pool{New: func() any {
 	reader, _ := zlib.NewReader(bytes.NewReader(emptyStream))
-	return reader.(inflater)
+	return &pooledInflater{inflater: reader.(inflater), buffer: bufio.NewReaderSize(nil, inflateBufferSize)}
 }}
 
 func acquireInflater(source io.Reader) (inflater, error) {
-	reader := inflaters.Get().(inflater)
-	if err := reader.Reset(source, nil); err != nil {
-		inflaters.Put(reader)
+	pooled := inflaters.Get().(*pooledInflater)
+	feed := source
+	if _, exact := source.(io.ByteReader); !exact {
+		pooled.buffer.Reset(source)
+		feed = pooled.buffer
+	}
+	if err := pooled.Reset(feed, nil); err != nil {
+		releaseInflater(pooled)
 		return nil, fmt.Errorf("%w: %v", ErrDecompress, err)
 	}
-	return reader, nil
+	return pooled, nil
 }
 
 func releaseInflater(reader inflater) {
-	inflaters.Put(reader)
+	pooled := reader.(*pooledInflater)
+	pooled.buffer.Reset(nil)
+	inflaters.Put(pooled)
 }
 
 func inflateExact(source io.Reader, into []byte) error {
