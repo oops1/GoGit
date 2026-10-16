@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/oops1/gogit/internal/gitcore/gitlink"
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 	"github.com/oops1/gogit/internal/gitcore/odb"
 	"github.com/oops1/gogit/internal/gitcore/repo"
@@ -49,7 +50,7 @@ func hasGitlink(entries []*index.Entry) bool {
 	return false
 }
 
-func (w *Worktree) gitlinkRulesFor(entries []*index.Entry, headTree map[string]headEntry) (gitlinkRules, error) {
+func (w *Worktree) gitlinkRulesFor(entries []*index.Entry, headTree hash.ObjectID) (gitlinkRules, error) {
 	rules := gitlinkRules{cfg: w.repo.Config(), modules: &submodule.Modules{}, base: ignoreFlags{untracked: w.hideUntracked}}
 	if !hasGitlink(entries) || w.ignoreNoSubmodule {
 		return rules, nil
@@ -62,11 +63,15 @@ func (w *Worktree) gitlinkRulesFor(entries []*index.Entry, headTree map[string]h
 		rules.base = ignoreFlagsOf(mode)
 		rules.base.untracked = rules.base.untracked || w.hideUntracked
 	}
+	headBlob, err := w.headGitmodules(headTree)
+	if err != nil {
+		return gitlinkRules{}, err
+	}
 	modules, err := submodule.Load(submodule.Source{
 		WorkTree: w.repo.WorkTree(),
 		Index:    w.currentIndex(),
 		Objects:  w.db,
-		HeadBlob: headTree[submodule.GitmodulesFile].ID,
+		HeadBlob: headBlob,
 	})
 	if err != nil {
 		return gitlinkRules{}, err

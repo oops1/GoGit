@@ -167,7 +167,7 @@ func TestStatusFailsWhenTheHeadTreeObjectIsMissing(t *testing.T) {
 	}
 }
 
-func TestCollectHeadTreeStopsWhenContextIsCanceled(t *testing.T) {
+func TestStagedStatusStopsWhenContextIsCanceled(t *testing.T) {
 	tr := newTestRepo(t)
 	tr.stage("a.txt", "hi\n")
 	tr.stage("dir/b.txt", "hi\n")
@@ -177,8 +177,8 @@ func TestCollectHeadTreeStopsWhenContextIsCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Commit returned error %v", err)
 	}
-	if _, err := w.collectHeadTree(newStepContext(0), commit.Tree); err == nil {
-		t.Fatalf("collectHeadTree returned no error for a canceled context")
+	if _, err := w.stagedStatus(newStepContext(0), commit.Tree); err == nil {
+		t.Fatalf("stagedStatus returned no error for a canceled context")
 	}
 }
 

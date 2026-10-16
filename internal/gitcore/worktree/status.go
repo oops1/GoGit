@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oops1/gogit/internal/gitcore/hash"
 	"github.com/oops1/gogit/internal/gitcore/index"
 )
 
@@ -78,18 +79,18 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	headTree := map[string]headEntry{}
+	headTree := hash.Zero
 	if !headCommit.IsZero() {
 		commit, err := w.db.Commit(headCommit)
 		if err != nil {
 			return Status{}, fmt.Errorf("%w: %w", ErrReadHead, err)
 		}
-		headTree, err = w.collectHeadTree(ctx, commit.Tree)
-		if err != nil {
-			return Status{}, err
-		}
+		headTree = commit.Tree
 	}
-	staged := w.stagedStatus(headTree)
+	staged, err := w.stagedStatus(ctx, headTree)
+	if err != nil {
+		return Status{}, err
+	}
 
 	var mergedEntries []*index.Entry
 	trackedFiles := map[string]bool{}
