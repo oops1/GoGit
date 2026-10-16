@@ -2,6 +2,7 @@ package transport
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -76,6 +78,7 @@ func TestHTTPAuthenticatesToAnNTLMOrNegotiateProxy(t *testing.T) {
 			}
 			t.Run(name, func(t *testing.T) {
 				authority := newNTLMProxyAuthority(t, scheme, "hunter2")
+				reopened := recordTunnelReopens(t)
 				proxy := startAuthenticatingProxy(t, authority, false)
 				target := newProxyTarget(t, secure)
 				opts := proxyConfig(t, proxy.server.URL, target, "")
@@ -85,7 +88,7 @@ func TestHTTPAuthenticatesToAnNTLMOrNegotiateProxy(t *testing.T) {
 					t.Fatalf("advertise through the %s proxy returned error %v", scheme, err)
 				}
 				if authority.authenticated == 0 || !authority.sameConnection() {
-					t.Fatalf("authenticated %d times, same connection %v (steps %q); want a completed handshake on one connection", authority.authenticated, authority.sameConnection(), authority.stepsSeen())
+					t.Fatalf("authenticated %d times, same connection %v (steps %q, reopened after %q); want a completed handshake on one connection", authority.authenticated, authority.sameConnection(), authority.stepsSeen(), reopened())
 				}
 				if len(source.asked) != 1 || source.asked[0] != proxy.server.URL {
 					t.Fatalf("asked = %q, want one question about %s", source.asked, proxy.server.URL)
@@ -296,5 +299,23 @@ func TestPlainProxyForIgnoresForeignTransportsAndBadURLs(t *testing.T) {
 	s.ownsTransport = false
 	if s.plainProxyFor("http://git.example.com/repo.git") != nil {
 		t.Fatalf("a caller-supplied client must not be proxied by the session")
+	}
+}
+
+func recordTunnelReopens(t *testing.T) func() []string {
+	t.Helper()
+	var mu sync.Mutex
+	var seen []string
+	previous := observeTunnelReopen
+	observeTunnelReopen = func(resp *http.Response) {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, fmt.Sprintf("%s length=%d encoding=%v header=%v", resp.Status, resp.ContentLength, resp.TransferEncoding, resp.Header))
+	}
+	t.Cleanup(func() { observeTunnelReopen = previous })
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), seen...)
 	}
 }
