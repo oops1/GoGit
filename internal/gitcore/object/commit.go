@@ -118,7 +118,7 @@ func parseHeaderID(header ExtraHeader) (hash.ObjectID, error) {
 }
 
 func parseHeaderSignature(header ExtraHeader) (Signature, error) {
-	signature, err := ParseSignature([]byte(header.Value))
+	signature, err := parseSignature(header.Value)
 	if err != nil {
 		return Signature{}, fmt.Errorf("header %s: %w", header.Key, err)
 	}

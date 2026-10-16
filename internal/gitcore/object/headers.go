@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const expectedHeaders = 6
+
 type ExtraHeader struct {
 	Key   string
 	Value string
@@ -16,24 +18,24 @@ func splitHeaders(data []byte) ([]ExtraHeader, string, error) {
 	if separator < 0 {
 		return nil, "", fmt.Errorf("%w: no blank line between headers and message", ErrMalformed)
 	}
-	block := data[:separator+1]
+	block := string(data[:separator+1])
 	message := string(data[separator+2:])
-	var headers []ExtraHeader
+	headers := make([]ExtraHeader, 0, expectedHeaders)
 	for len(block) > 0 {
-		var line []byte
-		line, block, _ = bytes.Cut(block, []byte("\n"))
+		var line string
+		line, block, _ = strings.Cut(block, "\n")
 		if len(line) > 0 && line[0] == ' ' {
 			if len(headers) == 0 {
 				return nil, "", fmt.Errorf("%w: continuation line before any header", ErrMalformed)
 			}
-			headers[len(headers)-1].Value += "\n" + string(line[1:])
+			headers[len(headers)-1].Value += "\n" + line[1:]
 			continue
 		}
-		key, value, found := bytes.Cut(line, []byte(" "))
+		key, value, found := strings.Cut(line, " ")
 		if !found {
 			return nil, "", fmt.Errorf("%w: header line %q has no value", ErrMalformed, line)
 		}
-		headers = append(headers, ExtraHeader{Key: string(key), Value: string(value)})
+		headers = append(headers, ExtraHeader{Key: key, Value: value})
 	}
 	return headers, message, nil
 }
