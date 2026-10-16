@@ -78,3 +78,55 @@ func BenchmarkWeakCacheOfParsedCommits(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkGetFromPackWithAWarmCacheInParallel(b *testing.B) {
+	db, ids := packedBenchmarkDB(b, Options{})
+	for _, id := range ids {
+		if _, _, err := db.Get(id); err != nil {
+			b.Fatalf("Get(%s) returned error %v", id, err)
+		}
+	}
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		at := 0
+		for pb.Next() {
+			if _, _, err := db.Get(ids[at%len(ids)]); err != nil {
+				b.Errorf("Get returned error %v", err)
+				return
+			}
+			at++
+		}
+	})
+}
+
+func benchmarkRawCacheInParallel(b *testing.B, limit int64) {
+	cache := newRawCache(limit)
+	const entries = 4096
+	ids := make([]hash.ObjectID, entries)
+	for at := range ids {
+		binary.LittleEndian.PutUint64(ids[at][4:], uint64(at)*2654435761)
+		ids[at][0] = byte(at * 7)
+		cache.put(ids[at], object.TypeBlob, []byte("payload"))
+	}
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		at := 0
+		for pb.Next() {
+			if _, _, ok := cache.get(ids[at%entries]); !ok {
+				b.Error("an entry is missing")
+				return
+			}
+			at += 7
+		}
+	})
+}
+
+func BenchmarkRawCacheOfOneShardInParallel(b *testing.B) { benchmarkRawCacheInParallel(b, 1<<20) }
+
+func BenchmarkRawCacheOfDefaultSizeInParallel(b *testing.B) {
+	benchmarkRawCacheInParallel(b, DefaultCacheBytes)
+}
+
+func BenchmarkRawCacheOfSixteenShardsInParallel(b *testing.B) {
+	benchmarkRawCacheInParallel(b, 16*rawShardBytes)
+}

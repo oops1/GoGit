@@ -199,3 +199,69 @@ func TestWeakCacheForgetsCollectedValuesOnRead(t *testing.T) {
 		t.Fatalf("cache holds %d entries after a read", cache.len())
 	}
 }
+
+func TestRawCacheUsesOneShardPerTwoMegabytesUpToSixteen(t *testing.T) {
+	tests := []struct {
+		limit int64
+		want  int
+	}{
+		{1, 1}, {rawShardBytes - 1, 1}, {rawShardBytes, 1}, {3 * rawShardBytes, 3},
+		{DefaultCacheBytes, DefaultCacheBytes / rawShardBytes}, {1 << 40, rawShardLimit},
+	}
+	for _, tc := range tests {
+		if got := len(newRawCache(tc.limit).shards); got != tc.want {
+			t.Errorf("a limit of %d gives %d shards, want %d", tc.limit, got, tc.want)
+		}
+	}
+}
+
+func TestRawCacheSpreadsEntriesAcrossShardsAndSumsThem(t *testing.T) {
+	cache := newRawCache(4 * rawShardBytes)
+	for prefix := range byte(40) {
+		cache.put(idFrom(t, prefix), object.TypeBlob, []byte("12345"))
+	}
+
+	used := 0
+	for _, shard := range cache.shards {
+		if shard.len() > 0 {
+			used++
+		}
+	}
+	if used != len(cache.shards) || cache.len() != 40 || cache.bytes() != 200 {
+		t.Fatalf("%d shards hold %d entries and %d bytes, want 40 entries and 200 bytes in every shard", used, cache.len(), cache.bytes())
+	}
+	cache.purge()
+	if cache.len() != 0 || cache.bytes() != 0 {
+		t.Fatalf("cache holds %d entries and %d bytes after purge", cache.len(), cache.bytes())
+	}
+}
+
+func TestRawCacheEvictsOnlyWithinTheShardThatIsFull(t *testing.T) {
+	cache := newRawCache(2 * rawShardBytes)
+	half := make([]byte, rawShardBytes*3/4)
+	first, second := idFrom(t, 2), idFrom(t, 4)
+	other := idFrom(t, 3)
+	cache.put(first, object.TypeBlob, half)
+	cache.put(other, object.TypeBlob, half)
+	cache.put(second, object.TypeBlob, half)
+
+	if _, _, ok := cache.get(first); ok {
+		t.Fatal("the oldest entry of the full shard survived")
+	}
+	if _, _, ok := cache.get(second); !ok {
+		t.Fatal("the newest entry of the full shard was lost")
+	}
+	if _, _, ok := cache.get(other); !ok {
+		t.Fatal("an entry of another shard was evicted")
+	}
+}
+
+func TestRawCacheRefusesAnEntryLargerThanItsShard(t *testing.T) {
+	cache := newRawCache(4 * rawShardBytes)
+
+	cache.put(idFrom(t, 1), object.TypeBlob, make([]byte, rawShardBytes+1))
+
+	if cache.len() != 0 {
+		t.Fatalf("cache holds %d entries, want the oversized one refused", cache.len())
+	}
+}
