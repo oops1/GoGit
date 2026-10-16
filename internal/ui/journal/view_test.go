@@ -332,6 +332,24 @@ func TestAppendKeepsEveryPageInOrder(t *testing.T) {
 	}
 }
 
+func TestAppendingAPageKeepsTheSelectedRowQuietly(t *testing.T) {
+	v, grid := bound(t)
+	first := sampleRows(3)
+	v.Append(first)
+	grid.Grid.SetSelectedIndex(1)
+	selections := 0
+	v.OnSelect = func(Row) { selections++ }
+
+	v.Append(sampleRows(3))
+
+	if got, _ := grid.Grid.SelectedItem().(Row); got.ID != first[1].ID {
+		t.Fatalf("selected %s, want the selection kept on %s", got.ID, first[1].ID)
+	}
+	if selections != 0 {
+		t.Fatalf("selections = %d, want the next page to leave the selection alone", selections)
+	}
+}
+
 func BenchmarkAppendingTwoHundredPagesToTheJournal(b *testing.B) {
 	page := sampleRows(500)
 	b.ReportAllocs()
