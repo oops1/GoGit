@@ -80,11 +80,13 @@ func NewIndexFile(file *os.File) (*Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	index, err := NewIndex(file, info.Size())
+	source, closer := sourceOf(file, info.Size())
+	index, err := NewIndex(source, info.Size())
 	if err != nil {
+		_ = closer.Close()
 		return nil, err
 	}
-	index.closer = file
+	index.closer = closer
 	index.path = file.Name()
 	return index, nil
 }
