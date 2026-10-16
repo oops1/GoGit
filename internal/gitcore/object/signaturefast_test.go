@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 func referenceSeconds(stamp string) (int64, bool) {
@@ -60,6 +61,7 @@ func TestParsingASignatureRejectsATimestampThatIsNotCanonical(t *testing.T) {
 }
 
 func TestSignaturesInTheSameZoneShareOneLocation(t *testing.T) {
+	emptyZoneCache(t)
 	first, err := ParseSignature([]byte("Ann <ann@example.com> 1700000000 +0530"))
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +83,7 @@ func TestSignaturesInTheSameZoneShareOneLocation(t *testing.T) {
 }
 
 func TestTheZoneCacheStopsGrowingAtItsLimit(t *testing.T) {
+	emptyZoneCache(t)
 	var wg sync.WaitGroup
 	for worker := range 4 {
 		wg.Go(func() {
@@ -116,7 +119,21 @@ func TestTheZoneCacheStopsGrowingAtItsLimit(t *testing.T) {
 	}
 }
 
+func emptyZoneCache(t *testing.T) {
+	t.Helper()
+	zoneCache.Lock()
+	saved := zoneCache.locations
+	zoneCache.locations = make(map[string]*time.Location)
+	zoneCache.Unlock()
+	t.Cleanup(func() {
+		zoneCache.Lock()
+		zoneCache.locations = saved
+		zoneCache.Unlock()
+	})
+}
+
 func TestParsingACommitAllocatesLittle(t *testing.T) {
+	emptyZoneCache(t)
 	data := []byte("tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n" +
 		"parent 1111111111111111111111111111111111111111\n" +
 		"author Ann <ann@example.com> 1700000000 +0300\n" +
