@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"maps"
 	"strings"
+	"sync"
 
 	"github.com/oops1/gogit/internal/gitcore/config"
 	"github.com/oops1/gogit/internal/gitcore/hash"
@@ -205,7 +206,9 @@ type Attributes struct {
 	resolved    map[string]map[string]Value
 	globals     [][]attrLine
 	globalErr   error
-	globalsRead bool
+	globalsOnce sync.Once
+	mu          sync.Mutex
+	resolvedMu  sync.Mutex
 }
 
 func New(opts AttributeOptions) *Attributes {
@@ -234,13 +237,19 @@ func (a *Attributes) dirFile(dir string) string {
 }
 
 func (a *Attributes) node(dir string) *attrNode {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.nodeLocked(dir)
+}
+
+func (a *Attributes) nodeLocked(dir string) *attrNode {
 	if n, ok := a.nodes[dir]; ok {
 		return n
 	}
 	n := &attrNode{}
 	a.nodes[dir] = n
 	if dir != "" {
-		n.parent = a.node(parentDir(dir))
+		n.parent = a.nodeLocked(parentDir(dir))
 		n.err = n.parent.err
 	}
 	lines, err := a.perDir.get(a.dirFile(dir))
@@ -250,15 +259,13 @@ func (a *Attributes) node(dir string) *attrNode {
 }
 
 func (a *Attributes) globalLists() ([][]attrLine, error) {
-	if a.globalsRead {
-		return a.globals, a.globalErr
-	}
-	a.globalsRead = true
-	for _, name := range []string{a.opts.InfoFile, a.opts.AttributesFile, a.opts.SystemFile} {
-		lines, err := a.globalFiles.get(name)
-		a.globalErr = cmp.Or(a.globalErr, err)
-		a.globals = append(a.globals, lines)
-	}
+	a.globalsOnce.Do(func() {
+		for _, name := range []string{a.opts.InfoFile, a.opts.AttributesFile, a.opts.SystemFile} {
+			lines, err := a.globalFiles.get(name)
+			a.globalErr = cmp.Or(a.globalErr, err)
+			a.globals = append(a.globals, lines)
+		}
+	})
 	return a.globals, a.globalErr
 }
 
@@ -311,7 +318,10 @@ func (a *Attributes) Lookup(path string) (map[string]Value, error) {
 	if isDir {
 		key += "/"
 	}
-	if cached, ok := a.resolved[key]; ok {
+	a.resolvedMu.Lock()
+	cached, ok := a.resolved[key]
+	a.resolvedMu.Unlock()
+	if ok {
 		return cached, err
 	}
 	macros := determineMacros(lists)
@@ -325,7 +335,9 @@ func (a *Attributes) Lookup(path string) (map[string]Value, error) {
 			fillStates(out, line.states, macros)
 		}
 	}
+	a.resolvedMu.Lock()
 	a.resolved[key] = out
+	a.resolvedMu.Unlock()
 	return out, err
 }
 

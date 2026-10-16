@@ -5,6 +5,7 @@ import (
 	"iter"
 	"slices"
 	"strings"
+	"sync"
 )
 
 const DefaultIgnoreFile = ".gitignore"
@@ -101,7 +102,8 @@ type Matcher struct {
 	nodes       map[string]*ignoreNode
 	globals     [][]Rule
 	globalErr   error
-	globalsRead bool
+	globalsOnce sync.Once
+	mu          sync.Mutex
 }
 
 func NewMatcher(opts IgnoreOptions) *Matcher {
@@ -121,17 +123,15 @@ func NewMatcher(opts IgnoreOptions) *Matcher {
 }
 
 func (m *Matcher) globalLists() ([][]Rule, error) {
-	if m.globalsRead {
-		return m.globals, m.globalErr
-	}
-	m.globalsRead = true
-	for _, name := range []string{m.opts.InfoExclude, m.opts.ExcludesFile} {
-		rules, err := m.globalFiles.get(name)
-		if err != nil && m.globalErr == nil {
-			m.globalErr = err
+	m.globalsOnce.Do(func() {
+		for _, name := range []string{m.opts.InfoExclude, m.opts.ExcludesFile} {
+			rules, err := m.globalFiles.get(name)
+			if err != nil && m.globalErr == nil {
+				m.globalErr = err
+			}
+			m.globals = append(m.globals, rules)
 		}
-		m.globals = append(m.globals, rules)
-	}
+	})
 	return m.globals, m.globalErr
 }
 
@@ -143,13 +143,19 @@ func (m *Matcher) dirFile(dir string) string {
 }
 
 func (m *Matcher) node(dir string) *ignoreNode {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.nodeLocked(dir)
+}
+
+func (m *Matcher) nodeLocked(dir string) *ignoreNode {
 	if n, ok := m.nodes[dir]; ok {
 		return n
 	}
 	n := &ignoreNode{}
 	m.nodes[dir] = n
 	if dir != "" {
-		n.parent = m.node(parentDir(dir))
+		n.parent = m.nodeLocked(parentDir(dir))
 		n.err = n.parent.err
 		if n.parent.blocked {
 			n.blocked, n.rule = true, n.parent.rule
