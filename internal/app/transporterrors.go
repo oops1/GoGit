@@ -25,6 +25,7 @@ var transportErrorKeys = []struct {
 	{transport.ErrProtocolNotAllowed, "Operation.Error.ProtocolNotAllowed"},
 	{transport.ErrProxyAuthRequired, "Operation.Error.ProxyAuthRequired"},
 	{transport.ErrTLSConfig, "Operation.Error.TLSConfig"},
+	{transport.ErrTLSHandshakeTimeout, "Operation.Error.TLSHandshakeTimeout"},
 }
 
 func localizeOperationError(err error) error {

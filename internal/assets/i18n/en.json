@@ -1160,6 +1160,7 @@
   "Operation.Error.ProtocolNotAllowed": "The protocol of this address is forbidden by protocol.allow or GIT_ALLOW_PROTOCOL",
   "Operation.Error.ProxyAuthRequired": "The proxy requires authentication",
   "Operation.Error.TLSConfig": "The TLS settings http.sslCAInfo, http.sslCAPath, http.sslCert or http.sslKey cannot be used",
+  "Operation.Error.TLSHandshakeTimeout": "The secure connection to the server was not established in time: the network or proxy is too slow",
   "Operation.Log.AttributionRemoved": "Attribution removed from commits: %d",
   "Operation.Log.Canceling": "Cancel requested…",
   "Operation.Log.Checkout": "Checking out…",

@@ -12,6 +12,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strings"
 	"sync"
@@ -22,9 +23,8 @@ import (
 
 const defaultUserAgent = "git/2.45.0 (Go.Git)"
 
-const tlsHandshakeTimeout = 15 * time.Second
-
 var (
+	tlsHandshakeTimeout     = 60 * time.Second
 	discoveryHeaderTimeout  = 30 * time.Second
 	errUnsupportedMediaType = errors.New("transport: the server refused the request encoding")
 )
@@ -235,12 +235,12 @@ func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType, 
 		}
 	}
 	s.applyHeaders(req, contentType, proxyAuthorization, headers)
-	stopHeaderTimer := func() bool { return false }
+	headerWait := &headerDeadline{cancel: cancel}
 	if method == http.MethodGet {
-		stopHeaderTimer = time.AfterFunc(discoveryHeaderTimeout, func() { cancel(ErrHeaderTimeout) }).Stop
+		req = req.WithContext(httptrace.WithClientTrace(reqCtx, &httptrace.ClientTrace{WroteRequest: headerWait.start}))
 	}
 	resp, err := s.client.Do(req)
-	stopHeaderTimer()
+	headerWait.stop()
 	if err != nil {
 		watch.stop()
 		cause := context.Cause(reqCtx)
@@ -249,6 +249,31 @@ func (s *httpSession) attempt(ctx context.Context, method, rawURL, contentType, 
 	}
 	resp.Body = &responseBody{ReadCloser: resp.Body, watch: watch, ctx: reqCtx, cancel: cancel}
 	return resp, nil
+}
+
+type headerDeadline struct {
+	mu      sync.Mutex
+	cancel  context.CancelCauseFunc
+	timer   *time.Timer
+	stopped bool
+}
+
+func (d *headerDeadline) start(httptrace.WroteRequestInfo) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopped || d.timer != nil {
+		return
+	}
+	d.timer = time.AfterFunc(discoveryHeaderTimeout, func() { d.cancel(ErrHeaderTimeout) })
+}
+
+func (d *headerDeadline) stop() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.stopped = true
+	if d.timer != nil {
+		d.timer.Stop()
+	}
 }
 
 func (s *httpSession) send(ctx context.Context, method, suffix, contentType string, body *requestBody, headers map[string]string) (*http.Response, error) {

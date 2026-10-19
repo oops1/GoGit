@@ -1160,6 +1160,7 @@
   "Operation.Error.ProtocolNotAllowed": "Протокол этого адреса запрещён настройкой protocol.allow или GIT_ALLOW_PROTOCOL",
   "Operation.Error.ProxyAuthRequired": "Прокси требует аутентификации",
   "Operation.Error.TLSConfig": "Настройки TLS http.sslCAInfo, http.sslCAPath, http.sslCert или http.sslKey нельзя применить",
+  "Operation.Error.TLSHandshakeTimeout": "Защищённое соединение с сервером не установилось вовремя: сеть или прокси слишком медленные",
   "Operation.Log.AttributionRemoved": "Атрибуция убрана из коммитов: %d",
   "Operation.Log.Canceling": "Отмена запрошена…",
   "Operation.Log.Checkout": "Переключение…",
