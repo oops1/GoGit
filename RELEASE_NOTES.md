@@ -29,7 +29,7 @@ All numbers below were measured on Windows with a 20-thread processor.
   opening is lost. A new set of ignored directories reaches the running watcher
   instead of restarting it with a full walk of the tree.
 
-## Journal, Blame and network
+## Fixes
 
 - Loading the next page of the journal no longer drops the selected commit or
   rebuilds the whole table.
@@ -38,3 +38,7 @@ All numbers below were measured on Windows with a 20-thread processor.
 - A secure connection over a slow network waits a minute instead of 15 seconds, and
   the server response timer starts only after the request is sent. When the
   connection never comes up, Go.Git says so instead of "context deadline exceeded".
+- On Windows a commit made right after git or a virus scanner let go of
+  `packed-refs.lock` no longer fails with "Access is denied": while the system is
+  still closing the old file, Go.Git waits up to a second, as it does for a busy
+  lock.
