@@ -241,3 +241,20 @@ func swapWrite(t *testing.T, after int, err error) {
 	}
 	t.Cleanup(func() { fsWrite = previous })
 }
+
+func swapOpenFile(t *testing.T, fail func(name string, call int) bool, err error) *int {
+	t.Helper()
+	previous := fsOpenFile
+	calls := new(int)
+	fsOpenFile = func(root *os.Root, name string, flag int, perm fs.FileMode) (*os.File, error) {
+		if strings.HasSuffix(filepath.ToSlash(name), packedRefsFile+lockSuffix) {
+			*calls++
+			if fail(filepath.ToSlash(name), *calls) {
+				return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+			}
+		}
+		return previous(root, name, flag, perm)
+	}
+	t.Cleanup(func() { fsOpenFile = previous })
+	return calls
+}
