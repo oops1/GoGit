@@ -14,6 +14,8 @@ type watcherIface interface {
 	Poke()
 	Pause()
 	Resume()
+	Ready() <-chan struct{}
+	SetSkipDirs(dirs []string)
 }
 
 func newRealWatcher(layout gitrepo.Layout, opts watch.Options) watcherIface {
@@ -50,14 +52,30 @@ func (a *App) ignoredDirectories() []string {
 }
 
 func (a *App) syncWatcherSkips() {
+	skip := a.ignoredDirectories()
 	a.watchMu.Lock()
-	current := a.watchSkip
-	running := a.watcher != nil
+	w := a.watcher
+	changed := w != nil && !slices.Equal(a.watchSkip, skip)
+	if changed {
+		a.watchSkip = skip
+	}
 	a.watchMu.Unlock()
-	if !running || slices.Equal(current, a.ignoredDirectories()) {
+	if changed {
+		w.SetSkipDirs(skip)
+	}
+}
+
+func (a *App) waitForWatcherBaseline(ctx context.Context) {
+	a.watchMu.Lock()
+	w := a.watcher
+	a.watchMu.Unlock()
+	if w == nil {
 		return
 	}
-	a.restartWatcherForCurrentRepository()
+	select {
+	case <-ctx.Done():
+	case <-w.Ready():
+	}
 }
 
 func (a *App) runWatcher(ctx context.Context, w watcherIface) {

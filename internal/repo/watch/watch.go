@@ -112,38 +112,83 @@ func (o Options) normalize() Options {
 }
 
 type Watcher struct {
-	layout     repo.Layout
-	opts       Options
-	snapshotFn func() Snapshot
+	layout repo.Layout
+	custom func() Snapshot
 
 	mu       sync.Mutex
+	opts     Options
+	skipGen  uint64
 	paused   bool
 	resumeCh chan struct{}
 	pokeCh   chan struct{}
 
 	baseline     Snapshot
+	baselineGen  uint64
+	ready        chan struct{}
 	baselineOnce sync.Once
 }
 
 func New(layout repo.Layout, opts Options) *Watcher {
 	opts = opts.normalize()
-	w := &Watcher{layout: layout, opts: opts, pokeCh: make(chan struct{}, 1)}
-	if opts.Snapshot != nil {
-		w.snapshotFn = opts.Snapshot
-	} else {
-		w.snapshotFn = func() Snapshot { return take(w.layout, w.opts) }
-	}
-	w.baseline = w.snapshotFn()
+	w := &Watcher{layout: layout, opts: opts, custom: opts.Snapshot, pokeCh: make(chan struct{}, 1), ready: make(chan struct{})}
+	go w.takeBaseline()
 	return w
 }
 
-func (w *Watcher) initialSnapshot() Snapshot {
+func (w *Watcher) takeBaseline() {
+	defer close(w.ready)
+	w.baseline, w.baselineGen = w.snapshot()
+}
+
+func (w *Watcher) Ready() <-chan struct{} { return w.ready }
+
+func (w *Watcher) SetSkipDirs(dirs []string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.opts.SkipDirs = slices.Clone(dirs)
+	w.skipGen++
+}
+
+func (w *Watcher) snapshot() (Snapshot, uint64) {
+	w.mu.Lock()
+	opts, gen := w.opts, w.skipGen
+	w.mu.Unlock()
+	if w.custom != nil {
+		return w.custom(), gen
+	}
+	return take(w.layout, opts), gen
+}
+
+func (w *Watcher) initialSnapshot(ctx context.Context) (Snapshot, uint64, bool) {
 	first := false
 	w.baselineOnce.Do(func() { first = true })
-	if first {
-		return w.baseline
+	if !first {
+		snap, gen := w.snapshot()
+		return snap, gen, true
 	}
-	return w.snapshotFn()
+	select {
+	case <-ctx.Done():
+		return nil, 0, false
+	case <-w.ready:
+		return w.baseline, w.baselineGen, true
+	}
+}
+
+func changesBetween(prev, next Snapshot, skipsChanged bool) ChangeSet {
+	if skipsChanged {
+		return diffCommon(prev, next)
+	}
+	return Diff(prev, next)
+}
+
+func diffCommon(prev, next Snapshot) ChangeSet {
+	var changes ChangeSet
+	for path, before := range prev {
+		if after, ok := next[path]; ok && !before.equal(after) {
+			changes = changes.add(before.Kind)
+		}
+	}
+	return changes
 }
 
 func (w *Watcher) Poke() {
@@ -189,7 +234,10 @@ func minDuration(a, b time.Duration) time.Duration {
 
 func (w *Watcher) Run(ctx context.Context) iter.Seq[ChangeSet] {
 	return func(yield func(ChangeSet) bool) {
-		prev := w.initialSnapshot()
+		prev, prevGen, ok := w.initialSnapshot(ctx)
+		if !ok {
+			return
+		}
 		interval := w.opts.MinInterval
 		timer := time.NewTimer(interval)
 		defer timer.Stop()
@@ -200,7 +248,7 @@ func (w *Watcher) Run(ctx context.Context) iter.Seq[ChangeSet] {
 					return
 				case <-resumeCh:
 				}
-				prev = w.snapshotFn()
+				prev, prevGen = w.snapshot()
 				interval = w.opts.MinInterval
 				timer.Reset(interval)
 				continue
@@ -215,9 +263,9 @@ func (w *Watcher) Run(ctx context.Context) iter.Seq[ChangeSet] {
 				timer.Reset(w.opts.MinInterval)
 				continue
 			}
-			next := w.snapshotFn()
-			changes := Diff(prev, next)
-			prev = next
+			next, nextGen := w.snapshot()
+			changes := changesBetween(prev, next, nextGen != prevGen)
+			prev, prevGen = next, nextGen
 			if len(changes) == 0 {
 				interval = minDuration(interval*2, w.opts.MaxInterval)
 			} else {

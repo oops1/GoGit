@@ -155,6 +155,7 @@ func TestCompareToWorktreeDetectsExecutableBitEvenWhenStatCacheMatches(t *testin
 		Stat: index.Stat{MTime: mtime, Size: 7},
 	})
 	w := tr.open()
+	w.hideUntracked = true
 	w.fileMode = true
 	original := fsLstatFile
 	fsLstatFile = func(root *os.Root, name string) (os.FileInfo, error) {
@@ -176,6 +177,7 @@ func TestCompareToWorktreeDetectsExecutableBitAfterAFullContentRead(t *testing.T
 	tr.writeFile("run2.sh", "echo\n")
 	tr.stageContent("run2.sh", "echo\n")
 	w := tr.open()
+	w.hideUntracked = true
 	w.fileMode = true
 	original := fsLstatFile
 	fsLstatFile = func(root *os.Root, name string) (os.FileInfo, error) {
@@ -205,6 +207,7 @@ func TestCompareToWorktreeFailsWhenHashingASymlinkTargetWithAnUnsupportedFormat(
 		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
+	w.hideUntracked = true
 	w.format = hash.Format(99)
 	originalLstat, originalReadlink := fsLstatFile, fsReadlinkFile
 	fsLstatFile = func(root *os.Root, name string) (os.FileInfo, error) {

@@ -1,58 +1,44 @@
-# Go.Git 1.7.0 — Speed
+# Go.Git 1.7.1 — Sharper text, faster big working trees
 
-Status, the journal, branch counters and object reading are noticeably faster on
-big repositories, and Go.Git now writes the commit graph itself.
+Small text is sharper, the status of a big working tree takes half the time, and
+opening a repository no longer holds up the interface.
 
 All numbers below were measured on Windows with a 20-thread processor.
 
-## Working tree status
+## Sharper text
 
-- Status of a repository with 50 thousand files takes 0.12 s instead of 5.1 s.
-  Almost all the time went into stating each file through a path that is opened
-  component by component. A directory is now read once and its files are described
-  from that listing; only small directories and files missing from a listing are
-  stated one by one.
-- The index is compared with HEAD through the cache tree: if a directory has the
-  same tree as in HEAD, it is not read at all. With nothing staged, no tree below
-  the root is read.
-- Untracked directories are walked in parallel, each read once. With 20 thousand
-  untracked files the status takes 23 ms instead of 46 ms, with 20 thousand ignored
-  files 24 ms instead of 76 ms. The ignore and attribute matchers no longer wait for
-  each other behind a lock.
+- Small text is drawn with vertical hinting and a contrast boost for thin strokes:
+  the heights of lowercase and capital letters land on whole pixels, and dark text
+  on a light background looks denser. Line widths and layout do not change.
+  Subpixel smoothing stays off because it is useless in a remote session. The
+  headless-gui engine is updated to v3.43.0 for this.
 
-## Journal and history
+## Big working trees
 
-- If a repository has no commit graph, Go.Git writes it in the background after the
-  repository is opened. With a graph the journal streams its first page instead of
-  walking the whole history. The settings `core.commitGraph` and
-  `gc.writeCommitGraph` are honoured, and shallow clones are left alone.
-- Parsing a commit makes almost four times fewer allocations: a walk over 10 thousand commits goes
-  from 330 thousand allocations to 90 thousand and from 12.1 ms to 7.5 ms.
-- The journal hands its rows to the grid once per page instead of copying them
-  twice: with 100 thousand rows 65 ms instead of 127 ms and 284 MB instead of 635 MB.
-- A refresh no longer restarts the journal when no branch, tag or remote moved.
+- Status of a working tree with 50 thousand files, unchanged files included (the
+  way the Files pane asks for it), takes 53 ms instead of 103 ms and 41 MB instead
+  of 122 MB. File attributes come from the cache without rebuilding the rule stack,
+  and for every file only the question of whether it needs an external filter is
+  asked.
+- A directory with tracked files is read once per scan: the search for untracked
+  files reuses the listing that was already read. Status of 50 thousand files takes
+  30 ms instead of 44 ms.
+- Opening a repository with 80 thousand files holds up the interface for 19 ms
+  instead of 250–440 ms. The working tree watcher takes its first snapshot in the
+  background, and the status scan waits for it so that no change made right after
+  opening is lost. A new set of ignored directories reaches the running watcher
+  instead of restarting it with a full walk of the tree.
 
-## Branch counters
+## Fixes
 
-- The ahead and behind counters are computed once for each pair of branch tips and
-  remembered, so a refresh recounts only the branches that moved. All walks of one
-  computation share the commits they have parsed, and the counting reuses the open
-  repository and its cached commit graph.
-
-## Objects and references
-
-- Pack indexes keep their name table in memory and, together with packfiles, are
-  read through a memory mapping on Windows and Linux (with a fallback to plain
-  reads). Looking an object up in a pack index takes about 70 ns.
-- `packed-refs` is parsed once while the file does not change instead of on every
-  miss.
-- A missing object no longer rescans the pack directory when it has not changed.
-- The pack that answered last is searched first; the decompression buffers are
-  pooled; the parsed object cache sweeps dead entries lazily; the raw object cache
-  is split into shards so parallel readers stop sharing one lock.
-
-## Diagnostics
-
-- `GOGIT_TRACE_STARTUP=1` writes the startup steps with their time since the process
-  start into `gogit.log`: logger opened, application built, repository opened,
-  window started, first journal page and working tree status shown.
+- Loading the next page of the journal no longer drops the selected commit or
+  rebuilds the whole table.
+- In Blame a commit opens with a single click on its link, and the cursor turns
+  into a hand over it.
+- A secure connection over a slow network waits a minute instead of 15 seconds, and
+  the server response timer starts only after the request is sent. When the
+  connection never comes up, Go.Git says so instead of "context deadline exceeded".
+- On Windows a commit made right after git or a virus scanner let go of
+  `packed-refs.lock` no longer fails with "Access is denied": while the system is
+  still closing the old file, Go.Git waits up to a second, as it does for a busy
+  lock.

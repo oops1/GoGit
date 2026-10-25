@@ -216,30 +216,55 @@ func TestTheRowsAreTightAndUnstriped(t *testing.T) {
 	}
 }
 
-func TestActivatingARowAsksForItsCommit(t *testing.T) {
+func commitClick(v *View, row int) datagrid.CellClickedEvent {
+	return datagrid.CellClickedEvent{RowIndex: row, Column: v.commitCol}
+}
+
+func TestClickingTheCommitLinkAsksForItsCommit(t *testing.T) {
 	v := newTestView(t)
 	v.SetLines("f", twoLines())
 	var asked hash.ObjectID
 	v.OnCommit = func(got hash.ObjectID) { asked = got }
 
-	v.table.Grid.OnRowActivated(1, nil)
+	v.table.Grid.OnCellClicked(commitClick(v, 1))
 
 	if asked != id("two") {
-		t.Fatalf("asked for %s, want the commit of the activated row", asked)
+		t.Fatalf("asked for %s, want the commit of the clicked row", asked)
 	}
 }
 
-func TestActivatingARowWithoutAHandlerOrOutsideTheListIsQuiet(t *testing.T) {
+func TestTheCommitColumnShowsAHandCursor(t *testing.T) {
+	v := newTestView(t)
+
+	if got := v.commitCol.Cursor(); got != datagrid.CursorHand {
+		t.Fatalf("cursor = %d, want the hand over the commit link", got)
+	}
+}
+
+func TestClicksThatAreNotASingleLeftClickOnTheLinkAreQuiet(t *testing.T) {
 	v := newTestView(t)
 	v.SetLines("f", twoLines())
 
-	v.table.Grid.OnRowActivated(0, nil)
+	v.table.Grid.OnCellClicked(commitClick(v, 0))
 
 	asked := false
 	v.OnCommit = func(hash.ObjectID) { asked = true }
-	v.table.Grid.OnRowActivated(7, nil)
-	if asked {
-		t.Fatal("a row outside the list must not name a commit")
+	text := commitClick(v, 0)
+	text.Column = v.table.Grid.Columns()[4]
+	right := commitClick(v, 0)
+	right.Button = 1
+	double := commitClick(v, 0)
+	double.DoubleClick = true
+	for name, e := range map[string]datagrid.CellClickedEvent{
+		"outside the list": commitClick(v, 7),
+		"another column":   text,
+		"right button":     right,
+		"double click":     double,
+	} {
+		v.table.Grid.OnCellClicked(e)
+		if asked {
+			t.Fatalf("a click %s must not name a commit", name)
+		}
 	}
 }
 

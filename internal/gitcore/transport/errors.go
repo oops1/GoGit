@@ -33,5 +33,6 @@ var (
 	ErrClientKeyEncrypted    = errors.New("transport: the tls client key is encrypted")
 	ErrLowSpeed              = errors.New("transport: transfer speed stayed below http.lowSpeedLimit")
 	ErrHeaderTimeout         = errors.New("transport: no response headers from the server in time")
+	ErrTLSHandshakeTimeout   = errors.New("transport: the tls handshake with the server did not finish in time")
 	ErrProtocolNotAllowed    = errors.New("transport: protocol is not allowed")
 )

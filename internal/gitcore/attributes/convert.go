@@ -110,7 +110,11 @@ func eolFromValue(v Value) Conversion {
 }
 
 func (a *Attributes) Text(path string) TextPolicy {
-	values := a.Get(path, "text", "crlf", "eol")
+	values, _ := a.Lookup(path)
+	return a.textOf(values)
+}
+
+func (a *Attributes) textOf(values map[string]Value) TextPolicy {
 	action := crlfFromValue(values["text"])
 	if action == CRLFUndefined {
 		action = crlfFromValue(values["crlf"])

@@ -21,6 +21,9 @@ var (
 	fsRename   = func(root *os.Root, from, to string) error { return root.Rename(from, to) }
 	fsRemove   = func(root *os.Root, name string) error { return root.Remove(name) }
 	fsWrite    = func(file *os.File, data []byte) (int, error) { return file.Write(data) }
+	fsOpenFile = func(root *os.Root, name string, flag int, perm fs.FileMode) (*os.File, error) {
+		return root.OpenFile(name, flag, perm)
+	}
 )
 
 type tree struct {
@@ -56,14 +59,14 @@ func (t tree) isFile(rel string) bool {
 
 func (t tree) create(rel string, flag int) (*os.File, error) {
 	name := filepath.FromSlash(rel)
-	file, err := t.root.OpenFile(name, flag, filePerm)
+	file, err := fsOpenFile(t.root, name, flag, filePerm)
 	if !errors.Is(err, fs.ErrNotExist) {
 		return file, err
 	}
 	if err := t.root.MkdirAll(filepath.FromSlash(path.Dir(rel)), dirPerm); err != nil {
 		return nil, fmt.Errorf("%w: %s: %w", ErrDirFailed, rel, err)
 	}
-	return t.root.OpenFile(name, flag, filePerm)
+	return fsOpenFile(t.root, name, flag, filePerm)
 }
 
 func (t tree) rename(from, to string) error {

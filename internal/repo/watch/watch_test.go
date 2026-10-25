@@ -492,27 +492,130 @@ func TestNewNormalizesOptions(t *testing.T) {
 	assertOptionsEqual(t, w.opts, want)
 }
 
-func TestNewSnapshotFnReflectsTheGivenLayout(t *testing.T) {
+func TestNewSnapshotReflectsTheGivenLayout(t *testing.T) {
 	layout := newTestLayout(t, false)
 	w := New(layout, Options{})
-	snap := w.snapshotFn()
+	snap, _ := w.snapshot()
 	if e, ok := snap[gitPath(layout, "HEAD")]; !ok || !e.Exists {
 		t.Fatalf("snapshot missing HEAD entry: %+v", snap)
 	}
 }
 
-func TestNewCapturesTheBaselineSnapshotSynchronouslyFromOptionsSnapshot(t *testing.T) {
+func TestNewReturnsBeforeTheBaselineIsTakenAndSignalsWhenItIsReady(t *testing.T) {
+	release := make(chan struct{})
 	var calls atomic.Int32
 	w := New(repo.Layout{}, Options{Snapshot: func() Snapshot {
+		<-release
 		calls.Add(1)
 		return Snapshot{"marker": {Kind: Head, Exists: true}}
 	}})
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("Options.Snapshot called %d times during New, want 1", got)
+	select {
+	case <-w.Ready():
+		t.Fatal("the watcher reported a baseline that is still being taken")
+	default:
 	}
-	if _, ok := w.baseline["marker"]; !ok {
-		t.Fatalf("baseline = %v, want the injected snapshot", w.baseline)
+	close(release)
+	select {
+	case <-w.Ready():
+	case <-time.After(testTimeout):
+		t.Fatal("the watcher never finished its baseline")
 	}
+	if _, ok := w.baseline["marker"]; !ok || calls.Load() != 1 {
+		t.Fatalf("baseline = %v after %d snapshots, want the injected snapshot taken once", w.baseline, calls.Load())
+	}
+}
+
+func TestRunStopsWhenCancelledWhileTheBaselineIsStillBeingTaken(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	w := New(repo.Layout{}, Options{Snapshot: func() Snapshot {
+		<-release
+		return Snapshot{}
+	}})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for cs := range w.Run(ctx) {
+		t.Fatalf("Run reported %v although it was cancelled before the baseline", cs)
+	}
+}
+
+func TestSetSkipDirsAppliesToTheNextSnapshot(t *testing.T) {
+	layout := newTestLayout(t, false)
+	out := filepath.Join(layout.WorkTree, "out")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w := New(layout, Options{})
+	<-w.Ready()
+	before, beforeGen := w.snapshot()
+
+	w.SetSkipDirs([]string{"out"})
+	after, afterGen := w.snapshot()
+
+	if _, ok := before[out]; !ok {
+		t.Fatalf("the snapshot before the skip misses %s: %v", out, before)
+	}
+	if _, ok := after[out]; ok || afterGen == beforeGen {
+		t.Fatalf("after SetSkipDirs the snapshot still holds %s (generation %d -> %d)", out, beforeGen, afterGen)
+	}
+}
+
+func TestDiffCommonReportsOnlyPathsPresentInBothSnapshots(t *testing.T) {
+	prev := Snapshot{"kept": {Kind: WorkTree, Size: 1}, "gone": {Kind: Refs}}
+	next := Snapshot{"kept": {Kind: WorkTree, Size: 1}, "new": {Kind: Index}}
+	if got := diffCommon(prev, next); len(got) != 0 {
+		t.Fatalf("diffCommon = %v, want nothing for paths that only appeared or vanished", got)
+	}
+	next["kept"] = Entry{Kind: WorkTree, Size: 2}
+	if got := diffCommon(prev, next); !got.Has(WorkTree) || len(got) != 1 {
+		t.Fatalf("diffCommon = %v, want the changed WorkTree path", got)
+	}
+}
+
+func TestRunDoesNotReportDirectoriesThatOnlyVanishedBecauseTheSkipsChanged(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		snaps := []Snapshot{
+			{"a": {Kind: WorkTree, Size: 1}, "b": {Kind: WorkTree, Size: 1}},
+			{"a": {Kind: WorkTree, Size: 1}},
+			{"a": {Kind: WorkTree, Size: 2}},
+		}
+		var at atomic.Int32
+		w := New(repo.Layout{}, Options{MinInterval: time.Hour, MaxInterval: time.Hour, Snapshot: func() Snapshot {
+			return snaps[min(int(at.Add(1))-1, len(snaps)-1)]
+		}})
+		ctx, cancel := context.WithCancel(t.Context())
+		results := make(chan ChangeSet, 4)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for cs := range w.Run(ctx) {
+				results <- cs
+			}
+		}()
+		synctest.Wait()
+
+		w.SetSkipDirs([]string{"b"})
+		w.Poke()
+		synctest.Wait()
+		select {
+		case cs := <-results:
+			t.Fatalf("a directory that vanished only because it is now skipped was reported: %v", cs)
+		default:
+		}
+
+		w.Poke()
+		synctest.Wait()
+		select {
+		case cs := <-results:
+			if !cs.Has(WorkTree) {
+				t.Fatalf("changes = %v, want WorkTree", cs)
+			}
+		default:
+			t.Fatal("a real change after the skip update was not reported")
+		}
+		cancel()
+		<-done
+	})
 }
 
 func TestPokeDropsExtraSignalsWhenAlreadyQueued(t *testing.T) {
@@ -573,10 +676,11 @@ func TestRunReportsHeadChangeWithinMinInterval(t *testing.T) {
 	})
 }
 
-func TestRunReportsAChangeMadeBetweenNewAndTheFirstIteration(t *testing.T) {
+func TestRunReportsAChangeMadeBetweenReadyAndTheFirstIteration(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		layout := newTestLayout(t, false)
 		w := New(layout, Options{MinInterval: time.Second, MaxInterval: 4 * time.Second})
+		<-w.Ready()
 		headFile := gitPath(layout, "HEAD")
 		if err := os.WriteFile(headFile, []byte("ref: refs/heads/created-before-the-first-iteration\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile returned error %v", err)
@@ -596,7 +700,7 @@ func TestRunReportsAChangeMadeBetweenNewAndTheFirstIteration(t *testing.T) {
 				t.Fatalf("changes = %v, want Head", cs)
 			}
 		case <-time.After(testTimeout):
-			t.Fatal("a change made between New and the first iteration was not reported")
+			t.Fatal("a change made between Ready and the first iteration was not reported")
 		}
 		cancel()
 		<-done

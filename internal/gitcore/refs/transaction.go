@@ -370,7 +370,8 @@ func (s *Store) lockPacked() (*lockFile, error) {
 	deadline := time.Now().Add(packedLockTimeout)
 	for {
 		lock, err := newLock(s.common, packedRefsFile)
-		if !errors.Is(err, ErrLocked) || time.Now().After(deadline) {
+		busy := errors.Is(err, ErrLocked) || err != nil && lockMayBeReleasing(err)
+		if !busy || time.Now().After(deadline) {
 			return lock, err
 		}
 		time.Sleep(10 * time.Millisecond)

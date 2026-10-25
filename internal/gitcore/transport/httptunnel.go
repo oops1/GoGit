@@ -25,10 +25,13 @@ func (s *httpSession) tlsConfigFor(host string) *tls.Config {
 
 func (s *httpSession) handshakeTLS(ctx context.Context, conn net.Conn, host string) (*tls.Conn, error) {
 	tc := tls.Client(conn, s.tlsConfigFor(host))
-	hsCtx, cancel := context.WithTimeout(ctx, tlsHandshakeTimeout)
+	hsCtx, cancel := context.WithTimeoutCause(ctx, tlsHandshakeTimeout, ErrTLSHandshakeTimeout)
 	defer cancel()
 	if err := tc.HandshakeContext(hsCtx); err != nil {
 		_ = conn.Close()
+		if cause := context.Cause(hsCtx); errors.Is(cause, ErrTLSHandshakeTimeout) {
+			return nil, cause
+		}
 		return nil, err
 	}
 	return tc, nil

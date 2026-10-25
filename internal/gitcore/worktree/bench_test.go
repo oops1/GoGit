@@ -129,3 +129,16 @@ func BenchmarkStatusWithTwentyThousandIgnoredFiles(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkStatusOfFiftyThousandFilesIncludingUnmodified(b *testing.B) {
+	tr := newLargeBenchRepo(b, 50000)
+	w := tr.openWith(Options{IncludeUnmodified: true})
+	ctx := b.Context()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if _, err := w.Status(ctx); err != nil {
+			b.Fatalf("Status returned error %v", err)
+		}
+	}
+}

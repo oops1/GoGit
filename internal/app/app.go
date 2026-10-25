@@ -417,6 +417,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 	root.Title = i18n.T("App.Title")
 
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
+	a.eng.SetTextQuality(engine.TextQuality{Hinting: true, Contrast: engine.DefaultTextContrast})
 	a.eng.SetRoot(root)
 	a.eng.SetOnModalClosed(func(widget.ModalWidget) { a.releaseClosedDialogs() })
 	a.startPostQueue()

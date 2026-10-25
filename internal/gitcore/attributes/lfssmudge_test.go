@@ -67,9 +67,13 @@ func TestPolicyClassifiesSmudgeDrivers(t *testing.T) {
 			if tc.config != "" {
 				opts.Config = loadConfig(t, tc.config)
 			}
-			policy := testAttributes(attrs, opts).Policy(tc.path)
+			set := testAttributes(attrs, opts)
+			policy := set.Policy(tc.path)
 			if policy.Clean != tc.clean || policy.Smudge != tc.smudge || policy.SkipSmudge != tc.skip || policy.FilterUnsupported() != tc.unsupported {
 				t.Fatalf("Policy(%q) = clean %d smudge %d skip %v unsupported %v", tc.path, policy.Clean, policy.Smudge, policy.SkipSmudge, policy.FilterUnsupported())
+			}
+			if got := set.FilterUnsupported(tc.path); got != tc.unsupported {
+				t.Fatalf("FilterUnsupported(%q) = %v, want %v as the policy says", tc.path, got, tc.unsupported)
 			}
 		})
 	}

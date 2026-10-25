@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,14 +26,33 @@ import (
 type fakeWatcher struct {
 	changes chan watch.ChangeSet
 	started chan struct{}
+	ready   chan struct{}
 	stopped atomic.Bool
 	pokes   atomic.Int32
 	pauses  atomic.Int32
 	resumes atomic.Int32
+	skipsMu sync.Mutex
+	skips   [][]string
 }
 
 func newFakeWatcher() *fakeWatcher {
-	return &fakeWatcher{changes: make(chan watch.ChangeSet, 4), started: make(chan struct{})}
+	ready := make(chan struct{})
+	close(ready)
+	return &fakeWatcher{changes: make(chan watch.ChangeSet, 4), started: make(chan struct{}), ready: ready}
+}
+
+func (w *fakeWatcher) Ready() <-chan struct{} { return w.ready }
+
+func (w *fakeWatcher) SetSkipDirs(dirs []string) {
+	w.skipsMu.Lock()
+	w.skips = append(w.skips, slices.Clone(dirs))
+	w.skipsMu.Unlock()
+}
+
+func (w *fakeWatcher) skipUpdates() [][]string {
+	w.skipsMu.Lock()
+	defer w.skipsMu.Unlock()
+	return slices.Clone(w.skips)
 }
 
 func (w *fakeWatcher) Run(ctx context.Context) iter.Seq[watch.ChangeSet] {
@@ -591,4 +611,84 @@ func TestWatcherSkipsTheDirectoriesGitIgnores(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func TestAnIgnoredDirectoryReachesTheRunningWatcherWithoutRestartingIt(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	if err := writeFile(target, ".gitignore", "out/\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Join(target, "out"), "build.log", "x\n"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	var started atomic.Int32
+	fw := newFakeWatcher()
+	a.newWatcher = func(gitrepo.Layout, watch.Options) watcherIface {
+		started.Add(1)
+		return fw
+	}
+
+	a.ActivateRepository("r1")
+	waitForWorkingIdle(t, a)
+
+	updates := fw.skipUpdates()
+	if len(updates) != 1 || !slices.Contains(updates[0], "out") {
+		t.Fatalf("skip updates = %v, want one carrying the ignored directory", updates)
+	}
+	if got := started.Load(); got != 1 {
+		t.Fatalf("watchers started = %d, want the first one kept running", got)
+	}
+}
+
+func TestTheWorkingScanWaitsUntilTheWatcherHasItsBaseline(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	fw := newFakeWatcher()
+	fw.ready = make(chan struct{})
+	a.newWatcher = func(gitrepo.Layout, watch.Options) watcherIface { return fw }
+
+	a.ActivateRepository("r1")
+	time.Sleep(50 * time.Millisecond)
+	if rows := filesRowCountOnDispatcher(t, a); rows != 0 {
+		t.Fatalf("the files grid shows %d rows before the watcher baseline, want none", rows)
+	}
+
+	close(fw.ready)
+	waitForWorkingRows(t, a, 5)
+}
+
+func TestStoppingTheWorkingScanReleasesAWaitForTheWatcherBaseline(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	buildWorkingRepoFixture(t, target)
+	cfg := config.Default()
+	cfg.Repositories = []config.Repository{{ID: "r1", Name: "Main", Path: target}}
+	a := newTestAppWithConfig(t, cfg)
+	fw := newFakeWatcher()
+	fw.ready = make(chan struct{})
+	a.newWatcher = func(gitrepo.Layout, watch.Options) watcherIface { return fw }
+	a.ActivateRepository("r1")
+
+	stopped := make(chan struct{})
+	go func() {
+		a.stopWorking()
+		close(stopped)
+	}()
+
+	waitForChannel(t, stopped, "the working scan stop")
+}
+
+func TestWaitingForTheWatcherBaselineWithoutAWatcherReturnsAtOnce(t *testing.T) {
+	a := newTestApp(t)
+
+	a.waitForWatcherBaseline(t.Context())
 }

@@ -69,9 +69,10 @@ func TestStatusReadsABigDirectoryOnceInsteadOfStatingEachFileInIt(t *testing.T) 
 	}
 }
 
-func TestStatusStatesFilesOfSmallDirectoriesOneByOne(t *testing.T) {
+func TestStatusStatesFilesOfSmallDirectoriesOneByOneWhenUntrackedFilesAreHidden(t *testing.T) {
 	tr := newBatchedRepo(t, batchedStatMinimum)
 	w := tr.open()
+	w.hideUntracked = true
 	inSmall := countLstatCalls(t, "small/")
 
 	if _, err := w.Status(t.Context()); err != nil {
@@ -202,7 +203,7 @@ func TestStatusStopsWhenTheCallerGivesUpInTheMiddleOfAGroup(t *testing.T) {
 		group[at] = at
 	}
 
-	err := w.scanGroup(newStepContext(0), entries, group, gitlinkRules{}, make([]unstagedChange, len(entries)))
+	err := w.scanGroup(newStepContext(0), entries, group, gitlinkRules{}, make([]unstagedChange, len(entries)), nil)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("scanGroup returned %v, want the cancellation", err)
