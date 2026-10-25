@@ -116,7 +116,7 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	unstaged := scan.changes
 	var untracked []Entry
 	if !w.hideUntracked {
-		untracked, err = w.untrackedEntries(ctx, trackedDirs, trackedFiles)
+		untracked, err = w.untrackedEntries(ctx, trackedDirs, trackedFiles, scan.listings)
 		if err != nil {
 			return Status{}, err
 		}
@@ -160,7 +160,7 @@ func (w *Worktree) Status(ctx context.Context) (Status, error) {
 	result := Status{HeadBranch: branch, Detached: detached, Entries: make([]Entry, 0, len(combined))}
 	for _, entry := range combined {
 		w.fillWorkingInfo(entry, scan.stats)
-		entry.FilterUnsupported = !entry.IsDir && w.policy(entry.Path).FilterUnsupported()
+		entry.FilterUnsupported = !entry.IsDir && w.attrs.FilterUnsupported(entry.Path)
 		result.Entries = append(result.Entries, *entry)
 	}
 	slices.SortFunc(result.Entries, func(a, b Entry) int { return strings.Compare(a.Path, b.Path) })

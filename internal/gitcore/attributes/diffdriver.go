@@ -3,7 +3,7 @@ package attributes
 import "strings"
 
 func (a *Attributes) DiffBinary(path string) (binary bool, known bool) {
-	value := a.Get(path, "diff")["diff"]
+	value := a.value(path, "diff")
 	cfg := a.opts.Config
 	switch {
 	case value.IsUnset():

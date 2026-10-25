@@ -198,12 +198,17 @@ type attrNode struct {
 	err    error
 }
 
+type resolvedValues struct {
+	values map[string]Value
+	err    error
+}
+
 type Attributes struct {
 	opts        AttributeOptions
 	perDir      *fileCache[attrLine]
 	globalFiles *fileCache[attrLine]
 	nodes       map[string]*attrNode
-	resolved    map[string]map[string]Value
+	resolved    map[string]resolvedValues
 	globals     [][]attrLine
 	globalErr   error
 	globalsOnce sync.Once
@@ -225,7 +230,7 @@ func New(opts AttributeOptions) *Attributes {
 			return parseAttributesFile(source, "", data, true)
 		}),
 		nodes:    map[string]*attrNode{},
-		resolved: map[string]map[string]Value{},
+		resolved: map[string]resolvedValues{},
 	}
 }
 
@@ -313,7 +318,6 @@ func fillStates(out map[string]Value, states []attrState, macros map[string][]at
 
 func (a *Attributes) Lookup(path string) (map[string]Value, error) {
 	clean, isDir := normalizePath(path)
-	lists, err := a.stack(parentDir(clean))
 	key := clean
 	if isDir {
 		key += "/"
@@ -322,8 +326,9 @@ func (a *Attributes) Lookup(path string) (map[string]Value, error) {
 	cached, ok := a.resolved[key]
 	a.resolvedMu.Unlock()
 	if ok {
-		return cached, err
+		return cached.values, cached.err
 	}
+	lists, err := a.stack(parentDir(clean))
 	macros := determineMacros(lists)
 	out := map[string]Value{}
 	for _, list := range lists {
@@ -336,9 +341,14 @@ func (a *Attributes) Lookup(path string) (map[string]Value, error) {
 		}
 	}
 	a.resolvedMu.Lock()
-	a.resolved[key] = out
+	a.resolved[key] = resolvedValues{values: out, err: err}
 	a.resolvedMu.Unlock()
 	return out, err
+}
+
+func (a *Attributes) value(path, name string) Value {
+	all, _ := a.Lookup(path)
+	return all[name]
 }
 
 func (a *Attributes) Get(path string, names ...string) map[string]Value {
@@ -356,7 +366,7 @@ func (a *Attributes) Get(path string, names ...string) map[string]Value {
 }
 
 func (a *Attributes) Binary(path string) bool {
-	return a.Get(path, "diff")["diff"].IsUnset()
+	return a.value(path, "diff").IsUnset()
 }
 
 func driverName(v Value) string {
@@ -366,8 +376,6 @@ func driverName(v Value) string {
 	return ""
 }
 
-func (a *Attributes) Diff(path string) string  { return driverName(a.Get(path, "diff")["diff"]) }
-func (a *Attributes) Merge(path string) string { return driverName(a.Get(path, "merge")["merge"]) }
-func (a *Attributes) Filter(path string) string {
-	return driverName(a.Get(path, "filter")["filter"])
-}
+func (a *Attributes) Diff(path string) string   { return driverName(a.value(path, "diff")) }
+func (a *Attributes) Merge(path string) string  { return driverName(a.value(path, "merge")) }
+func (a *Attributes) Filter(path string) string { return driverName(a.value(path, "filter")) }

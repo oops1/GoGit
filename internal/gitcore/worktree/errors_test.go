@@ -202,7 +202,7 @@ func TestUntrackedEntriesStopsWhenContextIsCanceled(t *testing.T) {
 	tr.writeFile("a.txt", "hi\n")
 	tr.writeFile("dir/b.txt", "hi\n")
 	w := tr.open()
-	if _, err := w.untrackedEntries(newStepContext(0), map[string]bool{}, map[string]bool{}); err == nil {
+	if _, err := w.untrackedEntries(newStepContext(0), map[string]bool{}, map[string]bool{}, nil); err == nil {
 		t.Fatalf("untrackedEntries returned no error for a canceled context")
 	}
 }
@@ -371,6 +371,7 @@ func TestCompareToWorktreeFailsWhenLstatFails(t *testing.T) {
 	tr.stage("a.txt", "hi\n")
 	tr.commit("initial")
 	w := tr.open()
+	w.hideUntracked = true
 	original := fsLstatFile
 	fsLstatFile = func(root *os.Root, name string) (os.FileInfo, error) { return nil, errors.New("boom") }
 	t.Cleanup(func() { fsLstatFile = original })
@@ -406,6 +407,7 @@ func TestCompareToWorktreeDetectsSymlinkChangesUsingFaultInjection(t *testing.T)
 		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
+	w.hideUntracked = true
 
 	originalLstat, originalReadlink := fsLstatFile, fsReadlinkFile
 	t.Cleanup(func() {
@@ -440,6 +442,7 @@ func TestCompareToWorktreeIsUnmodifiedWhenTheSymlinkTargetIsUnchanged(t *testing
 		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
+	w.hideUntracked = true
 
 	originalLstat, originalReadlink := fsLstatFile, fsReadlinkFile
 	t.Cleanup(func() {
@@ -474,6 +477,7 @@ func TestCompareToWorktreeFailsWhenReadlinkFails(t *testing.T) {
 		Stat: index.Stat{MTime: time.Unix(1, 0), Size: 999},
 	})
 	w := tr.open()
+	w.hideUntracked = true
 
 	originalLstat, originalReadlink := fsLstatFile, fsReadlinkFile
 	t.Cleanup(func() {

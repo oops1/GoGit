@@ -103,6 +103,7 @@ func (a *App) stopWorkingLocked() {
 
 func (a *App) runWorking(ctx context.Context, wt *worktree.Worktree) {
 	defer a.finishWorking()
+	a.waitForWatcherBaseline(ctx)
 	status, err := wt.Status(ctx)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {

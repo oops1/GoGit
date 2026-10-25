@@ -90,3 +90,24 @@ func BenchmarkAttributesGet(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkAttributesPolicyOnAWarmCache(b *testing.B) {
+	paths := benchmarkPaths()
+	files := map[string]string{
+		".gitattributes": "* text=auto\n*.o binary\n*.bin filter=lfs -text\n",
+	}
+	for dir := range 20 {
+		files[fmt.Sprintf("dir%02d/.gitattributes", dir)] = "*.bak -text\n*.tmp ident\n"
+	}
+	attrs := New(AttributeOptions{Work: MemoryLoader(files)})
+	for _, path := range paths {
+		attrs.Policy(path.Name)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		for _, path := range paths {
+			attrs.Policy(path.Name)
+		}
+	}
+}

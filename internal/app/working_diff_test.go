@@ -177,6 +177,17 @@ func TestBlobVsWorktreeDiffFailsWhenTheContextIsAlreadyCancelled(t *testing.T) {
 	}
 }
 
+func TestBlobVsWorktreeDiffFailsWhenTheWorkingFileCannotBeRead(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "main")
+	initTestRepoWithBranch(t, target, "main")
+	o := openTestRepository(t, target)
+
+	if _, err := blobVsWorktreeDiff(t.Context(), o, "../outside.txt", hash.Zero); !errors.Is(err, worktree.ErrReadWorkingTree) {
+		t.Fatalf("blobVsWorktreeDiff returned error %v, want ErrReadWorkingTree", err)
+	}
+}
+
 func TestRunWorkingDiffLogsAWarningForARealError(t *testing.T) {
 	widget.ClearStrings()
 	t.Cleanup(widget.ClearStrings)

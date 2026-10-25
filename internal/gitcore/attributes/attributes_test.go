@@ -2,6 +2,7 @@ package attributes
 
 import (
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -315,6 +316,18 @@ func TestLookupReportsAttributeLoaderErrors(t *testing.T) {
 	}
 	if _, err := attrs.Lookup("sub/deep/x.txt"); !errors.Is(err, errLoader) {
 		t.Fatalf("Lookup below a failing directory returned %v, want %v", err, errLoader)
+	}
+}
+
+func TestLookupAnsweredFromTheCacheStillReportsTheLoaderError(t *testing.T) {
+	attrs := New(AttributeOptions{Work: failingLoader("sub/.gitattributes")})
+	first, firstErr := attrs.Lookup("sub/x.txt")
+	again, againErr := attrs.Lookup("sub/x.txt")
+	if !errors.Is(firstErr, errLoader) || !errors.Is(againErr, errLoader) {
+		t.Fatalf("Lookup errors = %v then %v, want %v both times", firstErr, againErr, errLoader)
+	}
+	if !maps.Equal(first, again) {
+		t.Fatalf("a cached Lookup returned %v, want %v", again, first)
 	}
 }
 

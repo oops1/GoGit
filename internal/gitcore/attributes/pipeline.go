@@ -41,13 +41,12 @@ type Policy struct {
 }
 
 func (a *Attributes) Policy(path string) Policy {
-	values := a.Get(path, "ident", "filter", "working-tree-encoding")
+	values, _ := a.Lookup(path)
 	filter := driverName(values["filter"])
-	clean, _ := a.filterDriver(filter, "clean", lfsCleanCommands)
-	smudge, skip := a.filterDriver(filter, "smudge", lfsSmudgeCommands)
+	clean, smudge, skip := a.filterDrivers(filter)
 	return Policy{
 		Path:       path,
-		Text:       a.Text(path),
+		Text:       a.textOf(values),
 		Ident:      values["ident"].IsSet(),
 		Encoding:   values["working-tree-encoding"],
 		Filter:     filter,
@@ -56,6 +55,17 @@ func (a *Attributes) Policy(path string) Policy {
 		SkipSmudge: skip,
 		format:     a.opts.ObjectFormat,
 	}
+}
+
+func (a *Attributes) FilterUnsupported(path string) bool {
+	clean, smudge, _ := a.filterDrivers(driverName(a.value(path, "filter")))
+	return unsupportedFilter(clean, smudge)
+}
+
+func (a *Attributes) filterDrivers(name string) (clean, smudge FilterKind, skipSmudge bool) {
+	clean, _ = a.filterDriver(name, "clean", lfsCleanCommands)
+	smudge, skipSmudge = a.filterDriver(name, "smudge", lfsSmudgeCommands)
+	return clean, smudge, skipSmudge
 }
 
 func (a *Attributes) filterDriver(name, capability string, single map[string]bool) (FilterKind, bool) {
@@ -84,7 +94,11 @@ func isLFSExtension(subsection string) bool {
 }
 
 func (p Policy) FilterUnsupported() bool {
-	return p.Clean == FilterExternal || p.Smudge == FilterExternal
+	return unsupportedFilter(p.Clean, p.Smudge)
+}
+
+func unsupportedFilter(clean, smudge FilterKind) bool {
+	return clean == FilterExternal || smudge == FilterExternal
 }
 
 func (p Policy) filterError() error {

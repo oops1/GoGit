@@ -13,6 +13,7 @@ type untrackedScan struct {
 	ctx          context.Context
 	trackedDirs  map[string]bool
 	trackedFiles map[string]bool
+	listings     map[string][]fs.DirEntry
 
 	mu      sync.Mutex
 	out     []Entry
@@ -23,15 +24,16 @@ type untrackedScan struct {
 	slots   chan struct{}
 }
 
-func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFiles map[string]bool) ([]Entry, error) {
+func (w *Worktree) untrackedEntries(ctx context.Context, trackedDirs, trackedFiles map[string]bool, listings map[string][]fs.DirEntry) ([]Entry, error) {
 	scan := &untrackedScan{
 		w:            w,
 		ctx:          ctx,
 		trackedDirs:  trackedDirs,
 		trackedFiles: trackedFiles,
+		listings:     listings,
 		slots:        make(chan struct{}, w.workers),
 	}
-	items, err := w.readDirTyped("")
+	items, err := scan.readTrackedDir("")
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +93,15 @@ func (s *untrackedScan) descend(rel string) {
 	}
 }
 
+func (s *untrackedScan) readTrackedDir(rel string) ([]dirEntry, error) {
+	if items, ok := s.listings[rel]; ok {
+		return typedEntries(items), nil
+	}
+	return s.w.readDirTyped(rel)
+}
+
 func (s *untrackedScan) enter(rel string) {
-	children, err := s.w.readDirTyped(rel)
+	children, err := s.readTrackedDir(rel)
 	if err != nil {
 		s.fail(err)
 		return
@@ -228,9 +237,13 @@ func (w *Worktree) readDirTyped(rel string) ([]dirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	return typedEntries(entries), nil
+}
+
+func typedEntries(entries []fs.DirEntry) []dirEntry {
 	out := make([]dirEntry, len(entries))
 	for i, entry := range entries {
 		out[i] = dirEntry{name: entry.Name(), isDir: entry.IsDir(), entry: entry}
 	}
-	return out, nil
+	return out
 }

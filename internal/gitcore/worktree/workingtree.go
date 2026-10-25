@@ -30,8 +30,37 @@ type workingStat struct {
 }
 
 type workingScan struct {
-	changes map[string]unstagedChange
-	stats   map[string]workingStat
+	changes  map[string]unstagedChange
+	stats    map[string]workingStat
+	listings map[string][]fs.DirEntry
+}
+
+type keptListings struct {
+	mu   sync.Mutex
+	dirs map[string][]fs.DirEntry
+}
+
+func (k *keptListings) keep(dir string, items []fs.DirEntry) {
+	if k == nil {
+		return
+	}
+	k.mu.Lock()
+	k.dirs[dir] = items
+	k.mu.Unlock()
+}
+
+func (k *keptListings) all() map[string][]fs.DirEntry {
+	if k == nil {
+		return nil
+	}
+	return k.dirs
+}
+
+func listingKey(dir string) string {
+	if dir == "." {
+		return ""
+	}
+	return dir
 }
 
 type directoryListing map[string]fs.DirEntry
@@ -45,11 +74,12 @@ func (l directoryListing) info(name string) (fs.FileInfo, bool) {
 	return info, err == nil
 }
 
-func (w *Worktree) listDirectory(rel string) directoryListing {
+func (w *Worktree) listDirectory(rel string, kept *keptListings) directoryListing {
 	items, err := w.readDir(rel)
 	if err != nil {
 		return nil
 	}
+	kept.keep(rel, items)
 	listing := make(directoryListing, len(items))
 	for _, item := range items {
 		listing[item.Name()] = item
@@ -78,6 +108,10 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry,
 	}
 	close(queue)
 	scanned := make([]unstagedChange, len(entries))
+	var kept *keptListings
+	if !w.hideUntracked {
+		kept = &keptListings{dirs: make(map[string][]fs.DirEntry, len(groups))}
+	}
 	var (
 		wg      sync.WaitGroup
 		once    sync.Once
@@ -87,7 +121,7 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry,
 	for range min(w.workers, len(groups)) {
 		wg.Go(func() {
 			for group := range queue {
-				if err := w.scanGroup(ctx, entries, group, rules, scanned); err != nil {
+				if err := w.scanGroup(ctx, entries, group, rules, scanned, kept); err != nil {
 					fail(err)
 					return
 				}
@@ -102,8 +136,9 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry,
 		return workingScan{}, err
 	}
 	scan := workingScan{
-		changes: make(map[string]unstagedChange),
-		stats:   make(map[string]workingStat, len(entries)),
+		changes:  make(map[string]unstagedChange),
+		stats:    make(map[string]workingStat, len(entries)),
+		listings: kept.all(),
 	}
 	for at, change := range scanned {
 		if change.code != StatusUnmodified {
@@ -116,10 +151,10 @@ func (w *Worktree) unstagedStatuses(ctx context.Context, entries []*index.Entry,
 	return scan, nil
 }
 
-func (w *Worktree) scanGroup(ctx context.Context, entries []*index.Entry, group []int, rules gitlinkRules, scanned []unstagedChange) error {
+func (w *Worktree) scanGroup(ctx context.Context, entries []*index.Entry, group []int, rules gitlinkRules, scanned []unstagedChange, kept *keptListings) error {
 	var listing directoryListing
-	if len(group) >= batchedStatMinimum {
-		listing = w.listDirectory(path.Dir(entries[group[0]].Path))
+	if len(group) >= batchedStatMinimum || kept != nil {
+		listing = w.listDirectory(listingKey(path.Dir(entries[group[0]].Path)), kept)
 	}
 	for _, at := range group {
 		if err := ctx.Err(); err != nil {
