@@ -120,7 +120,7 @@ type UI struct {
 	Layout                string         `toml:"layout"`
 	Branches              BranchesPane   `toml:"branches"`
 	Colors                Colors         `toml:"colors"`
-	CompareWindow         WindowSize     `toml:"compare_window"`
+	CompareWindow         CompareWindow  `toml:"compare_window"`
 	ConflictWindow        ConflictWindow `toml:"conflict_window"`
 }
 
@@ -129,10 +129,23 @@ type WindowSize struct {
 	Height int `toml:"height"`
 }
 
+type CompareWindow struct {
+	WindowSize
+	CollapseLeft  bool    `toml:"collapse_left"`
+	CollapseRight bool    `toml:"collapse_right"`
+	Split         float64 `toml:"split"`
+}
+
 type ConflictWindow struct {
 	WindowSize
-	HideBase       bool `toml:"hide_base"`
-	SeparateScroll bool `toml:"separate_scroll"`
+	HideBase         bool    `toml:"hide_base"`
+	SeparateScroll   bool    `toml:"separate_scroll"`
+	CollapseOurs     bool    `toml:"collapse_ours"`
+	CollapseBase     bool    `toml:"collapse_base"`
+	CollapseTheirs   bool    `toml:"collapse_theirs"`
+	ResultMaximized  bool    `toml:"result_maximized"`
+	SourcesMaximized bool    `toml:"sources_maximized"`
+	Split            float64 `toml:"split"`
 }
 
 type Colors struct {

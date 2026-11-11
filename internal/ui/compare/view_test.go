@@ -398,3 +398,36 @@ func TestTheWindowShrinksIntoASmallerMainWindow(t *testing.T) {
 		t.Fatalf("size = %v, want no larger than the %v it was drawn for", got, full)
 	}
 }
+
+func TestTheSidesKeepTheLayoutTheyAreGiven(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		in   Layout
+		want Layout
+	}{
+		{"BothOpen", Layout{}, Layout{Split: 0.5}},
+		{"LeftCollapsed", Layout{CollapseLeft: true, Split: 0.6}, Layout{CollapseLeft: true, Split: 0.6}},
+		{"RightCollapsed", Layout{CollapseRight: true}, Layout{CollapseRight: true, Split: 0.5}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := loaded(t, "a\nb\n", "a\nc\n")
+
+			v.SetLayout(tt.in)
+
+			if got := v.Layout(); got != tt.want {
+				t.Fatalf("layout = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCollapsingTheOtherSideOpensTheFirst(t *testing.T) {
+	v := loaded(t, "a\n", "b\n")
+	v.SetLayout(Layout{CollapseLeft: true})
+
+	v.Diff().SetCollapsed(widget.DiffRight, true)
+
+	if got := v.Layout(); got.CollapseLeft || !got.CollapseRight {
+		t.Fatalf("layout = %+v, want only the right side collapsed", got)
+	}
+}

@@ -25,16 +25,18 @@ func TestPreviewConflictDialog(t *testing.T) {
 		t.Skip("GOGIT_PREVIEW_DIR not set")
 	}
 	for _, variant := range []struct {
-		name  string
-		lang  string
-		width int
-		theme *widget.Theme
+		name   string
+		lang   string
+		width  int
+		theme  *widget.Theme
+		layout Layout
 	}{
-		{"light", "ru", 0, widget.Win11LightTheme()},
-		{"dark", "ru", 0, widget.Win11DarkTheme()},
-		{"en", "en", 0, widget.Win11LightTheme()},
-		{"narrow-ru", "ru", dialogMinWidth, widget.Win11LightTheme()},
-		{"narrow-en", "en", dialogMinWidth, widget.Win11LightTheme()},
+		{"light", "ru", 0, widget.Win11LightTheme(), Layout{}},
+		{"dark", "ru", 0, widget.Win11DarkTheme(), Layout{}},
+		{"en", "en", 0, widget.Win11LightTheme(), Layout{}},
+		{"narrow-ru", "ru", dialogMinWidth, widget.Win11LightTheme(), Layout{}},
+		{"narrow-en", "en", dialogMinWidth, widget.Win11LightTheme(), Layout{}},
+		{"collapsed", "ru", 0, widget.Win11LightTheme(), Layout{CollapseBase: true, CollapseTheirs: true}},
 	} {
 		if _, err := i18n.Install(""); err != nil {
 			t.Fatal(err)
@@ -65,6 +67,7 @@ func TestPreviewConflictDialog(t *testing.T) {
 		if variant.width > 0 {
 			view.Dialog().Resize(variant.width, view.Dialog().Bounds().Dy())
 		}
+		view.SetLayout(variant.layout)
 		eng.ShowModal(view.Dialog())
 		view.Restyle(variant.theme)
 

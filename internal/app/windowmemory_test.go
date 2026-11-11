@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oops1/headless-gui/v4/widget"
+
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/ui/conflict"
 )
@@ -27,14 +29,14 @@ func TestTheCompareWindowReopensAtTheSizeItWasLeft(t *testing.T) {
 	waitForPostQueueDrain(t, a)
 
 	want := config.WindowSize{Width: 1000, Height: 600}
-	if got := readOnDispatcher(t, a, func() config.WindowSize { return a.cfg.UI.CompareWindow }); got != want {
+	if got := readOnDispatcher(t, a, func() config.WindowSize { return a.cfg.UI.CompareWindow.WindowSize }); got != want {
 		t.Fatalf("remembered = %+v, want %+v", got, want)
 	}
 	saved, err := config.Load(paths.ConfigFile())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.UI.CompareWindow != want {
+	if saved.UI.CompareWindow.WindowSize != want {
 		t.Fatalf("saved = %+v, want %+v", saved.UI.CompareWindow, want)
 	}
 
@@ -51,7 +53,7 @@ func TestTheCompareWindowReopensAtTheSizeItWasLeft(t *testing.T) {
 
 func TestAMaximizedCompareWindowKeepsTheSizeToReturnTo(t *testing.T) {
 	a := newTestApp(t)
-	a.cfg.UI.CompareWindow = config.WindowSize{Width: 1000, Height: 600}
+	a.cfg.UI.CompareWindow.WindowSize = config.WindowSize{Width: 1000, Height: 600}
 	captured := captureCompareView(t)
 	a.openCompareFiles("", "")
 
@@ -60,7 +62,7 @@ func TestAMaximizedCompareWindowKeepsTheSizeToReturnTo(t *testing.T) {
 	waitForPostQueueDrain(t, a)
 
 	want := config.WindowSize{Width: 1000, Height: 600}
-	if got := readOnDispatcher(t, a, func() config.WindowSize { return a.cfg.UI.CompareWindow }); got != want {
+	if got := readOnDispatcher(t, a, func() config.WindowSize { return a.cfg.UI.CompareWindow.WindowSize }); got != want {
 		t.Fatalf("remembered = %+v, want the restored size %+v", got, want)
 	}
 }
@@ -111,7 +113,7 @@ func TestTheConflictWindowRemembersItsPanesWhenClosed(t *testing.T) {
 	runOnDispatcher(t, a, func() { a.eng.CloseModal(view.Dialog()) })
 	waitForPostQueueDrain(t, a)
 
-	want := config.ConflictWindow{WindowSize: config.WindowSize{Width: 1200, Height: 680}, HideBase: true, SeparateScroll: true}
+	want := config.ConflictWindow{WindowSize: config.WindowSize{Width: 1200, Height: 680}, HideBase: true, SeparateScroll: true, Split: 0.58}
 	if got := readOnDispatcher(t, a, func() config.ConflictWindow { return a.cfg.UI.ConflictWindow }); got != want {
 		t.Fatalf("remembered = %+v, want %+v", got, want)
 	}
@@ -160,4 +162,55 @@ func newConflictWindowDirect(t *testing.T) *conflict.View {
 	}
 	view.Show(conflict.File{Path: "f.txt"})
 	return view
+}
+
+func TestTheCompareWindowReopensWithTheSideThatWasCollapsed(t *testing.T) {
+	a := newTestApp(t)
+	captured := captureCompareView(t)
+	a.openCompareFiles(textFile(t, "a.txt", "a\n"), textFile(t, "b.txt", "b\n"))
+	runOnDispatcher(t, a, func() {
+		(*captured).Diff().SetSplit(0.7)
+		(*captured).Diff().SetCollapsed(widget.DiffLeft, true)
+	})
+
+	runOnDispatcher(t, a, func() { (*captured).OnClose() })
+	waitForPostQueueDrain(t, a)
+
+	saved := readOnDispatcher(t, a, func() config.CompareWindow { return a.cfg.UI.CompareWindow })
+	if !saved.CollapseLeft || saved.CollapseRight || saved.Split != 0.7 {
+		t.Fatalf("remembered = %+v, want the left side collapsed at 0.7", saved)
+	}
+
+	a.openCompareFiles("", "")
+	if got := readOnDispatcher(t, a, (*captured).Layout); !got.CollapseLeft || got.Split != 0.7 {
+		t.Fatalf("reopened with %+v, want the left side collapsed at 0.7", got)
+	}
+	runOnDispatcher(t, a, func() { a.eng.CloseModal((*captured).Dialog()) })
+}
+
+func TestTheConflictWindowRemembersItsCollapsedPanes(t *testing.T) {
+	a := newTestApp(t)
+	view := newConflictWindow(t, a)
+	runOnDispatcher(t, a, func() {
+		a.restoreConflictWindow(view)
+		a.showModal(view.Dialog(), view)
+		view.Merge().SetSplit(0.4)
+		view.Merge().SetPaneCollapsed(widget.MergeTheirs, true)
+		view.Merge().SetResultMaximized(true)
+	})
+
+	runOnDispatcher(t, a, func() { a.eng.CloseModal(view.Dialog()) })
+	waitForPostQueueDrain(t, a)
+
+	saved := readOnDispatcher(t, a, func() config.ConflictWindow { return a.cfg.UI.ConflictWindow })
+	if !saved.CollapseTheirs || saved.CollapseOurs || saved.CollapseBase || !saved.ResultMaximized || saved.Split != 0.4 {
+		t.Fatalf("remembered = %+v", saved)
+	}
+
+	reopened := newConflictWindow(t, a)
+	runOnDispatcher(t, a, func() { a.restoreConflictWindow(reopened) })
+	got := readOnDispatcher(t, a, reopened.Layout)
+	if !got.CollapseTheirs || !got.ResultMaximized || got.Split != 0.4 {
+		t.Fatalf("reopened with %+v", got)
+	}
 }

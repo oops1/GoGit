@@ -87,6 +87,28 @@ func (v *View) FitWithin(width, height int) {
 
 func (v *View) Diff() *widget.DiffView { return v.diff }
 
+type Layout struct {
+	CollapseLeft  bool
+	CollapseRight bool
+	Split         float64
+}
+
+func (v *View) SetLayout(l Layout) {
+	if l.Split > 0 {
+		v.diff.SetSplit(l.Split)
+	}
+	v.diff.SetCollapsed(widget.DiffLeft, l.CollapseLeft)
+	v.diff.SetCollapsed(widget.DiffRight, l.CollapseRight)
+}
+
+func (v *View) Layout() Layout {
+	return Layout{
+		CollapseLeft:  v.diff.Collapsed(widget.DiffLeft),
+		CollapseRight: v.diff.Collapsed(widget.DiffRight),
+		Split:         v.diff.Split(),
+	}
+}
+
 func (v *View) Restyle(t *widget.Theme) {
 	p := style.Of(t)
 	p.Quiet(v.openLeft, v.openRight, v.save, v.undo, v.redo, v.prevChange, v.nextChange, v.closeBtn)

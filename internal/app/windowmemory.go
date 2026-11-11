@@ -4,6 +4,7 @@ import (
 	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/ui/compare"
 	"github.com/oops1/gogit/internal/ui/conflict"
 	"github.com/oops1/gogit/internal/ui/dialogs"
 )
@@ -29,18 +30,37 @@ func rememberSize(dlg *widget.Dialog, target *config.WindowSize) {
 	}
 }
 
-func (a *App) restoreCompareWindow(dlg *widget.Dialog) {
-	dialogs.RestoreSize(dlg, a.cfg.UI.CompareWindow.Width, a.cfg.UI.CompareWindow.Height)
-	a.rememberOnClose(dlg, func() { rememberSize(dlg, &a.cfg.UI.CompareWindow) })
+func (a *App) restoreCompareWindow(view *compare.View) {
+	saved := a.cfg.UI.CompareWindow
+	dialogs.RestoreSize(view.Dialog(), saved.Width, saved.Height)
+	view.SetLayout(compare.Layout{CollapseLeft: saved.CollapseLeft, CollapseRight: saved.CollapseRight, Split: saved.Split})
+	a.rememberOnClose(view.Dialog(), func() {
+		target := &a.cfg.UI.CompareWindow
+		rememberSize(view.Dialog(), &target.WindowSize)
+		layout := view.Layout()
+		target.CollapseLeft, target.CollapseRight, target.Split = layout.CollapseLeft, layout.CollapseRight, layout.Split
+	})
 }
 
 func (a *App) restoreConflictWindow(view *conflict.View) {
 	saved := a.cfg.UI.ConflictWindow
 	dialogs.RestoreSize(view.Dialog(), saved.Width, saved.Height)
 	view.SetPanes(!saved.HideBase, !saved.SeparateScroll)
+	view.SetLayout(conflict.Layout{
+		CollapseOurs:     saved.CollapseOurs,
+		CollapseBase:     saved.CollapseBase,
+		CollapseTheirs:   saved.CollapseTheirs,
+		ResultMaximized:  saved.ResultMaximized,
+		SourcesMaximized: saved.SourcesMaximized,
+		Split:            saved.Split,
+	})
 	a.rememberOnClose(view.Dialog(), func() {
-		rememberSize(view.Dialog(), &a.cfg.UI.ConflictWindow.WindowSize)
-		a.cfg.UI.ConflictWindow.HideBase = !view.ShowsBase()
-		a.cfg.UI.ConflictWindow.SeparateScroll = !view.ScrollsTogether()
+		target := &a.cfg.UI.ConflictWindow
+		rememberSize(view.Dialog(), &target.WindowSize)
+		target.HideBase = !view.ShowsBase()
+		target.SeparateScroll = !view.ScrollsTogether()
+		layout := view.Layout()
+		target.CollapseOurs, target.CollapseBase, target.CollapseTheirs = layout.CollapseOurs, layout.CollapseBase, layout.CollapseTheirs
+		target.ResultMaximized, target.SourcesMaximized, target.Split = layout.ResultMaximized, layout.SourcesMaximized, layout.Split
 	})
 }

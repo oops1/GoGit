@@ -495,3 +495,37 @@ func TestThePanesOpenTheWayTheyWereLeft(t *testing.T) {
 		t.Fatal("the sides still scroll together")
 	}
 }
+
+func TestThePanesKeepTheLayoutTheyAreGiven(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		in   Layout
+		want Layout
+	}{
+		{"Default", Layout{}, Layout{Split: 0.58}},
+		{"TheirsAndBaseCollapsed", Layout{CollapseBase: true, CollapseTheirs: true, Split: 0.4}, Layout{CollapseBase: true, CollapseTheirs: true, Split: 0.4}},
+		{"ResultOnTheWholeHeight", Layout{CollapseOurs: true, ResultMaximized: true}, Layout{CollapseOurs: true, ResultMaximized: true, Split: 0.58}},
+		{"SourcesOnTheWholeHeight", Layout{SourcesMaximized: true}, Layout{SourcesMaximized: true, Split: 0.58}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := shown(t)
+
+			v.SetLayout(tt.in)
+
+			if got := v.Layout(); got != tt.want {
+				t.Fatalf("layout = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTheLastOpenPaneCannotBeCollapsed(t *testing.T) {
+	v := shown(t)
+
+	v.SetLayout(Layout{CollapseOurs: true, CollapseBase: true, CollapseTheirs: true})
+
+	got := v.Layout()
+	if got.CollapseOurs && got.CollapseBase && got.CollapseTheirs {
+		t.Fatalf("layout = %+v, want one pane left open", got)
+	}
+}

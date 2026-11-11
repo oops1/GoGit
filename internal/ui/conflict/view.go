@@ -178,6 +178,37 @@ func (v *View) SetPanes(showBase, syncScroll bool) {
 
 func (v *View) ShowsBase() bool { return v.merge.ShowBase() }
 
+type Layout struct {
+	CollapseOurs     bool
+	CollapseBase     bool
+	CollapseTheirs   bool
+	ResultMaximized  bool
+	SourcesMaximized bool
+	Split            float64
+}
+
+func (v *View) SetLayout(l Layout) {
+	if l.Split > 0 {
+		v.merge.SetSplit(l.Split)
+	}
+	v.merge.SetPaneCollapsed(widget.MergeOurs, l.CollapseOurs)
+	v.merge.SetPaneCollapsed(widget.MergeBase, l.CollapseBase)
+	v.merge.SetPaneCollapsed(widget.MergeTheirs, l.CollapseTheirs)
+	v.merge.SetResultMaximized(l.ResultMaximized)
+	v.merge.SetSourcesMaximized(l.SourcesMaximized)
+}
+
+func (v *View) Layout() Layout {
+	return Layout{
+		CollapseOurs:     v.merge.PaneCollapsed(widget.MergeOurs),
+		CollapseBase:     v.merge.PaneCollapsed(widget.MergeBase),
+		CollapseTheirs:   v.merge.PaneCollapsed(widget.MergeTheirs),
+		ResultMaximized:  v.merge.ResultMaximized(),
+		SourcesMaximized: v.merge.SourcesMaximized(),
+		Split:            v.merge.Split(),
+	}
+}
+
 func (v *View) ScrollsTogether() bool { return v.merge.SyncScroll() }
 
 func (v *View) resolve(how widget.MergeResolution) {
