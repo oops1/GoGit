@@ -30,8 +30,8 @@ github.com/jcmturner/gokrb5/v8 v8.4.4 h1:x1Sv4HaTpepFkXbt2IkL29DXRf8sOfZXo8eRKh6
 github.com/jcmturner/gokrb5/v8 v8.4.4/go.mod h1:1btQEpgT6k+unzCwX1KdWMEwPPkkgBtP+F6aCACiMrs=
 github.com/jcmturner/rpc/v2 v2.0.3 h1:7FXXj8Ti1IaVFpSAziCZWNzbNuZmnvw/i6CqLNdWfZY=
 github.com/jcmturner/rpc/v2 v2.0.3/go.mod h1:VUJYCIDm3PVOEHw8sgt091/20OJjskO/YJki3ELg/Hc=
-github.com/oops1/headless-gui/v4 v4.4.0 h1:ByszDzmAGiIj2vll1V+Mrq1NGV1BQVbnxDjff//3UmE=
-github.com/oops1/headless-gui/v4 v4.4.0/go.mod h1:F2VHnvyVf8UGe7I6OUwDGlEYV8zNi1mjkM1q1MbFcgg=
+github.com/oops1/headless-gui/v4 v4.5.0 h1:mCN4cpYzCX6xWOBhaER0Z7FIJzmuPYfJ1BgzRQwdDEw=
+github.com/oops1/headless-gui/v4 v4.5.0/go.mod h1:F2VHnvyVf8UGe7I6OUwDGlEYV8zNi1mjkM1q1MbFcgg=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
