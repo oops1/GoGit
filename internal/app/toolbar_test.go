@@ -243,7 +243,8 @@ func TestTheStretchesShareWhateverTheButtonsLeaveOver(t *testing.T) {
 	stretches := []*widget.Stretch{}
 	fixed := panel.Padding * 2
 	for _, child := range panel.Children() {
-		fixed += toolbarItemMargin * 2
+		margin := child.(interface{ GetMargin() widget.Margin }).GetMargin()
+		fixed += margin.Left + margin.Right
 		if stretch, is := child.(*widget.Stretch); is {
 			stretches = append(stretches, stretch)
 			continue
