@@ -99,6 +99,14 @@ func TestTheWindowCanBeResizedButNotCrushed(t *testing.T) {
 	}
 }
 
+func TestTheWindowCanBeMaximized(t *testing.T) {
+	v := newTestView(t)
+
+	if !v.Dialog().HasWindowButtons() {
+		t.Fatal("the window has no buttons to maximize it")
+	}
+}
+
 func TestTwoFilesAreComparedAndTheirChangesCounted(t *testing.T) {
 	v := loaded(t, "one\ntwo\nthree\n", "one\nTWO\nthree\nfour\n")
 

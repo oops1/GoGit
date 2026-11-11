@@ -100,3 +100,49 @@ func TestClosingTheAppReleasesTheDialogsStillOpen(t *testing.T) {
 		t.Fatal("the app still tracks dialogs after closing")
 	}
 }
+
+func windowedDialog(t *testing.T) *widget.Dialog {
+	t.Helper()
+	dlg := widget.NewDialog("Title", 400, 300)
+	dlg.SetResizable(true)
+	dlg.SetMinSize(200, 150)
+	dlg.SetWindowButtons(true)
+	return dlg
+}
+
+func TestADialogDrawnInsideTheMainWindowMaximizesToIt(t *testing.T) {
+	a := newTestApp(t)
+	dlg := windowedDialog(t)
+	runOnDispatcher(t, a, func() { a.showModal(dlg, dialogOwnerView{}) })
+	shown := readOnDispatcher(t, a, dlg.Bounds)
+
+	runOnDispatcher(t, a, func() { dlg.OnMaximizeRestore() })
+
+	if got, want := readOnDispatcher(t, a, dlg.Bounds), readOnDispatcher(t, a, a.root.Bounds); got != want {
+		t.Fatalf("maximized bounds = %v, want the main window %v", got, want)
+	}
+	if !readOnDispatcher(t, a, dlg.IsMaximized) {
+		t.Fatal("the dialog does not know it is maximized")
+	}
+
+	runOnDispatcher(t, a, func() { dlg.OnMaximizeRestore() })
+
+	if got := readOnDispatcher(t, a, dlg.Bounds); got != shown {
+		t.Fatalf("restored bounds = %v, want %v", got, shown)
+	}
+	if readOnDispatcher(t, a, dlg.IsMaximized) {
+		t.Fatal("the restored dialog still counts as maximized")
+	}
+	runOnDispatcher(t, a, func() { a.eng.CloseModal(dlg) })
+}
+
+func TestADialogWithoutWindowButtonsGetsNoMaximize(t *testing.T) {
+	a := newTestApp(t)
+	dlg := widget.NewDialog("Title", 400, 300)
+	runOnDispatcher(t, a, func() { a.showModal(dlg, dialogOwnerView{}) })
+
+	if readOnDispatcher(t, a, func() bool { return dlg.OnMaximizeRestore != nil }) {
+		t.Fatal("a dialog without window buttons got a maximize action")
+	}
+	runOnDispatcher(t, a, func() { a.eng.CloseModal(dlg) })
+}

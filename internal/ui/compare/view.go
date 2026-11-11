@@ -69,6 +69,7 @@ func NewView() (*View, error) {
 	}
 	dlg.SetMinSize(dialogMinWidth, dialogMinHeight)
 	dlg.SetResizable(true)
+	dlg.SetWindowButtons(true)
 	v.wire()
 	v.refresh()
 	return v, nil

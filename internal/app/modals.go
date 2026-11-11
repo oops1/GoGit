@@ -1,6 +1,8 @@
 package app
 
 import (
+	"image"
+
 	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/ui/dialogs"
@@ -22,8 +24,25 @@ type shownDialog struct {
 func (a *App) showModal(modal widget.ModalWidget, view styledView) {
 	a.releaseClosedDialogs()
 	a.trackDialog(modal, view)
+	if dlg, ok := modal.(*widget.Dialog); ok && dlg.HasWindowButtons() {
+		dlg.OnMaximizeRestore = a.maximizeInsideMainWindow(dlg)
+	}
 	a.eng.ShowModal(modal)
 	view.Restyle(a.theme())
+}
+
+func (a *App) maximizeInsideMainWindow(dlg *widget.Dialog) func() {
+	var restored image.Rectangle
+	return func() {
+		if dlg.IsMaximized() {
+			dlg.SetBounds(restored)
+			dlg.SetMaximized(false)
+			return
+		}
+		restored = dlg.Bounds()
+		dlg.SetBounds(a.root.Bounds())
+		dlg.SetMaximized(true)
+	}
 }
 
 func (a *App) trackDialog(modal widget.ModalWidget, view styledView) {
