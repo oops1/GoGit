@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 )
 
 type Colors struct {

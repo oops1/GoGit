@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"
@@ -22,7 +22,7 @@ const (
 	githubIconSize = 24
 	okTintPercent  = 14
 	gitEngineName  = "Go"
-	guiEngineName  = "headless-gui/v3"
+	guiEngineName  = "headless-gui/v4"
 	copyrightYear  = 2026
 )
 

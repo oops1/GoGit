@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"

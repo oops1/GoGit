@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	"github.com/oops1/gogit/internal/gitcore/hash"

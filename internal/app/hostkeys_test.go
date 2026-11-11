@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/oops1/gogit/internal/gitcore/transport"

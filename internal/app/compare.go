@@ -5,7 +5,7 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"

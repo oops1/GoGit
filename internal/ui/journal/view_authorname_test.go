@@ -3,7 +3,7 @@ package journal
 import (
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
 )
 
 func journalColumns() []datagrid.Column {

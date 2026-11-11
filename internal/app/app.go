@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/oops1/headless-gui/v3/engine"
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
-	"github.com/oops1/headless-gui/v3/window"
+	"github.com/oops1/headless-gui/v4/engine"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/window"
 
 	"github.com/oops1/gogit/internal/assets"
 	"github.com/oops1/gogit/internal/config"
@@ -69,6 +69,8 @@ type App struct {
 	detect   func() systheme.Scheme
 	accentOf func() systheme.Accent
 	log      *slog.Logger
+
+	enginePanics enginePanicLog
 
 	layoutStore   layout.Store
 	defaultLayout []byte
@@ -418,6 +420,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
 	a.eng.SetTextQuality(engine.TextQuality{Hinting: true, Contrast: engine.DefaultTextContrast})
+	a.eng.SetOnPanic(a.reportEnginePanic)
 	a.eng.SetRoot(root)
 	a.eng.SetOnModalClosed(func(widget.ModalWidget) { a.releaseClosedDialogs() })
 	a.startPostQueue()

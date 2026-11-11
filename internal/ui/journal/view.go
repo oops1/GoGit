@@ -4,8 +4,8 @@ import (
 	"image/color"
 	"sync"
 
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/ui/journal/graph"
 )

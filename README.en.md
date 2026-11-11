@@ -10,7 +10,7 @@ interface. An alternative to the paid SmartGit.
 
 - Its own implementation of git in pure Go: no installed git is required.
 - `CGO_ENABLED=0`, a single executable with all resources built in.
-- Graphics engine [headless-gui/v3](https://github.com/oops1/headless-gui):
+- Graphics engine [headless-gui/v4](https://github.com/oops1/headless-gui):
   the interface is described in XAML, the logic in Go, Windows 11 themes (dark and light, matching the system by default).
 - Dock panels: repositories, branches, files, diff, commit log — any of them
   can be hidden, dragged to another edge, or torn off into a separate system
