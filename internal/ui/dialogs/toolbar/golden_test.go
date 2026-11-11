@@ -13,6 +13,7 @@ import (
 	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const goldenFrameOS = "windows"
@@ -61,6 +62,7 @@ func renderDialogFrame(t *testing.T, theme *widget.Theme) *image.RGBA {
 	b := dlg.Bounds()
 	canvas := engine.New(b.Dx(), b.Dy(), 30)
 	t.Cleanup(canvas.Stop)
+	canvas.SetTextQuality(style.TextQuality())
 	canvas.SetTheme(theme)
 	widget.ApplyThemeTree(dlg, theme)
 	view.Restyle(theme)
