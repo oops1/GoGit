@@ -214,3 +214,20 @@ func TestTheConflictWindowRemembersItsCollapsedPanes(t *testing.T) {
 		t.Fatalf("reopened with %+v", got)
 	}
 }
+
+func TestAWindowClosedTwiceIsRememberedOnce(t *testing.T) {
+	a := newTestApp(t)
+	dlg := widget.NewDialog("Title", 400, 300)
+	remembered := 0
+	runOnDispatcher(t, a, func() { a.rememberOnClose(dlg, func() { remembered++ }) })
+
+	runOnDispatcher(t, a, func() {
+		dlg.OnClosed()
+		dlg.OnClosed()
+	})
+	waitForPostQueueDrain(t, a)
+
+	if got := readOnDispatcher(t, a, func() int { return remembered }); got != 1 {
+		t.Fatalf("remembered %d times, want once", got)
+	}
+}

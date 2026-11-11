@@ -1,6 +1,8 @@
 package app
 
 import (
+	"sync"
+
 	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/config"
@@ -11,15 +13,18 @@ import (
 
 func (a *App) rememberOnClose(dlg *widget.Dialog, remember func()) {
 	closed := dlg.OnClosed
+	var once sync.Once
 	dlg.OnClosed = func() {
 		if closed != nil {
 			closed()
 		}
-		a.Post(func() {
-			remember()
-			if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
-				a.log.Warn("save window size failed", "error", err)
-			}
+		once.Do(func() {
+			a.Post(func() {
+				remember()
+				if err := a.cfg.Save(a.paths.ConfigFile()); err != nil {
+					a.log.Warn("save window size failed", "error", err)
+				}
+			})
 		})
 	}
 }
