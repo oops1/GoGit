@@ -420,6 +420,7 @@ func NewFromXAML(cfg *config.Config, paths config.Paths, xaml []byte, log *slog.
 
 	a.eng = engine.New(cfg.Window.Width, cfg.Window.Height, targetFPS)
 	a.eng.SetTextQuality(style.TextQuality())
+	useInterfaceFont(a.eng, systemInterfaceFont())
 	a.eng.SetOnPanic(a.reportEnginePanic)
 	a.eng.SetRoot(root)
 	a.eng.SetOnModalClosed(func(widget.ModalWidget) { a.releaseClosedDialogs() })
@@ -1176,6 +1177,7 @@ func (a *App) Run() error {
 	a.scheduleUpdateCheck()
 	go a.runWatchdog(ctx, a.watches())
 	win := window.New(a.eng, a.root.Title)
+	win.SetTextQualityFromSystem(true)
 	a.applyWindowIcon(win)
 	if a.OnExit == nil {
 		a.OnExit = win.Close
