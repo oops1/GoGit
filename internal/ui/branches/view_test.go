@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 func bound(t *testing.T) (*View, *widget.TreeViewWidget) {
 	t.Helper()
 	v := NewView()
+	v.options.MainSection = false
 	tw := widget.NewTreeViewWidget()
 	v.Bind(tw)
 	return v, tw

@@ -72,7 +72,7 @@ func TestLocalBranchesFollowTheChosenSortAndGrouping(t *testing.T) {
 	}{
 		{
 			name:    "by name, nested by path",
-			options: DefaultOptions(),
+			options: Options{Grouping: Grouping{ByPath: true}},
 			want:    []string{"feature", "  a", "  b", "main", "release", "  1.9", "  1.10", "solo", "  only"},
 		},
 		{

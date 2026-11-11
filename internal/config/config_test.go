@@ -718,3 +718,16 @@ func TestAnOldConfigOpensTheWindowsAsDesigned(t *testing.T) {
 			cfg.UI.CompareWindow, cfg.UI.ConflictWindow)
 	}
 }
+
+func TestMainBranchesStandInAGroupOfTheirOwnByDefault(t *testing.T) {
+	if !Default().UI.Branches.MainSection {
+		t.Fatal("a fresh config must put main branches in a group of their own")
+	}
+	cfg, err := Parse([]byte("version = 1\n[ui.branches]\nsort = \"name\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.UI.Branches.MainSection {
+		t.Fatal("a config written before the option existed must keep the group")
+	}
+}

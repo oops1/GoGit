@@ -146,6 +146,7 @@ type Colors struct {
 type BranchesPane struct {
 	Sort                string `toml:"sort"`
 	FlowSections        bool   `toml:"flow_sections"`
+	MainSection         bool   `toml:"main_section"`
 	GroupByPath         bool   `toml:"group_by_path"`
 	GroupExceptSingles  bool   `toml:"group_except_singles"`
 	GroupsFirst         bool   `toml:"groups_first"`
@@ -190,7 +191,7 @@ func Default() *Config {
 		UI: UI{
 			ShowToolbar: true, ShowStatusBar: true, ToolbarCaptions: true,
 			FilesSubdirectories: true, Layout: LayoutDocks,
-			Branches: BranchesPane{Sort: BranchSortName, GroupByPath: true},
+			Branches: BranchesPane{Sort: BranchSortName, GroupByPath: true, MainSection: true},
 		},
 	}
 }

@@ -60,6 +60,7 @@ type View struct {
 	secondary       color.RGBA
 	pairedRemote    map[refs.Name]string
 	consumedRemote  map[refs.Name]bool
+	mainNames       map[string]bool
 
 	OnSubmoduleActivate func(ops.Submodule)
 	OnSubmoduleMenu     func(ops.Submodule) []widget.MenuItem
@@ -148,8 +149,9 @@ func (v *View) render(s Snapshot) {
 	v.keyByItem = map[*treeview.TreeViewItem]string{}
 	v.submoduleByItem = map[*treeview.TreeViewItem]ops.Submodule{}
 
-	if base := v.buildFlowBase(s); base != nil {
-		v.tree.AddRoot(base)
+	v.mainNames = MainBranchNames(s, v.flow, v.flowConfigured)
+	if main := v.buildMain(s); main != nil {
+		v.tree.AddRoot(main)
 	}
 	for _, section := range v.buildFlowSections(s) {
 		v.tree.AddRoot(section)
@@ -280,25 +282,13 @@ func (v *View) buildLocal(s Snapshot) *treeview.TreeViewItem {
 	entries := make([]pathEntry, 0, len(s.Local))
 	for _, b := range s.Local {
 		short := b.Name.Short()
+		if v.inMainSection(short) {
+			continue
+		}
 		if _, inFlow := v.flowKindOf(short); inFlow {
 			continue
 		}
-		if short == v.flowBaseBranch() {
-			continue
-		}
-		current := !s.Detached && short == s.Current
-		icon := "branch"
-		if current {
-			icon = "branch_current"
-		}
-		entries = append(entries, pathEntry{
-			path:          short,
-			ref:           b.Name,
-			current:       current,
-			icon:          icon,
-			when:          b.When,
-			trackedRemote: v.pairedRemote[b.Name],
-		})
+		entries = append(entries, v.localEntry(s, b, short))
 	}
 	v.buildPathTree(root, localGroupKey, entries)
 	return root
@@ -311,7 +301,7 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 		node := v.newGroupItem(key, remote.Name)
 		root.AddChild(node)
 
-		entries := make([]pathEntry, 0, len(remote.Branches))
+		var mains, entries []pathEntry
 		for _, b := range remote.Branches {
 			if isRemoteHead(b.Name) {
 				continue
@@ -320,11 +310,22 @@ func (v *View) buildRemotes(s Snapshot) *treeview.TreeViewItem {
 			if v.flowHoldsRemote(relative) {
 				continue
 			}
-			icon := "branch_remote"
-			if remote.Head != "" && b.Name == remote.Head {
-				icon = "branch_head"
+			entry := pathEntry{path: relative, ref: b.Name, icon: "branch_remote", when: b.When}
+			switch {
+			case remote.Head != "" && b.Name == remote.Head:
+				entry.icon = "branch_head"
+			case v.mainNames[relative]:
+				entry.icon = mainBranchIcon
 			}
-			entries = append(entries, pathEntry{path: relative, ref: b.Name, icon: icon, when: b.When})
+			if v.mainNames[relative] {
+				mains = append(mains, entry)
+				continue
+			}
+			entries = append(entries, entry)
+		}
+		sortRefEntries(mains, v.options.Sort)
+		for _, entry := range mains {
+			node.AddChild(v.leafItem(entry, entry.path))
 		}
 		v.buildPathTree(node, key, entries)
 	}
