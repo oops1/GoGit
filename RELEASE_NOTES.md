@@ -1,44 +1,47 @@
-# Go.Git 1.7.1 — Sharper text, faster big working trees
+# Go.Git 1.7.2 — Text as in Windows, collapsible compare and conflict windows
 
-Small text is sharper, the status of a big working tree takes half the time, and
-opening a repository no longer holds up the interface.
+A new engine, text drawn the way Windows is set up, compare and conflict-resolution
+windows that collapse their sides and remember how they were left, and main
+branches first in the Branches pane.
 
-All numbers below were measured on Windows with a 20-thread processor.
+## Text
 
-## Sharper text
+- The headless-gui engine is updated to v4.5.0 (from v3.43.0). Text follows the
+  system setting: with ClearType on it uses subpixel smoothing (measured the same as
+  Windows itself on the same font) with the monitor's subpixel order; in a remote
+  session (RDP) and with greyscale smoothing it is grey. Turning ClearType on or off
+  or connecting over RDP changes it at once, without a restart.
+- The interface font on Windows is Verdana: at small sizes it reads more clearly
+  than the former Go Regular. Linux keeps the old font.
+- Dialogs and floating panes in their own windows draw text with the same font and
+  smoothing as the main window.
+- On Windows 11 the window and the dialogs no longer show a second frame arc at the
+  rounded corners: the system draws the frame, accent color included.
 
-- Small text is drawn with vertical hinting and a contrast boost for thin strokes:
-  the heights of lowercase and capital letters land on whole pixels, and dark text
-  on a light background looks denser. Line widths and layout do not change.
-  Subpixel smoothing stays off because it is useless in a remote session. The
-  headless-gui engine is updated to v3.43.0 for this.
+## Compare and conflicts
 
-## Big working trees
+- The compare window collapses its left or right side, the border between them can
+  be dragged, and the window has maximize and minimize buttons.
+- The conflict-resolution window collapses Ours, Base and Theirs, shows the result
+  or the sources at full height, and the border between the top and the result can
+  be dragged. New: Redo, the All conflicts menu (take ours or theirs in every
+  unresolved conflict, mark every conflict unresolved again) and separate scrolling.
+- Both windows reopen the way they were closed: size, collapsed sides, border, base
+  pane and joint scrolling are kept in `config.toml`.
 
-- Status of a working tree with 50 thousand files, unchanged files included (the
-  way the Files pane asks for it), takes 53 ms instead of 103 ms and 41 MB instead
-  of 122 MB. File attributes come from the cache without rebuilding the rule stack,
-  and for every file only the question of whether it needs an external filter is
-  asked.
-- A directory with tracked files is read once per scan: the search for untracked
-  files reuses the listing that was already read. Status of 50 thousand files takes
-  30 ms instead of 44 ms.
-- Opening a repository with 80 thousand files holds up the interface for 19 ms
-  instead of 250–440 ms. The working tree watcher takes its first snapshot in the
-  background, and the status scan waits for it so that no change made right after
-  opening is lost. A new set of ignored directories reaches the running watcher
-  instead of restarting it with a full walk of the tree.
+## Branches
+
+- git-flow develop and master, every server's default branch and the usual main,
+  master and develop come first in a Main group with their own icon, and first on
+  every server. The pane menu turns the group off, and selecting obsolete branches
+  leaves main branches alone. A server default branch such as `release/current` no
+  longer appears again under Releases.
 
 ## Fixes
 
-- Loading the next page of the journal no longer drops the selected commit or
-  rebuilds the whole table.
-- In Blame a commit opens with a single click on its link, and the cursor turns
-  into a hand over it.
-- A secure connection over a slow network waits a minute instead of 15 seconds, and
-  the server response timer starts only after the request is sent. When the
-  connection never comes up, Go.Git says so instead of "context deadline exceeded".
-- On Windows a commit made right after git or a virus scanner let go of
-  `packed-refs.lock` no longer fails with "Access is denied": while the system is
-  still closing the old file, Go.Git waits up to a second, as it does for a busy
-  lock.
+- The installer shows the license text again: since 1.6.1 the license dialog was
+  empty.
+- A failure in a widget or a handler no longer brings the app down: the engine
+  catches it, and Go.Git logs it once per place, with secrets redacted.
+- The layout of a window closed twice (by the window and by the engine) is saved
+  once.
