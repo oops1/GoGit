@@ -26,15 +26,20 @@ func TestPreviewConflictDialog(t *testing.T) {
 	}
 	for _, variant := range []struct {
 		name  string
+		lang  string
+		width int
 		theme *widget.Theme
 	}{
-		{"light", widget.Win11LightTheme()},
-		{"dark", widget.Win11DarkTheme()},
+		{"light", "ru", 0, widget.Win11LightTheme()},
+		{"dark", "ru", 0, widget.Win11DarkTheme()},
+		{"en", "en", 0, widget.Win11LightTheme()},
+		{"narrow-ru", "ru", dialogMinWidth, widget.Win11LightTheme()},
+		{"narrow-en", "en", dialogMinWidth, widget.Win11LightTheme()},
 	} {
 		if _, err := i18n.Install(""); err != nil {
 			t.Fatal(err)
 		}
-		i18n.Apply("ru")
+		i18n.Apply(variant.lang)
 
 		eng := engine.New(1280, 800, 30)
 		eng.SetTheme(variant.theme)
@@ -57,6 +62,9 @@ func TestPreviewConflictDialog(t *testing.T) {
 		})
 		view.Merge().ResolveCurrent(widget.MergeTakeTheirs)
 		view.Merge().NextConflict()
+		if variant.width > 0 {
+			view.Dialog().Resize(variant.width, view.Dialog().Bounds().Dy())
+		}
 		eng.ShowModal(view.Dialog())
 		view.Restyle(variant.theme)
 
