@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oops1/headless-gui/v3/engine"
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/engine"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/i18n"
@@ -25,16 +25,23 @@ func TestPreviewConflictDialog(t *testing.T) {
 		t.Skip("GOGIT_PREVIEW_DIR not set")
 	}
 	for _, variant := range []struct {
-		name  string
-		theme *widget.Theme
+		name   string
+		lang   string
+		width  int
+		theme  *widget.Theme
+		layout Layout
 	}{
-		{"light", widget.Win11LightTheme()},
-		{"dark", widget.Win11DarkTheme()},
+		{"light", "ru", 0, widget.Win11LightTheme(), Layout{}},
+		{"dark", "ru", 0, widget.Win11DarkTheme(), Layout{}},
+		{"en", "en", 0, widget.Win11LightTheme(), Layout{}},
+		{"narrow-ru", "ru", dialogMinWidth, widget.Win11LightTheme(), Layout{}},
+		{"narrow-en", "en", dialogMinWidth, widget.Win11LightTheme(), Layout{}},
+		{"collapsed", "ru", 0, widget.Win11LightTheme(), Layout{CollapseBase: true, CollapseTheirs: true}},
 	} {
 		if _, err := i18n.Install(""); err != nil {
 			t.Fatal(err)
 		}
-		i18n.Apply("ru")
+		i18n.Apply(variant.lang)
 
 		eng := engine.New(1280, 800, 30)
 		eng.SetTheme(variant.theme)
@@ -57,6 +64,10 @@ func TestPreviewConflictDialog(t *testing.T) {
 		})
 		view.Merge().ResolveCurrent(widget.MergeTakeTheirs)
 		view.Merge().NextConflict()
+		if variant.width > 0 {
+			view.Dialog().Resize(variant.width, view.Dialog().Bounds().Dy())
+		}
+		view.SetLayout(variant.layout)
 		eng.ShowModal(view.Dialog())
 		view.Restyle(variant.theme)
 

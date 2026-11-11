@@ -9,10 +9,11 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/engine"
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/engine"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/config"
+	"github.com/oops1/gogit/internal/ui/style"
 )
 
 const (
@@ -46,6 +47,7 @@ func renderToolbarFrame(t *testing.T, theme string, captions bool) *image.RGBA {
 
 	canvas := engine.New(config.MinWindowWidth, height, 30)
 	t.Cleanup(canvas.Stop)
+	canvas.SetTextQuality(style.TextQuality())
 	canvas.SetTheme(a.theme())
 	widget.ApplyThemeTree(panel, a.theme())
 	a.applyToolbarIcons()

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/config"
 	gitconfig "github.com/oops1/gogit/internal/gitcore/config"
@@ -57,6 +57,7 @@ func TestTheViewMenuKeepsItsOrderAndTheStoredChoices(t *testing.T) {
 		i18n.T("Menu.Branches.Sort"),
 		"-",
 		i18n.T("Menu.Branches.FlowSections"),
+		i18n.T("Menu.Branches.MainSection"),
 		"-",
 		i18n.T("Menu.Branches.Group"),
 		i18n.T("Menu.Branches.Group.ExceptSingles"),
@@ -81,10 +82,13 @@ func TestTheViewMenuKeepsItsOrderAndTheStoredChoices(t *testing.T) {
 			t.Fatalf("sort item %q checked = %v, want the stored sort by name", item.Text, item.Checked)
 		}
 	}
-	if !items[4].Checked {
+	if !items[3].Checked {
+		t.Fatal("main branches must start in a group of their own")
+	}
+	if !items[5].Checked {
 		t.Fatal("grouping by path must start checked")
 	}
-	if items[5].Disabled || items[6].Disabled || items[7].Disabled {
+	if items[6].Disabled || items[7].Disabled || items[8].Disabled {
 		t.Fatal("the grouping sub-options must be reachable while grouping is on")
 	}
 	if !items[len(items)-1].Disabled {
@@ -97,10 +101,10 @@ func TestTurningGroupingOffGreysItsSubOptions(t *testing.T) {
 	clickViewMenuItem(t, a, branchesPaneMenu(t, a), "Menu.Branches.Group")
 
 	items := branchesPaneMenu(t, a)
-	if items[4].Checked {
+	if items[5].Checked {
 		t.Fatal("grouping by path must be off now")
 	}
-	if !items[5].Disabled || !items[6].Disabled || !items[7].Disabled {
+	if !items[6].Disabled || !items[7].Disabled || !items[8].Disabled {
 		t.Fatal("the grouping sub-options must be greyed out while grouping is off")
 	}
 	if readOnDispatcher(t, a, a.branchesView.Options).Grouping.ByPath {
@@ -119,6 +123,7 @@ func TestEveryViewMenuToggleSurvivesARestart(t *testing.T) {
 	a, paths := newTestAppWithPaths(t)
 	for _, key := range []string{
 		"Menu.Branches.FlowSections",
+		"Menu.Branches.MainSection",
 		"Menu.Branches.Group.ExceptSingles",
 		"Menu.Branches.Group.GroupsFirst",
 		"Menu.Branches.Group.AfterLastSlash",
@@ -148,7 +153,7 @@ func TestEveryViewMenuToggleSurvivesARestart(t *testing.T) {
 	if options != branchesPaneOptions(want) {
 		t.Fatalf("options after restart = %+v, want %+v", options, branchesPaneOptions(want))
 	}
-	if options.Sort != branches.SortByCommitTime || !options.FlowSections {
+	if options.Sort != branches.SortByCommitTime || !options.FlowSections || options.MainSection {
 		t.Fatalf("options after restart = %+v", options)
 	}
 }

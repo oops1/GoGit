@@ -3,7 +3,7 @@ package branches
 import (
 	"strings"
 
-	"github.com/oops1/headless-gui/v3/widget/treeview"
+	"github.com/oops1/headless-gui/v4/widget/treeview"
 
 	"github.com/oops1/gogit/internal/gitcore/ops"
 	"github.com/oops1/gogit/internal/i18n"
@@ -34,7 +34,7 @@ func (v *View) Flow() (ops.FlowConfig, bool) {
 }
 
 func (v *View) flowKindOf(short string) (string, bool) {
-	if !v.flowConfigured {
+	if !v.flowConfigured || v.inMainSection(short) {
 		return "", false
 	}
 	kind, _, ok := v.flow.BranchKind(short)
@@ -75,19 +75,7 @@ func (v *View) flowEntries(s Snapshot, kind string) []pathEntry {
 		if !ok || found != kind {
 			continue
 		}
-		current := !s.Detached && short == s.Current
-		icon := "branch"
-		if current {
-			icon = "branch_current"
-		}
-		entries = append(entries, pathEntry{
-			path:          v.flowBranchName(short),
-			ref:           b.Name,
-			current:       current,
-			icon:          icon,
-			when:          b.When,
-			trackedRemote: v.pairedRemote[b.Name],
-		})
+		entries = append(entries, v.localEntry(s, b, v.flowBranchName(short)))
 	}
 	if !v.options.FlowSections {
 		return entries
@@ -122,37 +110,4 @@ func (v *View) flowBranchName(short string) string {
 		return short
 	}
 	return name
-}
-
-func (v *View) flowBaseBranch() string {
-	if !v.flowConfigured || !v.flow.Light() {
-		return ""
-	}
-	return v.flow.Develop
-}
-
-func (v *View) buildFlowBase(s Snapshot) *treeview.TreeViewItem {
-	base := v.flowBaseBranch()
-	if base == "" {
-		return nil
-	}
-	for _, b := range s.Local {
-		if b.Name.Short() != base {
-			continue
-		}
-		current := !s.Detached && base == s.Current
-		icon := "branch"
-		if current {
-			icon = "branch_current"
-		}
-		return v.leafItem(pathEntry{
-			path:          base,
-			ref:           b.Name,
-			current:       current,
-			icon:          icon,
-			when:          b.When,
-			trackedRemote: v.pairedRemote[b.Name],
-		}, base)
-	}
-	return nil
 }

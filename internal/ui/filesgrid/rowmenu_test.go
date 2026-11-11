@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 )
 
 func openRowMenu(t *testing.T, g *Grid, x, y int) *widget.PopupMenu {

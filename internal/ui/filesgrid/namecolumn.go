@@ -3,7 +3,7 @@ package filesgrid
 import (
 	"image"
 
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/ui/changes"
 	"github.com/oops1/gogit/internal/ui/icons"

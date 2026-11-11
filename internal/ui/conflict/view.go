@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/i18n"
@@ -16,7 +16,7 @@ import (
 
 const (
 	dialogName         = "conflict"
-	dialogMinWidth     = 900
+	dialogMinWidth     = 1150
 	dialogMinHeight    = 640
 	prevChangeIcon     = "change_prev"
 	nextChangeIcon     = "change_next"
@@ -44,12 +44,15 @@ type View struct {
 	takeOurs     *widget.Button
 	takeTheirs   *widget.Button
 	takeBoth     *widget.Button
+	allConflicts *widget.MenuButton
 	undo         *widget.Button
+	redo         *widget.Button
 	prevConflict *widget.Button
 	nextConflict *widget.Button
 	save         *widget.Button
 	closeBtn     *widget.Button
 	showBase     *widget.CheckBox
+	syncScroll   *widget.CheckBox
 	unresolved   *widget.Label
 	position     *widget.Label
 	message      *widget.Label
@@ -100,6 +103,7 @@ func (v *View) bind(named map[string]widget.Widget) error {
 		"takeTheirs":   &v.takeTheirs,
 		"takeBoth":     &v.takeBoth,
 		"undo":         &v.undo,
+		"redo":         &v.redo,
 		"prevConflict": &v.prevConflict,
 		"nextConflict": &v.nextConflict,
 		"save":         &v.save,
@@ -111,8 +115,18 @@ func (v *View) bind(named map[string]widget.Widget) error {
 		}
 		*target = button
 	}
-	if v.showBase, ok = named["showBase"].(*widget.CheckBox); !ok {
-		return fmt.Errorf("%w: showBase", ErrWidgetMissing)
+	if v.allConflicts, ok = named["allConflicts"].(*widget.MenuButton); !ok {
+		return fmt.Errorf("%w: allConflicts", ErrWidgetMissing)
+	}
+	for name, target := range map[string]**widget.CheckBox{
+		"showBase":   &v.showBase,
+		"syncScroll": &v.syncScroll,
+	} {
+		check, ok := named[name].(*widget.CheckBox)
+		if !ok {
+			return fmt.Errorf("%w: %s", ErrWidgetMissing, name)
+		}
+		*target = check
 	}
 	for name, target := range map[string]**widget.Label{
 		"unresolved": &v.unresolved,
@@ -133,6 +147,8 @@ func (v *View) wire() {
 	v.takeTheirs.OnClick = func() { v.resolve(widget.MergeTakeTheirs) }
 	v.takeBoth.OnClick = func() { v.resolve(widget.MergeTakeOursThenTheirs) }
 	v.undo.OnClick = func() { v.merge.Undo(); v.refresh() }
+	v.redo.OnClick = func() { v.merge.Redo(); v.refresh() }
+	v.allConflicts.OnOpening = func() { v.allConflicts.Items = v.allConflictsItems() }
 	v.prevConflict.OnClick = func() { v.merge.PrevConflict(); v.refresh() }
 	v.nextConflict.OnClick = func() { v.merge.NextConflict(); v.refresh() }
 	v.save.OnClick = v.requestSave
@@ -143,6 +159,9 @@ func (v *View) wire() {
 	}
 	v.showBase.SetChecked(true)
 	v.showBase.OnChange = v.merge.SetShowBase
+	v.syncScroll.SetChecked(true)
+	v.merge.SetSyncScroll(true)
+	v.syncScroll.OnChange = v.merge.SetSyncScroll
 	v.merge.OnResolvedChanged = func(int) { v.refresh() }
 	v.merge.OnResultEdited = v.refresh
 	v.merge.OnCurrentConflict = func(int) { v.refresh() }
@@ -150,8 +169,77 @@ func (v *View) wire() {
 	v.merge.OnSaveRequest = v.requestSave
 }
 
+func (v *View) SetPanes(showBase, syncScroll bool) {
+	v.showBase.SetChecked(showBase)
+	v.merge.SetShowBase(showBase)
+	v.syncScroll.SetChecked(syncScroll)
+	v.merge.SetSyncScroll(syncScroll)
+}
+
+func (v *View) ShowsBase() bool { return v.merge.ShowBase() }
+
+type Layout struct {
+	CollapseOurs     bool
+	CollapseBase     bool
+	CollapseTheirs   bool
+	ResultMaximized  bool
+	SourcesMaximized bool
+	Split            float64
+}
+
+func (v *View) SetLayout(l Layout) {
+	if l.Split > 0 {
+		v.merge.SetSplit(l.Split)
+	}
+	v.merge.SetPaneCollapsed(widget.MergeOurs, l.CollapseOurs)
+	v.merge.SetPaneCollapsed(widget.MergeBase, l.CollapseBase)
+	v.merge.SetPaneCollapsed(widget.MergeTheirs, l.CollapseTheirs)
+	v.merge.SetResultMaximized(l.ResultMaximized)
+	v.merge.SetSourcesMaximized(l.SourcesMaximized)
+}
+
+func (v *View) Layout() Layout {
+	return Layout{
+		CollapseOurs:     v.merge.PaneCollapsed(widget.MergeOurs),
+		CollapseBase:     v.merge.PaneCollapsed(widget.MergeBase),
+		CollapseTheirs:   v.merge.PaneCollapsed(widget.MergeTheirs),
+		ResultMaximized:  v.merge.ResultMaximized(),
+		SourcesMaximized: v.merge.SourcesMaximized(),
+		Split:            v.merge.Split(),
+	}
+}
+
+func (v *View) ScrollsTogether() bool { return v.merge.SyncScroll() }
+
 func (v *View) resolve(how widget.MergeResolution) {
 	v.merge.ResolveCurrent(how)
+	v.refresh()
+}
+
+func (v *View) resolveAll(how widget.MergeResolution) {
+	v.merge.ResolveAll(how)
+	v.refresh()
+}
+
+func (v *View) allConflictsItems() []widget.MenuItem {
+	return []widget.MenuItem{
+		{Text: i18n.T("Dialog.Conflict.AllConflicts.Ours"), OnClick: func() { v.resolveAll(widget.MergeTakeOurs) }},
+		{Text: i18n.T("Dialog.Conflict.AllConflicts.Theirs"), OnClick: func() { v.resolveAll(widget.MergeTakeTheirs) }},
+		{Separator: true},
+		{
+			Text:     i18n.T("Dialog.Conflict.AllConflicts.Reset"),
+			Disabled: v.merge.Unresolved() == v.merge.ConflictCount(),
+			OnClick:  v.reopenAll,
+		},
+	}
+}
+
+func (v *View) reopenAll() {
+	for i, chunk := range v.merge.Chunks() {
+		if chunk.Conflict {
+			v.merge.Resolve(i, widget.MergeUnresolved)
+		}
+	}
 	v.refresh()
 }
 
@@ -249,11 +337,14 @@ func (v *View) refresh() {
 	for _, button := range []*widget.Button{v.takeOurs, v.takeTheirs, v.takeBoth, v.prevConflict, v.nextConflict} {
 		button.SetEnabled(hasConflicts)
 	}
+	v.allConflicts.SetMenuEnabled(hasConflicts)
+	v.undo.SetEnabled(v.merge.CanUndo())
+	v.redo.SetEnabled(v.merge.CanRedo())
 }
 
 func (v *View) Restyle(t *widget.Theme) {
 	p := style.Of(t)
-	p.Quiet(v.takeOurs, v.takeTheirs, v.takeBoth, v.undo, v.prevConflict, v.nextConflict, v.save, v.closeBtn)
+	p.Quiet(v.takeOurs, v.takeTheirs, v.takeBoth, v.allConflicts.Button, v.undo, v.redo, v.prevConflict, v.nextConflict, v.save, v.closeBtn)
 	v.prevConflict.Icon = icons.Toolbar(prevChangeIcon, navigationIconSize, p.Text)
 	v.nextConflict.Icon = icons.Toolbar(nextChangeIcon, navigationIconSize, p.Text)
 	p.Body(v.unresolved, v.position)

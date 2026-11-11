@@ -4,7 +4,7 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/oops1/headless-gui/v3/widget/svg"
+	"github.com/oops1/headless-gui/v4/widget/svg"
 )
 
 const searchIconSVG = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

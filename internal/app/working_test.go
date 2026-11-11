@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget/datagrid"
+	"github.com/oops1/headless-gui/v4/widget/datagrid"
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/gitcore/diff"

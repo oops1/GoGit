@@ -134,7 +134,7 @@ func TestTreeIcons(t *testing.T) {
 	want := []string{
 		"group", "group_open", "repository", "repository_modified",
 		"repository_ahead", "repository_missing", "worktree",
-		"branch", "branch_current", "branch_remote", "branch_head", "tag", "stash",
+		"branch", "branch_current", "branch_remote", "branch_head", "branch_main", "tag", "stash",
 		"folder", "file", "directory", "directory_dim", "directory_muted",
 	}
 	names := TreeIconNames()

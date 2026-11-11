@@ -1,7 +1,7 @@
 package filesgrid
 
 import (
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 )
 
 const XAMLTag = "FilesGrid"

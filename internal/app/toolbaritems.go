@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/ui/dialogs/toolbar"
 )

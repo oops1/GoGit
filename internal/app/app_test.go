@@ -9,8 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/engine"
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/systheme"
@@ -62,8 +61,8 @@ func TestNewLoadsMainWindow(t *testing.T) {
 func TestNewTurnsOnHintedHighContrastText(t *testing.T) {
 	a := newTestApp(t)
 	got := a.Engine().TextQuality()
-	if !got.Hinting || got.Contrast != engine.DefaultTextContrast || got.LCD {
-		t.Fatalf("text quality = %+v, want hinting with default contrast and no LCD", got)
+	if got != style.TextQuality() {
+		t.Fatalf("text quality = %+v, want %+v", got, style.TextQuality())
 	}
 }
 

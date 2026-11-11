@@ -5,7 +5,7 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/diff"
 	gitrepo "github.com/oops1/gogit/internal/gitcore/repo"
@@ -161,6 +161,7 @@ func (a *App) openCompareSides(left, right compareSide) {
 	view.OnPick = func(side widget.DiffSide) { a.pickCompareFile(view, side) }
 	view.OnSaveAs = func(side widget.DiffSide) { a.saveCompareAs(view, side) }
 	view.OnClose = func() { a.closeCompare(view) }
+	a.restoreCompareWindow(view)
 	if bounds := a.root.Bounds(); !bounds.Empty() {
 		view.FitWithin(bounds.Dx(), bounds.Dy())
 	}

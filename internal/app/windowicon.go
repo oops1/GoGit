@@ -4,7 +4,7 @@ import (
 	"errors"
 	"image"
 
-	"github.com/oops1/headless-gui/v3/window"
+	"github.com/oops1/headless-gui/v4/window"
 
 	"github.com/oops1/gogit/internal/ui/icons"
 )

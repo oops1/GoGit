@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/gitcore/merge"
 	"github.com/oops1/gogit/internal/i18n"
@@ -66,10 +66,12 @@ func TestNewViewReportsEveryMissingWidget(t *testing.T) {
 	t.Cleanup(func() { loadDialog = prev })
 	full := func() map[string]widget.Widget {
 		named := map[string]widget.Widget{"merge": widget.NewMergeView("", "")}
-		for _, name := range []string{"takeOurs", "takeTheirs", "takeBoth", "undo", "prevConflict", "nextConflict", "save", "close"} {
+		for _, name := range []string{"takeOurs", "takeTheirs", "takeBoth", "undo", "redo", "prevConflict", "nextConflict", "save", "close"} {
 			named[name] = widget.NewButton("")
 		}
 		named["showBase"] = widget.NewCheckBox("")
+		named["syncScroll"] = widget.NewCheckBox("")
+		named["allConflicts"] = widget.NewMenuButton("")
 		for _, name := range []string{"unresolved", "position", "message"} {
 			named[name] = widget.NewLabel("", widget.CurrentTheme().LabelText)
 		}
@@ -349,5 +351,181 @@ func TestTheWindowKnowsWhenItsResultChangedSinceTheLastSave(t *testing.T) {
 	v.Saved(v.Result(), true)
 	if v.Modified() {
 		t.Fatal("a saved result still counts as a change")
+	}
+}
+
+func twoConflictFile() File {
+	file := conflictingFile()
+	file.Blocks = append(file.Blocks,
+		merge.Chunk{Conflict: true, Ours: []string{"OURS2\n"}, Base: []string{"four\n"}, Theirs: []string{"THEIRS2\n"}},
+	)
+	return file
+}
+
+func openAllConflicts(t *testing.T, v *View) []widget.MenuItem {
+	t.Helper()
+	v.allConflicts.OnOpening()
+	return v.allConflicts.Items
+}
+
+func TestUndoAndRedoAreOnlyOfferedWhenThereIsSomethingToTake(t *testing.T) {
+	v := shown(t)
+	if v.undo.IsEnabled() || v.redo.IsEnabled() {
+		t.Fatal("a freshly opened conflict has nothing to undo or redo")
+	}
+
+	v.takeOurs.OnClick()
+	if !v.undo.IsEnabled() || v.redo.IsEnabled() {
+		t.Fatalf("after a choice: undo = %v, redo = %v", v.undo.IsEnabled(), v.redo.IsEnabled())
+	}
+
+	v.undo.OnClick()
+	if !v.redo.IsEnabled() {
+		t.Fatal("an undone choice cannot be redone")
+	}
+}
+
+func TestRedoBringsTheChoiceBack(t *testing.T) {
+	v := shown(t)
+	v.takeTheirs.OnClick()
+	v.undo.OnClick()
+
+	v.redo.OnClick()
+
+	if v.Unresolved() != 0 || !strings.Contains(v.Result(), "THEIRS") {
+		t.Fatalf("unresolved = %d, result = %q, want their side back", v.Unresolved(), v.Result())
+	}
+}
+
+func TestTheRemainingConflictsTakeOneSideAtOnce(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		item   int
+		want   string
+		absent string
+	}{
+		{"Ours", 0, "OURS2", "THEIRS"},
+		{"Theirs", 1, "THEIRS2", "OURS"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := newTestView(t)
+			v.Show(twoConflictFile())
+
+			openAllConflicts(t, v)[tt.item].OnClick()
+
+			if v.Unresolved() != 0 {
+				t.Fatalf("unresolved = %d, want none", v.Unresolved())
+			}
+			if got := v.Result(); !strings.Contains(got, tt.want) || strings.Contains(got, tt.absent) {
+				t.Fatalf("result = %q", got)
+			}
+			if v.unresolved.Text() != "Unresolved: 0 of 2" {
+				t.Fatalf("status = %q", v.unresolved.Text())
+			}
+		})
+	}
+}
+
+func TestEveryConflictCanBeMarkedUnresolvedAgain(t *testing.T) {
+	v := newTestView(t)
+	v.Show(twoConflictFile())
+	if !openAllConflicts(t, v)[3].Disabled {
+		t.Fatal("nothing is resolved yet, so there is nothing to bring back")
+	}
+	openAllConflicts(t, v)[0].OnClick()
+
+	reset := openAllConflicts(t, v)[3]
+	if reset.Disabled {
+		t.Fatal("resolved conflicts cannot be brought back")
+	}
+	reset.OnClick()
+
+	if v.Unresolved() != 2 {
+		t.Fatalf("unresolved = %d, want both conflicts back", v.Unresolved())
+	}
+}
+
+func TestTheAllConflictsMenuIsOffWithoutConflicts(t *testing.T) {
+	v := newTestView(t)
+	file := conflictingFile()
+	file.Blocks = file.Blocks[:1]
+
+	v.Show(file)
+
+	if v.allConflicts.MenuEnabled() {
+		t.Fatal("there is nothing to resolve, so the menu must be off")
+	}
+}
+
+func TestTheSidesScrollWithTheResultUntilAskedNotTo(t *testing.T) {
+	v := shown(t)
+	if !v.syncScroll.IsChecked() || !v.Merge().SyncScroll() {
+		t.Fatal("the window must open with the sides scrolling together")
+	}
+
+	v.syncScroll.OnChange(false)
+
+	if v.Merge().SyncScroll() {
+		t.Fatal("the sides still scroll together")
+	}
+}
+
+func TestTakingTheRemainingConflictsKeepsAChoiceAlreadyMade(t *testing.T) {
+	v := newTestView(t)
+	v.Show(twoConflictFile())
+	v.takeTheirs.OnClick()
+
+	openAllConflicts(t, v)[0].OnClick()
+
+	got := v.Result()
+	if !strings.Contains(got, "THEIRS\n") || !strings.Contains(got, "OURS2") {
+		t.Fatalf("result = %q, want the first conflict kept as theirs and the second taken as ours", got)
+	}
+}
+
+func TestThePanesOpenTheWayTheyWereLeft(t *testing.T) {
+	v := shown(t)
+
+	v.SetPanes(false, false)
+
+	if v.ShowsBase() || v.showBase.IsChecked() {
+		t.Fatal("the base is still shown")
+	}
+	if v.ScrollsTogether() || v.syncScroll.IsChecked() {
+		t.Fatal("the sides still scroll together")
+	}
+}
+
+func TestThePanesKeepTheLayoutTheyAreGiven(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		in   Layout
+		want Layout
+	}{
+		{"Default", Layout{}, Layout{Split: 0.58}},
+		{"TheirsAndBaseCollapsed", Layout{CollapseBase: true, CollapseTheirs: true, Split: 0.4}, Layout{CollapseBase: true, CollapseTheirs: true, Split: 0.4}},
+		{"ResultOnTheWholeHeight", Layout{CollapseOurs: true, ResultMaximized: true}, Layout{CollapseOurs: true, ResultMaximized: true, Split: 0.58}},
+		{"SourcesOnTheWholeHeight", Layout{SourcesMaximized: true}, Layout{SourcesMaximized: true, Split: 0.58}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			v := shown(t)
+
+			v.SetLayout(tt.in)
+
+			if got := v.Layout(); got != tt.want {
+				t.Fatalf("layout = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTheLastOpenPaneCannotBeCollapsed(t *testing.T) {
+	v := shown(t)
+
+	v.SetLayout(Layout{CollapseOurs: true, CollapseBase: true, CollapseTheirs: true})
+
+	got := v.Layout()
+	if got.CollapseOurs && got.CollapseBase && got.CollapseTheirs {
+		t.Fatalf("layout = %+v, want one pane left open", got)
 	}
 }

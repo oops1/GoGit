@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/treeview"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/treeview"
 
 	"github.com/oops1/gogit/internal/gitcore/refs"
 	"github.com/oops1/gogit/internal/i18n"
@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 func bound(t *testing.T) (*View, *widget.TreeViewWidget) {
 	t.Helper()
 	v := NewView()
+	v.options.MainSection = false
 	tw := widget.NewTreeViewWidget()
 	v.Bind(tw)
 	return v, tw

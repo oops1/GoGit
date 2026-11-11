@@ -19,10 +19,11 @@ type Options struct {
 	Sort         SortMode
 	Grouping     Grouping
 	FlowSections bool
+	MainSection  bool
 }
 
 func DefaultOptions() Options {
-	return Options{Grouping: Grouping{ByPath: true}}
+	return Options{Grouping: Grouping{ByPath: true}, MainSection: true}
 }
 
 func (v *View) SetOptions(o Options) {

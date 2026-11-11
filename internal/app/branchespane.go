@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/config"
 	"github.com/oops1/gogit/internal/i18n"
@@ -49,6 +49,7 @@ var branchGroupToggles = []struct {
 func branchesPaneOptions(pane config.BranchesPane) branches.Options {
 	options := branches.Options{
 		FlowSections: pane.FlowSections,
+		MainSection:  pane.MainSection,
 		Grouping: branches.Grouping{
 			ByPath:         pane.GroupByPath,
 			ExceptSingles:  pane.GroupExceptSingles,
@@ -82,6 +83,9 @@ func (a *App) branchesPaneMenuItems() []widget.MenuItem {
 		menuSeparator(),
 		a.branchesToggleItem("Menu.Branches.FlowSections", pane.FlowSections, true, func(p *config.BranchesPane) {
 			p.FlowSections = !p.FlowSections
+		}),
+		a.branchesToggleItem("Menu.Branches.MainSection", pane.MainSection, true, func(p *config.BranchesPane) {
+			p.MainSection = !p.MainSection
 		}),
 		menuSeparator(),
 		a.branchesToggleItem("Menu.Branches.Group", pane.GroupByPath, true, func(p *config.BranchesPane) {

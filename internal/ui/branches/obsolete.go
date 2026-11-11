@@ -1,7 +1,7 @@
 package branches
 
 import (
-	"github.com/oops1/headless-gui/v3/widget/treeview"
+	"github.com/oops1/headless-gui/v4/widget/treeview"
 
 	"github.com/oops1/gogit/internal/gitcore/refs"
 )
@@ -37,7 +37,12 @@ func (v *View) SelectObsolete() []refs.Name {
 func (v *View) obsoleteItems() ([]refs.Name, []*treeview.TreeViewItem) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	stale := ObsoleteLocal(v.last)
+	var stale []refs.Name
+	for _, ref := range ObsoleteLocal(v.last) {
+		if !v.mainNames[ref.Short()] {
+			stale = append(stale, ref)
+		}
+	}
 	if v.tree == nil || len(stale) == 0 {
 		return stale, nil
 	}

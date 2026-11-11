@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/treeview"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/treeview"
 
 	"github.com/oops1/gogit/internal/gitcore/refs"
 )
@@ -72,7 +72,7 @@ func TestLocalBranchesFollowTheChosenSortAndGrouping(t *testing.T) {
 	}{
 		{
 			name:    "by name, nested by path",
-			options: DefaultOptions(),
+			options: Options{Grouping: Grouping{ByPath: true}},
 			want:    []string{"feature", "  a", "  b", "main", "release", "  1.9", "  1.10", "solo", "  only"},
 		},
 		{

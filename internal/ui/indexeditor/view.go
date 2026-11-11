@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/oops1/headless-gui/v3/widget"
-	"github.com/oops1/headless-gui/v3/widget/diffview"
-	"github.com/oops1/headless-gui/v3/widget/mergeview"
+	"github.com/oops1/headless-gui/v4/widget"
+	"github.com/oops1/headless-gui/v4/widget/diffview"
+	"github.com/oops1/headless-gui/v4/widget/mergeview"
 
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/dialogs"

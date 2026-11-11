@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oops1/headless-gui/v3/engine"
-	"github.com/oops1/headless-gui/v3/widget"
+	"github.com/oops1/headless-gui/v4/engine"
+	"github.com/oops1/headless-gui/v4/widget"
 
 	"github.com/oops1/gogit/internal/i18n"
 )
@@ -70,13 +70,15 @@ func TestPreviewCompareWindow(t *testing.T) {
 		}
 	}
 	for _, variant := range []struct {
-		name  string
-		lang  string
-		theme *widget.Theme
+		name   string
+		lang   string
+		theme  *widget.Theme
+		layout Layout
 	}{
-		{"light", "ru", widget.Win11LightTheme()},
-		{"dark", "ru", widget.Win11DarkTheme()},
-		{"en", "en", widget.Win11LightTheme()},
+		{"light", "ru", widget.Win11LightTheme(), Layout{}},
+		{"dark", "ru", widget.Win11DarkTheme(), Layout{}},
+		{"en", "en", widget.Win11LightTheme(), Layout{}},
+		{"left-collapsed", "ru", widget.Win11LightTheme(), Layout{CollapseLeft: true}},
 	} {
 		if _, err := i18n.Install(""); err != nil {
 			t.Fatal(err)
@@ -98,6 +100,7 @@ func TestPreviewCompareWindow(t *testing.T) {
 		if err := view.Load(widget.DiffRight, right); err != nil {
 			t.Fatal(err)
 		}
+		view.SetLayout(variant.layout)
 		eng.ShowModal(view.Dialog())
 		view.Restyle(variant.theme)
 
