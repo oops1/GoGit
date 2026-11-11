@@ -251,3 +251,31 @@ func TestSelectingObsoleteBranchesLeavesMainBranchesAlone(t *testing.T) {
 		t.Fatalf("stale = %v, want gone selected", stale)
 	}
 }
+
+func TestAMainBranchIsNotRepeatedInAGitFlowSection(t *testing.T) {
+	v, tw := boundWithMainSection(t)
+	v.SetFlow(ops.DefaultFlowConfig(), true)
+	s := Snapshot{
+		Local: []Branch{
+			{Name: refs.BranchName("release/current"), Target: oid(t, "11")},
+			{Name: refs.BranchName("release/2.0"), Target: oid(t, "22")},
+		},
+		Remotes: []Remote{{
+			Name: "origin",
+			Head: refs.RemoteBranchName("origin", "release/current"),
+			Branches: []Branch{
+				{Name: refs.RemoteBranchName("origin", "release/current"), Target: oid(t, "11")},
+			},
+		}},
+	}
+	v.Render(s)
+
+	want := []string{"Main", "  release/current = origin"}
+	if got := sectionOutline(t, v, tw.Tree, mainGroupKey); !slices.Equal(got, want) {
+		t.Fatalf("main group = %v, want %v", got, want)
+	}
+	want = []string{"Releases (1)", "  2.0"}
+	if got := sectionOutline(t, v, tw.Tree, flowKey(ops.FlowKindRelease)); !slices.Equal(got, want) {
+		t.Fatalf("releases section = %v, want %v", got, want)
+	}
+}

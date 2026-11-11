@@ -34,7 +34,7 @@ func (v *View) Flow() (ops.FlowConfig, bool) {
 }
 
 func (v *View) flowKindOf(short string) (string, bool) {
-	if !v.flowConfigured {
+	if !v.flowConfigured || v.inMainSection(short) {
 		return "", false
 	}
 	kind, _, ok := v.flow.BranchKind(short)
