@@ -34,7 +34,7 @@ func toolbarItemIDs(a *App) []string {
 	ids := make([]string, 0, len(panel.Children()))
 	for _, child := range panel.Children() {
 		switch child.(type) {
-		case *toolbarSeparator:
+		case *widget.Separator:
 			ids = append(ids, toolbar.SeparatorID)
 		case *widget.Stretch:
 			ids = append(ids, toolbar.StretchID)
@@ -278,10 +278,6 @@ func TestTheToolbarSkipsItemsItDoesNotKnow(t *testing.T) {
 
 func TestASpacerDrawsNothingWhereThereIsNothingToDraw(t *testing.T) {
 	(&widget.Stretch{}).Draw(nil)
-	(&toolbarSeparator{}).Draw(nil)
-	invisible := &toolbarSeparator{}
-	invisible.SetBounds(rectOfSize(0, 0, 9, 40))
-	invisible.Draw(nil)
 }
 
 func TestAToolbarBuiltUnderATestedThemeWearsIt(t *testing.T) {
@@ -309,7 +305,7 @@ func toolbarConfigurationOf(items []string, captions bool) toolbar.Result {
 }
 
 func TestTheSeparatorTakesItsColourFromTheTheme(t *testing.T) {
-	separator := &toolbarSeparator{}
+	separator := newToolbarSeparator()
 	for _, theme := range []*widget.Theme{widget.Win11LightTheme(), widget.Win11DarkTheme()} {
 		separator.ApplyTheme(theme)
 		if separator.Color != theme.Border {

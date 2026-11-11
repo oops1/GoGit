@@ -2,7 +2,6 @@ package app
 
 import (
 	"image"
-	"image/color"
 
 	"github.com/oops1/headless-gui/v4/widget"
 
@@ -19,29 +18,21 @@ const (
 	toolbarButtonHeight   = 54
 	toolbarCompactWidth   = 44
 	toolbarCompactHeight  = 36
-	toolbarSeparatorWidth = 9
+	toolbarSeparatorPad   = 6
+	toolbarSeparatorInset = 4
 	toolbarMenuArrowWidth = 16
 	toolbarItemMargin     = 2
 )
 
 const toolbarCaptionFontSize = 8.0
 
-type toolbarSeparator struct {
-	widget.Base
-	Color color.RGBA
+func newToolbarSeparator() *widget.Separator {
+	separator := widget.NewVerticalSeparator()
+	separator.Color = widget.CurrentTheme().Border
+	separator.Margin = toolbarSeparatorInset
+	separator.SetMargin(widget.Margin{Left: toolbarSeparatorPad, Right: toolbarSeparatorPad})
+	return separator
 }
-
-func (s *toolbarSeparator) Draw(ctx widget.DrawContext) {
-	b := s.Bounds()
-	if b.Empty() || s.Color.A == 0 {
-		return
-	}
-	ctx.FillRect(b.Min.X+b.Dx()/2, b.Min.Y+4, 1, max(b.Dy()-8, 1), s.Color)
-}
-
-func (s *toolbarSeparator) ApplyTheme(t *widget.Theme) { s.Color = t.Border }
-
-func (*toolbarSeparator) DesiredSize() (int, int) { return toolbarSeparatorWidth, 0 }
 
 func toolbarItemSize(w widget.Widget) (int, int) {
 	if sizer, ok := w.(widget.DesiredSizer); ok {
@@ -89,9 +80,7 @@ func (a *App) buildToolbar() {
 	for _, id := range a.configuredToolbarItems() {
 		switch id {
 		case toolbar.SeparatorID:
-			separator := &toolbarSeparator{Color: widget.CurrentTheme().Border}
-			setToolbarMargin(separator)
-			panel.AddChild(separator)
+			panel.AddChild(newToolbarSeparator())
 		case toolbar.StretchID:
 			stretch := panel.AddStretch()
 			setToolbarMargin(stretch)
