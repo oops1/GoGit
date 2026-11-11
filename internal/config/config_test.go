@@ -693,3 +693,28 @@ func TestSaveKeepsColorKeysUnknownToThisBuild(t *testing.T) {
 		t.Fatalf("colors = %v", colors)
 	}
 }
+
+func TestTheCompareAndConflictWindowsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	cfg := Default()
+	cfg.UI.CompareWindow = WindowSize{Width: 1300, Height: 800}
+	cfg.UI.ConflictWindow = ConflictWindow{WindowSize: WindowSize{Width: 1200, Height: 760}, HideBase: true, SeparateScroll: true}
+	if err := cfg.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.UI.CompareWindow != cfg.UI.CompareWindow || loaded.UI.ConflictWindow != cfg.UI.ConflictWindow {
+		t.Fatalf("compare = %+v, conflict = %+v", loaded.UI.CompareWindow, loaded.UI.ConflictWindow)
+	}
+}
+
+func TestAnOldConfigOpensTheWindowsAsDesigned(t *testing.T) {
+	cfg := Default()
+	if cfg.UI.CompareWindow != (WindowSize{}) || cfg.UI.ConflictWindow != (ConflictWindow{}) {
+		t.Fatalf("compare = %+v, conflict = %+v, want no remembered size and the base shown with joint scrolling",
+			cfg.UI.CompareWindow, cfg.UI.ConflictWindow)
+	}
+}

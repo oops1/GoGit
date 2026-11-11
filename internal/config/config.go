@@ -107,19 +107,32 @@ type Git struct {
 }
 
 type UI struct {
-	ShowToolbar           bool         `toml:"show_toolbar"`
-	ToolbarCaptions       bool         `toml:"toolbar_captions"`
-	ToolbarItems          []string     `toml:"toolbar_items"`
-	ShowStatusBar         bool         `toml:"show_status_bar"`
-	FilesColumns          []string     `toml:"files_columns"`
-	FilesVisibleColumns   []string     `toml:"files_visible_columns"`
-	FilesStatusFilter     []string     `toml:"files_status_filter"`
-	FilesSubdirectories   bool         `toml:"files_subdirectories"`
-	JournalFullAuthorName bool         `toml:"journal_full_author_name"`
-	CollapsedGroups       []string     `toml:"collapsed_groups"`
-	Layout                string       `toml:"layout"`
-	Branches              BranchesPane `toml:"branches"`
-	Colors                Colors       `toml:"colors"`
+	ShowToolbar           bool           `toml:"show_toolbar"`
+	ToolbarCaptions       bool           `toml:"toolbar_captions"`
+	ToolbarItems          []string       `toml:"toolbar_items"`
+	ShowStatusBar         bool           `toml:"show_status_bar"`
+	FilesColumns          []string       `toml:"files_columns"`
+	FilesVisibleColumns   []string       `toml:"files_visible_columns"`
+	FilesStatusFilter     []string       `toml:"files_status_filter"`
+	FilesSubdirectories   bool           `toml:"files_subdirectories"`
+	JournalFullAuthorName bool           `toml:"journal_full_author_name"`
+	CollapsedGroups       []string       `toml:"collapsed_groups"`
+	Layout                string         `toml:"layout"`
+	Branches              BranchesPane   `toml:"branches"`
+	Colors                Colors         `toml:"colors"`
+	CompareWindow         WindowSize     `toml:"compare_window"`
+	ConflictWindow        ConflictWindow `toml:"conflict_window"`
+}
+
+type WindowSize struct {
+	Width  int `toml:"width"`
+	Height int `toml:"height"`
+}
+
+type ConflictWindow struct {
+	WindowSize
+	HideBase       bool `toml:"hide_base"`
+	SeparateScroll bool `toml:"separate_scroll"`
 }
 
 type Colors struct {

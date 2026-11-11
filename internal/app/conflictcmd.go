@@ -57,6 +57,7 @@ func (a *App) showConflictEditor(file ops.ConflictFile) {
 		Style:        file.Style,
 		FinalNewline: endsWithNewline(file),
 	})
+	a.restoreConflictWindow(view)
 	if bounds := a.root.Bounds(); !bounds.Empty() {
 		view.FitWithin(bounds.Dx(), bounds.Dy())
 	}
