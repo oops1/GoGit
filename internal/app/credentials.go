@@ -363,24 +363,34 @@ func (a *App) askCredentials(ctx context.Context, resource, username string, ret
 	}
 }
 
-func (a *App) rememberCredential(ctx context.Context, resource, username string, secret []byte) {
-	v := a.vaultIfOpen()
-	if v == nil {
-		a.log.Warn("cannot remember credential: secret store is not set up", "resource", resource)
-		return
+func (a *App) unlockedVaultForRemembering(ctx context.Context) (*vault.Vault, error) {
+	v, _, err := a.secretsVault(ctx, true)
+	if err != nil {
+		return nil, err
 	}
 	if v.Locked() {
 		unlocked, err := a.unlockVault(ctx, v)
 		if err != nil {
-			a.log.Warn("unlock secret store for credential failed", "resource", resource, "error", err)
-			return
+			return nil, err
 		}
 		if !unlocked {
-			return
+			return nil, ErrSecretsUnlockCancelled
 		}
 	}
+	return v, nil
+}
+
+func (a *App) rememberCredential(ctx context.Context, resource, username string, secret []byte) {
+	v, err := a.unlockedVaultForRemembering(ctx)
+	if errors.Is(err, ErrSecretsUnlockCancelled) || errors.Is(err, ErrSecretsSetupCancelled) {
+		return
+	}
+	if err != nil {
+		a.log.Warn("open secret store for credential failed", "resource", resource, "error", err)
+		return
+	}
 	cred := vault.Credential{Resource: resource, Username: username, Secret: append([]byte(nil), secret...)}
-	err := v.SetCredential(cred)
+	err = v.SetCredential(cred)
 	cred.Wipe()
 	if err != nil {
 		a.log.Warn("save credential failed", "resource", resource, "error", err)

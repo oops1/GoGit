@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/hostkey"
 	"github.com/oops1/gogit/internal/ui/keypassphrase"
+	"github.com/oops1/gogit/internal/ui/masterpassword"
 	"github.com/oops1/gogit/internal/ui/unlock"
 	"github.com/oops1/gogit/internal/vault"
 )
@@ -261,11 +263,43 @@ func rememberWork(a *App) {
 	a.rememberKeyPassphrase(context.Background(), transport.PassphraseRequest{Host: "github.com", Path: "/keys/work"}, []byte("pp-secret"))
 }
 
-func TestRememberKeyPassphraseNeedsASecretStore(t *testing.T) {
+func TestRememberKeyPassphraseCreatesTheSecretStoreWhenItIsMissing(t *testing.T) {
 	a := newTestApp(t)
+	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
+	stubCreateVaultFileWithPassword(t, nil)
+	stubMasterPasswordDialog(t, a, []masterpassword.Result{{Password: []byte(testVaultPassword)}})
+	rememberWork(a)
+	v := a.vaultIfOpen()
+	if v == nil {
+		t.Fatal("the secret store was not created")
+	}
+	if stored, ok := v.SSHKey("github.com"); !ok || string(stored.Passphrase) != "pp-secret" || stored.Path != "/keys/work" {
+		t.Fatalf("stored = %+v, %v", stored, ok)
+	}
+}
+
+func TestRememberKeyPassphraseSavesNothingWhenTheStoreSetupIsCancelled(t *testing.T) {
+	a := newTestApp(t)
+	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
+	stubMasterPasswordDialog(t, a, nil)
 	log := captureLog(a)
 	rememberWork(a)
-	if !strings.Contains(log.String(), "secret store is not set up") || strings.Contains(log.String(), "pp-secret") {
+	if _, err := os.Stat(a.paths.VaultFile()); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("stat err = %v, want the store to stay missing", err)
+	}
+	if log.Len() != 0 {
+		t.Fatalf("log = %q, want nothing logged for a cancelled setup", log.String())
+	}
+}
+
+func TestRememberKeyPassphraseLogsAStoreItCannotCreate(t *testing.T) {
+	a := newTestApp(t)
+	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
+	stubMasterPasswordDialog(t, a, []masterpassword.Result{{Password: []byte(testVaultPassword)}})
+	blockFileWrites(t, a.paths.VaultFile())
+	log := captureLog(a)
+	rememberWork(a)
+	if !strings.Contains(log.String(), "open secret store for key passphrase failed") || strings.Contains(log.String(), "pp-secret") {
 		t.Fatalf("log = %q", log.String())
 	}
 }
@@ -298,7 +332,7 @@ func TestRememberKeyPassphraseLogsAFailedUnlock(t *testing.T) {
 	log := captureLog(a)
 	stubUnlockDialog(t, a, []unlock.Result{{Password: []byte(testVaultPassword)}})
 	rememberWork(a)
-	if !strings.Contains(log.String(), "unlock secret store for key passphrase failed") {
+	if !strings.Contains(log.String(), "open secret store for key passphrase failed") {
 		t.Fatalf("log = %q", log.String())
 	}
 }
