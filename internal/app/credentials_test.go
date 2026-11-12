@@ -20,6 +20,7 @@ import (
 	"github.com/oops1/gogit/internal/gitcore/transport"
 	"github.com/oops1/gogit/internal/i18n"
 	"github.com/oops1/gogit/internal/ui/credentials"
+	"github.com/oops1/gogit/internal/ui/masterpassword"
 	"github.com/oops1/gogit/internal/ui/unlock"
 	"github.com/oops1/gogit/internal/vault"
 )
@@ -730,13 +731,33 @@ func TestCredentialsSourceRememberGivesUpWhenUnlockIsCancelled(t *testing.T) {
 	}
 }
 
-func TestCredentialsSourceWithoutASetUpVaultRememberIsANoop(t *testing.T) {
+func TestCredentialsSourceWithoutASetUpVaultRememberCreatesTheStore(t *testing.T) {
 	a := newTestApp(t)
 	stubRememberedDialogAnswer(t, a)
+	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
+	stubCreateVaultFileWithPassword(t, nil)
+	stubMasterPasswordDialog(t, a, []masterpassword.Result{{Password: []byte(testVaultPassword)}})
+
+	rememberAndApprove(t, a)
+	saved, ok := a.vaultIfOpen().Credential(testResource)
+	if !ok || saved.Username != "bob" {
+		t.Fatalf("credential was not saved into the created store: %+v, ok=%v", saved, ok)
+	}
+}
+
+func TestCredentialsSourceWithoutASetUpVaultRememberStaysSilentWhenSetupIsCancelled(t *testing.T) {
+	a := newTestApp(t)
+	buf := captureLog(a)
+	stubRememberedDialogAnswer(t, a)
+	stubSecretsDefaultSlotKind(t, vault.SlotPassword)
+	stubMasterPasswordDialog(t, a, nil)
 
 	rememberAndApprove(t, a)
 	if _, err := os.Stat(a.paths.VaultFile()); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatal("remembering must not create a secret store")
+		t.Fatal("a cancelled setup must not leave a secret store")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("log = %q, want nothing", buf.String())
 	}
 }
 

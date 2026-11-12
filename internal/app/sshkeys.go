@@ -137,20 +137,13 @@ func (a *App) askKeyPassphrase(ctx context.Context, req transport.PassphraseRequ
 var errHostHasAnotherKey = errors.New("app: the host already has another ssh key in the store")
 
 func (a *App) rememberKeyPassphrase(ctx context.Context, req transport.PassphraseRequest, passphrase []byte) {
-	v := a.vaultIfOpen()
-	if v == nil {
-		a.log.Warn("cannot remember key passphrase: secret store is not set up", "host", req.Host)
+	v, err := a.unlockedVaultForRemembering(ctx)
+	if errors.Is(err, ErrSecretsUnlockCancelled) || errors.Is(err, ErrSecretsSetupCancelled) {
 		return
 	}
-	if v.Locked() {
-		unlocked, err := a.unlockVault(ctx, v)
-		if err != nil {
-			a.log.Warn("unlock secret store for key passphrase failed", "host", req.Host, "error", err)
-			return
-		}
-		if !unlocked {
-			return
-		}
+	if err != nil {
+		a.log.Warn("open secret store for key passphrase failed", "host", req.Host, "error", err)
+		return
 	}
 	if err := storeKeyPassphrase(v, req, passphrase); err != nil {
 		a.log.Warn("save key passphrase failed", "host", req.Host, "key", req.Path, "error", err)
